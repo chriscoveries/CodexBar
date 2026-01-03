@@ -1452,8 +1452,7 @@ extension UsageStore {
                     try await fetcher.loadTokenSnapshot(
                         provider: provider,
                         now: now,
-                        forceRefresh: force,
-                        allowVertexClaudeFallback: !self.isEnabled(.claude))
+                        forceRefresh: force)
                 }
                 group.addTask {
                     try await Task.sleep(nanoseconds: UInt64(timeoutSeconds * 1_000_000_000))

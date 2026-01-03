@@ -23,8 +23,7 @@ public struct CostUsageFetcher: Sendable {
     public func loadTokenSnapshot(
         provider: UsageProvider,
         now: Date = Date(),
-        forceRefresh: Bool = false,
-        allowVertexClaudeFallback: Bool = false) async throws -> CostUsageTokenSnapshot
+        forceRefresh: Bool = false) async throws -> CostUsageTokenSnapshot
     {
         guard provider == .codex || provider == .claude || provider == .vertexai else {
             throw CostUsageError.unsupportedProvider(provider)
@@ -36,7 +35,7 @@ public struct CostUsageFetcher: Sendable {
 
         var options = CostUsageScanner.Options()
         if provider == .vertexai {
-            options.claudeLogProviderFilter = allowVertexClaudeFallback ? .all : .vertexAIOnly
+            options.claudeLogProviderFilter = .vertexAIOnly
         } else if provider == .claude {
             options.claudeLogProviderFilter = .excludeVertexAI
         }
@@ -44,27 +43,12 @@ public struct CostUsageFetcher: Sendable {
             options.refreshMinIntervalSeconds = 0
             options.forceRescan = true
         }
-        var daily = CostUsageScanner.loadDailyReport(
+        let daily = CostUsageScanner.loadDailyReport(
             provider: provider,
             since: since,
             until: until,
             now: now,
             options: options)
-
-        if provider == .vertexai,
-           !allowVertexClaudeFallback,
-           options.claudeLogProviderFilter == .vertexAIOnly,
-           daily.data.isEmpty
-        {
-            var fallback = options
-            fallback.claudeLogProviderFilter = .all
-            daily = CostUsageScanner.loadDailyReport(
-                provider: provider,
-                since: since,
-                until: until,
-                now: now,
-                options: fallback)
-        }
 
         return Self.tokenSnapshot(from: daily, now: now)
     }
