@@ -24,6 +24,16 @@
 ## Commit & PR Guidelines
 - Commit messages: short imperative clauses (e.g., “Improve usage probe”, “Fix icon dimming”); keep commits scoped.
 - PRs/patches should list summary, commands run, screenshots/GIFs for UI changes, and linked issue/reference when relevant.
+- PRs should summarize scope, note testing performed, and mention any user-facing changes or new flags.
+- PR review flow: when given a PR link, review via `gh pr view`/`gh pr diff` and do **not** change branches.
+- PR merge flow: create a temp branch from `main`, merge the PR branch into it (prefer squash unless commit history is important; use rebase/merge when it is). Always try to merge the PR unless it’s truly difficult, then use another approach. If we squash, add the PR author as a co-contributor. Apply fixes, add changelog entry (include PR # + thanks), run full gate before the final commit, commit, merge back to `main`, delete the temp branch, and end on `main`.
+- If you review a PR and later do work on it, land via merge/squash (no direct-main commits) and always add the PR author as a co-contributor.
+- When working on a PR: add a changelog entry with the PR number and thank the contributor.
+- When merging a PR: leave a PR comment that explains exactly what we did and include the SHA hashes.
+
+### PR Workflow (Review vs Land)
+- **Review mode (PR link only):** read `gh pr view/diff`; **do not** switch branches; **do not** change code.
+- **Landing mode:** create an integration branch from `main`, bring in PR commits (**prefer rebase** for linear history; **merge allowed** when complexity/conflicts make it safer), apply fixes, add changelog (+ thanks + PR #), run full gate **locally before committing**, commit, merge back to `main`, then `git switch main` (never stay on a topic branch after landing). Important: contributor needs to be in git graph after this!
 
 ## Agent Notes
 - Use the provided scripts and package manager (SwiftPM); avoid adding dependencies or tooling without confirmation.
