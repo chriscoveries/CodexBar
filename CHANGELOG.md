@@ -16,6 +16,7 @@
 - Menu: fix usage line labels to honor “Show usage as used”.
 - Debug: add a toggle to keep Codex/Claude CLI sessions alive between probes.
 - Debug: add a button to reset CLI probe sessions.
+- App icon: make classic icon bundle lookup resilient (#223). Thanks @validatedev!
 - App icon: use the classic icon on macOS 15 and earlier while keeping Liquid Glass for macOS 26+ (#178). Thanks @zerone0x!
 
 ## 0.18.0-beta.1 — 2026-01-18

@@ -299,20 +299,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private static func classicIconURL() -> URL? {
-        if let url = Bundle.main.url(forResource: "Icon-classic", withExtension: "icns") {
+        let iconName = "Icon-classic"
+        if let url = Bundle.main.url(forResource: iconName, withExtension: "icns") {
             return url
         }
-        if let bundleURL = Bundle.main.url(forResource: "CodexBar_CodexBar", withExtension: "bundle"),
-           let bundle = Bundle(url: bundleURL),
-           let url = bundle.url(forResource: "Icon-classic", withExtension: "icns")
-        {
-            return url
+
+        let bundleName = "CodexBar_CodexBar"
+        var bundleCandidates: [URL] = []
+        if let url = Bundle.main.url(forResource: bundleName, withExtension: "bundle") {
+            bundleCandidates.append(url)
         }
-        let rootBundleURL = Bundle.main.bundleURL.appendingPathComponent("CodexBar_CodexBar.bundle")
-        if let bundle = Bundle(url: rootBundleURL),
-           let url = bundle.url(forResource: "Icon-classic", withExtension: "icns")
-        {
-            return url
+        if let resourceURL = Bundle.main.resourceURL {
+            bundleCandidates.append(resourceURL.appendingPathComponent("\(bundleName).bundle"))
+        }
+        let bundleURL = Bundle.main.bundleURL
+        if bundleURL.pathExtension == "app" {
+            bundleCandidates.append(bundleURL.appendingPathComponent("Contents/Resources/\(bundleName).bundle"))
+        } else {
+            let executableURL = bundleURL.deletingLastPathComponent()
+            bundleCandidates.append(executableURL.appendingPathComponent("\(bundleName).bundle"))
+        }
+
+        var seenBundles = Set<URL>()
+        for candidate in bundleCandidates where seenBundles.insert(candidate).inserted {
+            if let bundle = Bundle(url: candidate),
+               let url = bundle.url(forResource: iconName, withExtension: "icns")
+            {
+                return url
+            }
         }
         return nil
     }
