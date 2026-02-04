@@ -211,6 +211,9 @@ struct ClaudeOAuthCredentialsStoreTests {
         KeychainCacheStore.setTestStoreForTesting(true)
         defer { KeychainCacheStore.setTestStoreForTesting(false) }
 
+        ClaudeOAuthCredentialsStore._resetCredentialsFileTrackingForTesting()
+        defer { ClaudeOAuthCredentialsStore._resetCredentialsFileTrackingForTesting() }
+
         ClaudeOAuthCredentialsStore.invalidateCache()
         ClaudeOAuthCredentialsStore._resetClaudeKeychainChangeTrackingForTesting()
         defer {
@@ -259,7 +262,7 @@ struct ClaudeOAuthCredentialsStoreTests {
             let parsed = try ClaudeOAuthCredentials.parse(data: entry.data)
             #expect(parsed.accessToken == "keychain-token")
         default:
-            #expect(false)
+            #expect(Bool(false))
         }
     }
 
@@ -267,6 +270,9 @@ struct ClaudeOAuthCredentialsStoreTests {
     func doesNotSyncWhenClaudeKeychainFingerprintUnchanged() throws {
         KeychainCacheStore.setTestStoreForTesting(true)
         defer { KeychainCacheStore.setTestStoreForTesting(false) }
+
+        ClaudeOAuthCredentialsStore._resetCredentialsFileTrackingForTesting()
+        defer { ClaudeOAuthCredentialsStore._resetCredentialsFileTrackingForTesting() }
 
         ClaudeOAuthCredentialsStore.invalidateCache()
         ClaudeOAuthCredentialsStore._resetClaudeKeychainChangeTrackingForTesting()
@@ -308,7 +314,7 @@ struct ClaudeOAuthCredentialsStoreTests {
             let parsed = try ClaudeOAuthCredentials.parse(data: entry.data)
             #expect(parsed.accessToken == "cached-token")
         default:
-            #expect(false)
+            #expect(Bool(false))
         }
     }
 }
