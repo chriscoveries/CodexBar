@@ -292,33 +292,35 @@ public enum ClaudeOAuthCredentialsStore {
         }
 
         // 4. Fall back to Claude's keychain (may prompt user if allowed)
-        if allowKeychainPrompt {
-            let promptAllowed = !respectKeychainPromptCooldown || ClaudeOAuthKeychainAccessGate.shouldAllowPrompt()
-            if promptAllowed {
+        let promptAllowed =
+            allowKeychainPrompt
+                && (!respectKeychainPromptCooldown || ClaudeOAuthKeychainAccessGate.shouldAllowPrompt())
+        if promptAllowed {
+            do {
                 // Some macOS configurations still show the system keychain prompt even for our "silent" probes.
-                // Show the in-app pre-alert once before any Claude keychain access attempt when prompting is allowed.
-                self.claudeKeychainPromptLock.lock()
-                defer { self.claudeKeychainPromptLock.unlock() }
-                KeychainPromptHandler.handler?(
-                    KeychainPromptContext(
-                        kind: .claudeOAuth,
-                        service: self.claudeKeychainService,
-                        account: nil))
-                do {
-                    let keychainData = try self.loadFromClaudeKeychain()
-                    let creds = try ClaudeOAuthCredentials.parse(data: keychainData)
-                    self.writeMemoryCache(credentials: creds, timestamp: Date())
-                    self.saveToCacheKeychain(keychainData)
-                    return creds
-                } catch let error as ClaudeOAuthCredentialsError {
-                    if case .notFound = error {
-                        // Ignore missing entry
-                    } else {
-                        lastError = error
-                    }
-                } catch {
+                // Only show the in-app pre-alert when we have evidence that Keychain interaction is likely.
+                if self.shouldShowClaudeKeychainPreAlert() {
+                    self.claudeKeychainPromptLock.lock()
+                    defer { self.claudeKeychainPromptLock.unlock() }
+                    KeychainPromptHandler.handler?(
+                        KeychainPromptContext(
+                            kind: .claudeOAuth,
+                            service: self.claudeKeychainService,
+                            account: nil))
+                }
+                let keychainData = try self.loadFromClaudeKeychain()
+                let creds = try ClaudeOAuthCredentials.parse(data: keychainData)
+                self.writeMemoryCache(credentials: creds, timestamp: Date())
+                self.saveToCacheKeychain(keychainData)
+                return creds
+            } catch let error as ClaudeOAuthCredentialsError {
+                if case .notFound = error {
+                    // Ignore missing entry
+                } else {
                     lastError = error
                 }
+            } catch {
+                lastError = error
             }
         }
 
@@ -327,6 +329,15 @@ public enum ClaudeOAuthCredentialsStore {
         }
         if let lastError { throw lastError }
         throw ClaudeOAuthCredentialsError.notFound
+    }
+
+    private static func shouldShowClaudeKeychainPreAlert() -> Bool {
+        switch KeychainAccessPreflight.checkGenericPassword(service: self.claudeKeychainService, account: nil) {
+        case .interactionRequired:
+            true
+        case .allowed, .notFound, .failure:
+            false
+        }
     }
 
     /// Async version of load that automatically refreshes expired tokens.
@@ -741,6 +752,9 @@ public enum ClaudeOAuthCredentialsStore {
     }
 
     public static func loadFromClaudeKeychain() throws -> Data {
+        #if DEBUG
+        if let override = self.claudeKeychainDataOverride { return override }
+        #endif
         #if os(macOS)
         if !self.keychainAccessAllowed {
             throw ClaudeOAuthCredentialsError.notFound
