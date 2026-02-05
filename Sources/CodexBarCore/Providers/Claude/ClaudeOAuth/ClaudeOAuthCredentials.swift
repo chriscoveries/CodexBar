@@ -170,6 +170,8 @@ public enum ClaudeOAuthCredentialsStore {
     private nonisolated(unsafe) static var keychainAccessOverride: Bool?
     private nonisolated(unsafe) static var claudeKeychainDataOverride: Data?
     private nonisolated(unsafe) static var claudeKeychainFingerprintOverride: ClaudeKeychainFingerprint?
+    private nonisolated(unsafe) static var claudeKeychainReadOverride: ((Bool, Bool) throws -> Data?)?
+    private nonisolated(unsafe) static var claudeKeychainInteractiveReadAttemptHandler: (() -> Void)?
     static func setKeychainAccessOverrideForTesting(_ disabled: Bool?) {
         self.keychainAccessOverride = disabled
     }
@@ -180,6 +182,14 @@ public enum ClaudeOAuthCredentialsStore {
 
     static func setClaudeKeychainFingerprintOverrideForTesting(_ fingerprint: ClaudeKeychainFingerprint?) {
         self.claudeKeychainFingerprintOverride = fingerprint
+    }
+
+    static func setClaudeKeychainReadOverrideForTesting(_ override: ((Bool, Bool) throws -> Data?)?) {
+        self.claudeKeychainReadOverride = override
+    }
+
+    static func setClaudeKeychainInteractiveReadAttemptHandlerForTesting(_ handler: (() -> Void)?) {
+        self.claudeKeychainInteractiveReadAttemptHandler = handler
     }
     #endif
 
@@ -301,16 +311,7 @@ public enum ClaudeOAuthCredentialsStore {
                 self.claudeKeychainPromptLock.lock()
                 defer { self.claudeKeychainPromptLock.unlock() }
 
-                // Some macOS configurations still show the system keychain prompt even for our "silent" probes.
-                // Only show the in-app pre-alert when we have evidence that Keychain interaction is likely.
-                if self.shouldShowClaudeKeychainPreAlert() {
-                    KeychainPromptHandler.handler?(
-                        KeychainPromptContext(
-                            kind: .claudeOAuth,
-                            service: self.claudeKeychainService,
-                            account: nil))
-                }
-                let keychainData = try self.loadFromClaudeKeychain()
+                let keychainData = try self.loadFromClaudeKeychainForBootstrap()
                 let creds = try ClaudeOAuthCredentials.parse(data: keychainData)
                 self.writeMemoryCache(credentials: creds, timestamp: Date())
                 self.saveToCacheKeychain(keychainData)
@@ -819,6 +820,15 @@ public enum ClaudeOAuthCredentialsStore {
         candidate: ClaudeKeychainCandidate,
         allowKeychainPrompt: Bool) throws -> Data?
     {
+        #if DEBUG
+        if let override = self.claudeKeychainReadOverride {
+            if allowKeychainPrompt {
+                self.claudeKeychainInteractiveReadAttemptHandler?()
+            }
+            return try override(allowKeychainPrompt, false)
+        }
+        #endif
+
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecValuePersistentRef as String: candidate.persistentRef,
@@ -855,6 +865,15 @@ public enum ClaudeOAuthCredentialsStore {
     }
 
     private static func loadClaudeKeychainLegacyData(allowKeychainPrompt: Bool) throws -> Data? {
+        #if DEBUG
+        if let override = self.claudeKeychainReadOverride {
+            if allowKeychainPrompt {
+                self.claudeKeychainInteractiveReadAttemptHandler?()
+            }
+            return try override(allowKeychainPrompt, true)
+        }
+        #endif
+
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: self.claudeKeychainService,
@@ -1002,17 +1021,114 @@ public enum ClaudeOAuthCredentialsStore {
 }
 
 extension ClaudeOAuthCredentialsStore {
-    private static func shouldShowClaudeKeychainPreAlert() -> Bool {
-        switch KeychainAccessPreflight.checkGenericPassword(service: self.claudeKeychainService, account: nil) {
-        case .interactionRequired:
-            true
-        case .failure:
-            // If preflight fails, we can't be sure whether interaction is required (or if the preflight itself
-            // is impacted by a misbehaving Keychain configuration). Be conservative and show the pre-alert.
-            true
-        case .allowed, .notFound:
-            false
+    private static func showClaudeOAuthKeychainPreAlert() {
+        KeychainPromptHandler.handler?(
+            KeychainPromptContext(
+                kind: .claudeOAuth,
+                service: self.claudeKeychainService,
+                account: nil))
+    }
+
+    private static func loadFromClaudeKeychainForBootstrap() throws -> Data {
+        #if DEBUG
+        if let override = self.claudeKeychainDataOverride { return override }
+        if self.claudeKeychainReadOverride != nil {
+            self.log.info("Claude OAuth bootstrap preparing keychain access")
+            self.showClaudeOAuthKeychainPreAlert()
+
+            if let data = try self.loadClaudeKeychainLegacyData(allowKeychainPrompt: false),
+               !data.isEmpty
+            {
+                self.log.debug("Claude OAuth bootstrap keychain read succeeded without interaction")
+                return data
+            }
+
+            self.log.info("Claude OAuth bootstrap transitioning to interactive keychain read")
+            do {
+                if let data = try self.loadClaudeKeychainLegacyData(allowKeychainPrompt: true),
+                   !data.isEmpty
+                {
+                    return data
+                }
+                self.log.warning("Claude OAuth bootstrap interactive keychain read returned no data")
+            } catch let error as ClaudeOAuthCredentialsError {
+                if case .keychainError = error {
+                    self.log.warning("Claude OAuth bootstrap interactive keychain read failed")
+                    ClaudeOAuthKeychainAccessGate.recordDenied()
+                }
+                throw error
+            }
+            throw ClaudeOAuthCredentialsError.notFound
         }
+        #endif
+        #if os(macOS)
+        if !self.keychainAccessAllowed {
+            throw ClaudeOAuthCredentialsError.notFound
+        }
+
+        let candidates = self.claudeKeychainCandidatesWithoutPrompt()
+        if let newest = candidates.first {
+            self.log.info("Claude OAuth bootstrap preparing keychain access")
+            self.showClaudeOAuthKeychainPreAlert()
+
+            if let data = try self.loadClaudeKeychainData(candidate: newest, allowKeychainPrompt: false),
+               !data.isEmpty
+            {
+                self.log.debug("Claude OAuth bootstrap keychain read succeeded without interaction")
+                return data
+            }
+
+            self.log.info("Claude OAuth bootstrap transitioning to interactive keychain read")
+            self.showClaudeOAuthKeychainPreAlert()
+            do {
+                if let data = try self.loadClaudeKeychainData(candidate: newest, allowKeychainPrompt: true),
+                   !data.isEmpty
+                {
+                    return data
+                }
+                self.log.warning("Claude OAuth bootstrap interactive keychain read returned no data")
+            } catch let error as ClaudeOAuthCredentialsError {
+                if case .keychainError = error {
+                    self.log.warning("Claude OAuth bootstrap interactive keychain read failed")
+                    ClaudeOAuthKeychainAccessGate.recordDenied()
+                }
+                throw error
+            }
+            throw ClaudeOAuthCredentialsError.notFound
+        }
+
+        guard let legacyCandidate = self.claudeKeychainLegacyCandidateWithoutPrompt() else {
+            throw ClaudeOAuthCredentialsError.notFound
+        }
+
+        self.log.info("Claude OAuth bootstrap preparing keychain access")
+        self.showClaudeOAuthKeychainPreAlert()
+        if let data = try self.loadClaudeKeychainData(candidate: legacyCandidate, allowKeychainPrompt: false),
+           !data.isEmpty
+        {
+            self.log.debug("Claude OAuth bootstrap legacy keychain read succeeded without interaction")
+            return data
+        }
+
+        self.log.info("Claude OAuth bootstrap transitioning to interactive keychain read")
+        do {
+            if let data = try self.loadClaudeKeychainData(candidate: legacyCandidate, allowKeychainPrompt: true),
+               !data.isEmpty
+            {
+                return data
+            }
+            self.log.warning("Claude OAuth bootstrap interactive legacy keychain read returned no data")
+        } catch let error as ClaudeOAuthCredentialsError {
+            if case .keychainError = error {
+                self.log.warning("Claude OAuth bootstrap interactive legacy keychain read failed")
+                ClaudeOAuthKeychainAccessGate.recordDenied()
+            }
+            throw error
+        }
+        throw ClaudeOAuthCredentialsError.notFound
+        #else
+        throw ClaudeOAuthCredentialsError.notFound
+        #endif
     }
 
     /// Refresh the access token using a refresh token.
