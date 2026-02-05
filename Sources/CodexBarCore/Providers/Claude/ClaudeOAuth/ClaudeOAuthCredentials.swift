@@ -336,7 +336,11 @@ public enum ClaudeOAuthCredentialsStore {
         switch KeychainAccessPreflight.checkGenericPassword(service: self.claudeKeychainService, account: nil) {
         case .interactionRequired:
             true
-        case .allowed, .notFound, .failure:
+        case .failure:
+            // If preflight fails, we can't be sure whether interaction is required (or if the preflight itself
+            // is impacted by a misbehaving Keychain configuration). Be conservative and show the pre-alert.
+            true
+        case .allowed, .notFound:
             false
         }
     }
