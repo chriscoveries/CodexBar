@@ -437,7 +437,7 @@ struct ClaudeOAuthCredentialsStoreTests {
     }
 
     @Test
-    func showsPreAlertBeforeBootstrapKeychainReadEvenWhenSilentReadSucceeds() throws {
+    func doesNotShowPreAlertWhenBootstrapSilentReadSucceeds() throws {
         KeychainCacheStore.setTestStoreForTesting(true)
         defer { KeychainCacheStore.setTestStoreForTesting(false) }
 
@@ -483,7 +483,7 @@ struct ClaudeOAuthCredentialsStoreTests {
 
         let creds = try ClaudeOAuthCredentialsStore.load(environment: [:], allowKeychainPrompt: true)
         #expect(creds.accessToken == "keychain-token")
-        #expect(preAlertHits == 1)
+        #expect(preAlertHits == 0)
         #expect(interactiveReadAttempts == 0)
     }
 
