@@ -322,7 +322,8 @@ public enum ClaudeOAuthCredentialsStore {
     public static func loadRecord(
         environment: [String: String] = ProcessInfo.processInfo.environment,
         allowKeychainPrompt: Bool = true,
-        respectKeychainPromptCooldown: Bool = false) throws -> ClaudeOAuthCredentialRecord
+        respectKeychainPromptCooldown: Bool = false,
+        allowClaudeKeychainRepairWithoutPrompt: Bool = true) throws -> ClaudeOAuthCredentialRecord
     {
         // "Silent" keychain probes can still show UI on some macOS configurations. If the caller disallows prompts,
         // always honor the Claude keychain access cooldown gate to prevent prompt storms in Auto-mode paths.
@@ -429,12 +430,15 @@ public enum ClaudeOAuthCredentialsStore {
             lastError = error
         }
 
-        // 3.5 Try Claude keychain without prompting (repair path; may still show UI on some systems)
-        if let repaired = self.repairFromClaudeKeychainWithoutPromptIfAllowed(
-            now: Date(),
-            respectKeychainPromptCooldown: shouldRespectKeychainPromptCooldownForSilentProbes)
-        {
-            return repaired
+        // 3.5 Try Claude keychain without prompting (repair path; may still show UI on some systems).
+        // Only attempt this when prompts are disallowed; otherwise, go straight to the interactive path.
+        if allowClaudeKeychainRepairWithoutPrompt, !allowKeychainPrompt {
+            if let repaired = self.repairFromClaudeKeychainWithoutPromptIfAllowed(
+                now: Date(),
+                respectKeychainPromptCooldown: shouldRespectKeychainPromptCooldownForSilentProbes)
+            {
+                return repaired
+            }
         }
 
         // 4. Fall back to Claude's keychain (may prompt user if allowed)
@@ -1218,6 +1222,20 @@ public enum ClaudeOAuthCredentialsStore {
         let startedAtNs = DispatchTime.now().uptimeNanoseconds
         let status = SecItemCopyMatching(query as CFDictionary, &result)
         let durationMs = Double(DispatchTime.now().uptimeNanoseconds - startedAtNs) / 1_000_000.0
+        if !allowKeychainPrompt,
+           ProviderInteractionContext.current == .background,
+           durationMs > 1000
+        {
+            // Some systems still show Keychain UI even when kSecUseAuthenticationUIFail is set.
+            // If a "non-interactive" read blocks for a noticeable duration, assume UI was involved and back off.
+            ClaudeOAuthKeychainAccessGate.recordDenied()
+            self.log.warning(
+                "Claude keychain non-interactive read was slow; backing off",
+                metadata: [
+                    "service": self.claudeKeychainService,
+                    "duration_ms": String(format: "%.2f", durationMs),
+                ])
+        }
         self.log.debug(
             "Claude keychain data read result",
             metadata: [
@@ -1276,6 +1294,18 @@ public enum ClaudeOAuthCredentialsStore {
         let startedAtNs = DispatchTime.now().uptimeNanoseconds
         let status = SecItemCopyMatching(query as CFDictionary, &result)
         let durationMs = Double(DispatchTime.now().uptimeNanoseconds - startedAtNs) / 1_000_000.0
+        if !allowKeychainPrompt,
+           ProviderInteractionContext.current == .background,
+           durationMs > 1000
+        {
+            ClaudeOAuthKeychainAccessGate.recordDenied()
+            self.log.warning(
+                "Claude keychain legacy non-interactive read was slow; backing off",
+                metadata: [
+                    "service": self.claudeKeychainService,
+                    "duration_ms": String(format: "%.2f", durationMs),
+                ])
+        }
         self.log.debug(
             "Claude keychain legacy data read result",
             metadata: [

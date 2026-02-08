@@ -141,7 +141,8 @@ struct ClaudeOAuthFetchStrategy: ProviderFetchStrategy {
         return try? ClaudeOAuthCredentialsStore.loadRecord(
             environment: context.env,
             allowKeychainPrompt: false,
-            respectKeychainPromptCooldown: true)
+            respectKeychainPromptCooldown: true,
+            allowClaudeKeychainRepairWithoutPrompt: false)
     }
 
     private func isClaudeCLIAvailable() -> Bool {
