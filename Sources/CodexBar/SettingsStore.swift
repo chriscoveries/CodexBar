@@ -204,6 +204,11 @@ extension SettingsStore {
         let randomBlinkEnabled = userDefaults.object(forKey: "randomBlinkEnabled") as? Bool ?? false
         let menuBarShowsHighestUsage = userDefaults.object(forKey: "menuBarShowsHighestUsage") as? Bool ?? false
         let claudeWebExtrasEnabledRaw = userDefaults.object(forKey: "claudeWebExtrasEnabled") as? Bool ?? false
+        let claudeAutoKeychainPromptPolicyRaw = userDefaults.string(forKey: "claudeAutoKeychainPromptPolicyV1")
+            ?? AutoKeychainPromptPolicy.userInitiated.rawValue
+        if userDefaults.string(forKey: "claudeAutoKeychainPromptPolicyV1") == nil {
+            userDefaults.set(claudeAutoKeychainPromptPolicyRaw, forKey: "claudeAutoKeychainPromptPolicyV1")
+        }
         let creditsExtrasDefault = userDefaults.object(forKey: "showOptionalCreditsAndExtraUsage") as? Bool
         let showOptionalCreditsAndExtraUsage = creditsExtrasDefault ?? true
         if creditsExtrasDefault == nil { userDefaults.set(true, forKey: "showOptionalCreditsAndExtraUsage") }
@@ -238,6 +243,7 @@ extension SettingsStore {
             randomBlinkEnabled: randomBlinkEnabled,
             menuBarShowsHighestUsage: menuBarShowsHighestUsage,
             claudeWebExtrasEnabledRaw: claudeWebExtrasEnabledRaw,
+            claudeAutoKeychainPromptPolicyRaw: claudeAutoKeychainPromptPolicyRaw,
             showOptionalCreditsAndExtraUsage: showOptionalCreditsAndExtraUsage,
             openAIWebAccessEnabled: openAIWebAccessEnabled,
             jetbrainsIDEBasePath: jetbrainsIDEBasePath,

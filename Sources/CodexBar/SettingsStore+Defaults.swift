@@ -193,6 +193,17 @@ extension SettingsStore {
         set { self.claudeWebExtrasEnabledRaw = newValue }
     }
 
+    var claudeAutoKeychainPromptPolicy: AutoKeychainPromptPolicy {
+        get {
+            AutoKeychainPromptPolicy(rawValue: self.defaultsState.claudeAutoKeychainPromptPolicyRaw ?? "")
+                ?? .userInitiated
+        }
+        set {
+            self.defaultsState.claudeAutoKeychainPromptPolicyRaw = newValue.rawValue
+            self.userDefaults.set(newValue.rawValue, forKey: "claudeAutoKeychainPromptPolicyV1")
+        }
+    }
+
     private var claudeWebExtrasEnabledRaw: Bool {
         get { self.defaultsState.claudeWebExtrasEnabledRaw }
         set {

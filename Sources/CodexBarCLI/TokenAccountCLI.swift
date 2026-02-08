@@ -102,7 +102,8 @@ struct TokenAccountCLIContext {
                     usageDataSource: claudeSource,
                     webExtrasEnabled: false,
                     cookieSource: effectiveSource,
-                    manualCookieHeader: claudeSource == .oauth ? nil : cookieHeader))
+                    manualCookieHeader: claudeSource == .oauth ? nil : cookieHeader,
+                    autoKeychainPromptPolicy: .userInitiated))
         case .cursor:
             return self.makeSnapshot(
                 cursor: ProviderSettingsSnapshot.CursorProviderSettings(

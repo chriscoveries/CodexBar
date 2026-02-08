@@ -54,7 +54,8 @@ extension SettingsStore {
             usageDataSource: self.claudeUsageDataSource,
             webExtrasEnabled: self.claudeWebExtrasEnabled,
             cookieSource: self.claudeSnapshotCookieSource(tokenOverride: tokenOverride),
-            manualCookieHeader: self.claudeSnapshotCookieHeader(tokenOverride: tokenOverride))
+            manualCookieHeader: self.claudeSnapshotCookieHeader(tokenOverride: tokenOverride),
+            autoKeychainPromptPolicy: self.claudeAutoKeychainPromptPolicy)
     }
 
     private static func claudeUsageDataSource(from source: ProviderSourceMode?) -> ClaudeUsageDataSource {

@@ -1,5 +1,11 @@
 import Foundation
 
+public enum AutoKeychainPromptPolicy: String, Sendable, CaseIterable {
+    case never
+    case userInitiated
+    case always
+}
+
 public struct ProviderSettingsSnapshot: Sendable {
     public static func make(
         debugMenuEnabled: Bool = false,
@@ -55,17 +61,20 @@ public struct ProviderSettingsSnapshot: Sendable {
         public let webExtrasEnabled: Bool
         public let cookieSource: ProviderCookieSource
         public let manualCookieHeader: String?
+        public let autoKeychainPromptPolicy: AutoKeychainPromptPolicy
 
         public init(
             usageDataSource: ClaudeUsageDataSource,
             webExtrasEnabled: Bool,
             cookieSource: ProviderCookieSource,
-            manualCookieHeader: String?)
+            manualCookieHeader: String?,
+            autoKeychainPromptPolicy: AutoKeychainPromptPolicy)
         {
             self.usageDataSource = usageDataSource
             self.webExtrasEnabled = webExtrasEnabled
             self.cookieSource = cookieSource
             self.manualCookieHeader = manualCookieHeader
+            self.autoKeychainPromptPolicy = autoKeychainPromptPolicy
         }
     }
 

@@ -15,6 +15,7 @@
 
 ### Claude OAuth & Keychain (upgrade-relevant behavior)
 - Claude Auto mode prefers `oauth -> web -> cli` without triggering Keychain prompts during availability checks.
+- Claude Auto mode keeps Keychain prompts suppressed during background refreshes; opening the menu or clicking Refresh may allow an interactive prompt to recover OAuth.
 - If Claude OAuth credentials are present but expired, CodexBar performs at most one delegated refresh handoff to the
   Claude CLI and one OAuth retry before falling back to Web/CLI in Auto mode.
 - Claude OAuth-only mode stays strict: OAuth failures do not silently fall back to Web/CLI.

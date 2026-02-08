@@ -22,6 +22,7 @@ struct SettingsDefaultsState: Sendable {
     var randomBlinkEnabled: Bool
     var menuBarShowsHighestUsage: Bool
     var claudeWebExtrasEnabledRaw: Bool
+    var claudeAutoKeychainPromptPolicyRaw: String?
     var showOptionalCreditsAndExtraUsage: Bool
     var openAIWebAccessEnabled: Bool
     var jetbrainsIDEBasePath: String
