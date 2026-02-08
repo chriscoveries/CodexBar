@@ -340,7 +340,7 @@ struct ClaudeOAuthCredentialsStoreTests {
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         let fileURL = tempDir.appendingPathComponent("credentials.json")
-        try ClaudeOAuthCredentialsStore.withCredentialsURLOverrideForTesting(fileURL) {
+        ClaudeOAuthCredentialsStore.withCredentialsURLOverrideForTesting(fileURL) {
             ClaudeOAuthCredentialsStore.invalidateCache()
 
             let expiredData = self.makeCredentialsData(
@@ -370,7 +370,7 @@ struct ClaudeOAuthCredentialsStoreTests {
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         let fileURL = tempDir.appendingPathComponent("credentials.json")
-        try ClaudeOAuthCredentialsStore.withCredentialsURLOverrideForTesting(fileURL) {
+        ClaudeOAuthCredentialsStore.withCredentialsURLOverrideForTesting(fileURL) {
             ClaudeOAuthCredentialsStore.invalidateCache()
 
             let expiredData = self.makeCredentialsData(
@@ -503,6 +503,93 @@ struct ClaudeOAuthCredentialsStoreTests {
                     case let .found(entry):
                         let parsed = try ClaudeOAuthCredentials.parse(data: entry.data)
                         #expect(parsed.accessToken == "keychain-token")
+                    default:
+                        #expect(Bool(false))
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    func doesNotSyncInBackgroundWhenCacheValidAndPromptModeOnlyOnUserAction() throws {
+        let service = "com.steipete.codexbar.cache.tests.\(UUID().uuidString)"
+        try KeychainCacheStore.withServiceOverrideForTesting(service) {
+            try KeychainAccessGate.withTaskOverrideForTesting(false) {
+                KeychainCacheStore.setTestStoreForTesting(true)
+                defer { KeychainCacheStore.setTestStoreForTesting(false) }
+
+                ClaudeOAuthKeychainAccessGate.resetForTesting()
+                defer { ClaudeOAuthKeychainAccessGate.resetForTesting() }
+
+                ClaudeOAuthCredentialsStore.invalidateCache()
+                ClaudeOAuthCredentialsStore._resetCredentialsFileTrackingForTesting()
+                defer {
+                    ClaudeOAuthCredentialsStore.invalidateCache()
+                    ClaudeOAuthCredentialsStore._resetCredentialsFileTrackingForTesting()
+                    ClaudeOAuthCredentialsStore._resetClaudeKeychainChangeTrackingForTesting()
+                    ClaudeOAuthCredentialsStore.setClaudeKeychainDataOverrideForTesting(nil)
+                    ClaudeOAuthCredentialsStore.setClaudeKeychainFingerprintOverrideForTesting(nil)
+                }
+
+                let tempDir = FileManager.default.temporaryDirectory
+                    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+                try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+                let fileURL = tempDir.appendingPathComponent("credentials.json")
+
+                try ClaudeOAuthCredentialsStore.withCredentialsURLOverrideForTesting(fileURL) {
+                    ClaudeOAuthCredentialsStore._resetClaudeKeychainChangeTrackingForTesting()
+
+                    let fingerprintStore = ClaudeOAuthCredentialsStore.ClaudeKeychainFingerprintStore()
+                    let fingerprint1 = ClaudeOAuthCredentialsStore.ClaudeKeychainFingerprint(
+                        modifiedAt: 1,
+                        createdAt: 1,
+                        persistentRefHash: "ref1")
+                    fingerprintStore.fingerprint = fingerprint1
+
+                    let cacheKey = KeychainCacheStore.Key.oauth(provider: .claude)
+                    let cachedData = self.makeCredentialsData(
+                        accessToken: "cached-token",
+                        expiresAt: Date(timeIntervalSinceNow: 3600))
+                    KeychainCacheStore.store(
+                        key: cacheKey,
+                        entry: ClaudeOAuthCredentialsStore.CacheEntry(
+                            data: cachedData,
+                            storedAt: Date(),
+                            owner: .claudeCLI))
+
+                    ClaudeOAuthCredentialsStore._resetClaudeKeychainChangeThrottleForTesting()
+
+                    let fingerprint2 = ClaudeOAuthCredentialsStore.ClaudeKeychainFingerprint(
+                        modifiedAt: 2,
+                        createdAt: 2,
+                        persistentRefHash: "ref2")
+                    let keychainData = self.makeCredentialsData(
+                        accessToken: "keychain-token",
+                        expiresAt: Date(timeIntervalSinceNow: 3600))
+
+                    let creds = try ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.onlyOnUserAction) {
+                        try ProviderInteractionContext.$current.withValue(.background) {
+                            try ClaudeOAuthCredentialsStore.withClaudeKeychainFingerprintStoreOverrideForTesting(
+                                fingerprintStore)
+                            {
+                                try ClaudeOAuthCredentialsStore.withClaudeKeychainOverridesForTesting(
+                                    data: keychainData,
+                                    fingerprint: fingerprint2)
+                                {
+                                    try ClaudeOAuthCredentialsStore.load(environment: [:], allowKeychainPrompt: false)
+                                }
+                            }
+                        }
+                    }
+
+                    #expect(creds.accessToken == "cached-token")
+                    #expect(fingerprintStore.fingerprint == fingerprint1)
+
+                    switch KeychainCacheStore.load(key: cacheKey, as: ClaudeOAuthCredentialsStore.CacheEntry.self) {
+                    case let .found(entry):
+                        let parsed = try ClaudeOAuthCredentials.parse(data: entry.data)
+                        #expect(parsed.accessToken == "cached-token")
                     default:
                         #expect(Bool(false))
                     }

@@ -797,8 +797,9 @@ public enum ClaudeOAuthCredentialsStore {
         ]
         KeychainNoUIQuery.apply(to: &query)
 
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        let (status, _, durationMs) = ClaudeOAuthKeychainQueryTiming.copyMatching(query)
+        if ClaudeOAuthKeychainQueryTiming
+            .backoffIfSlowNoUIQuery(durationMs, self.claudeKeychainService, self.log) { return false }
         switch status {
         case errSecSuccess, errSecInteractionNotAllowed:
             return true
@@ -907,10 +908,7 @@ public enum ClaudeOAuthCredentialsStore {
                 if ProcessInfo.processInfo.environment["CODEXBAR_DEBUG_CLAUDE_OAUTH_FLOW"] == "1" {
                     self.log.debug(
                         "Claude OAuth keychain freshness sync skipped (background)",
-                        metadata: [
-                            "promptMode": mode.rawValue,
-                            "owner": String(describing: cached.owner),
-                        ])
+                        metadata: ["promptMode": mode.rawValue, "owner": String(describing: cached.owner)])
                 }
                 return false
             }
@@ -943,20 +941,21 @@ public enum ClaudeOAuthCredentialsStore {
 
         do {
             guard let data = try self.loadFromClaudeKeychainNonInteractive(), !data.isEmpty else { return nil }
+            let fingerprint = self.currentClaudeKeychainFingerprintWithoutPrompt()
             guard let creds = try? ClaudeOAuthCredentials.parse(data: data) else {
                 // Fingerprint so we don't repeatedly hammer a broken keychain item.
-                self.saveClaudeKeychainFingerprint(self.currentClaudeKeychainFingerprintWithoutPrompt())
+                self.saveClaudeKeychainFingerprint(fingerprint)
                 return nil
             }
 
             if creds.isExpired {
                 // We intentionally don't cache expired credentials as a "working" OAuth cache entry. However, for the
                 // OAuth flow to delegate refresh to Claude CLI, we must surface the expired record to the caller.
-                self.saveClaudeKeychainFingerprint(self.currentClaudeKeychainFingerprintWithoutPrompt())
+                self.saveClaudeKeychainFingerprint(fingerprint)
                 return ClaudeOAuthCredentialRecord(credentials: creds, owner: .claudeCLI, source: .claudeKeychain)
             }
 
-            self.saveClaudeKeychainFingerprint(self.currentClaudeKeychainFingerprintWithoutPrompt())
+            self.saveClaudeKeychainFingerprint(fingerprint)
             self.writeMemoryCache(
                 record: ClaudeOAuthCredentialRecord(credentials: creds, owner: .claudeCLI, source: .memoryCache),
                 timestamp: now)
@@ -964,9 +963,7 @@ public enum ClaudeOAuthCredentialsStore {
 
             self.log.info(
                 "Claude keychain credentials loaded without prompt; syncing OAuth cache",
-                metadata: [
-                    "interaction": ProviderInteractionContext.current == .userInitiated ? "user" : "background",
-                ])
+                metadata: ["interaction": ProviderInteractionContext.current == .userInitiated ? "user" : "background"])
             return ClaudeOAuthCredentialRecord(credentials: creds, owner: .claudeCLI, source: .claudeKeychain)
         } catch let error as ClaudeOAuthCredentialsError {
             if case let .keychainError(status) = error,
@@ -993,9 +990,8 @@ public enum ClaudeOAuthCredentialsStore {
         // Unit tests can supply TaskLocal overrides for the Claude keychain data/fingerprint. Those tests often run
         // concurrently with other suites, so the global throttle becomes nondeterministic. When an override is
         // present, bypass the throttle so test expectations don't depend on unrelated activity.
-        if self.taskClaudeKeychainFingerprintOverride != nil || self.claudeKeychainFingerprintOverride != nil {
-            return true
-        }
+        if self.taskClaudeKeychainOverrideStore != nil || self.taskClaudeKeychainFingerprintOverride != nil
+            || self.claudeKeychainFingerprintOverride != nil { return true }
         #endif
 
         self.claudeKeychainChangeCheckLock.lock()
@@ -1045,8 +1041,9 @@ public enum ClaudeOAuthCredentialsStore {
 
     private static func currentClaudeKeychainFingerprintWithoutPrompt() -> ClaudeKeychainFingerprint? {
         #if DEBUG
-        if let override = taskClaudeKeychainFingerprintOverride { return override }
-        if let override = self.claudeKeychainFingerprintOverride { return override }
+        if let store = taskClaudeKeychainOverrideStore { return store.fingerprint }
+        if let override = taskClaudeKeychainFingerprintOverride ?? self
+            .claudeKeychainFingerprintOverride { return override }
         #endif
         #if os(macOS)
         if !self.keychainAccessAllowed {
@@ -1092,8 +1089,8 @@ public enum ClaudeOAuthCredentialsStore {
 
     private static func loadFromClaudeKeychainNonInteractive() throws -> Data? {
         #if DEBUG
-        if let override = taskClaudeKeychainDataOverride { return override }
-        if let override = self.claudeKeychainDataOverride { return override }
+        if let store = taskClaudeKeychainOverrideStore { return store.data }
+        if let override = taskClaudeKeychainDataOverride ?? self.claudeKeychainDataOverride { return override }
         #endif
         #if os(macOS)
         if !self.keychainAccessAllowed {
@@ -1201,8 +1198,12 @@ public enum ClaudeOAuthCredentialsStore {
         ]
         KeychainNoUIQuery.apply(to: &query)
 
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        let (status, result, durationMs) = ClaudeOAuthKeychainQueryTiming.copyMatching(query)
+        if ClaudeOAuthKeychainQueryTiming
+            .backoffIfSlowNoUIQuery(durationMs, self.claudeKeychainService, self.log) { return [] }
+        if status == errSecUserCanceled || status == errSecAuthFailed || status == errSecNoAccessForItem {
+            ClaudeOAuthKeychainAccessGate.recordDenied()
+        }
         guard status == errSecSuccess else { return [] }
         guard let rows = result as? [[String: Any]], !rows.isEmpty else { return [] }
 

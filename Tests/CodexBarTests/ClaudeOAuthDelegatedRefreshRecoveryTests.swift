@@ -193,12 +193,9 @@ struct ClaudeOAuthDelegatedRefreshRecoveryTests {
                             modifiedAt: 1,
                             createdAt: 1,
                             persistentRefHash: "test")
-                        ClaudeOAuthCredentialsStore.setClaudeKeychainDataOverrideForTesting(Data())
-                        ClaudeOAuthCredentialsStore.setClaudeKeychainFingerprintOverrideForTesting(stubFingerprint)
-                        defer {
-                            ClaudeOAuthCredentialsStore.setClaudeKeychainDataOverrideForTesting(nil)
-                            ClaudeOAuthCredentialsStore.setClaudeKeychainFingerprintOverrideForTesting(nil)
-                        }
+                        let keychainOverrideStore = ClaudeOAuthCredentialsStore.ClaudeKeychainOverrideStore(
+                            data: Data(),
+                            fingerprint: stubFingerprint)
 
                         let freshData = self.makeCredentialsData(
                             accessToken: "fresh-token",
@@ -219,17 +216,23 @@ struct ClaudeOAuthDelegatedRefreshRecoveryTests {
                             Date,
                             TimeInterval) async -> ClaudeOAuthDelegatedRefreshCoordinator.Outcome)? = { _, _ in
                             // Simulate Claude CLI writing fresh credentials after the delegated refresh touch.
-                            ClaudeOAuthCredentialsStore.setClaudeKeychainDataOverrideForTesting(freshData)
-                            ClaudeOAuthCredentialsStore.setClaudeKeychainFingerprintOverrideForTesting(stubFingerprint)
+                            keychainOverrideStore.data = freshData
+                            keychainOverrideStore.fingerprint = stubFingerprint
                             _ = await delegatedCounter.increment()
                             return .attemptedSucceeded
                         }
 
-                        let snapshot = try await ClaudeUsageFetcher.$fetchOAuthUsageOverride.withValue(fetchOverride) {
-                            try await ClaudeUsageFetcher.$delegatedRefreshAttemptOverride.withValue(delegatedOverride) {
-                                try await fetcher.loadLatestUsage(model: "sonnet")
+                        let snapshot = try await ClaudeOAuthCredentialsStore
+                            .withMutableClaudeKeychainOverrideStoreForTesting(
+                                keychainOverrideStore)
+                            {
+                                try await ClaudeUsageFetcher.$fetchOAuthUsageOverride.withValue(fetchOverride) {
+                                    try await ClaudeUsageFetcher.$delegatedRefreshAttemptOverride
+                                        .withValue(delegatedOverride) {
+                                            try await fetcher.loadLatestUsage(model: "sonnet")
+                                        }
+                                }
                             }
-                        }
 
                         #expect(await delegatedCounter.current() == 1)
                         #expect(await tokenCapture.get() == "fresh-token")
