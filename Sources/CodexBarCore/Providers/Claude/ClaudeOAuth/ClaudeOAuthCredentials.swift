@@ -1533,13 +1533,13 @@ extension ClaudeOAuthCredentialsStore {
 
         #if DEBUG
         // Test hook: allow unit tests to simulate a "silent" keychain read without touching the real Keychain.
-        if let override = self.taskClaudeKeychainDataOverride ?? self.claudeKeychainDataOverride,
-           !override.isEmpty,
-           let creds = try? ClaudeOAuthCredentials.parse(data: override),
-           !creds.isExpired
+        if let override = self.taskClaudeKeychainOverrideStore?.data ?? self.taskClaudeKeychainDataOverride
+            ?? self.claudeKeychainDataOverride,
+            !override.isEmpty,
+            let creds = try? ClaudeOAuthCredentials.parse(data: override),
+            !creds.isExpired
         {
-            let fingerprint = self.currentClaudeKeychainFingerprintWithoutPrompt()
-            self.saveClaudeKeychainFingerprint(fingerprint)
+            self.saveClaudeKeychainFingerprint(self.currentClaudeKeychainFingerprintWithoutPrompt())
             self.writeMemoryCache(
                 record: ClaudeOAuthCredentialRecord(
                     credentials: creds,
