@@ -341,6 +341,9 @@ public struct ClaudeUsageFetcher: ClaudeUsageFetching, Sendable {
 
             // Allow keychain prompt when no cached credentials exist (bootstrap case)
             let hasCache = ClaudeOAuthCredentialsStore.hasCachedCredentials(environment: self.environment)
+            // Note: `hasCachedCredentials` intentionally returns true for expired Claude-CLI-owned creds, because the
+            // repair path is delegated refresh via Claude CLI (followed by a silent re-sync) rather than immediately
+            // prompting on the initial load.
             let allowKeychainPrompt = promptPolicy.canPromptNow && !hasCache
             if allowKeychainPrompt {
                 Self.log.info(
