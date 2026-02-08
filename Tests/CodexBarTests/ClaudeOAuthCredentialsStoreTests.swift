@@ -906,7 +906,7 @@ struct ClaudeOAuthCredentialsStoreTests {
     }
 
     @Test
-    func syncFromClaudeKeychainWithoutPrompt_respectsBackoffInBackground() throws {
+    func syncFromClaudeKeychainWithoutPrompt_respectsBackoffInBackground() {
         ProviderInteractionContext.$current.withValue(.background) {
             KeychainAccessGate.withTaskOverrideForTesting(true) {
                 ClaudeOAuthCredentialsStore.setKeychainAccessOverrideForTesting(true)
