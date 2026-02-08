@@ -904,4 +904,32 @@ struct ClaudeOAuthCredentialsStoreTests {
             #expect(preAlertHits == 1)
         }
     }
+
+    @Test
+    func syncFromClaudeKeychainWithoutPrompt_respectsBackoffInBackground() throws {
+        try ProviderInteractionContext.$current.withValue(.background) {
+            try KeychainAccessGate.withTaskOverrideForTesting(true) {
+                ClaudeOAuthCredentialsStore.setKeychainAccessOverrideForTesting(true)
+                defer { ClaudeOAuthCredentialsStore.setKeychainAccessOverrideForTesting(nil) }
+
+                let store = ClaudeOAuthCredentialsStore.ClaudeKeychainOverrideStore(
+                    data: self.makeCredentialsData(
+                        accessToken: "override-token",
+                        expiresAt: Date(timeIntervalSinceNow: 3600)),
+                    fingerprint: ClaudeOAuthCredentialsStore.ClaudeKeychainFingerprint(
+                        modifiedAt: 1,
+                        createdAt: 1,
+                        persistentRefHash: "deadbeefdead"))
+
+                let deniedStore = ClaudeOAuthKeychainAccessGate.DeniedUntilStore()
+                deniedStore.deniedUntil = Date(timeIntervalSinceNow: 3600)
+
+                ClaudeOAuthKeychainAccessGate.withDeniedUntilStoreOverrideForTesting(deniedStore) {
+                    ClaudeOAuthCredentialsStore.withMutableClaudeKeychainOverrideStoreForTesting(store) {
+                        #expect(ClaudeOAuthCredentialsStore.syncFromClaudeKeychainWithoutPrompt(now: Date()) == false)
+                    }
+                }
+            }
+        }
+    }
 }
