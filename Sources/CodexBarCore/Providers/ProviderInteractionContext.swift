@@ -8,4 +8,3 @@ public enum ProviderInteraction: Sendable, Equatable {
 public enum ProviderInteractionContext {
     @TaskLocal public static var current: ProviderInteraction = .background
 }
-

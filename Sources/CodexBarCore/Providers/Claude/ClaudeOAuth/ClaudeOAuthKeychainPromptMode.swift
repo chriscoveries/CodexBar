@@ -45,4 +45,3 @@ public enum ClaudeOAuthKeychainPromptPreference {
     }
     #endif
 }
-

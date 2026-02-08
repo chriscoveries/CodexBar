@@ -319,7 +319,6 @@ public enum ClaudeOAuthCredentialsStore {
             respectKeychainPromptCooldown: respectKeychainPromptCooldown).credentials
     }
 
-    // swiftlint:disable:next cyclomatic_complexity
     public static func loadRecord(
         environment: [String: String] = ProcessInfo.processInfo.environment,
         allowKeychainPrompt: Bool = true,
@@ -439,69 +438,12 @@ public enum ClaudeOAuthCredentialsStore {
         }
 
         // 4. Fall back to Claude's keychain (may prompt user if allowed)
-        let promptAllowed =
-            allowKeychainPrompt
-                && (!respectKeychainPromptCooldown || ClaudeOAuthKeychainAccessGate.shouldAllowPrompt())
-        if promptAllowed {
-            do {
-                self.claudeKeychainPromptLock.lock()
-                defer { self.claudeKeychainPromptLock.unlock() }
-
-                // Multiple concurrent callers can all reach this point before the first one populates the cache.
-                // Re-check the cache while holding the prompt lock to avoid triggering multiple OS keychain dialogs.
-                let memory = self.readMemoryCache()
-                if let cachedRecord = memory.record,
-                   let timestamp = memory.timestamp,
-                   Date().timeIntervalSince(timestamp) < self.memoryCacheValidityDuration,
-                   !cachedRecord.credentials.isExpired
-                {
-                    return ClaudeOAuthCredentialRecord(
-                        credentials: cachedRecord.credentials,
-                        owner: cachedRecord.owner,
-                        source: .memoryCache)
-                }
-                if case let .found(entry) = KeychainCacheStore.load(key: self.cacheKey, as: CacheEntry.self),
-                   let creds = try? ClaudeOAuthCredentials.parse(data: entry.data),
-                   !creds.isExpired
-                {
-                    return ClaudeOAuthCredentialRecord(
-                        credentials: creds,
-                        owner: entry.owner ?? .claudeCLI,
-                        source: .cacheKeychain)
-                }
-
-                // Some macOS configurations still show the system keychain prompt even for our "silent" probes.
-                // Only show the in-app pre-alert when we have evidence that Keychain interaction is likely.
-                if self.shouldShowClaudeKeychainPreAlert() {
-                    KeychainPromptHandler.handler?(
-                        KeychainPromptContext(
-                            kind: .claudeOAuth,
-                            service: self.claudeKeychainService,
-                            account: nil))
-                }
-                let keychainData = try self.loadFromClaudeKeychain()
-                let creds = try ClaudeOAuthCredentials.parse(data: keychainData)
-                let record = ClaudeOAuthCredentialRecord(
-                    credentials: creds,
-                    owner: .claudeCLI,
-                    source: .claudeKeychain)
-                self.writeMemoryCache(
-                    record: ClaudeOAuthCredentialRecord(
-                        credentials: creds,
-                        owner: .claudeCLI,
-                        source: .memoryCache),
-                    timestamp: Date())
-                self.saveToCacheKeychain(keychainData, owner: .claudeCLI)
-                return record
-            } catch let error as ClaudeOAuthCredentialsError {
-                if case .notFound = error {
-                    // Ignore missing entry
-                } else {
-                    lastError = error
-                }
-            } catch {
-                lastError = error
-            }
+        if let prompted = self.loadFromClaudeKeychainWithPromptIfAllowed(
+            allowKeychainPrompt: allowKeychainPrompt,
+            respectKeychainPromptCooldown: respectKeychainPromptCooldown,
+            lastError: &lastError)
+        {
+            return prompted
         }
 
         if let expiredRecord {
@@ -509,6 +451,78 @@ public enum ClaudeOAuthCredentialsStore {
         }
         if let lastError { throw lastError }
         throw ClaudeOAuthCredentialsError.notFound
+    }
+
+    private static func loadFromClaudeKeychainWithPromptIfAllowed(
+        allowKeychainPrompt: Bool,
+        respectKeychainPromptCooldown: Bool,
+        lastError: inout Error?) -> ClaudeOAuthCredentialRecord?
+    {
+        let promptAllowed =
+            allowKeychainPrompt
+                && (!respectKeychainPromptCooldown || ClaudeOAuthKeychainAccessGate.shouldAllowPrompt())
+        guard promptAllowed else { return nil }
+
+        do {
+            self.claudeKeychainPromptLock.lock()
+            defer { self.claudeKeychainPromptLock.unlock() }
+
+            // Multiple concurrent callers can all reach this point before the first one populates the cache.
+            // Re-check the cache while holding the prompt lock to avoid triggering multiple OS keychain dialogs.
+            let memory = self.readMemoryCache()
+            if let cachedRecord = memory.record,
+               let timestamp = memory.timestamp,
+               Date().timeIntervalSince(timestamp) < self.memoryCacheValidityDuration,
+               !cachedRecord.credentials.isExpired
+            {
+                return ClaudeOAuthCredentialRecord(
+                    credentials: cachedRecord.credentials,
+                    owner: cachedRecord.owner,
+                    source: .memoryCache)
+            }
+            if case let .found(entry) = KeychainCacheStore.load(key: self.cacheKey, as: CacheEntry.self),
+               let creds = try? ClaudeOAuthCredentials.parse(data: entry.data),
+               !creds.isExpired
+            {
+                return ClaudeOAuthCredentialRecord(
+                    credentials: creds,
+                    owner: entry.owner ?? .claudeCLI,
+                    source: .cacheKeychain)
+            }
+
+            // Some macOS configurations still show the system keychain prompt even for our "silent" probes.
+            // Only show the in-app pre-alert when we have evidence that Keychain interaction is likely.
+            if self.shouldShowClaudeKeychainPreAlert() {
+                KeychainPromptHandler.handler?(
+                    KeychainPromptContext(
+                        kind: .claudeOAuth,
+                        service: self.claudeKeychainService,
+                        account: nil))
+            }
+            let keychainData = try self.loadFromClaudeKeychain()
+            let creds = try ClaudeOAuthCredentials.parse(data: keychainData)
+            let record = ClaudeOAuthCredentialRecord(
+                credentials: creds,
+                owner: .claudeCLI,
+                source: .claudeKeychain)
+            self.writeMemoryCache(
+                record: ClaudeOAuthCredentialRecord(
+                    credentials: creds,
+                    owner: .claudeCLI,
+                    source: .memoryCache),
+                timestamp: Date())
+            self.saveToCacheKeychain(keychainData, owner: .claudeCLI)
+            return record
+        } catch let error as ClaudeOAuthCredentialsError {
+            if case .notFound = error {
+                // Ignore missing entry
+            } else {
+                lastError = error
+            }
+        } catch {
+            lastError = error
+        }
+        return nil
     }
 
     /// Async version of load that handles expired tokens based on credential ownership.
