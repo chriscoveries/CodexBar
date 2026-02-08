@@ -843,7 +843,18 @@ public enum ClaudeOAuthCredentialsStore {
         case .never:
             return false
         case .onlyOnUserAction:
-            return ProviderInteractionContext.current == .userInitiated
+            if ProviderInteractionContext.current != .userInitiated {
+                if ProcessInfo.processInfo.environment["CODEXBAR_DEBUG_CLAUDE_OAUTH_FLOW"] == "1" {
+                    self.log.debug(
+                        "Claude OAuth keychain freshness sync skipped (background)",
+                        metadata: [
+                            "promptMode": mode.rawValue,
+                            "owner": String(describing: cached.owner),
+                        ])
+                }
+                return false
+            }
+            return true
         case .always:
             return true
         }
