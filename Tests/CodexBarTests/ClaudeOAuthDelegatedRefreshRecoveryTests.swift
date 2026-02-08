@@ -58,7 +58,7 @@ struct ClaudeOAuthDelegatedRefreshRecoveryTests {
     }
 
     @Test
-    func delegatedRefresh_attemptedSucceeded_silentKeychainSync_recovers() async throws {
+    func silentKeychainRepair_recoversWithoutDelegation() async throws {
         let delegatedCounter = AsyncCounter()
         let usageResponse = try Self.makeOAuthUsageResponse()
         let tokenCapture = TokenCapture()
@@ -79,69 +79,165 @@ struct ClaudeOAuthDelegatedRefreshRecoveryTests {
                         .appendingPathComponent(UUID().uuidString, isDirectory: true)
                     try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
                     let fileURL = tempDir.appendingPathComponent("credentials.json")
-                    ClaudeOAuthCredentialsStore.setCredentialsURLOverrideForTesting(fileURL)
-                    defer { ClaudeOAuthCredentialsStore.setCredentialsURLOverrideForTesting(nil) }
+                    let snapshot = try await ClaudeOAuthCredentialsStore.withCredentialsURLOverrideForTesting(fileURL) {
+                        // Seed an expired cache entry owned by Claude CLI, so the initial load delegates refresh.
+                        ClaudeOAuthCredentialsStore.invalidateCache()
+                        let expiredData = self.makeCredentialsData(
+                            accessToken: "expired-token",
+                            expiresAt: Date(timeIntervalSinceNow: -3600))
+                        let cacheKey = KeychainCacheStore.Key.oauth(provider: .claude)
+                        let cacheEntry = ClaudeOAuthCredentialsStore.CacheEntry(
+                            data: expiredData,
+                            storedAt: Date(),
+                            owner: .claudeCLI)
+                        KeychainCacheStore.store(key: cacheKey, entry: cacheEntry)
+                        defer { KeychainCacheStore.clear(key: cacheKey) }
 
-                    // Seed an expired cache entry owned by Claude CLI, so the initial load delegates refresh.
-                    ClaudeOAuthCredentialsStore.invalidateCache()
-                    let expiredData = self.makeCredentialsData(
-                        accessToken: "expired-token",
-                        expiresAt: Date(timeIntervalSinceNow: -3600))
-                    let cacheKey = KeychainCacheStore.Key.oauth(provider: .claude)
-                    let cacheEntry = ClaudeOAuthCredentialsStore.CacheEntry(
-                        data: expiredData,
-                        storedAt: Date(),
-                        owner: .claudeCLI)
-                    KeychainCacheStore.store(key: cacheKey, entry: cacheEntry)
-                    defer { KeychainCacheStore.clear(key: cacheKey) }
+                        // Sanity: setup should be visible to the code under test.
+                        // Otherwise it may attempt interactive reads.
+                        #expect(ClaudeOAuthCredentialsStore.hasCachedCredentials(environment: [:]) == true)
 
-                    // Sanity: setup should be visible to the code under test.
-                    // Otherwise it may attempt interactive reads.
-                    #expect(ClaudeOAuthCredentialsStore.hasCachedCredentials(environment: [:]) == true)
+                        // Simulate Claude CLI writing fresh credentials into the Claude Code keychain entry.
+                        let freshData = self.makeCredentialsData(
+                            accessToken: "fresh-token",
+                            expiresAt: Date(timeIntervalSinceNow: 3600))
+                        let fingerprint = ClaudeOAuthCredentialsStore.ClaudeKeychainFingerprint(
+                            modifiedAt: 1,
+                            createdAt: 1,
+                            persistentRefHash: "test")
 
-                    // Simulate Claude CLI writing fresh credentials into the Claude Code keychain entry.
-                    let freshData = self.makeCredentialsData(
-                        accessToken: "fresh-token",
-                        expiresAt: Date(timeIntervalSinceNow: 3600))
-                    let fingerprint = ClaudeOAuthCredentialsStore.ClaudeKeychainFingerprint(
-                        modifiedAt: 1,
-                        createdAt: 1,
-                        persistentRefHash: "test")
+                        let fetcher = ClaudeUsageFetcher(
+                            browserDetection: BrowserDetection(cacheTTL: 0),
+                            environment: [:],
+                            dataSource: .oauth,
+                            oauthKeychainPromptCooldownEnabled: true)
 
-                    let fetcher = ClaudeUsageFetcher(
-                        browserDetection: BrowserDetection(cacheTTL: 0),
-                        environment: [:],
-                        dataSource: .oauth,
-                        oauthKeychainPromptCooldownEnabled: true)
+                        let fetchOverride: (@Sendable (String) async throws -> OAuthUsageResponse)? = { token in
+                            await tokenCapture.set(token)
+                            return usageResponse
+                        }
+                        let delegatedOverride: (@Sendable (
+                            Date,
+                            TimeInterval) async -> ClaudeOAuthDelegatedRefreshCoordinator.Outcome)? = { _, _ in
+                            _ = await delegatedCounter.increment()
+                            return .attemptedSucceeded
+                        }
 
-                    let fetchOverride: (@Sendable (String) async throws -> OAuthUsageResponse)? = { token in
-                        await tokenCapture.set(token)
-                        return usageResponse
+                        let snapshot = try await ClaudeOAuthCredentialsStore.withClaudeKeychainOverridesForTesting(
+                            data: freshData,
+                            fingerprint: fingerprint)
+                        {
+                            try await ClaudeUsageFetcher.$fetchOAuthUsageOverride.withValue(fetchOverride) {
+                                try await ClaudeUsageFetcher.$delegatedRefreshAttemptOverride
+                                    .withValue(delegatedOverride) {
+                                        try await fetcher.loadLatestUsage(model: "sonnet")
+                                    }
+                            }
+                        }
+
+                        // If Claude keychain already contains fresh credentials, we should recover without needing a
+                        // CLI
+                        // touch.
+                        #expect(await delegatedCounter.current() == 0)
+                        #expect(await tokenCapture.get() == "fresh-token")
+                        #expect(snapshot.primary.usedPercent == 7)
+                        #expect(snapshot.secondary?.usedPercent == 21)
+                        return snapshot
                     }
-                    let delegatedOverride: (@Sendable (
-                        Date,
-                        TimeInterval) async -> ClaudeOAuthDelegatedRefreshCoordinator.Outcome)? = { _, _ in
-                        _ = await delegatedCounter.increment()
-                        return .attemptedSucceeded
-                    }
+                    _ = snapshot
+                }
+            }
+        }
+    }
 
-                    let snapshot = try await ClaudeOAuthCredentialsStore.withClaudeKeychainOverridesForTesting(
-                        data: freshData,
-                        fingerprint: fingerprint)
-                    {
-                        try await ClaudeUsageFetcher.$fetchOAuthUsageOverride.withValue(fetchOverride) {
+    @Test
+    func delegatedRefresh_attemptedSucceeded_recoversAfterKeychainSync() async throws {
+        let delegatedCounter = AsyncCounter()
+        let usageResponse = try Self.makeOAuthUsageResponse()
+        let tokenCapture = TokenCapture()
+        let service = "com.steipete.codexbar.cache.tests.\(UUID().uuidString)"
+
+        try await KeychainCacheStore.withServiceOverrideForTesting(service) {
+            try await KeychainAccessGate.withTaskOverrideForTesting(false) {
+                KeychainCacheStore.setTestStoreForTesting(true)
+                defer { KeychainCacheStore.setTestStoreForTesting(false) }
+
+                ClaudeOAuthCredentialsStore._resetCredentialsFileTrackingForTesting()
+                defer { ClaudeOAuthCredentialsStore._resetCredentialsFileTrackingForTesting() }
+                ClaudeOAuthCredentialsStore._resetClaudeKeychainChangeTrackingForTesting()
+                defer { ClaudeOAuthCredentialsStore._resetClaudeKeychainChangeTrackingForTesting() }
+
+                try await ClaudeOAuthCredentialsStore.withIsolatedMemoryCacheForTesting {
+                    let tempDir = FileManager.default.temporaryDirectory
+                        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+                    try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+                    let fileURL = tempDir.appendingPathComponent("credentials.json")
+                    let snapshot = try await ClaudeOAuthCredentialsStore.withCredentialsURLOverrideForTesting(fileURL) {
+                        // Seed an expired cache entry owned by Claude CLI, so the initial load delegates refresh.
+                        ClaudeOAuthCredentialsStore.invalidateCache()
+                        let expiredData = self.makeCredentialsData(
+                            accessToken: "expired-token",
+                            expiresAt: Date(timeIntervalSinceNow: -3600))
+                        let cacheKey = KeychainCacheStore.Key.oauth(provider: .claude)
+                        let cacheEntry = ClaudeOAuthCredentialsStore.CacheEntry(
+                            data: expiredData,
+                            storedAt: Date(),
+                            owner: .claudeCLI)
+                        KeychainCacheStore.store(key: cacheKey, entry: cacheEntry)
+                        defer { KeychainCacheStore.clear(key: cacheKey) }
+
+                        // Ensure we don't silently repair from the Claude keychain before delegation.
+                        // Use an explicit empty-data override so we never consult the real system Keychain during
+                        // tests.
+                        let stubFingerprint = ClaudeOAuthCredentialsStore.ClaudeKeychainFingerprint(
+                            modifiedAt: 1,
+                            createdAt: 1,
+                            persistentRefHash: "test")
+                        ClaudeOAuthCredentialsStore.setClaudeKeychainDataOverrideForTesting(Data())
+                        ClaudeOAuthCredentialsStore.setClaudeKeychainFingerprintOverrideForTesting(stubFingerprint)
+                        defer {
+                            ClaudeOAuthCredentialsStore.setClaudeKeychainDataOverrideForTesting(nil)
+                            ClaudeOAuthCredentialsStore.setClaudeKeychainFingerprintOverrideForTesting(nil)
+                        }
+
+                        let freshData = self.makeCredentialsData(
+                            accessToken: "fresh-token",
+                            expiresAt: Date(timeIntervalSinceNow: 3600))
+
+                        let fetcher = ClaudeUsageFetcher(
+                            browserDetection: BrowserDetection(cacheTTL: 0),
+                            environment: [:],
+                            dataSource: .oauth,
+                            oauthKeychainPromptCooldownEnabled: true)
+
+                        let fetchOverride: (@Sendable (String) async throws -> OAuthUsageResponse)? = { token in
+                            await tokenCapture.set(token)
+                            return usageResponse
+                        }
+
+                        let delegatedOverride: (@Sendable (
+                            Date,
+                            TimeInterval) async -> ClaudeOAuthDelegatedRefreshCoordinator.Outcome)? = { _, _ in
+                            // Simulate Claude CLI writing fresh credentials after the delegated refresh touch.
+                            ClaudeOAuthCredentialsStore.setClaudeKeychainDataOverrideForTesting(freshData)
+                            ClaudeOAuthCredentialsStore.setClaudeKeychainFingerprintOverrideForTesting(stubFingerprint)
+                            _ = await delegatedCounter.increment()
+                            return .attemptedSucceeded
+                        }
+
+                        let snapshot = try await ClaudeUsageFetcher.$fetchOAuthUsageOverride.withValue(fetchOverride) {
                             try await ClaudeUsageFetcher.$delegatedRefreshAttemptOverride.withValue(delegatedOverride) {
                                 try await fetcher.loadLatestUsage(model: "sonnet")
                             }
                         }
-                    }
 
-                    // If Claude keychain already contains fresh credentials, we should recover without needing a CLI
-                    // touch.
-                    #expect(await delegatedCounter.current() == 0)
-                    #expect(await tokenCapture.get() == "fresh-token")
-                    #expect(snapshot.primary.usedPercent == 7)
-                    #expect(snapshot.secondary?.usedPercent == 21)
+                        #expect(await delegatedCounter.current() == 1)
+                        #expect(await tokenCapture.get() == "fresh-token")
+                        #expect(snapshot.primary.usedPercent == 7)
+                        #expect(snapshot.secondary?.usedPercent == 21)
+                        return snapshot
+                    }
+                    _ = snapshot
                 }
             }
         }

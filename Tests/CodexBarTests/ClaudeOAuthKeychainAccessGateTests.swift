@@ -52,13 +52,16 @@ struct ClaudeOAuthKeychainAccessGateTests {
             ClaudeOAuthKeychainAccessGate.resetForTesting()
             defer { ClaudeOAuthKeychainAccessGate.resetForTesting() }
 
-            let now = Date(timeIntervalSince1970: 3000)
-            ClaudeOAuthKeychainAccessGate.recordDenied(now: now)
-            #expect(ClaudeOAuthKeychainAccessGate.shouldAllowPrompt(now: now) == false)
+            let store = ClaudeOAuthKeychainAccessGate.DeniedUntilStore()
+            ClaudeOAuthKeychainAccessGate.withDeniedUntilStoreOverrideForTesting(store) {
+                let now = Date(timeIntervalSince1970: 3000)
+                ClaudeOAuthKeychainAccessGate.recordDenied(now: now)
+                #expect(ClaudeOAuthKeychainAccessGate.shouldAllowPrompt(now: now) == false)
 
-            #expect(ClaudeOAuthKeychainAccessGate.clearDenied(now: now))
-            #expect(ClaudeOAuthKeychainAccessGate.shouldAllowPrompt(now: now))
-            #expect(ClaudeOAuthKeychainAccessGate.clearDenied(now: now) == false)
+                #expect(ClaudeOAuthKeychainAccessGate.clearDenied(now: now))
+                #expect(ClaudeOAuthKeychainAccessGate.shouldAllowPrompt(now: now))
+                #expect(ClaudeOAuthKeychainAccessGate.clearDenied(now: now) == false)
+            }
         }
     }
 }

@@ -187,7 +187,7 @@ public enum ClaudeOAuthCredentialsStore {
     }
 
     private static let log = CodexBarLog.logger(LogCategories.claudeUsage)
-    private static let fileFingerprintKey = "ClaudeOAuthCredentialsFileFingerprintV1"
+    private static let fileFingerprintKey = "ClaudeOAuthCredentialsFileFingerprintV2"
     private static let claudeKeychainPromptLock = NSLock()
     private static let claudeKeychainFingerprintKey = "ClaudeOAuthClaudeKeychainFingerprintV2"
     private static let claudeKeychainFingerprintLegacyKey = "ClaudeOAuthClaudeKeychainFingerprintV1"
@@ -293,7 +293,7 @@ public enum ClaudeOAuthCredentialsStore {
     #endif
 
     private struct CredentialsFileFingerprint: Codable, Equatable, Sendable {
-        let modifiedAt: Int?
+        let modifiedAtMs: Int?
         let size: Int
     }
 
@@ -310,6 +310,9 @@ public enum ClaudeOAuthCredentialsStore {
     }
 
     private nonisolated(unsafe) static var credentialsURLOverride: URL?
+    #if DEBUG
+    @TaskLocal private static var taskCredentialsURLOverride: URL?
+    #endif
     // In-memory cache (nonisolated for synchronous access)
     private static let memoryCacheLock = NSLock()
     private nonisolated(unsafe) static var cachedCredentialRecord: ClaudeOAuthCredentialRecord?
@@ -684,8 +687,8 @@ public enum ClaudeOAuthCredentialsStore {
 
         var shouldClearKeychainCache = false
         if let current {
-            if let modifiedAtSeconds = current.modifiedAt {
-                let modifiedAt = Date(timeIntervalSince1970: TimeInterval(modifiedAtSeconds))
+            if let modifiedAtMs = current.modifiedAtMs {
+                let modifiedAt = Date(timeIntervalSince1970: TimeInterval(Double(modifiedAtMs) / 1000.0))
                 if case let .found(entry) = KeychainCacheStore.load(key: self.cacheKey, as: CacheEntry.self) {
                     if entry.storedAt < modifiedAt {
                         shouldClearKeychainCache = true
@@ -821,6 +824,12 @@ public enum ClaudeOAuthCredentialsStore {
         if respectKeychainPromptCooldown,
            !ClaudeOAuthKeychainAccessGate.shouldAllowPrompt(now: now)
         {
+            return nil
+        }
+
+        // Do not attempt a non-interactive data read if preflight indicates interaction is likely.
+        // Why: on some systems, Security.framework can still surface UI even for "no UI" queries.
+        if self.shouldShowClaudeKeychainPreAlert() {
             return nil
         }
 
@@ -1066,7 +1075,7 @@ public enum ClaudeOAuthCredentialsStore {
 
     static func currentCredentialsFileFingerprintWithoutPromptForAuthGate() -> String? {
         guard let fingerprint = self.currentFileFingerprint() else { return nil }
-        let modifiedAt = fingerprint.modifiedAt ?? 0
+        let modifiedAt = fingerprint.modifiedAtMs ?? 0
         return "\(modifiedAt):\(fingerprint.size)"
     }
 
@@ -1411,6 +1420,26 @@ public enum ClaudeOAuthCredentialsStore {
         self.credentialsURLOverride = url
     }
 
+    #if DEBUG
+    static func withCredentialsURLOverrideForTesting<T>(
+        _ url: URL?,
+        operation: () throws -> T) rethrows -> T
+    {
+        try self.$taskCredentialsURLOverride.withValue(url) {
+            try operation()
+        }
+    }
+
+    static func withCredentialsURLOverrideForTesting<T>(
+        _ url: URL?,
+        operation: () async throws -> T) async rethrows -> T
+    {
+        try await self.$taskCredentialsURLOverride.withValue(url) {
+            try await operation()
+        }
+    }
+    #endif
+
     private static func saveToCacheKeychain(_ data: Data, owner: ClaudeOAuthCredentialOwner? = nil) {
         let entry = CacheEntry(data: data, storedAt: Date(), owner: owner)
         KeychainCacheStore.store(key: self.cacheKey, entry: entry)
@@ -1430,7 +1459,10 @@ public enum ClaudeOAuthCredentialsStore {
     }
 
     private static func credentialsFileURL() -> URL {
-        self.credentialsURLOverride ?? self.defaultCredentialsURL()
+        #if DEBUG
+        if let override = self.taskCredentialsURLOverride { return override }
+        #endif
+        return self.credentialsURLOverride ?? self.defaultCredentialsURL()
     }
 
     private static func loadFileFingerprint() -> CredentialsFileFingerprint? {
@@ -1456,8 +1488,8 @@ public enum ClaudeOAuthCredentialsStore {
             return nil
         }
         let size = (attrs[.size] as? NSNumber)?.intValue ?? 0
-        let modifiedAt = (attrs[.modificationDate] as? Date).map { Int($0.timeIntervalSince1970) }
-        return CredentialsFileFingerprint(modifiedAt: modifiedAt, size: size)
+        let modifiedAtMs = (attrs[.modificationDate] as? Date).map { Int($0.timeIntervalSince1970 * 1000) }
+        return CredentialsFileFingerprint(modifiedAtMs: modifiedAtMs, size: size)
     }
 
     #if DEBUG
