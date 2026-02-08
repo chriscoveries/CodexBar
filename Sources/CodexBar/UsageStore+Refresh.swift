@@ -7,7 +7,11 @@ extension UsageStore {
         await self.performRuntimeAction(.forceSessionRefresh, for: .augment)
     }
 
-    func refreshProvider(_ provider: UsageProvider, allowDisabled: Bool = false) async {
+    func refreshProvider(
+        _ provider: UsageProvider,
+        trigger: ProviderFetchTrigger = .background,
+        allowDisabled: Bool = false) async
+    {
         guard let spec = self.providerSpecs[provider] else { return }
 
         if !spec.isEnabled(), !allowDisabled {
@@ -34,7 +38,7 @@ extension UsageStore {
 
         let tokenAccounts = self.tokenAccounts(for: provider)
         if self.shouldFetchAllTokenAccounts(provider: provider, accounts: tokenAccounts) {
-            await self.refreshTokenAccounts(provider: provider, accounts: tokenAccounts)
+            await self.refreshTokenAccounts(provider: provider, accounts: tokenAccounts, trigger: trigger)
             return
         } else {
             _ = await MainActor.run {
@@ -42,7 +46,7 @@ extension UsageStore {
             }
         }
 
-        let outcome = await spec.fetch()
+        let outcome = await spec.fetch(trigger)
         if provider == .claude,
            ClaudeOAuthCredentialsStore.invalidateCacheIfCredentialsFileChanged()
         {

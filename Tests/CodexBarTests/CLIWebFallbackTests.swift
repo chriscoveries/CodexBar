@@ -9,6 +9,7 @@ struct CLIWebFallbackTests {
         return ProviderFetchContext(
             runtime: .cli,
             sourceMode: sourceMode,
+            trigger: .userInitiated,
             includeCredits: true,
             webTimeout: 60,
             webDebugDumpHTML: false,

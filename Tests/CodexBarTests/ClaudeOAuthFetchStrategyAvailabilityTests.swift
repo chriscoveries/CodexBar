@@ -24,6 +24,7 @@ struct ClaudeOAuthFetchStrategyAvailabilityTests {
         return ProviderFetchContext(
             runtime: .app,
             sourceMode: sourceMode,
+            trigger: .background,
             includeCredits: false,
             webTimeout: 1,
             webDebugDumpHTML: false,

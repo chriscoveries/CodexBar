@@ -92,6 +92,8 @@ enum ProviderStatusIndicator: String {
 
 #if DEBUG
 extension UsageStore {
+    @TaskLocal static var refreshOverrideForTesting: (@Sendable (Bool, ProviderFetchTrigger) async -> Void)?
+
     func _setSnapshotForTesting(_ snapshot: UsageSnapshot?, provider: UsageProvider) {
         self.snapshots[provider] = snapshot?.scoped(to: provider)
     }
@@ -195,6 +197,13 @@ final class UsageStore {
     @ObservationIgnored var lastTokenFetchAt: [UsageProvider: Date] = [:]
     @ObservationIgnored private let tokenFetchTTL: TimeInterval = 60 * 60
     @ObservationIgnored private let tokenFetchTimeout: TimeInterval = 10 * 60
+    @ObservationIgnored private var currentRefreshRequest: RefreshRequest?
+    @ObservationIgnored private var pendingRefreshRequest: RefreshRequest?
+
+    private struct RefreshRequest {
+        var forceTokenUsage: Bool
+        var trigger: ProviderFetchTrigger
+    }
 
     init(
         fetcher: UsageFetcher,
@@ -422,14 +431,36 @@ final class UsageStore {
         }
     }
 
-    func refresh(forceTokenUsage: Bool = false) async {
-        guard !self.isRefreshing else { return }
+    func refresh(forceTokenUsage: Bool = false, trigger: ProviderFetchTrigger = .background) async {
+        #if DEBUG
+        // In test mode, allow callers to observe refresh triggers without running any provider work.
+        if let override = Self.refreshOverrideForTesting {
+            await override(forceTokenUsage, trigger)
+            return
+        }
+        #endif
+
+        let request = RefreshRequest(forceTokenUsage: forceTokenUsage, trigger: trigger)
+        if self.isRefreshing {
+            self.enqueueRefreshRequestIfNeeded(request)
+            return
+        }
         self.isRefreshing = true
-        defer { self.isRefreshing = false }
+        self.currentRefreshRequest = request
+        defer {
+            self.isRefreshing = false
+            self.currentRefreshRequest = nil
+            if let pending = self.pendingRefreshRequest {
+                self.pendingRefreshRequest = nil
+                Task { @MainActor [weak self] in
+                    await self?.refresh(forceTokenUsage: pending.forceTokenUsage, trigger: pending.trigger)
+                }
+            }
+        }
 
         await withTaskGroup(of: Void.self) { group in
             for provider in UsageProvider.allCases {
-                group.addTask { await self.refreshProvider(provider) }
+                group.addTask { await self.refreshProvider(provider, trigger: trigger) }
                 group.addTask { await self.refreshStatus(provider) }
             }
             group.addTask { await self.refreshCreditsIfNeeded() }
@@ -443,11 +474,35 @@ final class UsageStore {
         await self.refreshOpenAIDashboardIfNeeded(force: forceTokenUsage)
 
         if self.openAIDashboardRequiresLogin {
-            await self.refreshProvider(.codex)
+            await self.refreshProvider(.codex, trigger: trigger)
             await self.refreshCreditsIfNeeded()
         }
 
         self.persistWidgetSnapshot(reason: "refresh")
+    }
+
+    private func enqueueRefreshRequestIfNeeded(_ request: RefreshRequest) {
+        guard let current = self.currentRefreshRequest else { return }
+
+        var pending = self.pendingRefreshRequest ?? RefreshRequest(forceTokenUsage: false, trigger: .background)
+        var changed = false
+
+        // If a background refresh is running and a user action happens, ensure we run a user-initiated refresh
+        // afterward so we can allow interactive keychain prompts.
+        if request.trigger == .userInitiated, current.trigger == .background, pending.trigger != .userInitiated {
+            pending.trigger = .userInitiated
+            changed = true
+        }
+
+        // Force-token usage requests shouldn't be lost if the current refresh isn't forcing token usage.
+        if request.forceTokenUsage, !current.forceTokenUsage, !pending.forceTokenUsage {
+            pending.forceTokenUsage = true
+            changed = true
+        }
+
+        if changed {
+            self.pendingRefreshRequest = pending
+        }
     }
 
     /// For demo/testing: drop the snapshot so the loading animation plays, then restore the last snapshot.

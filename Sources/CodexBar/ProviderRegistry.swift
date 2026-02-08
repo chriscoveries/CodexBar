@@ -4,7 +4,7 @@ import Foundation
 struct ProviderSpec {
     let style: IconStyle
     let isEnabled: @MainActor () -> Bool
-    let fetch: () async -> ProviderFetchOutcome
+    let fetch: (_ trigger: ProviderFetchTrigger) async -> ProviderFetchOutcome
 }
 
 struct ProviderRegistry {
@@ -33,7 +33,7 @@ struct ProviderRegistry {
             let spec = ProviderSpec(
                 style: descriptor.branding.iconStyle,
                 isEnabled: { settings.isProviderEnabled(provider: provider, metadata: meta) },
-                fetch: {
+                fetch: { trigger in
                     let sourceMode = ProviderCatalog.implementation(for: provider)?
                         .sourceMode(context: ProviderSourceModeContext(provider: provider, settings: settings))
                         ?? .auto
@@ -51,6 +51,7 @@ struct ProviderRegistry {
                     let context = ProviderFetchContext(
                         runtime: .app,
                         sourceMode: sourceMode,
+                        trigger: trigger,
                         includeCredits: false,
                         webTimeout: 60,
                         webDebugDumpHTML: false,

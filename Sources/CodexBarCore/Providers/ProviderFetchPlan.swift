@@ -5,6 +5,11 @@ public enum ProviderRuntime: Sendable {
     case cli
 }
 
+public enum ProviderFetchTrigger: Sendable {
+    case background
+    case userInitiated
+}
+
 public enum ProviderSourceMode: String, CaseIterable, Sendable, Codable {
     case auto
     case web
@@ -20,6 +25,7 @@ public enum ProviderSourceMode: String, CaseIterable, Sendable, Codable {
 public struct ProviderFetchContext: Sendable {
     public let runtime: ProviderRuntime
     public let sourceMode: ProviderSourceMode
+    public let trigger: ProviderFetchTrigger
     public let includeCredits: Bool
     public let webTimeout: TimeInterval
     public let webDebugDumpHTML: Bool
@@ -33,6 +39,7 @@ public struct ProviderFetchContext: Sendable {
     public init(
         runtime: ProviderRuntime,
         sourceMode: ProviderSourceMode,
+        trigger: ProviderFetchTrigger,
         includeCredits: Bool,
         webTimeout: TimeInterval,
         webDebugDumpHTML: Bool,
@@ -45,6 +52,7 @@ public struct ProviderFetchContext: Sendable {
     {
         self.runtime = runtime
         self.sourceMode = sourceMode
+        self.trigger = trigger
         self.includeCredits = includeCredits
         self.webTimeout = webTimeout
         self.webDebugDumpHTML = webDebugDumpHTML

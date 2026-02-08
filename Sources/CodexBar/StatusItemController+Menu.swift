@@ -8,7 +8,17 @@ import SwiftUI
 
 extension StatusItemController {
     private static let menuCardBaseWidth: CGFloat = 310
-    private static let menuOpenRefreshDelay: Duration = .seconds(1.2)
+    #if DEBUG
+    static var _menuOpenRefreshDelayOverride: Duration?
+    #endif
+
+    private static var menuOpenRefreshDelay: Duration {
+        #if DEBUG
+        if let override = self._menuOpenRefreshDelayOverride { return override }
+        #endif
+        return .seconds(1.2)
+    }
+
     private struct OpenAIWebMenuItems {
         let hasUsageBreakdown: Bool
         let hasCreditsHistory: Bool
@@ -462,7 +472,7 @@ extension StatusItemController {
                 guard let self, let menu else { return }
                 self.settings.setActiveTokenAccountIndex(index, for: display.provider)
                 Task { @MainActor in
-                    await self.store.refresh()
+                    await self.store.refresh(trigger: .userInitiated)
                 }
                 self.populateMenu(menu, provider: display.provider)
                 self.markMenuFresh(menu)
@@ -551,9 +561,9 @@ extension StatusItemController {
     private func scheduleOpenMenuRefresh(for menu: NSMenu) {
         // Kick off a background refresh on open (non-forced) and re-check after a delay.
         // NEVER block menu opening with network requests.
-        if !self.store.isRefreshing {
-            self.refreshStore(forceTokenUsage: false)
-        }
+        // Even if a background refresh is already in-flight, treat menu open as user-initiated:
+        // UsageStore will coalesce/queue it so we don't lose the one opportunity to prompt.
+        self.refreshStore(forceTokenUsage: false, trigger: .userInitiated)
         let key = ObjectIdentifier(menu)
         self.menuRefreshTasks[key]?.cancel()
         self.menuRefreshTasks[key] = Task { @MainActor [weak self, weak menu] in
@@ -566,7 +576,7 @@ extension StatusItemController {
             let isStale = provider.map { self.store.isStale(provider: $0) } ?? self.store.isStale
             let hasSnapshot = provider.map { self.store.snapshot(for: $0) != nil } ?? true
             guard isStale || !hasSnapshot else { return }
-            self.refreshStore(forceTokenUsage: false)
+            self.refreshStore(forceTokenUsage: false, trigger: .background)
         }
     }
 

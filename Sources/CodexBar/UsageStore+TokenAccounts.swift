@@ -28,7 +28,11 @@ extension UsageStore {
         return self.settings.showAllTokenAccountsInMenu && accounts.count > 1
     }
 
-    func refreshTokenAccounts(provider: UsageProvider, accounts: [ProviderTokenAccount]) async {
+    func refreshTokenAccounts(
+        provider: UsageProvider,
+        accounts: [ProviderTokenAccount],
+        trigger: ProviderFetchTrigger) async
+    {
         let selectedAccount = self.settings.selectedTokenAccount(for: provider)
         let limitedAccounts = self.limitedTokenAccounts(accounts, selected: selectedAccount)
         let effectiveSelected = selectedAccount ?? limitedAccounts.first
@@ -38,7 +42,7 @@ extension UsageStore {
 
         for account in limitedAccounts {
             let override = TokenAccountOverride(provider: provider, account: account)
-            let outcome = await self.fetchOutcome(provider: provider, override: override)
+            let outcome = await self.fetchOutcome(provider: provider, override: override, trigger: trigger)
             let resolved = self.resolveAccountOutcome(outcome, provider: provider, account: account)
             snapshots.append(resolved.snapshot)
             if account.id == effectiveSelected?.id {
@@ -76,7 +80,8 @@ extension UsageStore {
 
     func fetchOutcome(
         provider: UsageProvider,
-        override: TokenAccountOverride?) async -> ProviderFetchOutcome
+        override: TokenAccountOverride?,
+        trigger: ProviderFetchTrigger) async -> ProviderFetchOutcome
     {
         let descriptor = ProviderDescriptorRegistry.descriptor(for: provider)
         let sourceMode = self.sourceMode(for: provider)
@@ -90,6 +95,7 @@ extension UsageStore {
         let context = ProviderFetchContext(
             runtime: .app,
             sourceMode: sourceMode,
+            trigger: trigger,
             includeCredits: false,
             webTimeout: 60,
             webDebugDumpHTML: false,

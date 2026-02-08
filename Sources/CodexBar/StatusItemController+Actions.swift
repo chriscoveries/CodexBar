@@ -4,19 +4,21 @@ import CodexBarCore
 extension StatusItemController {
     // MARK: - Actions reachable from menus
 
-    func refreshStore(forceTokenUsage: Bool) {
-        Task { await self.store.refresh(forceTokenUsage: forceTokenUsage) }
+    func refreshStore(forceTokenUsage: Bool, trigger: ProviderFetchTrigger = .background) {
+        Task { @MainActor [weak self] in
+            await self?.store.refresh(forceTokenUsage: forceTokenUsage, trigger: trigger)
+        }
     }
 
     @objc func refreshNow() {
-        self.refreshStore(forceTokenUsage: true)
+        self.refreshStore(forceTokenUsage: true, trigger: .userInitiated)
     }
 
     @objc func refreshAugmentSession() {
         Task {
             await self.store.forceRefreshAugmentSession()
             // Also trigger a full refresh to update the menu and clear any stale errors
-            await self.store.refresh(forceTokenUsage: false)
+            await self.store.refresh(forceTokenUsage: false, trigger: .userInitiated)
         }
     }
 
