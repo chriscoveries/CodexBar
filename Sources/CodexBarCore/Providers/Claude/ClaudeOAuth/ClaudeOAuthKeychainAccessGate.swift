@@ -39,6 +39,22 @@ public enum ClaudeOAuthKeychainAccessGate {
         }
     }
 
+    /// Clears the cooldown so the next attempt can proceed. Intended for user-initiated repairs.
+    /// - Returns: true if a cooldown was present and cleared.
+    public static func clearDenied(now: Date = Date()) -> Bool {
+        self.lock.withLock { state in
+            self.loadIfNeeded(&state)
+            guard let deniedUntil = state.deniedUntil, deniedUntil > now else {
+                state.deniedUntil = nil
+                self.persist(state)
+                return false
+            }
+            state.deniedUntil = nil
+            self.persist(state)
+            return true
+        }
+    }
+
     #if DEBUG
     static func withShouldAllowPromptOverrideForTesting<T>(
         _ value: Bool?,

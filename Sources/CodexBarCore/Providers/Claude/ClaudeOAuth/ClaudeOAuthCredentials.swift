@@ -147,7 +147,8 @@ public enum ClaudeOAuthCredentialsError: LocalizedError, Sendable {
                 || status == Int(errSecInteractionNotAllowed)
                 || status == Int(errSecNoAccessForItem)
             {
-                return "Claude Keychain access was denied. CodexBar won’t ask again for 6 hours in Auto mode. "
+                return "Claude Keychain access was denied. CodexBar will back off in the background until you retry "
+                    + "via a user action (menu open / manual refresh). "
                     + "Switch Claude Usage source to Web/CLI, or allow access in Keychain Access."
             }
             #endif

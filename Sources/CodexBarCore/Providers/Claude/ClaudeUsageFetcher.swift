@@ -97,9 +97,17 @@ public struct ClaudeUsageFetcher: ClaudeUsageFetching, Sendable {
     }
 
     private static func currentClaudeOAuthKeychainPromptPolicy() -> ClaudeOAuthKeychainPromptPolicy {
-        ClaudeOAuthKeychainPromptPolicy(
+        let policy = ClaudeOAuthKeychainPromptPolicy(
             mode: ClaudeOAuthKeychainPromptPreference.current(),
             interaction: ProviderInteractionContext.current)
+
+        // User actions should be able to immediately retry a repair after a background cooldown was recorded.
+        if policy.interaction == .userInitiated {
+            if ClaudeOAuthKeychainAccessGate.clearDenied() {
+                Self.log.info("Claude OAuth keychain cooldown cleared by user action")
+            }
+        }
+        return policy
     }
 
     #if DEBUG
