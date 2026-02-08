@@ -128,6 +128,37 @@ struct ClaudeOAuthFetchStrategy: ProviderFetchStrategy {
     let id: String = "claude.oauth"
     let kind: ProviderFetchKind = .oauth
 
+    private func allowInteractiveKeychainPromptsInAuto(_ context: ProviderFetchContext) -> Bool {
+        guard context.sourceMode == .auto else { return true }
+        let policy = context.settings?.claude?.autoKeychainPromptPolicy ?? .userInitiated
+        switch policy {
+        case .never:
+            return false
+        case .userInitiated:
+            return context.trigger == .userInitiated
+        case .always:
+            return true
+        }
+    }
+
+    #if DEBUG
+    static func _oauthKeychainPromptCooldownEnabledForTesting(
+        sourceMode: ProviderSourceMode,
+        trigger: ProviderFetchTrigger,
+        policy: AutoKeychainPromptPolicy) -> Bool
+    {
+        guard sourceMode == .auto else { return false }
+        switch policy {
+        case .never:
+            return true
+        case .userInitiated:
+            return trigger != .userInitiated
+        case .always:
+            return false
+        }
+    }
+    #endif
+
     #if DEBUG
     @TaskLocal static var nonInteractiveCredentialRecordOverride: ClaudeOAuthCredentialRecord?
     @TaskLocal static var claudeCLIAvailableOverride: Bool?
@@ -152,6 +183,7 @@ struct ClaudeOAuthFetchStrategy: ProviderFetchStrategy {
     }
 
     func isAvailable(_ context: ProviderFetchContext) async -> Bool {
+        let allowInteractivePrompts = self.allowInteractiveKeychainPromptsInAuto(context)
         let nonInteractiveRecord = self.loadNonInteractiveCredentialRecord(context)
         let nonInteractiveCredentials = nonInteractiveRecord?.credentials
         let hasRequiredScopeWithoutPrompt = nonInteractiveCredentials?.scopes.contains("user:profile") == true
@@ -191,19 +223,22 @@ struct ClaudeOAuthFetchStrategy: ProviderFetchStrategy {
         guard context.sourceMode == .auto else { return true }
 
         // Prefer OAuth in Auto mode only when it’s plausibly usable:
-        // - we can load credentials without prompting (env / CodexBar cache / credentials file) AND they meet the
-        //   scope requirement, or
-        // - Claude Code has stored OAuth creds in Keychain and we may be able to bootstrap (one prompt max).
-        guard ClaudeOAuthKeychainAccessGate.shouldAllowPrompt() else { return false }
+        // - if interactive prompts are disallowed: we must be able to load Claude keychain credentials without UI
+        // - if interactive prompts are allowed (user-initiated / always): keychain presence is enough to bootstrap
+        if allowInteractivePrompts {
+            return ClaudeOAuthCredentialsStore.hasClaudeKeychainCredentialsPossiblyPrompting()
+        }
         return ClaudeOAuthCredentialsStore.hasClaudeKeychainCredentialsWithoutPrompt()
     }
 
     func fetch(_ context: ProviderFetchContext) async throws -> ProviderFetchResult {
+        let allowInteractivePrompts = self.allowInteractiveKeychainPromptsInAuto(context)
         let fetcher = ClaudeUsageFetcher(
             browserDetection: context.browserDetection,
             environment: context.env,
             dataSource: .oauth,
-            oauthKeychainPromptCooldownEnabled: context.sourceMode == .auto,
+            oauthKeychainPromptCooldownEnabled: context.sourceMode == .auto && !allowInteractivePrompts,
+            oauthAllowKeychainPrompt: allowInteractivePrompts,
             useWebExtras: false)
         let usage = try await fetcher.loadLatestUsage(model: "sonnet")
         return self.makeResult(

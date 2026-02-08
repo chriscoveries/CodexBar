@@ -61,6 +61,7 @@ public struct ClaudeUsageFetcher: ClaudeUsageFetching, Sendable {
     private let environment: [String: String]
     private let dataSource: ClaudeUsageDataSource
     private let oauthKeychainPromptCooldownEnabled: Bool
+    private let oauthAllowKeychainPrompt: Bool
     private let useWebExtras: Bool
     private let manualCookieHeader: String?
     private let keepCLISessionsAlive: Bool
@@ -91,6 +92,7 @@ public struct ClaudeUsageFetcher: ClaudeUsageFetching, Sendable {
         environment: [String: String] = ProcessInfo.processInfo.environment,
         dataSource: ClaudeUsageDataSource = .oauth,
         oauthKeychainPromptCooldownEnabled: Bool = false,
+        oauthAllowKeychainPrompt: Bool = true,
         useWebExtras: Bool = false,
         manualCookieHeader: String? = nil,
         keepCLISessionsAlive: Bool = false)
@@ -99,6 +101,7 @@ public struct ClaudeUsageFetcher: ClaudeUsageFetching, Sendable {
         self.environment = environment
         self.dataSource = dataSource
         self.oauthKeychainPromptCooldownEnabled = oauthKeychainPromptCooldownEnabled
+        self.oauthAllowKeychainPrompt = oauthAllowKeychainPrompt
         self.useWebExtras = useWebExtras
         self.manualCookieHeader = manualCookieHeader
         self.keepCLISessionsAlive = keepCLISessionsAlive
@@ -301,7 +304,8 @@ public struct ClaudeUsageFetcher: ClaudeUsageFetching, Sendable {
             let hasCache = ClaudeOAuthCredentialsStore.hasCachedCredentials(environment: self.environment)
             let promptGateAllowsPrompt = ClaudeOAuthKeychainAccessGate.shouldAllowPrompt()
             let allowKeychainPrompt =
-                !hasCache
+                self.oauthAllowKeychainPrompt
+                    && !hasCache
                     && (!self.oauthKeychainPromptCooldownEnabled || promptGateAllowsPrompt)
             // Ownership-aware credential loading:
             // - Claude CLI-owned credentials delegate refresh to Claude CLI.
@@ -369,7 +373,10 @@ public struct ClaudeUsageFetcher: ClaudeUsageFetching, Sendable {
                         return ClaudeOAuthCredentialsStore.syncFromClaudeKeychainWithoutPrompt(now: Date())
                     }()
 
-                    let retryAllowKeychainPrompt = !self.oauthKeychainPromptCooldownEnabled && !didSyncSilently
+                    let retryAllowKeychainPrompt =
+                        self.oauthAllowKeychainPrompt
+                            && !self.oauthKeychainPromptCooldownEnabled
+                            && !didSyncSilently
                     if Self.isClaudeOAuthFlowDebugEnabled {
                         Self.log.debug(
                             "Claude OAuth credential load (post-delegation retry start)",

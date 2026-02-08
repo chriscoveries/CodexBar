@@ -207,6 +207,34 @@ public enum ClaudeOAuthCredentialsStore {
     private nonisolated(unsafe) static var claudeKeychainFingerprintOverride: ClaudeKeychainFingerprint?
     @TaskLocal private static var taskClaudeKeychainDataOverride: Data?
     @TaskLocal private static var taskClaudeKeychainFingerprintOverride: ClaudeKeychainFingerprint?
+    @TaskLocal private static var taskCredentialsURLOverride: URL?
+    private actor CredentialsURLOverrideTestMutex {
+        private var isLocked = false
+        private var waiters: [CheckedContinuation<Void, Never>] = []
+
+        func lock() async {
+            if !self.isLocked {
+                self.isLocked = true
+                return
+            }
+
+            await withCheckedContinuation { continuation in
+                self.waiters.append(continuation)
+            }
+        }
+
+        func unlock() async {
+            if self.waiters.isEmpty {
+                self.isLocked = false
+                return
+            }
+
+            let continuation = self.waiters.removeFirst()
+            continuation.resume()
+        }
+    }
+
+    private static let credentialsURLOverrideTestMutex = CredentialsURLOverrideTestMutex()
     final class ClaudeKeychainFingerprintStore: @unchecked Sendable {
         var fingerprint: ClaudeKeychainFingerprint?
 
@@ -267,6 +295,27 @@ public enum ClaudeOAuthCredentialsStore {
     {
         try await self.$taskClaudeKeychainFingerprintStoreOverride.withValue(store) {
             try await operation()
+        }
+    }
+
+    static func withCredentialsURLOverrideForTesting<T>(
+        _ url: URL?,
+        operation: () async throws -> T) async rethrows -> T
+    {
+        await self.credentialsURLOverrideTestMutex.lock()
+
+        let oldGlobal = self.credentialsURLOverride
+        self.credentialsURLOverride = url
+
+        do {
+            let result = try await self.$taskCredentialsURLOverride.withValue(url) { try await operation() }
+            self.credentialsURLOverride = oldGlobal
+            await self.credentialsURLOverrideTestMutex.unlock()
+            return result
+        } catch {
+            self.credentialsURLOverride = oldGlobal
+            await self.credentialsURLOverrideTestMutex.unlock()
+            throw error
         }
     }
     #endif
@@ -721,6 +770,21 @@ public enum ClaudeOAuthCredentialsStore {
         #if os(macOS)
         if !self.keychainAccessAllowed { return false }
 
+        // Strict: only return true when we can read keychain data without UI.
+        // If the item exists but requires UI (errSecInteractionNotAllowed), we treat this as unavailable.
+        if let data = try? self.loadFromClaudeKeychainNonInteractive(), data.isEmpty == false {
+            return true
+        }
+        return false
+        #else
+        return false
+        #endif
+    }
+
+    public static func hasClaudeKeychainCredentialsPossiblyPrompting() -> Bool {
+        #if os(macOS)
+        if !self.keychainAccessAllowed { return false }
+
         if !self.claudeKeychainCandidatesWithoutPrompt().isEmpty {
             return true
         }
@@ -739,7 +803,7 @@ public enum ClaudeOAuthCredentialsStore {
         case errSecSuccess, errSecInteractionNotAllowed:
             return true
         case errSecUserCanceled, errSecAuthFailed, errSecNoAccessForItem:
-            // Treat denial as "not available" and record a cooldown to avoid prompt storms in Auto mode.
+            // Treat denial as "not available" and record a cooldown to avoid prompt storms.
             ClaudeOAuthKeychainAccessGate.recordDenied()
             return false
         default:
@@ -1248,7 +1312,12 @@ public enum ClaudeOAuthCredentialsStore {
     }
 
     private static func credentialsFileURL() -> URL {
-        self.credentialsURLOverride ?? self.defaultCredentialsURL()
+        #if DEBUG
+        if let override = self.taskCredentialsURLOverride {
+            return override
+        }
+        #endif
+        return self.credentialsURLOverride ?? self.defaultCredentialsURL()
     }
 
     private static func loadFileFingerprint() -> CredentialsFileFingerprint? {
