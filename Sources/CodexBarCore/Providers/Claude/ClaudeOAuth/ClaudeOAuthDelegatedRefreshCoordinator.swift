@@ -85,7 +85,7 @@ public enum ClaudeOAuthDelegatedRefreshCoordinator {
         // Otherwise we end up in a long cooldown with still-expired credentials.
         let changed = await self.waitForClaudeKeychainChange(
             from: fingerprintBefore,
-            timeout: min(max(timeout, 3), 12))
+            timeout: min(max(timeout, 1), 2))
         if changed {
             self.recordAttempt(now: now, cooldown: self.defaultCooldownInterval)
             self.log.info("Claude OAuth delegated refresh touch succeeded")
@@ -158,7 +158,8 @@ public enum ClaudeOAuthDelegatedRefreshCoordinator {
             }
 
             let current = self.currentClaudeKeychainFingerprint()
-            if current != fingerprintBefore {
+            // Treat "no fingerprint" as "not observed"; a transient read failure should not count as a change.
+            if let current, current != fingerprintBefore {
                 return true
             }
             do {
