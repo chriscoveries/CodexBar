@@ -164,7 +164,7 @@ public enum ClaudeOAuthCredentialsError: LocalizedError, Sendable {
     }
 }
 
-// swiftlint:disable type_body_length
+// swiftlint:disable type_body_length file_length
 public enum ClaudeOAuthCredentialsStore {
     private static let credentialsPath = ".claude/.credentials.json"
     private static let claudeKeychainService = "Claude Code-credentials"
@@ -194,6 +194,25 @@ public enum ClaudeOAuthCredentialsStore {
     private nonisolated(unsafe) static var lastClaudeKeychainChangeCheckAt: Date?
     private static let claudeKeychainChangeCheckMinimumInterval: TimeInterval = 60
     private static let reauthenticateHint = "Run `claude` to re-authenticate."
+    private static let traceIDLock = NSLock()
+    private nonisolated(unsafe) static var nextTraceID: UInt64 = 1
+    @TaskLocal private static var taskCurrentLoadTraceID: String?
+
+    private static func makeTraceID() -> String {
+        self.traceIDLock.lock()
+        let id = self.nextTraceID
+        self.nextTraceID += 1
+        self.traceIDLock.unlock()
+        return String(id)
+    }
+
+    private static func traceMeta(_ traceID: String, extra: [String: String] = [:]) -> [String: String] {
+        var meta = ["trace_id": traceID]
+        for (k, v) in extra {
+            meta[k] = v
+        }
+        return meta
+    }
 
     struct ClaudeKeychainFingerprint: Codable, Equatable, Sendable {
         let modifiedAt: Int?
@@ -360,32 +379,84 @@ public enum ClaudeOAuthCredentialsStore {
     public static func load(
         environment: [String: String] = ProcessInfo.processInfo.environment,
         allowKeychainPrompt: Bool = true,
-        respectKeychainPromptCooldown: Bool = false) throws -> ClaudeOAuthCredentials
+        respectKeychainPromptCooldown: Bool = false,
+        callerFunction: StaticString = #function,
+        callerFile: StaticString = #fileID,
+        callerLine: UInt = #line) throws -> ClaudeOAuthCredentials
     {
         try self.loadRecord(
             environment: environment,
             allowKeychainPrompt: allowKeychainPrompt,
-            respectKeychainPromptCooldown: respectKeychainPromptCooldown).credentials
+            respectKeychainPromptCooldown: respectKeychainPromptCooldown,
+            callerFunction: callerFunction,
+            callerFile: callerFile,
+            callerLine: callerLine).credentials
     }
 
-    // swiftlint:disable:next cyclomatic_complexity
     public static func loadRecord(
         environment: [String: String] = ProcessInfo.processInfo.environment,
         allowKeychainPrompt: Bool = true,
-        respectKeychainPromptCooldown: Bool = false) throws -> ClaudeOAuthCredentialRecord
+        respectKeychainPromptCooldown: Bool = false,
+        callerFunction: StaticString = #function,
+        callerFile: StaticString = #fileID,
+        callerLine: UInt = #line) throws -> ClaudeOAuthCredentialRecord
+    {
+        let traceID = self.makeTraceID()
+        return try self.$taskCurrentLoadTraceID.withValue(traceID) {
+            try self.loadRecordImpl(
+                environment: environment,
+                allowKeychainPrompt: allowKeychainPrompt,
+                respectKeychainPromptCooldown: respectKeychainPromptCooldown,
+                traceID: traceID,
+                callerFunction: callerFunction,
+                callerFile: callerFile,
+                callerLine: callerLine)
+        }
+    }
+
+    // swiftlint:disable:next cyclomatic_complexity function_body_length function_parameter_count
+    private static func loadRecordImpl(
+        environment: [String: String],
+        allowKeychainPrompt: Bool,
+        respectKeychainPromptCooldown: Bool,
+        traceID: String,
+        callerFunction: StaticString,
+        callerFile: StaticString,
+        callerLine: UInt) throws -> ClaudeOAuthCredentialRecord
     {
         // "Silent" keychain probes can still show UI on some macOS configurations. If the caller disallows prompts,
         // always honor the Claude keychain access cooldown gate to prevent prompt storms in Auto-mode paths.
         let shouldRespectKeychainPromptCooldownForSilentProbes = respectKeychainPromptCooldown || !allowKeychainPrompt
+        self.log.debug(
+            "Claude OAuth credentials load start",
+            metadata: self.traceMeta(
+                traceID,
+                extra: [
+                    "allowKeychainPrompt": "\(allowKeychainPrompt)",
+                    "respectKeychainPromptCooldown": "\(respectKeychainPromptCooldown)",
+                    "respectCooldownForSilentProbes": "\(shouldRespectKeychainPromptCooldownForSilentProbes)",
+                    "caller": "\(callerFunction)",
+                    "caller_file": "\(callerFile)",
+                    "caller_line": "\(callerLine)",
+                    "keychainAccessAllowed": "\(self.keychainAccessAllowed)",
+                ]))
 
         if let credentials = self.loadFromEnvironment(environment) {
+            self.log.info(
+                "Claude OAuth credentials loaded from environment",
+                metadata: self.traceMeta(traceID))
             return ClaudeOAuthCredentialRecord(
                 credentials: credentials,
                 owner: .environment,
                 source: .environment)
         }
 
-        _ = self.invalidateCacheIfCredentialsFileChanged()
+        let didInvalidate = self.invalidateCacheIfCredentialsFileChanged()
+        if didInvalidate {
+            self.log.info(
+                "Claude OAuth credentials file changed; cache invalidated",
+                metadata: self.traceMeta(traceID))
+        }
 
         let memory = self.readMemoryCache()
         if let cachedRecord = memory.record,
@@ -393,10 +464,23 @@ public enum ClaudeOAuthCredentialsStore {
            Date().timeIntervalSince(timestamp) < self.memoryCacheValidityDuration,
            !cachedRecord.credentials.isExpired
         {
+            let age = Int(Date().timeIntervalSince(timestamp))
+            self.log.debug(
+                "Claude OAuth credentials memory cache hit",
+                metadata: self.traceMeta(
+                    traceID,
+                    extra: [
+                        "age_s": "\(age)",
+                        "owner": cachedRecord.owner.rawValue,
+                    ]))
             if let synced = self.syncWithClaudeKeychainIfChanged(
                 cached: cachedRecord,
-                respectKeychainPromptCooldown: shouldRespectKeychainPromptCooldownForSilentProbes)
+                respectKeychainPromptCooldown: shouldRespectKeychainPromptCooldownForSilentProbes,
+                traceID: traceID)
             {
+                self.log.info(
+                    "Claude OAuth credentials synced from Claude keychain",
+                    metadata: self.traceMeta(traceID))
                 return synced
             }
             return ClaudeOAuthCredentialRecord(
@@ -422,12 +506,22 @@ public enum ClaudeOAuthCredentialsStore {
                     owner: owner,
                     source: .cacheKeychain)
                 if creds.isExpired {
+                    self.log.info(
+                        "Claude OAuth credentials keychain cache hit (expired)",
+                        metadata: self.traceMeta(traceID, extra: ["owner": owner.rawValue]))
                     expiredRecord = record
                 } else {
+                    self.log.info(
+                        "Claude OAuth credentials keychain cache hit",
+                        metadata: self.traceMeta(traceID, extra: ["owner": owner.rawValue]))
                     if let synced = self.syncWithClaudeKeychainIfChanged(
                         cached: record,
-                        respectKeychainPromptCooldown: shouldRespectKeychainPromptCooldownForSilentProbes)
+                        respectKeychainPromptCooldown: shouldRespectKeychainPromptCooldownForSilentProbes,
+                        traceID: traceID)
                     {
+                        self.log.info(
+                            "Claude OAuth credentials synced from Claude keychain",
+                            metadata: self.traceMeta(traceID))
                         return synced
                     }
                     self.writeMemoryCache(
@@ -439,12 +533,20 @@ public enum ClaudeOAuthCredentialsStore {
                     return record
                 }
             } else {
+                self.log.warning(
+                    "Claude OAuth credentials keychain cache invalid; clearing",
+                    metadata: self.traceMeta(traceID))
                 KeychainCacheStore.clear(key: self.cacheKey)
             }
         case .invalid:
+            self.log.warning(
+                "Claude OAuth credentials keychain cache invalid; clearing",
+                metadata: self.traceMeta(traceID))
             KeychainCacheStore.clear(key: self.cacheKey)
         case .missing:
-            break
+            self.log.debug(
+                "Claude OAuth credentials keychain cache miss",
+                metadata: self.traceMeta(traceID))
         }
 
         // 3. Try file (no keychain prompt)
@@ -456,8 +558,14 @@ public enum ClaudeOAuthCredentialsStore {
                 owner: .claudeCLI,
                 source: .credentialsFile)
             if creds.isExpired {
+                self.log.info(
+                    "Claude OAuth credentials file hit (expired)",
+                    metadata: self.traceMeta(traceID))
                 expiredRecord = record
             } else {
+                self.log.info(
+                    "Claude OAuth credentials loaded from file",
+                    metadata: self.traceMeta(traceID))
                 self.writeMemoryCache(
                     record: ClaudeOAuthCredentialRecord(
                         credentials: creds,
@@ -469,11 +577,20 @@ public enum ClaudeOAuthCredentialsStore {
             }
         } catch let error as ClaudeOAuthCredentialsError {
             if case .notFound = error {
+                self.log.debug(
+                    "Claude OAuth credentials file not found",
+                    metadata: self.traceMeta(traceID))
                 // Ignore missing file
             } else {
+                self.log.warning(
+                    "Claude OAuth credentials file load failed",
+                    metadata: self.traceMeta(traceID, extra: ["error": error.localizedDescription]))
                 lastError = error
             }
         } catch {
+            self.log.warning(
+                "Claude OAuth credentials file load failed",
+                metadata: self.traceMeta(traceID, extra: ["error": error.localizedDescription]))
             lastError = error
         }
 
@@ -481,10 +598,22 @@ public enum ClaudeOAuthCredentialsStore {
         let promptAllowed =
             allowKeychainPrompt
                 && (!respectKeychainPromptCooldown || ClaudeOAuthKeychainAccessGate.shouldAllowPrompt())
+        self.log.debug(
+            "Claude OAuth Claude-keychain path evaluated",
+            metadata: self.traceMeta(
+                traceID,
+                extra: [
+                    "promptAllowed": "\(promptAllowed)",
+                    "allowKeychainPrompt": "\(allowKeychainPrompt)",
+                    "respectKeychainPromptCooldown": "\(respectKeychainPromptCooldown)",
+                ]))
         if promptAllowed {
             do {
                 self.claudeKeychainPromptLock.lock()
                 defer { self.claudeKeychainPromptLock.unlock() }
+                self.log.debug(
+                    "Claude OAuth Claude-keychain prompt lock acquired",
+                    metadata: self.traceMeta(traceID))
 
                 // Multiple concurrent callers can all reach this point before the first one populates the cache.
                 // Re-check the cache while holding the prompt lock to avoid triggering multiple OS keychain dialogs.
@@ -494,6 +623,9 @@ public enum ClaudeOAuthCredentialsStore {
                    Date().timeIntervalSince(timestamp) < self.memoryCacheValidityDuration,
                    !cachedRecord.credentials.isExpired
                 {
+                    self.log.info(
+                        "Claude OAuth Claude-keychain prompt avoided (memory cache filled concurrently)",
+                        metadata: self.traceMeta(traceID))
                     return ClaudeOAuthCredentialRecord(
                         credentials: cachedRecord.credentials,
                         owner: cachedRecord.owner,
@@ -503,6 +635,9 @@ public enum ClaudeOAuthCredentialsStore {
                    let creds = try? ClaudeOAuthCredentials.parse(data: entry.data),
                    !creds.isExpired
                 {
+                    self.log.info(
+                        "Claude OAuth Claude-keychain prompt avoided (keychain cache filled concurrently)",
+                        metadata: self.traceMeta(traceID))
                     return ClaudeOAuthCredentialRecord(
                         credentials: creds,
                         owner: entry.owner ?? .claudeCLI,
@@ -511,7 +646,11 @@ public enum ClaudeOAuthCredentialsStore {
 
                 // Some macOS configurations still show the system keychain prompt even for our "silent" probes.
                 // Only show the in-app pre-alert when we have evidence that Keychain interaction is likely.
-                if self.shouldShowClaudeKeychainPreAlert() {
+                let showPreAlert = self.shouldShowClaudeKeychainPreAlert()
+                self.log.debug(
+                    "Claude OAuth Claude-keychain pre-alert evaluated",
+                    metadata: self.traceMeta(traceID, extra: ["showPreAlert": "\(showPreAlert)"]))
+                if showPreAlert {
                     KeychainPromptHandler.handler?(
                         KeychainPromptContext(
                             kind: .claudeOAuth,
@@ -524,6 +663,9 @@ public enum ClaudeOAuthCredentialsStore {
                     credentials: creds,
                     owner: .claudeCLI,
                     source: .claudeKeychain)
+                self.log.info(
+                    "Claude OAuth credentials loaded from Claude keychain",
+                    metadata: self.traceMeta(traceID))
                 self.writeMemoryCache(
                     record: ClaudeOAuthCredentialRecord(
                         credentials: creds,
@@ -534,17 +676,40 @@ public enum ClaudeOAuthCredentialsStore {
                 return record
             } catch let error as ClaudeOAuthCredentialsError {
                 if case .notFound = error {
+                    self.log.debug(
+                        "Claude OAuth credentials not found in Claude keychain",
+                        metadata: self.traceMeta(traceID))
                     // Ignore missing entry
                 } else {
+                    self.log.warning(
+                        "Claude OAuth Claude-keychain load failed",
+                        metadata: self.traceMeta(traceID, extra: ["error": error.localizedDescription]))
                     lastError = error
                 }
             } catch {
+                self.log.warning(
+                    "Claude OAuth Claude-keychain load failed",
+                    metadata: self.traceMeta(traceID, extra: ["error": error.localizedDescription]))
                 lastError = error
             }
+        } else {
+            self.log.debug(
+                "Claude OAuth Claude-keychain path skipped (prompt disallowed or cooling down)",
+                metadata: self.traceMeta(traceID))
         }
 
         if let expiredRecord {
+            self.log.info(
+                "Claude OAuth credentials falling back to expired record",
+                metadata: self.traceMeta(
+                    traceID,
+                    extra: ["owner": expiredRecord.owner.rawValue, "source": expiredRecord.source.rawValue]))
             return expiredRecord
+        }
+        if lastError != nil {
+            self.log.warning(
+                "Claude OAuth credentials load failed",
+                metadata: self.traceMeta(traceID, extra: ["error": lastError?.localizedDescription ?? "unknown"]))
         }
         if let lastError { throw lastError }
         throw ClaudeOAuthCredentialsError.notFound
@@ -556,16 +721,29 @@ public enum ClaudeOAuthCredentialsStore {
     public static func loadWithAutoRefresh(
         environment: [String: String] = ProcessInfo.processInfo.environment,
         allowKeychainPrompt: Bool = true,
-        respectKeychainPromptCooldown: Bool = false) async throws -> ClaudeOAuthCredentials
+        respectKeychainPromptCooldown: Bool = false,
+        callerFunction: StaticString = #function,
+        callerFile: StaticString = #fileID,
+        callerLine: UInt = #line) async throws -> ClaudeOAuthCredentials
     {
         let record = try self.loadRecord(
             environment: environment,
             allowKeychainPrompt: allowKeychainPrompt,
-            respectKeychainPromptCooldown: respectKeychainPromptCooldown)
+            respectKeychainPromptCooldown: respectKeychainPromptCooldown,
+            callerFunction: callerFunction,
+            callerFile: callerFile,
+            callerLine: callerLine)
         let credentials = record.credentials
 
         // If not expired, return as-is
         guard credentials.isExpired else {
+            if let traceID = self.taskCurrentLoadTraceID {
+                self.log.debug(
+                    "Claude OAuth credentials valid; returning without refresh",
+                    metadata: self.traceMeta(
+                        traceID,
+                        extra: ["owner": record.owner.rawValue, "source": record.source.rawValue]))
+            }
             return credentials
         }
 
@@ -817,32 +995,63 @@ public enum ClaudeOAuthCredentialsStore {
     private static func syncWithClaudeKeychainIfChanged(
         cached: ClaudeOAuthCredentialRecord,
         respectKeychainPromptCooldown: Bool,
-        now: Date = Date()) -> ClaudeOAuthCredentialRecord?
+        now: Date = Date(),
+        traceID: String? = nil) -> ClaudeOAuthCredentialRecord?
     {
         #if os(macOS)
         if !self.keychainAccessAllowed { return nil }
         if respectKeychainPromptCooldown,
            !ClaudeOAuthKeychainAccessGate.shouldAllowPrompt(now: now)
         {
+            if let traceID {
+                self.log.debug(
+                    "Claude OAuth Claude-keychain sync skipped by cooldown gate",
+                    metadata: self.traceMeta(traceID))
+            }
             return nil
         }
 
         if !self.shouldCheckClaudeKeychainChange(now: now) {
+            if let traceID {
+                self.log.debug(
+                    "Claude OAuth Claude-keychain sync throttled",
+                    metadata: self.traceMeta(traceID))
+            }
             return nil
         }
 
         guard let currentFingerprint = self.currentClaudeKeychainFingerprintWithoutPrompt() else {
+            if let traceID {
+                self.log.debug(
+                    "Claude OAuth Claude-keychain sync skipped (no fingerprint)",
+                    metadata: self.traceMeta(traceID))
+            }
             return nil
         }
         let storedFingerprint = self.loadClaudeKeychainFingerprint()
         guard currentFingerprint != storedFingerprint else { return nil }
+        if let traceID {
+            self.log.info(
+                "Claude OAuth Claude-keychain fingerprint changed; attempting sync",
+                metadata: self.traceMeta(traceID))
+        }
 
         do {
             guard let data = try self.loadFromClaudeKeychainNonInteractive() else {
+                if let traceID {
+                    self.log.debug(
+                        "Claude OAuth Claude-keychain sync read returned no data",
+                        metadata: self.traceMeta(traceID))
+                }
                 return nil
             }
             guard let keychainCreds = try? ClaudeOAuthCredentials.parse(data: data) else {
                 self.saveClaudeKeychainFingerprint(currentFingerprint)
+                if let traceID {
+                    self.log.warning(
+                        "Claude OAuth Claude-keychain sync parse failed; fingerprint updated",
+                        metadata: self.traceMeta(traceID))
+                }
                 return nil
             }
             self.saveClaudeKeychainFingerprint(currentFingerprint)
@@ -875,8 +1084,18 @@ public enum ClaudeOAuthCredentialsStore {
                 // Back off to avoid repeated keychain probes on systems that still show prompts.
                 ClaudeOAuthKeychainAccessGate.recordDenied(now: now)
             }
+            if let traceID {
+                self.log.warning(
+                    "Claude OAuth Claude-keychain sync failed",
+                    metadata: self.traceMeta(traceID, extra: ["error": error.localizedDescription]))
+            }
             return nil
         } catch {
+            if let traceID {
+                self.log.warning(
+                    "Claude OAuth Claude-keychain sync failed",
+                    metadata: self.traceMeta(traceID, extra: ["error": error.localizedDescription]))
+            }
             return nil
         }
         #else
@@ -1147,13 +1366,17 @@ public enum ClaudeOAuthCredentialsStore {
         candidate: ClaudeKeychainCandidate,
         allowKeychainPrompt: Bool) throws -> Data?
     {
+        var startMeta: [String: String] = [
+            "service": self.claudeKeychainService,
+            "interactive": "\(allowKeychainPrompt)",
+            "process": ProcessInfo.processInfo.processName,
+        ]
+        if let traceID = self.taskCurrentLoadTraceID {
+            startMeta["trace_id"] = traceID
+        }
         self.log.debug(
             "Claude keychain data read start",
-            metadata: [
-                "service": self.claudeKeychainService,
-                "interactive": "\(allowKeychainPrompt)",
-                "process": ProcessInfo.processInfo.processName,
-            ])
+            metadata: startMeta)
 
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -1170,15 +1393,19 @@ public enum ClaudeOAuthCredentialsStore {
         let startedAtNs = DispatchTime.now().uptimeNanoseconds
         let status = SecItemCopyMatching(query as CFDictionary, &result)
         let durationMs = Double(DispatchTime.now().uptimeNanoseconds - startedAtNs) / 1_000_000.0
+        var resultMeta: [String: String] = [
+            "service": self.claudeKeychainService,
+            "interactive": "\(allowKeychainPrompt)",
+            "status": "\(status)",
+            "duration_ms": String(format: "%.2f", durationMs),
+            "process": ProcessInfo.processInfo.processName,
+        ]
+        if let traceID = self.taskCurrentLoadTraceID {
+            resultMeta["trace_id"] = traceID
+        }
         self.log.debug(
             "Claude keychain data read result",
-            metadata: [
-                "service": self.claudeKeychainService,
-                "interactive": "\(allowKeychainPrompt)",
-                "status": "\(status)",
-                "duration_ms": String(format: "%.2f", durationMs),
-                "process": ProcessInfo.processInfo.processName,
-            ])
+            metadata: resultMeta)
         switch status {
         case errSecSuccess:
             if let data = result as? Data {
@@ -1205,13 +1432,17 @@ public enum ClaudeOAuthCredentialsStore {
     }
 
     private static func loadClaudeKeychainLegacyData(allowKeychainPrompt: Bool) throws -> Data? {
+        var startMeta: [String: String] = [
+            "service": self.claudeKeychainService,
+            "interactive": "\(allowKeychainPrompt)",
+            "process": ProcessInfo.processInfo.processName,
+        ]
+        if let traceID = self.taskCurrentLoadTraceID {
+            startMeta["trace_id"] = traceID
+        }
         self.log.debug(
             "Claude keychain legacy data read start",
-            metadata: [
-                "service": self.claudeKeychainService,
-                "interactive": "\(allowKeychainPrompt)",
-                "process": ProcessInfo.processInfo.processName,
-            ])
+            metadata: startMeta)
 
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -1228,15 +1459,19 @@ public enum ClaudeOAuthCredentialsStore {
         let startedAtNs = DispatchTime.now().uptimeNanoseconds
         let status = SecItemCopyMatching(query as CFDictionary, &result)
         let durationMs = Double(DispatchTime.now().uptimeNanoseconds - startedAtNs) / 1_000_000.0
+        var resultMeta: [String: String] = [
+            "service": self.claudeKeychainService,
+            "interactive": "\(allowKeychainPrompt)",
+            "status": "\(status)",
+            "duration_ms": String(format: "%.2f", durationMs),
+            "process": ProcessInfo.processInfo.processName,
+        ]
+        if let traceID = self.taskCurrentLoadTraceID {
+            resultMeta["trace_id"] = traceID
+        }
         self.log.debug(
             "Claude keychain legacy data read result",
-            metadata: [
-                "service": self.claudeKeychainService,
-                "interactive": "\(allowKeychainPrompt)",
-                "status": "\(status)",
-                "duration_ms": String(format: "%.2f", durationMs),
-                "process": ProcessInfo.processInfo.processName,
-            ])
+            metadata: resultMeta)
         switch status {
         case errSecSuccess:
             return result as? Data
@@ -1457,7 +1692,13 @@ extension ClaudeOAuthCredentialsStore {
     }
 
     private static func shouldShowClaudeKeychainPreAlert() -> Bool {
-        switch KeychainAccessPreflight.checkGenericPassword(service: self.claudeKeychainService, account: nil) {
+        let outcome = KeychainAccessPreflight.checkGenericPassword(service: self.claudeKeychainService, account: nil)
+        if let traceID = self.taskCurrentLoadTraceID {
+            self.log.debug(
+                "Claude OAuth keychain preflight evaluated",
+                metadata: self.traceMeta(traceID, extra: ["outcome": String(describing: outcome)]))
+        }
+        return switch outcome {
         case .interactionRequired:
             true
         case .failure:

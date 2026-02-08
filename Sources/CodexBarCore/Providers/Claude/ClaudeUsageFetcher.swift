@@ -307,6 +307,17 @@ public struct ClaudeUsageFetcher: ClaudeUsageFetching, Sendable {
                 self.oauthAllowKeychainPrompt
                     && !hasCache
                     && (!self.oauthKeychainPromptCooldownEnabled || promptGateAllowsPrompt)
+            if Self.isClaudeOAuthFlowDebugEnabled {
+                Self.log.debug(
+                    "Claude OAuth allowKeychainPrompt computed",
+                    metadata: [
+                        "oauthAllowKeychainPrompt": "\(self.oauthAllowKeychainPrompt)",
+                        "hasCache": "\(hasCache)",
+                        "cooldownEnabled": "\(self.oauthKeychainPromptCooldownEnabled)",
+                        "promptGateAllowsPrompt": "\(promptGateAllowsPrompt)",
+                        "allowKeychainPrompt": "\(allowKeychainPrompt)",
+                    ])
+            }
             // Ownership-aware credential loading:
             // - Claude CLI-owned credentials delegate refresh to Claude CLI.
             // - CodexBar-owned credentials use direct token-endpoint refresh.

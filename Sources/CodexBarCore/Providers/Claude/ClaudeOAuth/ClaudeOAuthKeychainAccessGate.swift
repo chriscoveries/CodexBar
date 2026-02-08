@@ -13,6 +13,7 @@ public enum ClaudeOAuthKeychainAccessGate {
     private static let defaultsKey = "claudeOAuthKeychainDeniedUntil"
     private static let cooldownInterval: TimeInterval = 60 * 60 * 6
     @TaskLocal private static var taskOverrideShouldAllowPromptForTesting: Bool?
+    private static let log = CodexBarLog.logger(LogCategories.claudeUsage)
 
     public static func shouldAllowPrompt(now: Date = Date()) -> Bool {
         guard !KeychainAccessGate.isDisabled else { return false }
@@ -21,11 +22,16 @@ public enum ClaudeOAuthKeychainAccessGate {
             self.loadIfNeeded(&state)
             if let deniedUntil = state.deniedUntil {
                 if deniedUntil > now {
+                    let remaining = max(0, deniedUntil.timeIntervalSince(now))
+                    self.log.debug(
+                        "Claude OAuth keychain prompt gate denied",
+                        metadata: ["remaining_s": "\(Int(remaining))"])
                     return false
                 }
                 state.deniedUntil = nil
                 self.persist(state)
             }
+            self.log.debug("Claude OAuth keychain prompt gate allowed")
             return true
         }
     }
@@ -37,6 +43,10 @@ public enum ClaudeOAuthKeychainAccessGate {
             state.deniedUntil = deniedUntil
             self.persist(state)
         }
+        let remaining = max(0, deniedUntil.timeIntervalSince(now))
+        self.log.info(
+            "Claude OAuth keychain prompt gate recorded denial",
+            metadata: ["cooldown_s": "\(Int(remaining))"])
     }
 
     #if DEBUG

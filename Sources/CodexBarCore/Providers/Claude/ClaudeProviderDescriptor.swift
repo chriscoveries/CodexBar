@@ -233,6 +233,15 @@ struct ClaudeOAuthFetchStrategy: ProviderFetchStrategy {
 
     func fetch(_ context: ProviderFetchContext) async throws -> ProviderFetchResult {
         let allowInteractivePrompts = self.allowInteractiveKeychainPromptsInAuto(context)
+        let policy = context.settings?.claude?.autoKeychainPromptPolicy ?? .userInitiated
+        CodexBarLog.logger(LogCategories.claudeUsage).debug(
+            "Claude OAuth fetch starting",
+            metadata: [
+                "sourceMode": context.sourceMode.rawValue,
+                "trigger": String(describing: context.trigger),
+                "autoKeychainPromptPolicy": policy.rawValue,
+                "allowInteractivePrompts": "\(allowInteractivePrompts)",
+            ])
         let fetcher = ClaudeUsageFetcher(
             browserDetection: context.browserDetection,
             environment: context.env,
