@@ -901,10 +901,17 @@ public enum ClaudeOAuthCredentialsStore {
 
         do {
             guard let data = try self.loadFromClaudeKeychainNonInteractive(), !data.isEmpty else { return nil }
-            guard let creds = try? ClaudeOAuthCredentials.parse(data: data), !creds.isExpired else {
+            guard let creds = try? ClaudeOAuthCredentials.parse(data: data) else {
                 // Fingerprint so we don't repeatedly hammer a broken keychain item.
                 self.saveClaudeKeychainFingerprint(self.currentClaudeKeychainFingerprintWithoutPrompt())
                 return nil
+            }
+
+            if creds.isExpired {
+                // We intentionally don't cache expired credentials as a "working" OAuth cache entry. However, for the
+                // OAuth flow to delegate refresh to Claude CLI, we must surface the expired record to the caller.
+                self.saveClaudeKeychainFingerprint(self.currentClaudeKeychainFingerprintWithoutPrompt())
+                return ClaudeOAuthCredentialRecord(credentials: creds, owner: .claudeCLI, source: .claudeKeychain)
             }
 
             self.saveClaudeKeychainFingerprint(self.currentClaudeKeychainFingerprintWithoutPrompt())
