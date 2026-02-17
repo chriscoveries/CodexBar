@@ -168,6 +168,9 @@ extension StatusItemController {
             currentProvider: currentProvider,
             context: openAIContext,
             addedOpenAIWebItems: addedOpenAIWebItems)
+        if self.addUsageHistoryMenuItemIfNeeded(to: menu, provider: currentProvider) {
+            menu.addItem(.separator())
+        }
         self.addActionableSections(descriptor.sections, to: menu)
     }
 
@@ -216,6 +219,9 @@ extension StatusItemController {
             currentProvider: currentProvider,
             context: openAIContext,
             addedOpenAIWebItems: addedOpenAIWebItems)
+        if self.addUsageHistoryMenuItemIfNeeded(to: menu, provider: currentProvider) {
+            menu.addItem(.separator())
+        }
         self.addActionableSections(descriptor.sections, to: menu)
     }
 
@@ -1015,22 +1021,23 @@ extension StatusItemController {
     }
 
     private func makeUsageBreakdownSubmenu() -> NSMenu? {
-        let breakdown = self.store.openAIDashboard?.usageBreakdown ?? []
         let width = Self.menuCardBaseWidth
-        guard !breakdown.isEmpty else { return nil }
+        let submenu = NSMenu()
+        submenu.delegate = self
+        return self.appendUsageBreakdownChartItem(to: submenu, width: width) ? submenu : nil
+    }
 
+    private func appendUsageBreakdownChartItem(to submenu: NSMenu, width: CGFloat) -> Bool {
+        let breakdown = self.store.openAIDashboard?.usageBreakdown ?? []
+        guard !breakdown.isEmpty else { return false }
         if !Self.menuCardRenderingEnabled {
-            let submenu = NSMenu()
-            submenu.delegate = self
             let chartItem = NSMenuItem()
             chartItem.isEnabled = false
             chartItem.representedObject = "usageBreakdownChart"
             submenu.addItem(chartItem)
-            return submenu
+            return true
         }
 
-        let submenu = NSMenu()
-        submenu.delegate = self
         let chartView = UsageBreakdownChartMenuView(breakdown: breakdown, width: width)
         let hosting = MenuHostingView(rootView: chartView)
         // Use NSHostingController for efficient size calculation without multiple layout passes
@@ -1043,7 +1050,7 @@ extension StatusItemController {
         chartItem.isEnabled = false
         chartItem.representedObject = "usageBreakdownChart"
         submenu.addItem(chartItem)
-        return submenu
+        return true
     }
 
     private func makeCreditsHistorySubmenu() -> NSMenu? {
@@ -1120,6 +1127,7 @@ extension StatusItemController {
             "usageBreakdownChart",
             "creditsHistoryChart",
             "costHistoryChart",
+            "usageHistoryChart",
         ]
         return menu.items.contains { item in
             guard let id = item.representedObject as? String else { return false }

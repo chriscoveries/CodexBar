@@ -335,6 +335,112 @@ struct StatusMenuTests {
     }
 
     @Test
+    func showsUsageHistoryMenuItemForCodex() {
+        self.disableMenuCardsForTesting()
+        let settings = self.makeSettings()
+        settings.statusChecksEnabled = false
+        settings.refreshFrequency = .manual
+        settings.mergeIcons = true
+        settings.selectedMenuProvider = .codex
+
+        let registry = ProviderRegistry.shared
+        if let codexMeta = registry.metadata[.codex] {
+            settings.setProviderEnabled(provider: .codex, metadata: codexMeta, enabled: true)
+        }
+        if let claudeMeta = registry.metadata[.claude] {
+            settings.setProviderEnabled(provider: .claude, metadata: claudeMeta, enabled: false)
+        }
+        if let geminiMeta = registry.metadata[.gemini] {
+            settings.setProviderEnabled(provider: .gemini, metadata: geminiMeta, enabled: false)
+        }
+
+        let fetcher = UsageFetcher()
+        let store = UsageStore(fetcher: fetcher, browserDetection: BrowserDetection(cacheTTL: 0), settings: settings)
+        store._setSnapshotForTesting(
+            UsageSnapshot(
+                primary: RateWindow(usedPercent: 20, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
+                secondary: RateWindow(usedPercent: 40, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
+                updatedAt: Date()),
+            provider: .codex)
+        store.planUtilizationHistory[.codex] = [
+            PlanUtilizationHistorySample(
+                capturedAt: Date(),
+                dailyUsedPercent: 20,
+                weeklyUsedPercent: 40,
+                monthlyUsedPercent: 30),
+        ]
+
+        let controller = StatusItemController(
+            store: store,
+            settings: settings,
+            account: fetcher.loadAccountInfo(),
+            updater: DisabledUpdaterController(),
+            preferencesSelection: PreferencesSelection(),
+            statusBar: self.makeStatusBarForTesting())
+
+        let menu = controller.makeMenu()
+        controller.menuWillOpen(menu)
+
+        let usageHistoryItem = menu.items.first { $0.title == "Subscription Utilization" }
+        #expect(
+            usageHistoryItem?.submenu?.items
+                .contains { ($0.representedObject as? String) == "usageHistoryChart" } == true)
+    }
+
+    @Test
+    func showsUsageHistoryMenuItemForClaude() {
+        self.disableMenuCardsForTesting()
+        let settings = self.makeSettings()
+        settings.statusChecksEnabled = false
+        settings.refreshFrequency = .manual
+        settings.mergeIcons = true
+        settings.selectedMenuProvider = .claude
+
+        let registry = ProviderRegistry.shared
+        if let codexMeta = registry.metadata[.codex] {
+            settings.setProviderEnabled(provider: .codex, metadata: codexMeta, enabled: false)
+        }
+        if let claudeMeta = registry.metadata[.claude] {
+            settings.setProviderEnabled(provider: .claude, metadata: claudeMeta, enabled: true)
+        }
+        if let geminiMeta = registry.metadata[.gemini] {
+            settings.setProviderEnabled(provider: .gemini, metadata: geminiMeta, enabled: false)
+        }
+
+        let fetcher = UsageFetcher()
+        let store = UsageStore(fetcher: fetcher, browserDetection: BrowserDetection(cacheTTL: 0), settings: settings)
+        store._setSnapshotForTesting(
+            UsageSnapshot(
+                primary: RateWindow(usedPercent: 25, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
+                secondary: RateWindow(usedPercent: 55, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
+                updatedAt: Date()),
+            provider: .claude)
+        store.planUtilizationHistory[.claude] = [
+            PlanUtilizationHistorySample(
+                capturedAt: Date(),
+                dailyUsedPercent: 25,
+                weeklyUsedPercent: 55,
+                monthlyUsedPercent: 15),
+        ]
+
+        let controller = StatusItemController(
+            store: store,
+            settings: settings,
+            account: fetcher.loadAccountInfo(),
+            updater: DisabledUpdaterController(),
+            preferencesSelection: PreferencesSelection(),
+            statusBar: self.makeStatusBarForTesting())
+
+        let menu = controller.makeMenu()
+        controller.menuWillOpen(menu)
+
+        let usageHistoryItem = menu.items.first { $0.title == "Subscription Utilization" }
+        #expect(
+            usageHistoryItem?.submenu?.items
+                .contains { ($0.representedObject as? String) == "usageHistoryChart" } == true)
+    }
+
+    @Test
     func showsCreditsBeforeCostInCodexMenuCardSections() throws {
         self.disableMenuCardsForTesting()
         let settings = self.makeSettings()

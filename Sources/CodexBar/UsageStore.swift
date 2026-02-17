@@ -8,6 +8,9 @@ import SweetCookieKit
 
 @MainActor
 extension UsageStore {
+    private nonisolated static let codexSnapshotWaitTimeoutSeconds: TimeInterval = 6
+    private nonisolated static let codexSnapshotPollIntervalNanoseconds: UInt64 = 100_000_000
+
     var menuObservationToken: Int {
         _ = self.snapshots
         _ = self.errors
@@ -191,8 +194,10 @@ final class UsageStore {
     @ObservationIgnored private var tokenTimerTask: Task<Void, Never>?
     @ObservationIgnored private var tokenRefreshSequenceTask: Task<Void, Never>?
     @ObservationIgnored private var pathDebugRefreshTask: Task<Void, Never>?
+    @ObservationIgnored private var codexPlanHistoryBackfillTask: Task<Void, Never>?
     @ObservationIgnored var lastKnownSessionRemaining: [UsageProvider: Double] = [:]
     @ObservationIgnored var lastTokenFetchAt: [UsageProvider: Date] = [:]
+    @ObservationIgnored var planUtilizationHistory: [UsageProvider: [PlanUtilizationHistorySample]] = [:]
     @ObservationIgnored private var hasCompletedInitialRefresh: Bool = false
     @ObservationIgnored private let tokenFetchTTL: TimeInterval = 60 * 60
     @ObservationIgnored private let tokenFetchTimeout: TimeInterval = 10 * 60
@@ -230,6 +235,7 @@ final class UsageStore {
         self.providerRuntimes = Dictionary(uniqueKeysWithValues: ProviderCatalog.all.compactMap { implementation in
             implementation.makeRuntime().map { (implementation.id, $0) }
         })
+        self.planUtilizationHistory = PlanUtilizationHistoryStore.load()
         self.logStartupState()
         self.bindSettings()
         self.detectVersions()
@@ -434,6 +440,7 @@ final class UsageStore {
     func refresh(forceTokenUsage: Bool = false) async {
         guard !self.isRefreshing else { return }
         let refreshPhase: ProviderRefreshPhase = self.hasCompletedInitialRefresh ? .regular : .startup
+        let refreshStartedAt = Date()
 
         await ProviderRefreshContext.$current.withValue(refreshPhase) {
             self.isRefreshing = true
@@ -447,7 +454,7 @@ final class UsageStore {
                     group.addTask { await self.refreshProvider(provider) }
                     group.addTask { await self.refreshStatus(provider) }
                 }
-                group.addTask { await self.refreshCreditsIfNeeded() }
+                group.addTask { await self.refreshCreditsIfNeeded(minimumSnapshotUpdatedAt: refreshStartedAt) }
             }
 
             // Token-cost usage can be slow; run it outside the refresh group so we don't block menu updates.
@@ -459,7 +466,7 @@ final class UsageStore {
 
             if self.openAIDashboardRequiresLogin {
                 await self.refreshProvider(.codex)
-                await self.refreshCreditsIfNeeded()
+                await self.refreshCreditsIfNeeded(minimumSnapshotUpdatedAt: refreshStartedAt)
             }
 
             self.persistWidgetSnapshot(reason: "refresh")
@@ -621,7 +628,7 @@ final class UsageStore {
         }
     }
 
-    private func refreshCreditsIfNeeded() async {
+    private func refreshCreditsIfNeeded(minimumSnapshotUpdatedAt: Date? = nil) async {
         guard self.isEnabled(.codex) else { return }
         do {
             let credits = try await self.codexFetcher.loadLatestCredits(
@@ -632,6 +639,24 @@ final class UsageStore {
                 self.lastCreditsSnapshot = credits
                 self.creditsFailureStreak = 0
             }
+            let codexSnapshot = await MainActor.run {
+                self.snapshots[.codex]
+            }
+            if let minimumSnapshotUpdatedAt,
+               codexSnapshot == nil || codexSnapshot?.updatedAt ?? .distantPast < minimumSnapshotUpdatedAt
+            {
+                self.scheduleCodexPlanHistoryBackfill(
+                    minimumSnapshotUpdatedAt: minimumSnapshotUpdatedAt,
+                    credits: credits)
+                return
+            }
+
+            self.cancelCodexPlanHistoryBackfill()
+            guard let codexSnapshot else { return }
+            await self.recordPlanUtilizationHistorySample(
+                provider: .codex,
+                snapshot: codexSnapshot,
+                credits: credits)
         } catch {
             let message = error.localizedDescription
             if message.localizedCaseInsensitiveContains("data not available yet") {
@@ -862,6 +887,45 @@ extension UsageStore {
         } catch {
             await self.applyOpenAIDashboardFailure(message: error.localizedDescription)
         }
+    }
+
+    private func waitForCodexSnapshot(minimumUpdatedAt: Date) async -> UsageSnapshot? {
+        let deadline = Date().addingTimeInterval(Self.codexSnapshotWaitTimeoutSeconds)
+
+        while Date() < deadline {
+            if Task.isCancelled { return nil }
+            if let snapshot = await MainActor.run(body: { self.snapshots[.codex] }),
+               snapshot.updatedAt >= minimumUpdatedAt
+            {
+                return snapshot
+            }
+            try? await Task.sleep(nanoseconds: Self.codexSnapshotPollIntervalNanoseconds)
+        }
+
+        return nil
+    }
+
+    private func scheduleCodexPlanHistoryBackfill(
+        minimumSnapshotUpdatedAt: Date,
+        credits: CreditsSnapshot)
+    {
+        self.cancelCodexPlanHistoryBackfill()
+        self.codexPlanHistoryBackfillTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            guard let snapshot = await self.waitForCodexSnapshot(minimumUpdatedAt: minimumSnapshotUpdatedAt) else {
+                return
+            }
+            await self.recordPlanUtilizationHistorySample(
+                provider: .codex,
+                snapshot: snapshot,
+                credits: credits)
+            self.codexPlanHistoryBackfillTask = nil
+        }
+    }
+
+    private func cancelCodexPlanHistoryBackfill() {
+        self.codexPlanHistoryBackfillTask?.cancel()
+        self.codexPlanHistoryBackfillTask = nil
     }
 
     // MARK: - OpenAI web account switching
