@@ -64,7 +64,7 @@ struct PlanUtilizationHistoryChartMenuView: View {
     private let samples: [PlanUtilizationHistorySample]
     private let width: CGFloat
 
-    @State private var selectedPeriod: Period = .weekly
+    @State private var selectedPeriod: Period = .daily
     @State private var selectedPointID: String?
 
     init(provider: UsageProvider, samples: [PlanUtilizationHistorySample], width: CGFloat) {
