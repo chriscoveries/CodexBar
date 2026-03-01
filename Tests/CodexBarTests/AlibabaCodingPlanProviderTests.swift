@@ -55,6 +55,27 @@ struct AlibabaCodingPlanUsageSnapshotTests {
         #expect(usage.tertiary?.windowMinutes == 43_200)
         #expect(usage.loginMethod(for: .alibaba) == "Pro")
     }
+
+    @Test
+    func shiftsPrimaryResetForwardWhenBackendResetIsNotFuture() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let stalePrimaryReset = Date(timeIntervalSince1970: 1_699_999_900)
+        let snapshot = AlibabaCodingPlanUsageSnapshot(
+            planName: "Lite",
+            fiveHourUsedQuota: 70,
+            fiveHourTotalQuota: 1200,
+            fiveHourNextRefreshTime: stalePrimaryReset,
+            weeklyUsedQuota: 80,
+            weeklyTotalQuota: 9000,
+            weeklyNextRefreshTime: Date(timeIntervalSince1970: 1_700_010_000),
+            monthlyUsedQuota: 80,
+            monthlyTotalQuota: 18000,
+            monthlyNextRefreshTime: Date(timeIntervalSince1970: 1_700_100_000),
+            updatedAt: now)
+
+        let usage = snapshot.toUsageSnapshot()
+        #expect(usage.primary?.resetsAt == stalePrimaryReset.addingTimeInterval(TimeInterval(5 * 60 * 60)))
+    }
 }
 
 @Suite

@@ -50,11 +50,10 @@ extension AlibabaCodingPlanUsageSnapshot {
             RateWindow(
                 usedPercent: primaryPercent,
                 windowMinutes: 5 * 60,
-                resetsAt: Self.normalizedResetDate(
+                resetsAt: Self.normalizedFiveHourReset(
                     self.fiveHourNextRefreshTime,
-                    updatedAt: self.updatedAt,
-                    minimumLeadSeconds: 5 * 60),
-                resetDescription: Self.limitDescription(total: self.fiveHourTotalQuota, label: "5-hour"))
+                    updatedAt: self.updatedAt),
+                resetDescription: Self.usageDetail(used: self.fiveHourUsedQuota, total: self.fiveHourTotalQuota))
         } else {
             nil
         }
@@ -64,7 +63,7 @@ extension AlibabaCodingPlanUsageSnapshot {
                 usedPercent: secondaryPercent,
                 windowMinutes: 7 * 24 * 60,
                 resetsAt: self.weeklyNextRefreshTime,
-                resetDescription: Self.limitDescription(total: self.weeklyTotalQuota, label: "weekly"))
+                resetDescription: Self.usageDetail(used: self.weeklyUsedQuota, total: self.weeklyTotalQuota))
         } else {
             nil
         }
@@ -74,7 +73,7 @@ extension AlibabaCodingPlanUsageSnapshot {
                 usedPercent: tertiaryPercent,
                 windowMinutes: 30 * 24 * 60,
                 resetsAt: self.monthlyNextRefreshTime,
-                resetDescription: Self.limitDescription(total: self.monthlyTotalQuota, label: "monthly"))
+                resetDescription: Self.usageDetail(used: self.monthlyUsedQuota, total: self.monthlyTotalQuota))
         } else {
             nil
         }
@@ -106,12 +105,23 @@ extension AlibabaCodingPlanUsageSnapshot {
         return "\(total) requests / \(label)"
     }
 
-    private static func normalizedResetDate(
-        _ date: Date?,
-        updatedAt: Date,
-        minimumLeadSeconds: TimeInterval) -> Date?
-    {
-        guard let date else { return nil }
-        return date.timeIntervalSince(updatedAt) >= minimumLeadSeconds ? date : nil
+    private static func usageDetail(used: Int?, total: Int?) -> String? {
+        guard let used, let total, total > 0 else { return nil }
+        return "\(used) / \(total) used"
     }
+
+    private static func normalizedFiveHourReset(_ raw: Date?, updatedAt: Date) -> Date? {
+        guard let raw else { return nil }
+        if raw.timeIntervalSince(updatedAt) >= 60 {
+            return raw
+        }
+
+        let shifted = raw.addingTimeInterval(TimeInterval(5 * 60 * 60))
+        if shifted.timeIntervalSince(updatedAt) >= 60 {
+            return shifted
+        }
+
+        return updatedAt.addingTimeInterval(TimeInterval(5 * 60 * 60))
+    }
+
 }
