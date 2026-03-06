@@ -53,17 +53,19 @@ public struct AlibabaCodingPlanSettingsReader: Sendable {
 
 public enum AlibabaCodingPlanSettingsError: LocalizedError, Sendable {
     case missingToken
-    case missingCookie
+    case missingCookie(details: String? = nil)
     case invalidCookie
 
     public var errorDescription: String? {
         switch self {
         case .missingToken:
-            "Alibaba Coding Plan API key not found. Set apiKey in ~/.codexbar/config.json or ALIBABA_CODING_PLAN_API_KEY."
-        case .missingCookie:
-            "No Alibaba Coding Plan session cookies found in browsers."
+            return "Alibaba Coding Plan API key not found. Set apiKey in ~/.codexbar/config.json or ALIBABA_CODING_PLAN_API_KEY."
+        case let .missingCookie(details):
+            let base = "No Alibaba Coding Plan session cookies found in browsers. If you use Safari, enable Full Disk Access for CodexBar/Terminal or paste a manual Cookie header."
+            guard let details, !details.isEmpty else { return base }
+            return "\(base) \(details)"
         case .invalidCookie:
-            "Alibaba Coding Plan cookie header is invalid."
+            return "Alibaba Coding Plan cookie header is invalid."
         }
     }
 }

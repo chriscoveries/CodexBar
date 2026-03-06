@@ -22,6 +22,12 @@ struct AlibabaCodingPlanSettingsReaderTests {
             .quotaURL(environment: [AlibabaCodingPlanSettingsReader.quotaURLKey: "modelstudio.console.alibabacloud.com/data/api.json"])
         #expect(url?.absoluteString == "https://modelstudio.console.alibabacloud.com/data/api.json")
     }
+
+    @Test
+    func missingCookieErrorIncludesAccessHintWhenPresent() {
+        let error = AlibabaCodingPlanSettingsError.missingCookie(details: "Safari cookie file exists but is not readable.")
+        #expect(error.errorDescription?.contains("Safari cookie file exists but is not readable.") == true)
+    }
 }
 
 @Suite

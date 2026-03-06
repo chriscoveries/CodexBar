@@ -12,10 +12,10 @@ public enum AlibabaCodingPlanProviderDescriptor {
         #if os(macOS)
         let browserOrder: BrowserCookieImportOrder = [
             .safari,
+            .brave,
             .chrome,
             .chromeBeta,
             .edge,
-            .brave,
             .arc,
             .firefox,
         ]
@@ -86,9 +86,7 @@ struct AlibabaCodingPlanWebFetchStrategy: ProviderFetchStrategy {
     func isAvailable(_ context: ProviderFetchContext) async -> Bool {
         guard context.settings?.alibaba?.cookieSource != .off else { return false }
 
-        if let configured = context.settings?.alibaba?.manualCookieHeader,
-           CookieHeaderNormalizer.normalize(configured) != nil
-        {
+        if AlibabaCodingPlanSettingsReader.cookieHeader(environment: context.env) != nil {
             return true
         }
 
@@ -104,7 +102,12 @@ struct AlibabaCodingPlanWebFetchStrategy: ProviderFetchStrategy {
         {
             return true
         }
-        return AlibabaCodingPlanCookieImporter.hasSession(browserDetection: context.browserDetection)
+        if AlibabaCodingPlanCookieImporter.hasSession(browserDetection: context.browserDetection) {
+            return true
+        }
+        // Keep web strategy available in auto mode so fetch can attempt refresh/import
+        // and provide a concrete error or fallback path instead of "No available fetch strategy".
+        return context.settings?.alibaba?.cookieSource != .manual
         #else
         return false
         #endif
@@ -139,6 +142,15 @@ struct AlibabaCodingPlanWebFetchStrategy: ProviderFetchStrategy {
     }
 
     func shouldFallback(on error: Error, context _: ProviderFetchContext) -> Bool {
+        if let settingsError = error as? AlibabaCodingPlanSettingsError {
+            switch settingsError {
+            case .missingCookie, .invalidCookie:
+                return true
+            case .missingToken:
+                return false
+            }
+        }
+
         guard let alibabaError = error as? AlibabaCodingPlanUsageError else { return false }
         switch alibabaError {
         case .loginRequired:
@@ -153,6 +165,8 @@ struct AlibabaCodingPlanWebFetchStrategy: ProviderFetchStrategy {
     }
 
     private static func resolveCookieHeader(context: ProviderFetchContext, allowCached: Bool) throws -> String {
+        let normalizedConfiguredManual = CookieHeaderNormalizer.normalize(context.settings?.alibaba?.manualCookieHeader)
+
         if let settings = context.settings?.alibaba,
            settings.cookieSource == .manual
         {
@@ -160,12 +174,6 @@ struct AlibabaCodingPlanWebFetchStrategy: ProviderFetchStrategy {
                 throw AlibabaCodingPlanSettingsError.invalidCookie
             }
             return header
-        }
-
-        if let configured = context.settings?.alibaba?.manualCookieHeader,
-           let normalizedConfigured = CookieHeaderNormalizer.normalize(configured)
-        {
-            return normalizedConfigured
         }
 
         if let envCookie = AlibabaCodingPlanSettingsReader.cookieHeader(environment: context.env),
@@ -182,11 +190,18 @@ struct AlibabaCodingPlanWebFetchStrategy: ProviderFetchStrategy {
             return cached.cookieHeader
         }
 
-        let session = try AlibabaCodingPlanCookieImporter.importSession(browserDetection: context.browserDetection)
-        CookieHeaderCache.store(provider: .alibaba, cookieHeader: session.cookieHeader, sourceLabel: session.sourceLabel)
-        return session.cookieHeader
+        do {
+            let session = try AlibabaCodingPlanCookieImporter.importSession(browserDetection: context.browserDetection)
+            CookieHeaderCache.store(provider: .alibaba, cookieHeader: session.cookieHeader, sourceLabel: session.sourceLabel)
+            return session.cookieHeader
+        } catch {
+            if let fallbackManual = normalizedConfiguredManual {
+                return fallbackManual
+            }
+            throw error
+        }
         #else
-        throw AlibabaCodingPlanSettingsError.missingCookie
+        throw AlibabaCodingPlanSettingsError.missingCookie()
         #endif
     }
 }

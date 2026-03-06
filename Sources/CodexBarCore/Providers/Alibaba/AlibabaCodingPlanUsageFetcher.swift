@@ -150,7 +150,7 @@ public struct AlibabaCodingPlanUsageFetcher: Sendable {
         request.setValue("XMLHttpRequest", forHTTPHeaderField: "X-Requested-With")
         request.setValue(Self.browserLikeUserAgent, forHTTPHeaderField: "User-Agent")
         request.setValue(region.gatewayBaseURLString, forHTTPHeaderField: "Origin")
-        request.setValue(region.dashboardURL.absoluteString, forHTTPHeaderField: "Referer")
+        request.setValue(region.consoleRefererURL.absoluteString, forHTTPHeaderField: "Referer")
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
@@ -206,6 +206,7 @@ public struct AlibabaCodingPlanUsageFetcher: Sendable {
             "Data": [
                 "queryCodingPlanInstanceInfoRequest": [
                     "commodityCode": region.commodityCode,
+                    "onlyLatestOne": true,
                 ],
                 "cornerstoneParam": cornerstoneParam,
             ],
