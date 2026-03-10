@@ -595,13 +595,14 @@ struct StatusMenuTests {
                 secondary: RateWindow(usedPercent: 40, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
                 updatedAt: Date()),
             provider: .codex)
-        store.planUtilizationHistory[.codex] = [
-            PlanUtilizationHistorySample(
-                capturedAt: Date(),
-                dailyUsedPercent: 20,
-                weeklyUsedPercent: 40,
-                monthlyUsedPercent: 30),
-        ]
+        store.planUtilizationHistory[.codex] = PlanUtilizationHistoryBuckets(
+            unscoped: [
+                PlanUtilizationHistorySample(
+                    capturedAt: Date(),
+                    dailyUsedPercent: 20,
+                    weeklyUsedPercent: 40,
+                    monthlyUsedPercent: 30),
+            ])
 
         let controller = StatusItemController(
             store: store,
@@ -648,13 +649,14 @@ struct StatusMenuTests {
                 secondary: RateWindow(usedPercent: 55, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
                 updatedAt: Date()),
             provider: .claude)
-        store.planUtilizationHistory[.claude] = [
-            PlanUtilizationHistorySample(
-                capturedAt: Date(),
-                dailyUsedPercent: 25,
-                weeklyUsedPercent: 55,
-                monthlyUsedPercent: 15),
-        ]
+        store.planUtilizationHistory[.claude] = PlanUtilizationHistoryBuckets(
+            unscoped: [
+                PlanUtilizationHistorySample(
+                    capturedAt: Date(),
+                    dailyUsedPercent: 25,
+                    weeklyUsedPercent: 55,
+                    monthlyUsedPercent: 15),
+            ])
 
         let controller = StatusItemController(
             store: store,

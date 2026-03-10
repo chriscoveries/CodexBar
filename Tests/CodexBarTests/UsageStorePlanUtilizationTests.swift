@@ -359,4 +359,172 @@ struct UsageStorePlanUtilizationTests {
         #expect(model.axisIndexes == [23])
         #expect(model.xDomain == -0.5...23.5)
     }
+
+    @MainActor
+    @Test
+    func planHistorySelectsCurrentAccountBucket() throws {
+        let store = Self.makeStore()
+        let aliceSnapshot = Self.makeSnapshot(provider: .codex, email: "alice@example.com")
+        let bobSnapshot = Self.makeSnapshot(provider: .codex, email: "bob@example.com")
+        let aliceKey = try #require(
+            UsageStore._planUtilizationAccountKeyForTesting(
+                provider: .codex,
+                snapshot: aliceSnapshot))
+        let bobKey = try #require(
+            UsageStore._planUtilizationAccountKeyForTesting(
+                provider: .codex,
+                snapshot: bobSnapshot))
+
+        let aliceSample = PlanUtilizationHistorySample(
+            capturedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            dailyUsedPercent: 10,
+            weeklyUsedPercent: 20,
+            monthlyUsedPercent: 30)
+        let bobSample = PlanUtilizationHistorySample(
+            capturedAt: Date(timeIntervalSince1970: 1_700_086_400),
+            dailyUsedPercent: 40,
+            weeklyUsedPercent: 50,
+            monthlyUsedPercent: 60)
+
+        store.planUtilizationHistory[.codex] = PlanUtilizationHistoryBuckets(
+            unscoped: [
+                PlanUtilizationHistorySample(
+                    capturedAt: Date(timeIntervalSince1970: 1_699_913_600),
+                    dailyUsedPercent: 90,
+                    weeklyUsedPercent: 90,
+                    monthlyUsedPercent: 90),
+            ],
+            accounts: [
+                aliceKey: [aliceSample],
+                bobKey: [bobSample],
+            ])
+
+        store._setSnapshotForTesting(aliceSnapshot, provider: .codex)
+        #expect(store.planUtilizationHistory(for: .codex) == [aliceSample])
+
+        store._setSnapshotForTesting(bobSnapshot, provider: .codex)
+        #expect(store.planUtilizationHistory(for: .codex) == [bobSample])
+    }
+
+    @MainActor
+    @Test
+    func planHistoryFallsBackToUnscopedBucketWhenIdentityIsUnavailable() {
+        let store = Self.makeStore()
+        let sample = PlanUtilizationHistorySample(
+            capturedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            dailyUsedPercent: 20,
+            weeklyUsedPercent: 30,
+            monthlyUsedPercent: 40)
+
+        store.planUtilizationHistory[.claude] = PlanUtilizationHistoryBuckets(unscoped: [sample])
+        store._setSnapshotForTesting(
+            UsageSnapshot(
+                primary: nil,
+                secondary: nil,
+                updatedAt: Date()),
+            provider: .claude)
+
+        #expect(store.planUtilizationHistory(for: .claude) == [sample])
+    }
+
+    @Test
+    func storeLoadsLegacyProviderHistoryIntoUnscopedBucket() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let fileManager = PlanHistoryFileManager(applicationSupportURL: root)
+        let url = root
+            .appendingPathComponent("com.steipete.codexbar", isDirectory: true)
+            .appendingPathComponent("plan-utilization-history.json")
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true)
+
+        let sample = PlanUtilizationHistorySample(
+            capturedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            dailyUsedPercent: 10,
+            weeklyUsedPercent: 20,
+            monthlyUsedPercent: 30)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(LegacyPlanUtilizationHistoryFileFixture(
+            providers: ["codex": [sample]]))
+        try data.write(to: url, options: [.atomic])
+
+        let loaded = PlanUtilizationHistoryStore.load(fileManager: fileManager)
+
+        #expect(loaded[.codex]?.unscoped == [sample])
+        #expect(loaded[.codex]?.accounts.isEmpty == true)
+    }
+
+    @Test
+    func storeRoundTripsAccountBuckets() {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let fileManager = PlanHistoryFileManager(applicationSupportURL: root)
+        let aliceSample = PlanUtilizationHistorySample(
+            capturedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            dailyUsedPercent: 10,
+            weeklyUsedPercent: 20,
+            monthlyUsedPercent: 30)
+        let legacySample = PlanUtilizationHistorySample(
+            capturedAt: Date(timeIntervalSince1970: 1_699_913_600),
+            dailyUsedPercent: 50,
+            weeklyUsedPercent: 60,
+            monthlyUsedPercent: 70)
+        let buckets = PlanUtilizationHistoryBuckets(
+            unscoped: [legacySample],
+            accounts: ["alice": [aliceSample]])
+
+        PlanUtilizationHistoryStore.save([.codex: buckets], fileManager: fileManager)
+        let loaded = PlanUtilizationHistoryStore.load(fileManager: fileManager)
+
+        #expect(loaded == [.codex: buckets])
+    }
+}
+
+extension UsageStorePlanUtilizationTests {
+    @MainActor
+    private static func makeStore() -> UsageStore {
+        let suiteName = "UsageStorePlanUtilizationTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName) ?? .standard
+        defaults.removePersistentDomain(forName: suiteName)
+        let settings = SettingsStore(userDefaults: defaults)
+        return UsageStore(
+            fetcher: UsageFetcher(),
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings,
+            startupBehavior: .testing)
+    }
+
+    private static func makeSnapshot(provider: UsageProvider, email: String) -> UsageSnapshot {
+        UsageSnapshot(
+            primary: RateWindow(usedPercent: 10, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
+            secondary: RateWindow(usedPercent: 20, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
+            updatedAt: Date(),
+            identity: ProviderIdentitySnapshot(
+                providerID: provider,
+                accountEmail: email,
+                accountOrganization: nil,
+                loginMethod: "plus"))
+    }
+}
+
+private struct LegacyPlanUtilizationHistoryFileFixture: Codable {
+    let providers: [String: [PlanUtilizationHistorySample]]
+}
+
+private final class PlanHistoryFileManager: FileManager {
+    private let applicationSupportURL: URL
+
+    init(applicationSupportURL: URL) {
+        self.applicationSupportURL = applicationSupportURL
+        super.init()
+    }
+
+    override func urls(for directory: SearchPathDirectory, in domainMask: SearchPathDomainMask) -> [URL] {
+        if directory == .applicationSupportDirectory, domainMask == .userDomainMask {
+            return [self.applicationSupportURL]
+        }
+        return super.urls(for: directory, in: domainMask)
+    }
 }

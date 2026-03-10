@@ -1,4 +1,5 @@
 import CodexBarCore
+import CryptoKit
 import Foundation
 
 extension UsageStore {
@@ -8,7 +9,8 @@ extension UsageStore {
     private nonisolated static let planUtilizationMaxSamples: Int = 24 * 730
 
     func planUtilizationHistory(for provider: UsageProvider) -> [PlanUtilizationHistorySample] {
-        self.planUtilizationHistory[provider] ?? []
+        let accountKey = self.planUtilizationAccountKey(for: provider)
+        return self.planUtilizationHistory[provider]?.samples(for: accountKey) ?? []
     }
 
     func recordPlanUtilizationHistorySample(
@@ -20,9 +22,11 @@ extension UsageStore {
     {
         guard provider == .codex || provider == .claude else { return }
 
-        var snapshotToPersist: [UsageProvider: [PlanUtilizationHistorySample]]?
+        let accountKey = Self.planUtilizationAccountKey(provider: provider, snapshot: snapshot)
+        var snapshotToPersist: [UsageProvider: PlanUtilizationHistoryBuckets]?
         await MainActor.run {
-            let history = self.planUtilizationHistory[provider] ?? []
+            let providerBuckets = self.planUtilizationHistory[provider] ?? PlanUtilizationHistoryBuckets()
+            let history = providerBuckets.samples(for: accountKey)
             let resolvedCredits = provider == .codex ? credits : nil
             let sample = PlanUtilizationHistorySample(
                 capturedAt: now,
@@ -42,7 +46,9 @@ extension UsageStore {
                 return
             }
 
-            self.planUtilizationHistory[provider] = updatedHistory
+            var updatedBuckets = providerBuckets
+            updatedBuckets.setSamples(updatedHistory, for: accountKey)
+            self.planUtilizationHistory[provider] = updatedBuckets
             snapshotToPersist = self.planUtilizationHistory
         }
 
@@ -157,13 +163,55 @@ extension UsageStore {
             false
         }
     }
+
+    private func planUtilizationAccountKey(for provider: UsageProvider) -> String? {
+        guard let snapshot = self.snapshots[provider] else { return nil }
+        return Self.planUtilizationAccountKey(provider: provider, snapshot: snapshot)
+    }
+
+    private nonisolated static func planUtilizationAccountKey(
+        provider: UsageProvider,
+        snapshot: UsageSnapshot) -> String?
+    {
+        guard let identity = snapshot.identity(for: provider) else { return nil }
+
+        let normalizedEmail = identity.accountEmail?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        if let normalizedEmail, !normalizedEmail.isEmpty {
+            return self.sha256Hex("\(provider.rawValue):email:\(normalizedEmail)")
+        }
+
+        let normalizedOrganization = identity.accountOrganization?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        if let normalizedOrganization, !normalizedOrganization.isEmpty {
+            return self.sha256Hex("\(provider.rawValue):organization:\(normalizedOrganization)")
+        }
+
+        return nil
+    }
+
+    private nonisolated static func sha256Hex(_ input: String) -> String {
+        let digest = SHA256.hash(data: Data(input.utf8))
+        return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
+    #if DEBUG
+    nonisolated static func _planUtilizationAccountKeyForTesting(
+        provider: UsageProvider,
+        snapshot: UsageSnapshot) -> String?
+    {
+        self.planUtilizationAccountKey(provider: provider, snapshot: snapshot)
+    }
+    #endif
 }
 
 private actor PlanUtilizationHistoryPersistenceCoordinator {
-    private var pendingSnapshot: [UsageProvider: [PlanUtilizationHistorySample]]?
+    private var pendingSnapshot: [UsageProvider: PlanUtilizationHistoryBuckets]?
     private var isPersisting: Bool = false
 
-    func enqueue(_ snapshot: [UsageProvider: [PlanUtilizationHistorySample]]) {
+    func enqueue(_ snapshot: [UsageProvider: PlanUtilizationHistoryBuckets]) {
         self.pendingSnapshot = snapshot
         guard !self.isPersisting else { return }
         self.isPersisting = true
@@ -182,7 +230,7 @@ private actor PlanUtilizationHistoryPersistenceCoordinator {
         self.isPersisting = false
     }
 
-    private nonisolated static func saveAsync(_ snapshot: [UsageProvider: [PlanUtilizationHistorySample]]) async {
+    private nonisolated static func saveAsync(_ snapshot: [UsageProvider: PlanUtilizationHistoryBuckets]) async {
         await Task.detached(priority: .utility) {
             PlanUtilizationHistoryStore.save(snapshot)
         }.value
