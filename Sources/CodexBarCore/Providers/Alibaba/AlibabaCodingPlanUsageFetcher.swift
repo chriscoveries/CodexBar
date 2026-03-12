@@ -109,7 +109,7 @@ public struct AlibabaCodingPlanUsageFetcher: Sendable {
 
         guard httpResponse.statusCode == 200 else {
             if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
-                throw AlibabaCodingPlanUsageError.loginRequired
+                throw AlibabaCodingPlanUsageError.invalidCredentials
             }
             let body = String(data: data, encoding: .utf8) ?? ""
             Self.log.error("Alibaba Coding Plan returned \(httpResponse.statusCode): \(body)")
@@ -250,14 +250,26 @@ public struct AlibabaCodingPlanUsageFetcher: Sendable {
             return override
         }
         if let host = AlibabaCodingPlanSettingsReader.hostOverride(environment: environment),
-           let hostURL = self.url(from: host)
+           let hostURL = self.url(from: host, region: region)
         {
             return hostURL
         }
         return region.quotaURL
     }
 
-    static func url(from rawHost: String) -> URL? {
+    static func resolveConsoleDashboardURL(
+        region: AlibabaCodingPlanAPIRegion,
+        environment: [String: String]) -> URL
+    {
+        if let override = AlibabaCodingPlanSettingsReader.hostOverride(environment: environment),
+           let hostURL = self.dashboardURL(from: override, region: region)
+        {
+            return hostURL
+        }
+        return region.dashboardURL
+    }
+
+    static func url(from rawHost: String, region: AlibabaCodingPlanAPIRegion) -> URL? {
         let cleaned = AlibabaCodingPlanSettingsReader.cleaned(rawHost)
         guard let cleaned else { return nil }
 
@@ -275,7 +287,7 @@ public struct AlibabaCodingPlanUsageFetcher: Sendable {
             URLQueryItem(name: "action", value: "zeldaEasy.broadscope-bailian.codingPlan.queryCodingPlanInstanceInfoV2"),
             URLQueryItem(name: "product", value: "broadscope-bailian"),
             URLQueryItem(name: "api", value: "queryCodingPlanInstanceInfoV2"),
-            URLQueryItem(name: "currentRegionId", value: AlibabaCodingPlanAPIRegion.international.currentRegionID),
+            URLQueryItem(name: "currentRegionId", value: region.currentRegionID),
         ]
         return components?.url
     }
@@ -312,15 +324,7 @@ public struct AlibabaCodingPlanUsageFetcher: Sendable {
             return sec
         }
 
-        let dashboardURL: URL
-        if let override = AlibabaCodingPlanSettingsReader.hostOverride(environment: environment),
-           let hostURL = URL(string: override),
-           hostURL.scheme != nil
-        {
-            dashboardURL = hostURL
-        } else {
-            dashboardURL = region.dashboardURL
-        }
+        let dashboardURL = self.resolveConsoleDashboardURL(region: region, environment: environment)
 
         var request = URLRequest(url: dashboardURL)
         request.httpMethod = "GET"
@@ -344,6 +348,32 @@ public struct AlibabaCodingPlanUsageFetcher: Sendable {
         }
 
         throw AlibabaCodingPlanUsageError.loginRequired
+    }
+
+    static func dashboardURL(from rawHost: String, region: AlibabaCodingPlanAPIRegion) -> URL? {
+        let cleaned = AlibabaCodingPlanSettingsReader.cleaned(rawHost)
+        guard let cleaned else { return nil }
+
+        let base: URL?
+        if let url = URL(string: cleaned), url.scheme != nil {
+            base = url
+        } else {
+            base = URL(string: "https://\(cleaned)")
+        }
+        guard let base else { return nil }
+
+        guard var components = URLComponents(url: base, resolvingAgainstBaseURL: false),
+              let dashboardComponents = URLComponents(
+                  url: region.dashboardURL,
+                  resolvingAgainstBaseURL: false)
+        else {
+            return nil
+        }
+
+        components.path = dashboardComponents.path
+        components.percentEncodedQuery = dashboardComponents.percentEncodedQuery
+        components.fragment = dashboardComponents.fragment
+        return components.url
     }
 
     private static func fetchSECTokenFromUserInfo(

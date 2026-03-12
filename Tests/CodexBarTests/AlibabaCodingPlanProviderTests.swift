@@ -294,9 +294,98 @@ struct AlibabaCodingPlanRegionTests {
     }
 
     @Test
+    func hostOverrideUsesSelectedRegionForQuotaURL() {
+        let env = [AlibabaCodingPlanSettingsReader.hostKey: "custom.aliyun.com"]
+        let url = AlibabaCodingPlanUsageFetcher.resolveQuotaURL(region: .chinaMainland, environment: env)
+        #expect(url.host == "custom.aliyun.com")
+
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let currentRegion = components?.queryItems?.first(where: { $0.name == "currentRegionId" })?.value
+        #expect(currentRegion == AlibabaCodingPlanAPIRegion.chinaMainland.currentRegionID)
+    }
+
+    @Test
+    func bareHostOverrideBuildsConsoleDashboardURL() {
+        let env = [AlibabaCodingPlanSettingsReader.hostKey: "custom.aliyun.com"]
+        let url = AlibabaCodingPlanUsageFetcher.resolveConsoleDashboardURL(region: .international, environment: env)
+        #expect(url.scheme == "https")
+        #expect(url.host == "custom.aliyun.com")
+        #expect(url.path == AlibabaCodingPlanAPIRegion.international.dashboardURL.path)
+
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let tab = components?.queryItems?.first(where: { $0.name == "tab" })?.value
+        #expect(tab == "coding-plan")
+    }
+
+    @Test
     func quotaUrlOverrideBeatsHost() {
         let env = [AlibabaCodingPlanSettingsReader.quotaURLKey: "https://example.com/custom/quota"]
         let url = AlibabaCodingPlanUsageFetcher.resolveQuotaURL(region: .international, environment: env)
         #expect(url.absoluteString == "https://example.com/custom/quota")
     }
+}
+
+@Suite(.serialized)
+struct AlibabaCodingPlanUsageFetcherRequestTests {
+    @Test
+    func api401MapsToInvalidCredentials() async throws {
+        let registered = URLProtocol.registerClass(AlibabaUsageFetcherStubURLProtocol.self)
+        defer {
+            if registered {
+                URLProtocol.unregisterClass(AlibabaUsageFetcherStubURLProtocol.self)
+            }
+            AlibabaUsageFetcherStubURLProtocol.handler = nil
+        }
+
+        AlibabaUsageFetcherStubURLProtocol.handler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            return Self.makeResponse(url: url, body: #"{"message":"unauthorized"}"#, statusCode: 401)
+        }
+
+        await #expect(throws: AlibabaCodingPlanUsageError.invalidCredentials) {
+            _ = try await AlibabaCodingPlanUsageFetcher.fetchUsage(
+                apiKey: "cpk-test",
+                region: .chinaMainland,
+                environment: [AlibabaCodingPlanSettingsReader.quotaURLKey: "https://alibaba-api.test/data/api.json"])
+        }
+    }
+
+    private static func makeResponse(url: URL, body: String, statusCode: Int) -> (HTTPURLResponse, Data) {
+        let response = HTTPURLResponse(
+            url: url,
+            statusCode: statusCode,
+            httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Type": "application/json"])!
+        return (response, Data(body.utf8))
+    }
+}
+
+final class AlibabaUsageFetcherStubURLProtocol: URLProtocol {
+    nonisolated(unsafe) static var handler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
+
+    override static func canInit(with request: URLRequest) -> Bool {
+        request.url?.host == "alibaba-api.test"
+    }
+
+    override static func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        guard let handler = Self.handler else {
+            self.client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+            return
+        }
+
+        do {
+            let (response, data) = try handler(self.request)
+            self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            self.client?.urlProtocol(self, didLoad: data)
+            self.client?.urlProtocolDidFinishLoading(self)
+        } catch {
+            self.client?.urlProtocol(self, didFailWithError: error)
+        }
+    }
+
+    override func stopLoading() {}
 }
