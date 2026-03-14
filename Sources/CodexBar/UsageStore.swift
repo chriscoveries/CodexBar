@@ -90,26 +90,6 @@ enum ProviderStatusIndicator: String {
     }
 }
 
-#if DEBUG
-extension UsageStore {
-    func _setSnapshotForTesting(_ snapshot: UsageSnapshot?, provider: UsageProvider) {
-        self.snapshots[provider] = snapshot?.scoped(to: provider)
-    }
-
-    func _setTokenSnapshotForTesting(_ snapshot: CostUsageTokenSnapshot?, provider: UsageProvider) {
-        self.tokenSnapshots[provider] = snapshot
-    }
-
-    func _setTokenErrorForTesting(_ error: String?, provider: UsageProvider) {
-        self.tokenErrors[provider] = error
-    }
-
-    func _setErrorForTesting(_ error: String?, provider: UsageProvider) {
-        self.errors[provider] = error
-    }
-}
-#endif
-
 struct ProviderStatus {
     let indicator: ProviderStatusIndicator
     let description: String?
@@ -165,8 +145,9 @@ final class UsageStore {
     @ObservationIgnored private var creditsFailureStreak: Int = 0
     @ObservationIgnored private var lastOpenAIDashboardSnapshot: OpenAIDashboardSnapshot?
     @ObservationIgnored private var lastOpenAIDashboardTargetEmail: String?
+    @ObservationIgnored private var lastOpenAIDashboardAttemptAt: Date?
     @ObservationIgnored private var lastOpenAIDashboardCookieImportAttemptAt: Date?
-    @ObservationIgnored private var lastOpenAIDashboardCookieImportEmail: String?
+    @ObservationIgnored private(set) var lastOpenAIDashboardCookieImportEmail: String?
     @ObservationIgnored private var openAIWebAccountDidChange: Bool = false
 
     @ObservationIgnored let codexFetcher: UsageFetcher
@@ -412,6 +393,8 @@ final class UsageStore {
     func refresh(forceTokenUsage: Bool = false) async {
         guard !self.isRefreshing else { return }
         let refreshPhase: ProviderRefreshPhase = self.hasCompletedInitialRefresh ? .regular : .startup
+        let providers = self.enabledProviders()
+        let enabledProviders = Set(providers)
 
         await ProviderRefreshContext.$current.withValue(refreshPhase) {
             self.isRefreshing = true
@@ -420,8 +403,10 @@ final class UsageStore {
                 self.hasCompletedInitialRefresh = true
             }
 
+            self.clearDisabledProviderState(enabledProviders: enabledProviders)
+
             await withTaskGroup(of: Void.self) { group in
-                for provider in UsageProvider.allCases {
+                for provider in providers {
                     group.addTask { await self.refreshProvider(provider) }
                     group.addTask { await self.refreshStatus(provider) }
                 }
@@ -431,11 +416,15 @@ final class UsageStore {
             // Token-cost usage can be slow; run it outside the refresh group so we don't block menu updates.
             self.scheduleTokenRefresh(force: forceTokenUsage)
 
-            // OpenAI web scrape depends on the current Codex account email (which can change after login/account
-            // switch). Run this after Codex usage refresh so we don't accidentally scrape with stale credentials.
-            await self.refreshOpenAIDashboardIfNeeded(force: forceTokenUsage)
+            // Keep the OpenAI web account state in sync with the current Codex identity, but avoid loading the
+            // full ChatGPT dashboard on the background timer. That scrape is expensive enough to show up in
+            // Activity Monitor, so only run it on explicit/manual refreshes and submenu-driven stale checks.
+            self.syncOpenAIWebState()
+            if forceTokenUsage {
+                await self.refreshOpenAIDashboardIfNeeded(force: true)
+            }
 
-            if self.openAIDashboardRequiresLogin {
+            if forceTokenUsage, self.openAIDashboardRequiresLogin {
                 await self.refreshProvider(.codex)
                 await self.refreshCreditsIfNeeded()
             }
@@ -496,6 +485,7 @@ final class UsageStore {
             return
         }
 
+        let providers = self.enabledProviders()
         self.tokenRefreshSequenceTask = Task(priority: .utility) { [weak self] in
             guard let self else { return }
             defer {
@@ -503,7 +493,7 @@ final class UsageStore {
                     self?.tokenRefreshSequenceTask = nil
                 }
             }
-            for provider in UsageProvider.allCases {
+            for provider in providers {
                 if Task.isCancelled { break }
                 await self.refreshTokenUsage(provider, force: force)
             }
@@ -744,24 +734,28 @@ extension UsageStore {
     }
 
     private func refreshOpenAIDashboardIfNeeded(force: Bool = false) async {
-        guard self.isEnabled(.codex), self.settings.codexCookieSource.isEnabled else {
-            self.resetOpenAIWebState()
-            return
-        }
+        self.syncOpenAIWebState()
+        guard self.isEnabled(.codex),
+              self.settings.openAIWebAccessEnabled,
+              self.settings.codexCookieSource.isEnabled
+        else { return }
 
         let targetEmail = self.codexAccountEmailForOpenAIDashboard()
-        self.handleOpenAIWebTargetEmailChangeIfNeeded(targetEmail: targetEmail)
 
         let now = Date()
         let minInterval = self.openAIWebRefreshIntervalSeconds()
-        if !force,
-           !self.openAIWebAccountDidChange,
-           self.lastOpenAIDashboardError == nil,
-           let snapshot = self.lastOpenAIDashboardSnapshot,
-           now.timeIntervalSince(snapshot.updatedAt) < minInterval
-        {
+        let refreshGate = OpenAIWebRefreshGateContext(
+            force: force,
+            accountDidChange: self.openAIWebAccountDidChange,
+            lastError: self.lastOpenAIDashboardError,
+            lastSnapshotAt: self.lastOpenAIDashboardSnapshot?.updatedAt,
+            lastAttemptAt: self.lastOpenAIDashboardAttemptAt,
+            now: now,
+            refreshInterval: minInterval)
+        if Self.shouldSkipOpenAIWebRefresh(refreshGate) {
             return
         }
+        self.lastOpenAIDashboardAttemptAt = now
 
         if self.openAIWebDebugLines.isEmpty {
             self.resetOpenAIWebDebugLog(context: "refresh")
@@ -818,6 +812,7 @@ extension UsageStore {
 
             if self.dashboardEmailMismatch(expected: normalized, actual: dash.signedInEmail) {
                 let signedIn = dash.signedInEmail?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "unknown"
+                OpenAIDashboardFetcher.evictAllCachedWebViews()
                 await MainActor.run {
                     self.openAIDashboard = nil
                     self.lastOpenAIDashboardError = [
@@ -852,8 +847,10 @@ extension UsageStore {
                     targetEmail: targetEmail,
                     cookieImportStatus: self.openAIDashboardCookieImportStatus)
                     ?? OpenAIDashboardFetcher.FetchError.noDashboardData(body: finalBody).localizedDescription
+                OpenAIDashboardFetcher.evictAllCachedWebViews()
                 await self.applyOpenAIDashboardFailure(message: message)
             } catch {
+                OpenAIDashboardFetcher.evictAllCachedWebViews()
                 await self.applyOpenAIDashboardFailure(message: error.localizedDescription)
             }
         } catch OpenAIDashboardFetcher.FetchError.loginRequired {
@@ -870,6 +867,7 @@ extension UsageStore {
                     timeout: Self.openAIWebRetryFetchTimeout)
                 await self.applyOpenAIDashboard(dash, targetEmail: effectiveEmail)
             } catch OpenAIDashboardFetcher.FetchError.loginRequired {
+                OpenAIDashboardFetcher.evictAllCachedWebViews()
                 await MainActor.run {
                     self.lastOpenAIDashboardError = [
                         "OpenAI web access requires a signed-in chatgpt.com session.",
@@ -880,9 +878,11 @@ extension UsageStore {
                     self.openAIDashboardRequiresLogin = true
                 }
             } catch {
+                OpenAIDashboardFetcher.evictAllCachedWebViews()
                 await self.applyOpenAIDashboardFailure(message: error.localizedDescription)
             }
         } catch {
+            OpenAIDashboardFetcher.evictAllCachedWebViews()
             await self.applyOpenAIDashboardFailure(message: error.localizedDescription)
         }
     }
@@ -913,6 +913,7 @@ extension UsageStore {
             self.openAIDashboard = nil
             self.lastOpenAIDashboardSnapshot = nil
             self.lastOpenAIDashboardError = nil
+            self.lastOpenAIDashboardAttemptAt = nil
             self.openAIDashboardRequiresLogin = true
             self.openAIDashboardCookieImportStatus = "Codex account changed; importing browser cookies…"
             self.lastOpenAIDashboardCookieImportAttemptAt = nil
@@ -1091,34 +1092,17 @@ extension UsageStore {
     }
 
     func resetOpenAIWebState() {
+        OpenAIDashboardFetcher.evictAllCachedWebViews()
         self.openAIDashboard = nil
         self.lastOpenAIDashboardError = nil
         self.lastOpenAIDashboardSnapshot = nil
         self.lastOpenAIDashboardTargetEmail = nil
+        self.lastOpenAIDashboardAttemptAt = nil
         self.openAIDashboardRequiresLogin = false
         self.openAIDashboardCookieImportStatus = nil
         self.openAIDashboardCookieImportDebugLog = nil
         self.lastOpenAIDashboardCookieImportAttemptAt = nil
         self.lastOpenAIDashboardCookieImportEmail = nil
-    }
-
-    private func dashboardEmailMismatch(expected: String?, actual: String?) -> Bool {
-        guard let expected, !expected.isEmpty else { return false }
-        guard let raw = actual?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else { return false }
-        return raw.lowercased() != expected.lowercased()
-    }
-
-    func codexAccountEmailForOpenAIDashboard() -> String? {
-        let direct = self.snapshots[.codex]?.accountEmail(for: .codex)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        if let direct, !direct.isEmpty { return direct }
-        let fallback = self.codexFetcher.loadAccountInfo().email?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let fallback, !fallback.isEmpty { return fallback }
-        let cached = self.openAIDashboard?.signedInEmail?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let cached, !cached.isEmpty { return cached }
-        let imported = self.lastOpenAIDashboardCookieImportEmail?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let imported, !imported.isEmpty { return imported }
-        return nil
     }
 }
 

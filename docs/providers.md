@@ -40,7 +40,7 @@ until the session is invalid, to avoid repeated Keychain prompts.
 | OpenRouter | API token (config, overrides env) → credits API (`api`). |
 
 ## Codex
-- Web dashboard (when enabled): `https://chatgpt.com/codex/settings/usage` via WebView + browser cookies.
+- Web dashboard (optional, off by default): `https://chatgpt.com/codex/settings/usage` via WebView + browser cookies.
 - CLI RPC default: `codex ... app-server` JSON-RPC (`account/read`, `account/rateLimits/read`).
 - CLI PTY fallback: `/status` scrape.
 - Local cost usage: scans `~/.codex/sessions/**/*.jsonl` (last 30 days).

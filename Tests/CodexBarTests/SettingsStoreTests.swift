@@ -611,7 +611,7 @@ struct SettingsStoreTests {
     }
 
     @Test
-    func defaultsOpenAIWebAccessToEnabled() throws {
+    func defaultsOpenAIWebAccessToDisabled() throws {
         let suite = "SettingsStoreTests-openai-web"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defaults.removePersistentDomain(forName: suite)
@@ -624,9 +624,58 @@ struct SettingsStoreTests {
             zaiTokenStore: NoopZaiTokenStore(),
             syntheticTokenStore: NoopSyntheticTokenStore())
 
+        #expect(store.openAIWebAccessEnabled == false)
+        #expect(defaults.bool(forKey: "openAIWebAccessEnabled") == false)
+        #expect(store.codexCookieSource == .off)
+    }
+
+    @Test
+    func infersOpenAIWebAccessEnabledForLegacyConfiguredCodexCookies() throws {
+        let suite = "SettingsStoreTests-openai-web-legacy"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        defaults.removeObject(forKey: "openAIWebAccessEnabled")
+        defaults.set(false, forKey: "debugDisableKeychainAccess")
+        let configStore = testConfigStore(suiteName: suite)
+        try configStore.save(CodexBarConfig(providers: [
+            ProviderConfig(id: .codex, cookieSource: .auto),
+        ]))
+
+        let store = SettingsStore(
+            userDefaults: defaults,
+            configStore: configStore,
+            zaiTokenStore: NoopZaiTokenStore(),
+            syntheticTokenStore: NoopSyntheticTokenStore())
+
         #expect(store.openAIWebAccessEnabled == true)
         #expect(defaults.bool(forKey: "openAIWebAccessEnabled") == true)
         #expect(store.codexCookieSource == .auto)
+    }
+
+    @Test
+    func disablingOpenAIWebAccessTurnsCodexCookieSourceOff() throws {
+        let suite = "SettingsStoreTests-openai-web-toggle"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        defaults.set(false, forKey: "debugDisableKeychainAccess")
+        let configStore = testConfigStore(suiteName: suite)
+
+        let store = SettingsStore(
+            userDefaults: defaults,
+            configStore: configStore,
+            zaiTokenStore: NoopZaiTokenStore(),
+            syntheticTokenStore: NoopSyntheticTokenStore())
+
+        store.codexCookieSource = .auto
+        #expect(store.codexCookieSource == .auto)
+
+        store.openAIWebAccessEnabled = false
+        #expect(store.codexCookieSource == .off)
+        #expect(defaults.bool(forKey: "openAIWebAccessEnabled") == false)
+
+        store.openAIWebAccessEnabled = true
+        #expect(store.codexCookieSource == .auto)
+        #expect(defaults.bool(forKey: "openAIWebAccessEnabled") == true)
     }
 
     @Test

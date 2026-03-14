@@ -115,6 +115,7 @@ final class SettingsStore {
         copilotTokenStore: any CopilotTokenStoring = KeychainCopilotTokenStore(),
         tokenAccountStore: any ProviderTokenAccountStoring = FileTokenAccountStore())
     {
+        let hasStoredOpenAIWebAccessPreference = userDefaults.object(forKey: "openAIWebAccessEnabled") != nil
         let legacyStores = CodexBarConfigMigrator.LegacyStores(
             zaiTokenStore: zaiTokenStore,
             syntheticTokenStore: syntheticTokenStore,
@@ -149,13 +150,23 @@ final class SettingsStore {
         self.runInitialProviderDetectionIfNeeded()
         self.applyTokenCostDefaultIfNeeded()
         if self.claudeUsageDataSource != .cli { self.claudeWebExtrasEnabled = false }
-        self.openAIWebAccessEnabled = self.codexCookieSource.isEnabled
+        if hasStoredOpenAIWebAccessPreference {
+            self.openAIWebAccessEnabled = self.defaultsState.openAIWebAccessEnabled
+        } else {
+            self.openAIWebAccessEnabled = Self.inferredInitialOpenAIWebAccessEnabled(config: config)
+        }
         Self.sharedDefaults?.set(self.debugDisableKeychainAccess, forKey: "debugDisableKeychainAccess")
         KeychainAccessGate.isDisabled = self.debugDisableKeychainAccess
     }
 }
 
 extension SettingsStore {
+    private static func inferredInitialOpenAIWebAccessEnabled(config: CodexBarConfig) -> Bool {
+        guard let codex = config.providerConfig(for: .codex) else { return false }
+        if let cookieSource = codex.cookieSource { return cookieSource.isEnabled }
+        return codex.sanitizedCookieHeader != nil
+    }
+
     private static func loadDefaultsState(userDefaults: UserDefaults) -> SettingsDefaultsState {
         let refreshRaw = userDefaults.string(forKey: "refreshFrequency") ?? RefreshFrequency.fiveMinutes.rawValue
         let refreshFrequency = RefreshFrequency(rawValue: refreshRaw) ?? .fiveMinutes
@@ -211,8 +222,8 @@ extension SettingsStore {
         let showOptionalCreditsAndExtraUsage = creditsExtrasDefault ?? true
         if creditsExtrasDefault == nil { userDefaults.set(true, forKey: "showOptionalCreditsAndExtraUsage") }
         let openAIWebAccessDefault = userDefaults.object(forKey: "openAIWebAccessEnabled") as? Bool
-        let openAIWebAccessEnabled = openAIWebAccessDefault ?? true
-        if openAIWebAccessDefault == nil { userDefaults.set(true, forKey: "openAIWebAccessEnabled") }
+        let openAIWebAccessEnabled = openAIWebAccessDefault ?? false
+        if openAIWebAccessDefault == nil { userDefaults.set(false, forKey: "openAIWebAccessEnabled") }
         let jetbrainsIDEBasePath = userDefaults.string(forKey: "jetbrainsIDEBasePath") ?? ""
         let mergeIcons = userDefaults.object(forKey: "mergeIcons") as? Bool ?? true
         let switcherShowsIcons = userDefaults.object(forKey: "switcherShowsIcons") as? Bool ?? true

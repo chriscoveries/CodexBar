@@ -124,6 +124,49 @@ struct ProviderSettingsDescriptorTests {
     }
 
     @Test
+    func codexExposesOpenAIWebExtrasToggleAsDefaultOffOptIn() throws {
+        let suite = "ProviderSettingsDescriptorTests-codex-openai-toggle"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        let configStore = testConfigStore(suiteName: suite)
+        let settings = SettingsStore(
+            userDefaults: defaults,
+            configStore: configStore,
+            zaiTokenStore: NoopZaiTokenStore(),
+            syntheticTokenStore: NoopSyntheticTokenStore())
+        let store = UsageStore(
+            fetcher: UsageFetcher(environment: [:]),
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings)
+
+        let context = ProviderSettingsContext(
+            provider: .codex,
+            settings: settings,
+            store: store,
+            boolBinding: { keyPath in
+                Binding(
+                    get: { settings[keyPath: keyPath] },
+                    set: { settings[keyPath: keyPath] = $0 })
+            },
+            stringBinding: { keyPath in
+                Binding(
+                    get: { settings[keyPath: keyPath] },
+                    set: { settings[keyPath: keyPath] = $0 })
+            },
+            statusText: { _ in nil },
+            setStatusText: { _, _ in },
+            lastAppActiveRunAt: { _ in nil },
+            setLastAppActiveRunAt: { _, _ in },
+            requestConfirmation: { _ in })
+
+        let toggles = CodexProviderImplementation().settingsToggles(context: context)
+        let toggle = try #require(toggles.first(where: { $0.id == "codex-openai-web-extras" }))
+        #expect(toggle.binding.wrappedValue == false)
+        #expect(toggle.subtitle.contains("Optional."))
+        #expect(toggle.subtitle.contains("Turn this on"))
+    }
+
+    @Test
     func claudeExposesUsageAndCookiePickers() throws {
         let suite = "ProviderSettingsDescriptorTests-claude"
         let defaults = try #require(UserDefaults(suiteName: suite))

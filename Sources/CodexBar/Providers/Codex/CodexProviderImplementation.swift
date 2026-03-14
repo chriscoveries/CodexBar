@@ -74,7 +74,11 @@ struct CodexProviderImplementation: ProviderImplementation {
             ProviderSettingsToggleDescriptor(
                 id: "codex-openai-web-extras",
                 title: "OpenAI web extras",
-                subtitle: "Show usage breakdown, credits history, and code review via chatgpt.com.",
+                subtitle: [
+                    "Optional.",
+                    "Turn this on to show code review, usage breakdown, and credits history via chatgpt.com.",
+                    "This may increase battery or network usage.",
+                ].joined(separator: " "),
                 binding: extrasBinding,
                 statusText: nil,
                 actions: [],

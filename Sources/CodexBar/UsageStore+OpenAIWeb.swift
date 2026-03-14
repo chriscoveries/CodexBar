@@ -1,8 +1,66 @@
 import Foundation
 
+struct OpenAIWebRefreshGateContext {
+    let force: Bool
+    let accountDidChange: Bool
+    let lastError: String?
+    let lastSnapshotAt: Date?
+    let lastAttemptAt: Date?
+    let now: Date
+    let refreshInterval: TimeInterval
+}
+
 // MARK: - OpenAI web error messaging
 
 extension UsageStore {
+    nonisolated static func shouldSkipOpenAIWebRefresh(_ context: OpenAIWebRefreshGateContext) -> Bool {
+        if context.force || context.accountDidChange { return false }
+        if let lastAttemptAt = context.lastAttemptAt,
+           context.now.timeIntervalSince(lastAttemptAt) < context.refreshInterval
+        {
+            return true
+        }
+        if context.lastError == nil,
+           let lastSnapshotAt = context.lastSnapshotAt,
+           context.now.timeIntervalSince(lastSnapshotAt) < context.refreshInterval
+        {
+            return true
+        }
+        return false
+    }
+
+    func syncOpenAIWebState() {
+        guard self.isEnabled(.codex),
+              self.settings.openAIWebAccessEnabled,
+              self.settings.codexCookieSource.isEnabled
+        else {
+            self.resetOpenAIWebState()
+            return
+        }
+
+        let targetEmail = self.codexAccountEmailForOpenAIDashboard()
+        self.handleOpenAIWebTargetEmailChangeIfNeeded(targetEmail: targetEmail)
+    }
+
+    func dashboardEmailMismatch(expected: String?, actual: String?) -> Bool {
+        guard let expected, !expected.isEmpty else { return false }
+        guard let raw = actual?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else { return false }
+        return raw.lowercased() != expected.lowercased()
+    }
+
+    func codexAccountEmailForOpenAIDashboard() -> String? {
+        let direct = self.snapshots[.codex]?.accountEmail(for: .codex)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let direct, !direct.isEmpty { return direct }
+        let fallback = self.codexFetcher.loadAccountInfo().email?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let fallback, !fallback.isEmpty { return fallback }
+        let cached = self.openAIDashboard?.signedInEmail?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let cached, !cached.isEmpty { return cached }
+        let imported = self.lastOpenAIDashboardCookieImportEmail?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let imported, !imported.isEmpty { return imported }
+        return nil
+    }
+
     func openAIDashboardFriendlyError(
         body: String,
         targetEmail: String?,

@@ -315,6 +315,7 @@ extension StatusItemController {
     {
         let dashboard = self.store.openAIDashboard
         let openAIWebEligible = currentProvider == .codex &&
+            self.settings.openAIWebAccessEnabled &&
             self.store.openAIDashboardRequiresLogin == false &&
             dashboard != nil
         let hasCreditsHistory = openAIWebEligible && !(dashboard?.dailyBreakdown ?? []).isEmpty

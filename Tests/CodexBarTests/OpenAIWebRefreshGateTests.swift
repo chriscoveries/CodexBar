@@ -1,0 +1,69 @@
+import Foundation
+import Testing
+@testable import CodexBar
+
+struct OpenAIWebRefreshGateTests {
+    @Test("Recent successful dashboard refresh stays throttled")
+    func recentSuccessSkipsRefresh() {
+        let now = Date()
+
+        let shouldSkip = UsageStore.shouldSkipOpenAIWebRefresh(.init(
+            force: false,
+            accountDidChange: false,
+            lastError: nil,
+            lastSnapshotAt: now.addingTimeInterval(-60),
+            lastAttemptAt: now.addingTimeInterval(-60),
+            now: now,
+            refreshInterval: 300))
+
+        #expect(shouldSkip == true)
+    }
+
+    @Test("Recent failed dashboard refresh also stays throttled")
+    func recentFailureSkipsRefresh() {
+        let now = Date()
+
+        let shouldSkip = UsageStore.shouldSkipOpenAIWebRefresh(.init(
+            force: false,
+            accountDidChange: false,
+            lastError: "login required",
+            lastSnapshotAt: nil,
+            lastAttemptAt: now.addingTimeInterval(-60),
+            now: now,
+            refreshInterval: 300))
+
+        #expect(shouldSkip == true)
+    }
+
+    @Test("Force refresh bypasses throttle after failures")
+    func forceRefreshBypassesCooldown() {
+        let now = Date()
+
+        let shouldSkip = UsageStore.shouldSkipOpenAIWebRefresh(.init(
+            force: true,
+            accountDidChange: false,
+            lastError: "login required",
+            lastSnapshotAt: nil,
+            lastAttemptAt: now.addingTimeInterval(-60),
+            now: now,
+            refreshInterval: 300))
+
+        #expect(shouldSkip == false)
+    }
+
+    @Test("Account switches bypass the prior-attempt cooldown")
+    func accountChangeBypassesCooldown() {
+        let now = Date()
+
+        let shouldSkip = UsageStore.shouldSkipOpenAIWebRefresh(.init(
+            force: false,
+            accountDidChange: true,
+            lastError: "mismatch",
+            lastSnapshotAt: nil,
+            lastAttemptAt: now.addingTimeInterval(-60),
+            now: now,
+            refreshInterval: 300))
+
+        #expect(shouldSkip == false)
+    }
+}

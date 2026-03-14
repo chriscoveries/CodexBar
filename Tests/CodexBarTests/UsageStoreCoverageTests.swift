@@ -135,6 +135,39 @@ struct UsageStoreCoverageTests {
     }
 
     @Test
+    func backgroundRefreshOnlyTracksEnabledProviders() throws {
+        let settings = Self.makeSettingsStore(suite: "UsageStoreCoverageTests-background-refresh")
+        settings.refreshFrequency = .manual
+        settings.statusChecksEnabled = false
+
+        let metadata = ProviderRegistry.shared.metadata
+        for provider in UsageProvider.allCases {
+            try settings.setProviderEnabled(
+                provider: provider,
+                metadata: #require(metadata[provider]),
+                enabled: false)
+        }
+        try settings.setProviderEnabled(provider: .codex, metadata: #require(metadata[.codex]), enabled: true)
+
+        let store = Self.makeUsageStore(settings: settings)
+        let staleSnapshot = UsageSnapshot(
+            primary: RateWindow(usedPercent: 25, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
+            secondary: nil,
+            updatedAt: Date())
+        store._setSnapshotForTesting(staleSnapshot, provider: .claude)
+        store._setErrorForTesting("stale", provider: .claude)
+        store.statuses[.claude] = ProviderStatus(indicator: .major, description: "Outage", updatedAt: Date())
+
+        #expect(store.enabledProviders() == [.codex])
+
+        store.clearDisabledProviderState(enabledProviders: Set(store.enabledProviders()))
+
+        #expect(store.snapshot(for: .claude) == nil)
+        #expect(store.errors[.claude] == nil)
+        #expect(store.statuses[.claude] == nil)
+    }
+
+    @Test
     func statusIndicatorsAndFailureGate() {
         #expect(!ProviderStatusIndicator.none.hasIssue)
         #expect(ProviderStatusIndicator.maintenance.hasIssue)
