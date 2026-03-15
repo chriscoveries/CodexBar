@@ -16,16 +16,18 @@ extension UsageStore {
     func recordPlanUtilizationHistorySample(
         provider: UsageProvider,
         snapshot: UsageSnapshot,
+        account: ProviderTokenAccount? = nil,
         credits: CreditsSnapshot? = nil,
         now: Date = Date())
         async
     {
         guard provider == .codex || provider == .claude else { return }
 
-        let accountKey = Self.planUtilizationAccountKey(provider: provider, snapshot: snapshot)
+        let accountKey = Self.planUtilizationAccountKey(provider: provider, account: account)
+            ?? Self.planUtilizationIdentityAccountKey(provider: provider, snapshot: snapshot)
         var snapshotToPersist: [UsageProvider: PlanUtilizationHistoryBuckets]?
         await MainActor.run {
-            let providerBuckets = self.planUtilizationHistory[provider] ?? PlanUtilizationHistoryBuckets()
+            var providerBuckets = self.planUtilizationHistory[provider] ?? PlanUtilizationHistoryBuckets()
             let history = providerBuckets.samples(for: accountKey)
             let resolvedCredits = provider == .codex ? credits : nil
             let sample = PlanUtilizationHistorySample(
@@ -46,9 +48,8 @@ extension UsageStore {
                 return
             }
 
-            var updatedBuckets = providerBuckets
-            updatedBuckets.setSamples(updatedHistory, for: accountKey)
-            self.planUtilizationHistory[provider] = updatedBuckets
+            providerBuckets.setSamples(updatedHistory, for: accountKey)
+            self.planUtilizationHistory[provider] = providerBuckets
             snapshotToPersist = self.planUtilizationHistory
         }
 
@@ -165,11 +166,32 @@ extension UsageStore {
     }
 
     private func planUtilizationAccountKey(for provider: UsageProvider) -> String? {
-        guard let snapshot = self.snapshots[provider] else { return nil }
-        return Self.planUtilizationAccountKey(provider: provider, snapshot: snapshot)
+        self.planUtilizationAccountKey(for: provider, snapshot: nil, preferredAccount: nil)
+    }
+
+    private func planUtilizationAccountKey(
+        for provider: UsageProvider,
+        snapshot: UsageSnapshot? = nil,
+        preferredAccount: ProviderTokenAccount? = nil) -> String?
+    {
+        let account = preferredAccount ?? self.settings.selectedTokenAccount(for: provider)
+        let accountKey = Self.planUtilizationAccountKey(provider: provider, account: account)
+        if let accountKey {
+            return accountKey
+        }
+        let resolvedSnapshot = snapshot ?? self.snapshots[provider]
+        return resolvedSnapshot.flatMap { Self.planUtilizationIdentityAccountKey(provider: provider, snapshot: $0) }
     }
 
     private nonisolated static func planUtilizationAccountKey(
+        provider: UsageProvider,
+        account: ProviderTokenAccount?) -> String?
+    {
+        guard let account else { return nil }
+        return self.sha256Hex("\(provider.rawValue):token-account:\(account.id.uuidString.lowercased())")
+    }
+
+    private nonisolated static func planUtilizationIdentityAccountKey(
         provider: UsageProvider,
         snapshot: UsageSnapshot) -> String?
     {
@@ -202,7 +224,14 @@ extension UsageStore {
         provider: UsageProvider,
         snapshot: UsageSnapshot) -> String?
     {
-        self.planUtilizationAccountKey(provider: provider, snapshot: snapshot)
+        self.planUtilizationIdentityAccountKey(provider: provider, snapshot: snapshot)
+    }
+
+    nonisolated static func _planUtilizationTokenAccountKeyForTesting(
+        provider: UsageProvider,
+        account: ProviderTokenAccount) -> String?
+    {
+        self.planUtilizationAccountKey(provider: provider, account: account)
     }
     #endif
 }

@@ -408,6 +408,77 @@ struct UsageStorePlanUtilizationTests {
 
     @MainActor
     @Test
+    func planHistorySelectsConfiguredTokenAccountBucket() throws {
+        let store = Self.makeStore()
+        store.settings.addTokenAccount(provider: .claude, label: "Alice", token: "alice-token")
+        store.settings.addTokenAccount(provider: .claude, label: "Bob", token: "bob-token")
+
+        let accounts = store.settings.tokenAccounts(for: .claude)
+        let alice = try #require(accounts.first)
+        let bob = try #require(accounts.last)
+        let aliceKey = try #require(
+            UsageStore._planUtilizationTokenAccountKeyForTesting(
+                provider: .claude,
+                account: alice))
+        let bobKey = try #require(
+            UsageStore._planUtilizationTokenAccountKeyForTesting(
+                provider: .claude,
+                account: bob))
+
+        let aliceSample = PlanUtilizationHistorySample(
+            capturedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            dailyUsedPercent: 15,
+            weeklyUsedPercent: 25,
+            monthlyUsedPercent: 35)
+        let bobSample = PlanUtilizationHistorySample(
+            capturedAt: Date(timeIntervalSince1970: 1_700_086_400),
+            dailyUsedPercent: 45,
+            weeklyUsedPercent: 55,
+            monthlyUsedPercent: 65)
+
+        store.planUtilizationHistory[.claude] = PlanUtilizationHistoryBuckets(
+            accounts: [
+                aliceKey: [aliceSample],
+                bobKey: [bobSample],
+            ])
+
+        store.settings.setActiveTokenAccountIndex(0, for: .claude)
+        #expect(store.planUtilizationHistory(for: .claude) == [aliceSample])
+
+        store.settings.setActiveTokenAccountIndex(1, for: .claude)
+        #expect(store.planUtilizationHistory(for: .claude) == [bobSample])
+    }
+
+    @MainActor
+    @Test
+    func recordPlanHistoryWithoutExplicitAccountPrefersSnapshotIdentityOverSelectedTokenAccount() async throws {
+        let store = Self.makeStore()
+        store.settings.addTokenAccount(provider: .claude, label: "Alice", token: "alice-token")
+        store.settings.addTokenAccount(provider: .claude, label: "Bob", token: "bob-token")
+        store.settings.setActiveTokenAccountIndex(1, for: .claude)
+
+        let aliceSnapshot = Self.makeSnapshot(provider: .claude, email: "alice@example.com")
+        let aliceIdentityKey = try #require(
+            UsageStore._planUtilizationAccountKeyForTesting(
+                provider: .claude,
+                snapshot: aliceSnapshot))
+        let selectedTokenKey = try #require(
+            store.settings.selectedTokenAccount(for: .claude).flatMap {
+                UsageStore._planUtilizationTokenAccountKeyForTesting(provider: .claude, account: $0)
+            })
+
+        await store.recordPlanUtilizationHistorySample(
+            provider: .claude,
+            snapshot: aliceSnapshot,
+            now: Date(timeIntervalSince1970: 1_700_000_000))
+
+        let buckets = try #require(store.planUtilizationHistory[.claude])
+        #expect(buckets.accounts[aliceIdentityKey]?.count == 1)
+        #expect(buckets.accounts[selectedTokenKey] == nil)
+    }
+
+    @MainActor
+    @Test
     func planHistoryFallsBackToUnscopedBucketWhenIdentityIsUnavailable() {
         let store = Self.makeStore()
         let sample = PlanUtilizationHistorySample(
@@ -425,6 +496,30 @@ struct UsageStorePlanUtilizationTests {
             provider: .claude)
 
         #expect(store.planUtilizationHistory(for: .claude) == [sample])
+    }
+
+    @MainActor
+    @Test
+    func planHistoryDoesNotReadLegacyIdentityBucketForTokenAccounts() throws {
+        let store = Self.makeStore()
+        store.settings.addTokenAccount(provider: .claude, label: "Alice", token: "alice-token")
+
+        let snapshot = Self.makeSnapshot(provider: .claude, email: "alice@example.com")
+        let legacyKey = try #require(
+            UsageStore._planUtilizationAccountKeyForTesting(
+                provider: .claude,
+                snapshot: snapshot))
+        let legacySample = PlanUtilizationHistorySample(
+            capturedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            dailyUsedPercent: 10,
+            weeklyUsedPercent: 20,
+            monthlyUsedPercent: nil)
+
+        store.planUtilizationHistory[.claude] = PlanUtilizationHistoryBuckets(
+            accounts: [legacyKey: [legacySample]])
+        store._setSnapshotForTesting(snapshot, provider: .claude)
+
+        #expect(store.planUtilizationHistory(for: .claude).isEmpty)
     }
 
     @Test
@@ -488,11 +583,15 @@ extension UsageStorePlanUtilizationTests {
         let suiteName = "UsageStorePlanUtilizationTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName) ?? .standard
         defaults.removePersistentDomain(forName: suiteName)
-        let settings = SettingsStore(userDefaults: defaults)
+        let configStore = testConfigStore(suiteName: suiteName)
+        let isolatedSettings = SettingsStore(
+            userDefaults: defaults,
+            configStore: configStore,
+            tokenAccountStore: InMemoryTokenAccountStore())
         return UsageStore(
             fetcher: UsageFetcher(),
             browserDetection: BrowserDetection(cacheTTL: 0),
-            settings: settings,
+            settings: isolatedSettings,
             startupBehavior: .testing)
     }
 
