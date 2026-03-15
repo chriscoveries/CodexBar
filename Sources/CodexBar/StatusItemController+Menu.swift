@@ -99,10 +99,10 @@ extension StatusItemController {
                 self.lastMenuProvider = menuProvider
                 provider = menuProvider
             } else if menu === self.fallbackMenu {
-                self.lastMenuProvider = self.store.enabledProviders().first ?? .codex
+                self.lastMenuProvider = self.store.enabledProvidersForDisplay().first ?? .codex
                 provider = nil
             } else {
-                let resolved = self.store.enabledProviders().first ?? .codex
+                let resolved = self.store.enabledProvidersForDisplay().first ?? .codex
                 self.lastMenuProvider = resolved
                 provider = resolved
             }
@@ -147,7 +147,7 @@ extension StatusItemController {
     }
 
     private func populateMenu(_ menu: NSMenu, provider: UsageProvider?) {
-        let enabledProviders = self.store.enabledProviders()
+        let enabledProviders = self.store.enabledProvidersForDisplay()
         let includesOverview = self.includesOverviewTab(enabledProviders: enabledProviders)
         let switcherSelection = self.shouldMergeIcons && enabledProviders.count > 1
             ? self.resolvedSwitcherSelection(
@@ -604,7 +604,7 @@ extension StatusItemController {
         let view = TokenAccountSwitcherView(
             accounts: display.accounts,
             selectedIndex: display.activeIndex,
-            width: self.menuCardWidth(for: self.store.enabledProviders(), menu: menu),
+            width: self.menuCardWidth(for: self.store.enabledProvidersForDisplay(), menu: menu),
             onSelect: { [weak self, weak menu] index in
                 guard let self, let menu else { return }
                 self.settings.setActiveTokenAccountIndex(index, for: display.provider)
@@ -624,12 +624,14 @@ extension StatusItemController {
     }
 
     private func resolvedMenuProvider(enabledProviders: [UsageProvider]? = nil) -> UsageProvider? {
-        let enabled = enabledProviders ?? self.store.enabledProviders()
+        let enabled = enabledProviders ?? self.store.enabledProvidersForDisplay()
         if enabled.isEmpty { return .codex }
         if let selected = self.selectedMenuProvider, enabled.contains(selected) {
             return selected
         }
-        return enabled.first
+        // Prefer an available provider so the default menu content matches the status icon.
+        // Falls back to first display provider when all lack credentials.
+        return enabled.first(where: { self.store.isProviderAvailable($0) }) ?? enabled.first
     }
 
     private func includesOverviewTab(enabledProviders: [UsageProvider]) -> Bool {
@@ -710,7 +712,7 @@ extension StatusItemController {
         if menu === self.fallbackMenu {
             return nil
         }
-        return self.store.enabledProviders().first ?? .codex
+        return self.store.enabledProvidersForDisplay().first ?? .codex
     }
 
     private func scheduleOpenMenuRefresh(for menu: NSMenu) {
@@ -741,7 +743,7 @@ extension StatusItemController {
     }
 
     private func delayedRefreshRetryProviders(for menu: NSMenu) -> [UsageProvider] {
-        let enabledProviders = self.store.enabledProviders()
+        let enabledProviders = self.store.enabledProvidersForDisplay()
         guard !enabledProviders.isEmpty else { return [] }
         let includesOverview = self.includesOverviewTab(enabledProviders: enabledProviders)
 
@@ -772,7 +774,7 @@ extension StatusItemController {
         }
         for item in cardItems {
             guard let view = item.view else { continue }
-            let width = self.menuCardWidth(for: self.store.enabledProviders(), menu: menu)
+            let width = self.menuCardWidth(for: self.store.enabledProvidersForDisplay(), menu: menu)
             let height = self.menuCardHeight(for: view, width: width)
             view.frame = NSRect(
                 origin: .zero,
@@ -1351,7 +1353,7 @@ extension StatusItemController {
     }
 
     private func refreshHostedSubviewHeights(in menu: NSMenu) {
-        let enabledProviders = self.store.enabledProviders()
+        let enabledProviders = self.store.enabledProvidersForDisplay()
         let width = self.menuCardWidth(for: enabledProviders, menu: menu)
 
         for item in menu.items {
@@ -1368,7 +1370,7 @@ extension StatusItemController {
         snapshotOverride: UsageSnapshot? = nil,
         errorOverride: String? = nil) -> UsageMenuCardView.Model?
     {
-        let target = provider ?? self.store.enabledProviders().first ?? .codex
+        let target = provider ?? self.store.enabledProvidersForDisplay().first ?? .codex
         let metadata = self.store.metadata(for: target)
 
         let snapshot = snapshotOverride ?? self.store.snapshot(for: target)
