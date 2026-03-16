@@ -10,6 +10,7 @@ extension UsageStore {
 
     func planUtilizationHistory(for provider: UsageProvider) -> [PlanUtilizationHistorySample] {
         let accountKey = self.planUtilizationAccountKey(for: provider)
+        if provider == .claude, accountKey == nil { return [] }
         return self.planUtilizationHistory[provider]?.samples(for: accountKey) ?? []
     }
 
@@ -23,12 +24,15 @@ extension UsageStore {
     {
         guard provider == .codex || provider == .claude else { return }
 
-        let preferredAccount = account ?? self.settings.selectedTokenAccount(for: provider)
-        let accountKey = Self.planUtilizationAccountKey(provider: provider, account: preferredAccount)
-            ?? Self.planUtilizationIdentityAccountKey(provider: provider, snapshot: snapshot)
         var snapshotToPersist: [UsageProvider: PlanUtilizationHistoryBuckets]?
         await MainActor.run {
             var providerBuckets = self.planUtilizationHistory[provider] ?? PlanUtilizationHistoryBuckets()
+            let preferredAccount = account ?? self.settings.selectedTokenAccount(for: provider)
+            let accountKey = Self.planUtilizationAccountKey(provider: provider, account: preferredAccount)
+                ?? Self.planUtilizationIdentityAccountKey(provider: provider, snapshot: snapshot)
+            if provider == .claude, accountKey == nil {
+                return
+            }
             let history = providerBuckets.samples(for: accountKey)
             let resolvedCredits = provider == .codex ? credits : nil
             let sample = PlanUtilizationHistorySample(

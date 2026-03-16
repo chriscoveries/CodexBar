@@ -360,6 +360,26 @@ struct UsageStorePlanUtilizationTests {
         #expect(model.xDomain == -0.5...23.5)
     }
 
+    @Test
+    func chartEmptyStateShowsRefreshingWhileLoading() throws {
+        let text = try #require(
+            PlanUtilizationHistoryChartMenuView._emptyStateTextForTesting(
+                periodRawValue: "daily",
+                isRefreshing: true))
+
+        #expect(text == "Refreshing...")
+    }
+
+    @Test
+    func chartEmptyStateShowsPeriodSpecificMessageWhenNotRefreshing() throws {
+        let text = try #require(
+            PlanUtilizationHistoryChartMenuView._emptyStateTextForTesting(
+                periodRawValue: "weekly",
+                isRefreshing: false))
+
+        #expect(text == "No weekly utilization data yet.")
+    }
+
     @MainActor
     @Test
     func planHistorySelectsCurrentAccountBucket() throws {
@@ -474,7 +494,7 @@ struct UsageStorePlanUtilizationTests {
 
     @MainActor
     @Test
-    func planHistoryFallsBackToUnscopedBucketWhenIdentityIsUnavailable() {
+    func codexPlanHistoryFallsBackToUnscopedBucketWhenIdentityIsUnavailable() {
         let store = Self.makeStore()
         let sample = PlanUtilizationHistorySample(
             capturedAt: Date(timeIntervalSince1970: 1_700_000_000),
@@ -482,15 +502,32 @@ struct UsageStorePlanUtilizationTests {
             weeklyUsedPercent: 30,
             monthlyUsedPercent: 40)
 
-        store.planUtilizationHistory[.claude] = PlanUtilizationHistoryBuckets(unscoped: [sample])
+        store.planUtilizationHistory[.codex] = PlanUtilizationHistoryBuckets(unscoped: [sample])
         store._setSnapshotForTesting(
             UsageSnapshot(
                 primary: nil,
                 secondary: nil,
                 updatedAt: Date()),
-            provider: .claude)
+            provider: .codex)
 
-        #expect(store.planUtilizationHistory(for: .claude) == [sample])
+        #expect(store.planUtilizationHistory(for: .codex) == [sample])
+    }
+
+    @MainActor
+    @Test
+    func claudePlanHistoryReturnsEmptyWhenIdentityIsUnavailable() {
+        let store = Self.makeStore()
+        let sample = PlanUtilizationHistorySample(
+            capturedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            dailyUsedPercent: 20,
+            weeklyUsedPercent: 30,
+            monthlyUsedPercent: nil)
+
+        store.planUtilizationHistory[.claude] = PlanUtilizationHistoryBuckets(
+            unscoped: [sample],
+            accounts: ["claude-account-key": [sample]])
+
+        #expect(store.planUtilizationHistory(for: .claude).isEmpty)
     }
 
     @MainActor
@@ -515,6 +552,24 @@ struct UsageStorePlanUtilizationTests {
         store._setSnapshotForTesting(snapshot, provider: .claude)
 
         #expect(store.planUtilizationHistory(for: .claude).isEmpty)
+    }
+
+    @MainActor
+    @Test
+    func recordPlanHistoryWithoutIdentitySkipsClaudeWrite() async {
+        let store = Self.makeStore()
+        let snapshot = UsageSnapshot(
+            primary: RateWindow(usedPercent: 11, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
+            secondary: RateWindow(usedPercent: 21, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
+            updatedAt: Date(timeIntervalSince1970: 1_700_003_600))
+        let existingHistory = store.planUtilizationHistory[.claude]
+
+        await store.recordPlanUtilizationHistorySample(
+            provider: .claude,
+            snapshot: snapshot,
+            now: Date(timeIntervalSince1970: 1_700_003_600))
+
+        #expect(store.planUtilizationHistory[.claude] == existingHistory)
     }
 
     @Test

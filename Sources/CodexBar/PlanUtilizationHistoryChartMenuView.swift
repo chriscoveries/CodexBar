@@ -63,14 +63,16 @@ struct PlanUtilizationHistoryChartMenuView: View {
     private let provider: UsageProvider
     private let samples: [PlanUtilizationHistorySample]
     private let width: CGFloat
+    private let isRefreshing: Bool
 
     @State private var selectedPeriod: Period = .daily
     @State private var selectedPointID: String?
 
-    init(provider: UsageProvider, samples: [PlanUtilizationHistorySample], width: CGFloat) {
+    init(provider: UsageProvider, samples: [PlanUtilizationHistorySample], width: CGFloat, isRefreshing: Bool = false) {
         self.provider = provider
         self.samples = samples
         self.width = width
+        self.isRefreshing = isRefreshing
     }
 
     var body: some View {
@@ -89,7 +91,7 @@ struct PlanUtilizationHistoryChartMenuView: View {
 
             if model.points.isEmpty {
                 ZStack {
-                    Text(self.selectedPeriod.emptyStateText)
+                    Text(Self.emptyStateText(period: self.selectedPeriod, isRefreshing: self.isRefreshing))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -284,7 +286,19 @@ struct PlanUtilizationHistoryChartMenuView: View {
             axisIndexes: model.axisIndexes,
             xDomain: model.xDomain)
     }
+
+    nonisolated static func _emptyStateTextForTesting(periodRawValue: String, isRefreshing: Bool) -> String? {
+        guard let period = Period(rawValue: periodRawValue) else { return nil }
+        return self.emptyStateText(period: period, isRefreshing: isRefreshing)
+    }
     #endif
+
+    private nonisolated static func emptyStateText(period: Period, isRefreshing: Bool) -> String {
+        if isRefreshing {
+            return "Refreshing..."
+        }
+        return period.emptyStateText
+    }
 
     private nonisolated static func usedPercent(for sample: PlanUtilizationHistorySample, period: Period) -> Double? {
         switch period {
