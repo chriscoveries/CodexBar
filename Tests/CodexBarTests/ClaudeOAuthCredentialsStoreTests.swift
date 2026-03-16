@@ -854,7 +854,7 @@ struct ClaudeOAuthCredentialsStoreTests {
     }
 
     @Test
-    func ingOverrideSnapshotForwardsMutableClaudeKeychainOverrideStoreAcrossDetachedTask() async {
+    func `testing override snapshot forwards mutable Claude keychain override store across detached task`() async {
         let fingerprint = ClaudeOAuthCredentialsStore.ClaudeKeychainFingerprint(
             modifiedAt: 11,
             createdAt: 7,
