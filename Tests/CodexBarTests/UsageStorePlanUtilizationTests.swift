@@ -169,14 +169,12 @@ struct UsageStorePlanUtilizationTests {
             UsageStore._updatedPlanUtilizationHistoryForTesting(
                 provider: .codex,
                 existingHistory: [],
-                sample: nilMonthly,
-                now: now))
+                sample: nilMonthly))
         let updated = try #require(
             UsageStore._updatedPlanUtilizationHistoryForTesting(
                 provider: .codex,
                 existingHistory: initial,
-                sample: promotedMonthly,
-                now: now.addingTimeInterval(300)))
+                sample: promotedMonthly))
 
         #expect(updated.count == 1)
         let monthly = updated.last?.monthlyUsedPercent
@@ -218,19 +216,134 @@ struct UsageStorePlanUtilizationTests {
             UsageStore._updatedPlanUtilizationHistoryForTesting(
                 provider: .codex,
                 existingHistory: [],
-                sample: knownMonthly,
-                now: now))
+                sample: knownMonthly))
         let updated = UsageStore._updatedPlanUtilizationHistoryForTesting(
             provider: .codex,
             existingHistory: initial,
-            sample: nilMonthly,
-            now: now.addingTimeInterval(300))
+            sample: nilMonthly)
 
         #expect(updated == nil)
         #expect(initial.count == 1)
         let monthly = initial.last?.monthlyUsedPercent
         #expect(monthly != nil)
         #expect(abs((monthly ?? 0) - 36) < 0.001)
+    }
+
+    @Test
+    func coalescesChangedUsageWithinHourIntoSingleSample() throws {
+        let calendar = Calendar(identifier: .gregorian)
+        let hourStart = try #require(calendar.date(from: DateComponents(
+            timeZone: TimeZone(secondsFromGMT: 0),
+            year: 2026,
+            month: 3,
+            day: 17,
+            hour: 10)))
+        let first = PlanUtilizationHistorySample(
+            capturedAt: hourStart,
+            dailyUsedPercent: 10,
+            weeklyUsedPercent: 20,
+            monthlyUsedPercent: 30)
+        let second = PlanUtilizationHistorySample(
+            capturedAt: hourStart.addingTimeInterval(25 * 60),
+            dailyUsedPercent: 35,
+            weeklyUsedPercent: 45,
+            monthlyUsedPercent: 55)
+
+        let initial = try #require(
+            UsageStore._updatedPlanUtilizationHistoryForTesting(
+                provider: .codex,
+                existingHistory: [],
+                sample: first))
+        let updated = try #require(
+            UsageStore._updatedPlanUtilizationHistoryForTesting(
+                provider: .codex,
+                existingHistory: initial,
+                sample: second))
+
+        #expect(updated.count == 1)
+        #expect(updated.last == second)
+    }
+
+    @Test
+    func appendsNewSampleAfterCrossingIntoNextHourBucket() throws {
+        let calendar = Calendar(identifier: .gregorian)
+        let hourStart = try #require(calendar.date(from: DateComponents(
+            timeZone: TimeZone(secondsFromGMT: 0),
+            year: 2026,
+            month: 3,
+            day: 17,
+            hour: 10)))
+        let first = PlanUtilizationHistorySample(
+            capturedAt: hourStart,
+            dailyUsedPercent: 10,
+            weeklyUsedPercent: 20,
+            monthlyUsedPercent: 30)
+        let second = PlanUtilizationHistorySample(
+            capturedAt: hourStart.addingTimeInterval(50 * 60),
+            dailyUsedPercent: 35,
+            weeklyUsedPercent: 45,
+            monthlyUsedPercent: 55)
+        let nextHour = PlanUtilizationHistorySample(
+            capturedAt: hourStart.addingTimeInterval(65 * 60),
+            dailyUsedPercent: 60,
+            weeklyUsedPercent: 70,
+            monthlyUsedPercent: 80)
+
+        let oneHour = try #require(
+            UsageStore._updatedPlanUtilizationHistoryForTesting(
+                provider: .codex,
+                existingHistory: [],
+                sample: first))
+        let coalesced = try #require(
+            UsageStore._updatedPlanUtilizationHistoryForTesting(
+                provider: .codex,
+                existingHistory: oneHour,
+                sample: second))
+        let twoHours = try #require(
+            UsageStore._updatedPlanUtilizationHistoryForTesting(
+                provider: .codex,
+                existingHistory: coalesced,
+                sample: nextHour))
+
+        #expect(coalesced.count == 1)
+        #expect(twoHours.count == 2)
+        #expect(twoHours.first == second)
+        #expect(twoHours.last == nextHour)
+    }
+
+    @Test
+    func staleWriteInSameHourDoesNotOverrideNewerValues() throws {
+        let calendar = Calendar(identifier: .gregorian)
+        let hourStart = try #require(calendar.date(from: DateComponents(
+            timeZone: TimeZone(secondsFromGMT: 0),
+            year: 2026,
+            month: 3,
+            day: 17,
+            hour: 10)))
+        let newer = PlanUtilizationHistorySample(
+            capturedAt: hourStart.addingTimeInterval(45 * 60),
+            dailyUsedPercent: 70,
+            weeklyUsedPercent: 80,
+            monthlyUsedPercent: 90)
+        let stale = PlanUtilizationHistorySample(
+            capturedAt: hourStart.addingTimeInterval(5 * 60),
+            dailyUsedPercent: 15,
+            weeklyUsedPercent: 25,
+            monthlyUsedPercent: nil)
+
+        let initial = try #require(
+            UsageStore._updatedPlanUtilizationHistoryForTesting(
+                provider: .codex,
+                existingHistory: [],
+                sample: newer))
+        let updated = UsageStore._updatedPlanUtilizationHistoryForTesting(
+            provider: .codex,
+            existingHistory: initial,
+            sample: stale)
+
+        #expect(updated == nil)
+        #expect(initial.count == 1)
+        #expect(initial.last == newer)
     }
 
     @Test
@@ -257,8 +370,7 @@ struct UsageStorePlanUtilizationTests {
             UsageStore._updatedPlanUtilizationHistoryForTesting(
                 provider: .codex,
                 existingHistory: history,
-                sample: appended,
-                now: appended.capturedAt))
+                sample: appended))
 
         #expect(updated.count == maxSamples)
         #expect(updated.first?.capturedAt == history[1].capturedAt)
@@ -490,6 +602,42 @@ struct UsageStorePlanUtilizationTests {
 
         let buckets = try #require(store.planUtilizationHistory[.claude])
         #expect(buckets.accounts[selectedTokenKey]?.count == 1)
+    }
+
+    @MainActor
+    @Test
+    func concurrentPlanHistoryWritesCoalesceWithinSingleHourBucket() async throws {
+        let store = Self.makeStore()
+        let snapshot = Self.makeSnapshot(provider: .codex, email: "alice@example.com")
+        store._setSnapshotForTesting(snapshot, provider: .codex)
+        let calendar = Calendar(identifier: .gregorian)
+        let hourStart = try #require(calendar.date(from: DateComponents(
+            timeZone: TimeZone(secondsFromGMT: 0),
+            year: 2026,
+            month: 3,
+            day: 17,
+            hour: 10)))
+        let writeTimes = [
+            hourStart.addingTimeInterval(5 * 60),
+            hourStart.addingTimeInterval(25 * 60),
+            hourStart.addingTimeInterval(45 * 60),
+        ]
+
+        await withTaskGroup(of: Void.self) { group in
+            for writeTime in writeTimes {
+                group.addTask {
+                    await store.recordPlanUtilizationHistorySample(
+                        provider: .codex,
+                        snapshot: snapshot,
+                        now: writeTime)
+                }
+            }
+        }
+
+        let history = try #require(store.planUtilizationHistory[.codex]?.accounts.values.first)
+        #expect(history.count == 1)
+        let recordedAt = try #require(history.last?.capturedAt)
+        #expect(writeTimes.contains(recordedAt))
     }
 
     @MainActor

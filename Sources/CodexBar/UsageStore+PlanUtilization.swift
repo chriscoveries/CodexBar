@@ -26,6 +26,8 @@ extension UsageStore {
 
         var snapshotToPersist: [UsageProvider: PlanUtilizationHistoryBuckets]?
         await MainActor.run {
+            // History mutation stays serialized on MainActor so overlapping refresh tasks cannot race each other
+            // into duplicate writes for the same provider/account bucket.
             var providerBuckets = self.planUtilizationHistory[provider] ?? PlanUtilizationHistoryBuckets()
             let preferredAccount = account ?? self.settings.selectedTokenAccount(for: provider)
             let accountKey = Self.planUtilizationAccountKey(provider: provider, account: preferredAccount)
@@ -47,8 +49,7 @@ extension UsageStore {
             guard let updatedHistory = Self.updatedPlanUtilizationHistory(
                 provider: provider,
                 existingHistory: history,
-                sample: sample,
-                now: now)
+                sample: sample)
             else {
                 return
             }
@@ -65,32 +66,30 @@ extension UsageStore {
     private nonisolated static func updatedPlanUtilizationHistory(
         provider: UsageProvider,
         existingHistory: [PlanUtilizationHistorySample],
-        sample: PlanUtilizationHistorySample,
-        now: Date) -> [PlanUtilizationHistorySample]?
+        sample: PlanUtilizationHistorySample) -> [PlanUtilizationHistorySample]?
     {
         var history = existingHistory
+        let sampleHourBucket = self.planUtilizationHourBucket(for: sample.capturedAt)
 
-        if let last = history.last,
-           now.timeIntervalSince(last.capturedAt) < self.planUtilizationMinSampleIntervalSeconds,
-           self.nearlyEqual(last.dailyUsedPercent, sample.dailyUsedPercent),
-           self.nearlyEqual(last.weeklyUsedPercent, sample.weeklyUsedPercent)
-        {
-            if self.nearlyEqual(last.monthlyUsedPercent, sample.monthlyUsedPercent) {
+        if let matchingIndex = history.lastIndex(where: {
+            self.planUtilizationHourBucket(for: $0.capturedAt) == sampleHourBucket
+        }) {
+            let merged = self.mergedPlanUtilizationHistorySample(
+                existing: history[matchingIndex],
+                incoming: sample)
+            if merged == history[matchingIndex] {
                 return nil
             }
-
-            if provider == .codex {
-                if last.monthlyUsedPercent != nil, sample.monthlyUsedPercent == nil {
-                    return nil
-                }
-                if last.monthlyUsedPercent == nil, sample.monthlyUsedPercent != nil {
-                    history[history.index(before: history.endIndex)] = sample
-                    return history
-                }
-            }
+            history[matchingIndex] = merged
+            return history
         }
 
-        history.append(sample)
+        if let insertionIndex = history.firstIndex(where: { $0.capturedAt > sample.capturedAt }) {
+            history.insert(sample, at: insertionIndex)
+        } else {
+            history.append(sample)
+        }
+
         if history.count > self.planUtilizationMaxSamples {
             history.removeFirst(history.count - self.planUtilizationMaxSamples)
         }
@@ -101,14 +100,12 @@ extension UsageStore {
     nonisolated static func _updatedPlanUtilizationHistoryForTesting(
         provider: UsageProvider,
         existingHistory: [PlanUtilizationHistorySample],
-        sample: PlanUtilizationHistorySample,
-        now: Date) -> [PlanUtilizationHistorySample]?
+        sample: PlanUtilizationHistorySample) -> [PlanUtilizationHistorySample]?
     {
         self.updatedPlanUtilizationHistory(
             provider: provider,
             existingHistory: existingHistory,
-            sample: sample,
-            now: now)
+            sample: sample)
     }
 
     nonisolated static var _planUtilizationMaxSamplesForTesting: Int {
@@ -159,14 +156,42 @@ extension UsageStore {
         return max(0, min(100, value))
     }
 
-    private nonisolated static func nearlyEqual(_ lhs: Double?, _ rhs: Double?, tolerance: Double = 0.1) -> Bool {
-        switch (lhs, rhs) {
-        case (nil, nil):
-            true
-        case let (l?, r?):
-            abs(l - r) <= tolerance
-        default:
-            false
+    private nonisolated static func planUtilizationHourBucket(for date: Date) -> Int64 {
+        Int64(floor(date.timeIntervalSince1970 / self.planUtilizationMinSampleIntervalSeconds))
+    }
+
+    private nonisolated static func mergedPlanUtilizationHistorySample(
+        existing: PlanUtilizationHistorySample,
+        incoming: PlanUtilizationHistorySample) -> PlanUtilizationHistorySample
+    {
+        let preferIncoming = incoming.capturedAt >= existing.capturedAt
+        let capturedAt = preferIncoming ? incoming.capturedAt : existing.capturedAt
+
+        return PlanUtilizationHistorySample(
+            capturedAt: capturedAt,
+            dailyUsedPercent: self.mergedPlanUtilizationPercent(
+                existing: existing.dailyUsedPercent,
+                incoming: incoming.dailyUsedPercent,
+                preferIncoming: preferIncoming),
+            weeklyUsedPercent: self.mergedPlanUtilizationPercent(
+                existing: existing.weeklyUsedPercent,
+                incoming: incoming.weeklyUsedPercent,
+                preferIncoming: preferIncoming),
+            monthlyUsedPercent: self.mergedPlanUtilizationPercent(
+                existing: existing.monthlyUsedPercent,
+                incoming: incoming.monthlyUsedPercent,
+                preferIncoming: preferIncoming))
+    }
+
+    private nonisolated static func mergedPlanUtilizationPercent(
+        existing: Double?,
+        incoming: Double?,
+        preferIncoming: Bool) -> Double?
+    {
+        if preferIncoming {
+            incoming ?? existing
+        } else {
+            existing ?? incoming
         }
     }
 
