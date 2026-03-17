@@ -81,6 +81,13 @@ struct PlanUtilizationHistoryChartMenuView: View {
         var maxUsedPercent: Double
     }
 
+    private struct DerivedInterval {
+        let chartDate: Date
+        let startDate: Date
+        let endDate: Date
+        let maxUsedPercent: Double
+    }
+
     private enum AggregationMode {
         case exactFit
         case derived
@@ -447,12 +454,20 @@ struct PlanUtilizationHistoryChartMenuView: View {
             return lhs.chartDate < rhs.chartDate
         }
 
-        var previousResetBoundary: Date?
-        var weightedSums: [Date: Double] = [:]
-        var totalWeights: [Date: Double] = [:]
-        let nominalWindowMinutes = Double(source.windowMinutes)
+        let intervals = self.derivedIntervals(from: sortedGroups, nominalWindowMinutes: Double(source.windowMinutes))
+        guard !intervals.isEmpty else { return [:] }
 
-        for group in sortedGroups {
+        return self.derivedPeriodChartBuckets(period: period, intervals: intervals, calendar: calendar)
+    }
+
+    private nonisolated static func derivedIntervals(
+        from groups: [DerivedGroupAccumulator],
+        nominalWindowMinutes: Double) -> [DerivedInterval]
+    {
+        var previousResetBoundary: Date?
+        var intervals: [DerivedInterval] = []
+
+        for group in groups {
             var weightMinutes = nominalWindowMinutes
             if group.usesResetBoundary, let previousResetBoundary {
                 let factualWindowMinutes = group.boundaryDate.timeIntervalSince(previousResetBoundary) / 60
@@ -461,19 +476,60 @@ struct PlanUtilizationHistoryChartMenuView: View {
                 }
             }
 
-            weightedSums[group.chartDate, default: 0] += group.maxUsedPercent * weightMinutes
-            totalWeights[group.chartDate, default: 0] += weightMinutes
+            let endDate = group.boundaryDate
+            let startDate = endDate.addingTimeInterval(-(weightMinutes * 60))
+            intervals.append(DerivedInterval(
+                chartDate: group.chartDate,
+                startDate: startDate,
+                endDate: endDate,
+                maxUsedPercent: group.maxUsedPercent))
 
             if group.usesResetBoundary {
                 previousResetBoundary = group.boundaryDate
             }
         }
 
+        return intervals
+    }
+
+    private nonisolated static func derivedPeriodChartBuckets(
+        period: Period,
+        intervals: [DerivedInterval],
+        calendar: Calendar) -> [Date: Double]
+    {
+        var weightedSums: [Date: Double] = [:]
+
+        for interval in intervals {
+            var cursor = interval.startDate
+            while cursor < interval.endDate {
+                guard let chartInterval = self.chartDateInterval(
+                    for: cursor,
+                    period: period,
+                    calendar: calendar)
+                else {
+                    break
+                }
+
+                let overlapStart = max(interval.startDate, chartInterval.start)
+                let overlapEnd = min(interval.endDate, chartInterval.end)
+                let overlapMinutes = overlapEnd.timeIntervalSince(overlapStart) / 60
+
+                if overlapMinutes > 0 {
+                    weightedSums[chartInterval.start, default: 0] += interval.maxUsedPercent * overlapMinutes
+                }
+
+                cursor = chartInterval.end
+            }
+        }
+
         return weightedSums.reduce(into: [Date: Double]()) { output, entry in
-            let (chartDate, weightedSum) = entry
-            let totalWeight = totalWeights[chartDate] ?? 0
-            guard totalWeight > 0 else { return }
-            output[chartDate] = weightedSum / totalWeight
+            let (chartStart, weightedSum) = entry
+            guard let chartInterval = self.chartDateInterval(for: chartStart, period: period, calendar: calendar) else {
+                return
+            }
+            let chartMinutes = chartInterval.duration / 60
+            guard chartMinutes > 0 else { return }
+            output[chartStart] = weightedSum / chartMinutes
         }
     }
 
@@ -550,13 +606,23 @@ struct PlanUtilizationHistoryChartMenuView: View {
     }
 
     private nonisolated static func bucketDate(for date: Date, period: Period, calendar: Calendar) -> Date? {
+        self.chartDateInterval(for: date, period: period, calendar: calendar)?.start
+    }
+
+    private nonisolated static func chartDateInterval(
+        for date: Date,
+        period: Period,
+        calendar: Calendar) -> DateInterval?
+    {
         switch period {
         case .daily:
-            calendar.startOfDay(for: date)
+            let start = calendar.startOfDay(for: date)
+            guard let end = calendar.date(byAdding: .day, value: 1, to: start) else { return nil }
+            return DateInterval(start: start, end: end)
         case .weekly:
-            calendar.dateInterval(of: .weekOfYear, for: date)?.start
+            return calendar.dateInterval(of: .weekOfYear, for: date)
         case .monthly:
-            calendar.dateInterval(of: .month, for: date)?.start
+            return calendar.dateInterval(of: .month, for: date)
         }
     }
 

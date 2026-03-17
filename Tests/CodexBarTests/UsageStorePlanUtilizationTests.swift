@@ -218,25 +218,48 @@ struct UsageStorePlanUtilizationTests {
     @Test
     func dailyModelLeftAlignsSparseHistory() throws {
         let calendar = Calendar(identifier: .gregorian)
-        let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 3, day: 6)))
+        let firstBoundary = try #require(calendar.date(from: DateComponents(
+            timeZone: TimeZone.current,
+            year: 2026,
+            month: 3,
+            day: 4,
+            hour: 10,
+            minute: 0)))
+        let secondBoundary = try #require(calendar.date(from: DateComponents(
+            timeZone: TimeZone.current,
+            year: 2026,
+            month: 3,
+            day: 5,
+            hour: 10,
+            minute: 0)))
+        let thirdBoundary = try #require(calendar.date(from: DateComponents(
+            timeZone: TimeZone.current,
+            year: 2026,
+            month: 3,
+            day: 6,
+            hour: 10,
+            minute: 0)))
         let samples = [
             makePlanSample(
-                at: now,
+                at: thirdBoundary.addingTimeInterval(-30 * 60),
                 primary: 20,
                 secondary: 35,
                 primaryWindowMinutes: 300,
+                primaryResetsAt: thirdBoundary,
                 secondaryWindowMinutes: 10080),
             makePlanSample(
-                at: now.addingTimeInterval(-24 * 3600),
+                at: secondBoundary.addingTimeInterval(-30 * 60),
                 primary: 48,
                 secondary: 48,
                 primaryWindowMinutes: 300,
+                primaryResetsAt: secondBoundary,
                 secondaryWindowMinutes: 10080),
             makePlanSample(
-                at: now.addingTimeInterval(-2 * 24 * 3600),
+                at: firstBoundary.addingTimeInterval(-30 * 60),
                 primary: 62,
                 secondary: 62,
                 primaryWindowMinutes: 300,
+                primaryResetsAt: firstBoundary,
                 secondaryWindowMinutes: 10080),
         ]
 
@@ -250,7 +273,10 @@ struct UsageStorePlanUtilizationTests {
         #expect(model.axisIndexes == [0, 2])
         #expect(model.xDomain == -0.5...29.5)
         #expect(model.selectedSource == "primary:300")
-        #expect(model.usedPercents == [62, 48, 20])
+        #expect(model.usedPercents.count == 3)
+        #expect(abs(model.usedPercents[0] - (62.0 * 5.0 / 24.0)) < 0.000_1)
+        #expect(abs(model.usedPercents[1] - 10.0) < 0.000_1)
+        #expect(abs(model.usedPercents[2] - (20.0 * 5.0 / 24.0)) < 0.000_1)
     }
 
     @MainActor
@@ -364,34 +390,6 @@ struct UsageStorePlanUtilizationTests {
         #expect(visiblePeriods == ["weekly", "monthly"])
     }
 
-    @MainActor
-    @Test
-    func dailyModelDerivesFromPrimaryFiveHourHistory() throws {
-        let calendar = Calendar(identifier: .gregorian)
-        let base = try #require(calendar.date(from: DateComponents(
-            timeZone: TimeZone.current,
-            year: 2026,
-            month: 3,
-            day: 7,
-            hour: 0,
-            minute: 0)))
-        let samples = [
-            makePlanSample(at: base.addingTimeInterval(60), primary: 20, secondary: nil, primaryWindowMinutes: 300),
-            makePlanSample(at: base.addingTimeInterval(3600), primary: 10, secondary: nil, primaryWindowMinutes: 300),
-            makePlanSample(at: base.addingTimeInterval(18060), primary: 40, secondary: nil, primaryWindowMinutes: 300),
-        ]
-
-        let model = try #require(
-            PlanUtilizationHistoryChartMenuView._modelSnapshotForTesting(
-                periodRawValue: "daily",
-                samples: samples,
-                provider: .codex))
-
-        #expect(model.pointCount == 1)
-        #expect(model.selectedSource == "primary:300")
-        #expect(model.usedPercents == [30])
-    }
-
     @Test
     func fiveHourOnlyHistoryShowsAllTabs() {
         let base = Date(timeIntervalSince1970: Double(18000 * 100_000))
@@ -410,19 +408,46 @@ struct UsageStorePlanUtilizationTests {
     @Test
     func weeklyAndMonthlyModelsUsePrimaryWhenItIsTheBestEligibleWindow() throws {
         let calendar = Calendar(identifier: .gregorian)
-        let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 3, day: 20)))
+        let firstBoundary = try #require(calendar.date(from: DateComponents(
+            timeZone: TimeZone.current,
+            year: 2026,
+            month: 3,
+            day: 8,
+            hour: 0,
+            minute: 0)))
+        let secondBoundary = try #require(calendar.date(from: DateComponents(
+            timeZone: TimeZone.current,
+            year: 2026,
+            month: 3,
+            day: 15,
+            hour: 0,
+            minute: 0)))
+        let thirdBoundary = try #require(calendar.date(from: DateComponents(
+            timeZone: TimeZone.current,
+            year: 2026,
+            month: 3,
+            day: 22,
+            hour: 0,
+            minute: 0)))
         let samples = [
-            makePlanSample(at: now, primary: 20, secondary: nil, primaryWindowMinutes: 10080),
             makePlanSample(
-                at: now.addingTimeInterval(-7 * 24 * 3600),
-                primary: 48,
-                secondary: nil,
-                primaryWindowMinutes: 10080),
-            makePlanSample(
-                at: now.addingTimeInterval(-14 * 24 * 3600),
+                at: firstBoundary.addingTimeInterval(-30 * 60),
                 primary: 62,
                 secondary: nil,
-                primaryWindowMinutes: 10080),
+                primaryWindowMinutes: 10080,
+                primaryResetsAt: firstBoundary),
+            makePlanSample(
+                at: secondBoundary.addingTimeInterval(-30 * 60),
+                primary: 48,
+                secondary: nil,
+                primaryWindowMinutes: 10080,
+                primaryResetsAt: secondBoundary),
+            makePlanSample(
+                at: thirdBoundary.addingTimeInterval(-30 * 60),
+                primary: 20,
+                secondary: nil,
+                primaryWindowMinutes: 10080,
+                primaryResetsAt: thirdBoundary),
         ]
 
         let weeklyModel = try #require(
@@ -441,7 +466,8 @@ struct UsageStorePlanUtilizationTests {
         #expect(monthlyModel.pointCount == 1)
         #expect(monthlyModel.selectedSource == "primary:10080")
         #expect(weeklyModel.usedPercents == [62, 48, 20])
-        #expect(monthlyModel.usedPercents == [43.333333333333336])
+        #expect(monthlyModel.usedPercents.count == 1)
+        #expect(abs(monthlyModel.usedPercents[0] - ((62.0 + 48.0 + 20.0) * 7.0 / 31.0)) < 0.000_1)
     }
 
     @MainActor
@@ -462,7 +488,8 @@ struct UsageStorePlanUtilizationTests {
 
         #expect(model.pointCount == 1)
         #expect(model.selectedSource == "primary:300")
-        #expect(model.usedPercents == [30])
+        #expect(model.usedPercents.count == 1)
+        #expect(abs(model.usedPercents[0] - ((20.0 * 5.0 + 40.0 * 5.0) / (7.0 * 24.0))) < 0.000_1)
     }
 
     @Test
