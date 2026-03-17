@@ -3,7 +3,6 @@ import CryptoKit
 import Foundation
 
 extension UsageStore {
-    private nonisolated static let codexCreditsMonthlyCapTokens: Double = 1000
     private nonisolated static let planUtilizationMinSampleIntervalSeconds: TimeInterval = 60 * 60
     private nonisolated static let planUtilizationMaxSamples: Int = 24 * 730
 
@@ -17,7 +16,6 @@ extension UsageStore {
         provider: UsageProvider,
         snapshot: UsageSnapshot,
         account: ProviderTokenAccount? = nil,
-        credits: CreditsSnapshot? = nil,
         now: Date = Date())
         async
     {
@@ -35,15 +33,14 @@ extension UsageStore {
                 return
             }
             let history = providerBuckets.samples(for: accountKey)
-            let resolvedCredits = provider == .codex ? credits : nil
             let sample = PlanUtilizationHistorySample(
                 capturedAt: now,
-                dailyUsedPercent: Self.clampedPercent(snapshot.primary?.usedPercent),
-                weeklyUsedPercent: Self.clampedPercent(snapshot.secondary?.usedPercent),
-                monthlyUsedPercent: Self.planHistoryMonthlyUsedPercent(
-                    provider: provider,
-                    snapshot: snapshot,
-                    credits: resolvedCredits))
+                primaryUsedPercent: Self.clampedPercent(snapshot.primary?.usedPercent),
+                primaryWindowMinutes: snapshot.primary?.windowMinutes,
+                primaryResetsAt: snapshot.primary?.resetsAt,
+                secondaryUsedPercent: Self.clampedPercent(snapshot.secondary?.usedPercent),
+                secondaryWindowMinutes: snapshot.secondary?.windowMinutes,
+                secondaryResetsAt: snapshot.secondary?.resetsAt)
 
             guard let updatedHistory = Self.updatedPlanUtilizationHistory(
                 provider: provider,
@@ -110,45 +107,8 @@ extension UsageStore {
     nonisolated static var _planUtilizationMaxSamplesForTesting: Int {
         self.planUtilizationMaxSamples
     }
+
     #endif
-
-    nonisolated static func planHistoryMonthlyUsedPercent(
-        provider: UsageProvider,
-        snapshot: UsageSnapshot,
-        credits: CreditsSnapshot?) -> Double?
-    {
-        if provider == .codex,
-           let providerCostPercent = self.monthlyUsedPercent(from: snapshot.providerCost)
-        {
-            return providerCostPercent
-        }
-        guard provider == .codex else { return nil }
-        guard self.codexSupportsCreditBasedMonthly(snapshot: snapshot) else { return nil }
-        return self.codexMonthlyUsedPercent(from: credits)
-    }
-
-    private nonisolated static func monthlyUsedPercent(from providerCost: ProviderCostSnapshot?) -> Double? {
-        guard let providerCost, providerCost.limit > 0 else { return nil }
-        let usedPercent = (providerCost.used / providerCost.limit) * 100
-        return self.clampedPercent(usedPercent)
-    }
-
-    private nonisolated static func codexMonthlyUsedPercent(from credits: CreditsSnapshot?) -> Double? {
-        guard let remaining = credits?.remaining, remaining.isFinite else { return nil }
-        let cap = self.codexCreditsMonthlyCapTokens
-        guard cap > 0 else { return nil }
-        let used = max(0, min(cap, cap - remaining))
-        let usedPercent = (used / cap) * 100
-        return self.clampedPercent(usedPercent)
-    }
-
-    private nonisolated static func codexSupportsCreditBasedMonthly(snapshot: UsageSnapshot) -> Bool {
-        let rawPlan = snapshot.loginMethod(for: .codex)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased() ?? ""
-        guard !rawPlan.isEmpty else { return false }
-        return rawPlan == "guest" || rawPlan == "free" || rawPlan == "free_workspace"
-    }
 
     private nonisolated static func clampedPercent(_ value: Double?) -> Double? {
         guard let value else { return nil }
@@ -168,24 +128,36 @@ extension UsageStore {
 
         return PlanUtilizationHistorySample(
             capturedAt: capturedAt,
-            dailyUsedPercent: self.mergedPlanUtilizationPercent(
-                existing: existing.dailyUsedPercent,
-                incoming: incoming.dailyUsedPercent,
+            primaryUsedPercent: self.mergedPlanUtilizationValue(
+                existing: existing.primaryUsedPercent,
+                incoming: incoming.primaryUsedPercent,
                 preferIncoming: preferIncoming),
-            weeklyUsedPercent: self.mergedPlanUtilizationPercent(
-                existing: existing.weeklyUsedPercent,
-                incoming: incoming.weeklyUsedPercent,
+            primaryWindowMinutes: self.mergedPlanUtilizationValue(
+                existing: existing.primaryWindowMinutes,
+                incoming: incoming.primaryWindowMinutes,
                 preferIncoming: preferIncoming),
-            monthlyUsedPercent: self.mergedPlanUtilizationPercent(
-                existing: existing.monthlyUsedPercent,
-                incoming: incoming.monthlyUsedPercent,
+            primaryResetsAt: self.mergedPlanUtilizationValue(
+                existing: existing.primaryResetsAt,
+                incoming: incoming.primaryResetsAt,
+                preferIncoming: preferIncoming),
+            secondaryUsedPercent: self.mergedPlanUtilizationValue(
+                existing: existing.secondaryUsedPercent,
+                incoming: incoming.secondaryUsedPercent,
+                preferIncoming: preferIncoming),
+            secondaryWindowMinutes: self.mergedPlanUtilizationValue(
+                existing: existing.secondaryWindowMinutes,
+                incoming: incoming.secondaryWindowMinutes,
+                preferIncoming: preferIncoming),
+            secondaryResetsAt: self.mergedPlanUtilizationValue(
+                existing: existing.secondaryResetsAt,
+                incoming: incoming.secondaryResetsAt,
                 preferIncoming: preferIncoming))
     }
 
-    private nonisolated static func mergedPlanUtilizationPercent(
-        existing: Double?,
-        incoming: Double?,
-        preferIncoming: Bool) -> Double?
+    private nonisolated static func mergedPlanUtilizationValue<T>(
+        existing: T?,
+        incoming: T?,
+        preferIncoming: Bool) -> T?
     {
         if preferIncoming {
             incoming ?? existing

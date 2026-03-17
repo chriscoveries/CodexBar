@@ -87,8 +87,7 @@ extension UsageStore {
             }
             await self.recordPlanUtilizationHistorySample(
                 provider: provider,
-                snapshot: scoped,
-                credits: result.credits)
+                snapshot: scoped)
             if let runtime = self.providerRuntimes[provider] {
                 let context = ProviderRuntimeContext(
                     provider: provider, settings: self.settings, store: self)

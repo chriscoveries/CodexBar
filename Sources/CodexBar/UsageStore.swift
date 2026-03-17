@@ -654,8 +654,7 @@ final class UsageStore {
                codexSnapshot == nil || codexSnapshot?.updatedAt ?? .distantPast < minimumSnapshotUpdatedAt
             {
                 self.scheduleCodexPlanHistoryBackfill(
-                    minimumSnapshotUpdatedAt: minimumSnapshotUpdatedAt,
-                    credits: credits)
+                    minimumSnapshotUpdatedAt: minimumSnapshotUpdatedAt)
                 return
             }
 
@@ -663,8 +662,7 @@ final class UsageStore {
             guard let codexSnapshot else { return }
             await self.recordPlanUtilizationHistorySample(
                 provider: .codex,
-                snapshot: codexSnapshot,
-                credits: credits)
+                snapshot: codexSnapshot)
         } catch {
             let message = error.localizedDescription
             if message.localizedCaseInsensitiveContains("data not available yet") {
@@ -921,8 +919,7 @@ extension UsageStore {
     }
 
     private func scheduleCodexPlanHistoryBackfill(
-        minimumSnapshotUpdatedAt: Date,
-        credits: CreditsSnapshot)
+        minimumSnapshotUpdatedAt: Date)
     {
         self.cancelCodexPlanHistoryBackfill()
         self.codexPlanHistoryBackfillTask = Task { @MainActor [weak self] in
@@ -932,8 +929,7 @@ extension UsageStore {
             }
             await self.recordPlanUtilizationHistorySample(
                 provider: .codex,
-                snapshot: snapshot,
-                credits: credits)
+                snapshot: snapshot)
             self.codexPlanHistoryBackfillTask = nil
         }
     }

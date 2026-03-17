@@ -51,6 +51,39 @@ struct PlanUtilizationHistoryChartMenuView: View {
                 24
             }
         }
+
+        var chartWindowMinutes: Int {
+            switch self {
+            case .daily:
+                1440
+            case .weekly:
+                10080
+            case .monthly:
+                44640
+            }
+        }
+    }
+
+    private enum WindowSlot: Int, CaseIterable {
+        case primary
+        case secondary
+    }
+
+    private struct WindowSourceSelection: Hashable {
+        let slot: WindowSlot
+        let windowMinutes: Int
+    }
+
+    private struct DerivedGroupAccumulator {
+        let chartDate: Date
+        let boundaryDate: Date
+        let usesResetBoundary: Bool
+        var maxUsedPercent: Double
+    }
+
+    private enum AggregationMode {
+        case exactFit
+        case derived
     }
 
     private struct Point: Identifiable {
@@ -76,22 +109,29 @@ struct PlanUtilizationHistoryChartMenuView: View {
     }
 
     var body: some View {
-        let model = Self.makeModel(period: self.selectedPeriod, samples: self.samples, provider: self.provider)
+        let availablePeriods = Self.availablePeriods(samples: self.samples)
+        let visiblePeriods = availablePeriods.isEmpty ? Period.allCases : availablePeriods
+        let effectiveSelectedPeriod = visiblePeriods.contains(self.selectedPeriod)
+            ? self.selectedPeriod
+            : (visiblePeriods.first ?? .daily)
+        let model = Self.makeModel(period: effectiveSelectedPeriod, samples: self.samples, provider: self.provider)
 
         VStack(alignment: .leading, spacing: 10) {
-            Picker("Period", selection: self.$selectedPeriod) {
-                ForEach(Period.allCases) { period in
-                    Text(period.title).tag(period)
+            if visiblePeriods.count > 1 {
+                Picker("Period", selection: self.$selectedPeriod) {
+                    ForEach(visiblePeriods) { period in
+                        Text(period.title).tag(period)
+                    }
                 }
-            }
-            .pickerStyle(.segmented)
-            .onChange(of: self.selectedPeriod) { _, _ in
-                self.selectedPointID = nil
+                .pickerStyle(.segmented)
+                .onChange(of: self.selectedPeriod) { _, _ in
+                    self.selectedPointID = nil
+                }
             }
 
             if model.points.isEmpty {
                 ZStack {
-                    Text(Self.emptyStateText(period: self.selectedPeriod, isRefreshing: self.isRefreshing))
+                    Text(Self.emptyStateText(period: effectiveSelectedPeriod, isRefreshing: self.isRefreshing))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -109,7 +149,7 @@ struct PlanUtilizationHistoryChartMenuView: View {
                                 if let raw = value.as(Double.self) {
                                     let index = Int(raw.rounded())
                                     if let point = model.pointsByIndex[index] {
-                                        Text(point.date.formatted(self.axisFormat(for: self.selectedPeriod)))
+                                        Text(point.date.formatted(self.axisFormat(for: effectiveSelectedPeriod)))
                                             .font(.caption2)
                                             .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
                                     }
@@ -129,7 +169,7 @@ struct PlanUtilizationHistoryChartMenuView: View {
                         }
                     }
 
-                let detail = self.detailLines(model: model)
+                let detail = self.detailLines(model: model, period: effectiveSelectedPeriod)
                 VStack(alignment: .leading, spacing: 0) {
                     Text(detail.primary)
                         .font(.caption)
@@ -150,6 +190,12 @@ struct PlanUtilizationHistoryChartMenuView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .frame(minWidth: self.width, maxWidth: .infinity, alignment: .topLeading)
+        .task(id: visiblePeriods.map(\.rawValue).joined(separator: ",")) {
+            guard let firstVisiblePeriod = visiblePeriods.first else { return }
+            guard !visiblePeriods.contains(self.selectedPeriod) else { return }
+            self.selectedPeriod = firstVisiblePeriod
+            self.selectedPointID = nil
+        }
     }
 
     private struct Model {
@@ -166,51 +212,17 @@ struct PlanUtilizationHistoryChartMenuView: View {
         samples: [PlanUtilizationHistorySample],
         provider: UsageProvider) -> Model
     {
-        var buckets: [Date: Double] = [:]
         let calendar = Calendar.current
-
-        let shouldDeriveCodexMonthlyFromWeekly = provider == .codex &&
-            !samples.contains(where: { $0.monthlyUsedPercent != nil })
-        let shouldDeriveMonthlyFromWeekly = period == .monthly &&
-            (provider == .claude || shouldDeriveCodexMonthlyFromWeekly)
-
-        if shouldDeriveMonthlyFromWeekly {
-            // Subscription utilization is approximated from weekly windows when no suitable monthly source exists.
-            // For Claude, this intentionally ignores pay-as-you-go extra usage spend.
-            // Approximate monthly utilization as the average weekly used % observed in that month.
-            var monthToWeekUsage: [Date: [Date: Double]] = [:]
-            for sample in samples {
-                guard let used = sample.weeklyUsedPercent else { continue }
-                let clamped = max(0, min(100, used))
-                guard
-                    let monthDate = Self.bucketDate(for: sample.capturedAt, period: .monthly, calendar: calendar),
-                    let weekDate = Self.bucketDate(for: sample.capturedAt, period: .weekly, calendar: calendar)
-                else {
-                    continue
-                }
-                var weekUsage = monthToWeekUsage[monthDate] ?? [:]
-                weekUsage[weekDate] = max(weekUsage[weekDate] ?? 0, clamped)
-                monthToWeekUsage[monthDate] = weekUsage
-            }
-
-            for (monthDate, weekUsage) in monthToWeekUsage {
-                guard !weekUsage.isEmpty else { continue }
-                let totalUsed = weekUsage.values.reduce(0, +)
-                buckets[monthDate] = totalUsed / Double(weekUsage.count)
-            }
-        } else {
-            for sample in samples {
-                guard let used = Self.usedPercent(for: sample, period: period) else { continue }
-                let clamped = max(0, min(100, used))
-                guard
-                    let bucketDate = Self.bucketDate(for: sample.capturedAt, period: period, calendar: calendar)
-                else {
-                    continue
-                }
-                let current = buckets[bucketDate] ?? 0
-                buckets[bucketDate] = max(current, clamped)
-            }
+        guard let selectedSource = Self.selectedSource(for: period, samples: samples) else {
+            return Self.emptyModel(provider: provider, period: period)
         }
+        let aggregationMode = Self.aggregationMode(period: period, source: selectedSource)
+        let buckets = Self.chartBuckets(
+            period: period,
+            samples: samples,
+            source: selectedSource,
+            mode: aggregationMode,
+            calendar: calendar)
 
         var points = buckets
             .map { date, used in
@@ -251,6 +263,18 @@ struct PlanUtilizationHistoryChartMenuView: View {
             barColor: barColor)
     }
 
+    private nonisolated static func emptyModel(provider: UsageProvider, period: Period) -> Model {
+        let color = ProviderDescriptorRegistry.descriptor(for: provider).branding.color
+        let barColor = Color(red: color.red, green: color.green, blue: color.blue)
+        return Model(
+            points: [],
+            axisIndexes: [],
+            xDomain: self.xDomain(points: [], period: period),
+            pointsByID: [:],
+            pointsByIndex: [:],
+            barColor: barColor)
+    }
+
     private nonisolated static func xDomain(points: [Point], period: Period) -> ClosedRange<Double>? {
         guard !points.isEmpty else { return nil }
         return -0.5...(Double(period.maxPoints) - 0.5)
@@ -272,6 +296,8 @@ struct PlanUtilizationHistoryChartMenuView: View {
         let pointCount: Int
         let axisIndexes: [Double]
         let xDomain: ClosedRange<Double>?
+        let selectedSource: String?
+        let usedPercents: [Double]
     }
 
     nonisolated static func _modelSnapshotForTesting(
@@ -284,12 +310,20 @@ struct PlanUtilizationHistoryChartMenuView: View {
         return ModelSnapshot(
             pointCount: model.points.count,
             axisIndexes: model.axisIndexes,
-            xDomain: model.xDomain)
+            xDomain: model.xDomain,
+            selectedSource: self.selectedSource(for: period, samples: samples).map {
+                "\($0.slot == .primary ? "primary" : "secondary"):\($0.windowMinutes)"
+            },
+            usedPercents: model.points.map(\.usedPercent))
     }
 
     nonisolated static func _emptyStateTextForTesting(periodRawValue: String, isRefreshing: Bool) -> String? {
         guard let period = Period(rawValue: periodRawValue) else { return nil }
         return self.emptyStateText(period: period, isRefreshing: isRefreshing)
+    }
+
+    nonisolated static func _visiblePeriodsForTesting(samples: [PlanUtilizationHistorySample]) -> [String] {
+        self.availablePeriods(samples: samples).map(\.rawValue)
     }
     #endif
 
@@ -300,15 +334,219 @@ struct PlanUtilizationHistoryChartMenuView: View {
         return period.emptyStateText
     }
 
-    private nonisolated static func usedPercent(for sample: PlanUtilizationHistorySample, period: Period) -> Double? {
-        switch period {
-        case .daily:
-            sample.dailyUsedPercent
-        case .weekly:
-            sample.weeklyUsedPercent
-        case .monthly:
-            sample.monthlyUsedPercent
+    private nonisolated static func selectedSource(
+        for period: Period,
+        samples: [PlanUtilizationHistorySample]) -> WindowSourceSelection?
+    {
+        var counts: [WindowSourceSelection: Int] = [:]
+
+        for sample in samples {
+            for slot in WindowSlot.allCases {
+                guard let windowMinutes = self.windowMinutes(for: sample, slot: slot) else { continue }
+                guard windowMinutes <= period.chartWindowMinutes else { continue }
+                let selection = WindowSourceSelection(slot: slot, windowMinutes: windowMinutes)
+                counts[selection, default: 0] += 1
+            }
         }
+
+        return counts.max { lhs, rhs in
+            if lhs.key.windowMinutes != rhs.key.windowMinutes {
+                return lhs.key.windowMinutes < rhs.key.windowMinutes
+            }
+            if lhs.value != rhs.value {
+                return lhs.value < rhs.value
+            }
+            return lhs.key.slot.rawValue > rhs.key.slot.rawValue
+        }?.key
+    }
+
+    private nonisolated static func availablePeriods(samples: [PlanUtilizationHistorySample]) -> [Period] {
+        Period.allCases.filter { self.selectedSource(for: $0, samples: samples) != nil }
+    }
+
+    private nonisolated static func usedPercent(
+        for sample: PlanUtilizationHistorySample,
+        source: WindowSourceSelection) -> Double?
+    {
+        guard self.windowMinutes(for: sample, slot: source.slot) == source.windowMinutes else { return nil }
+        switch source.slot {
+        case .primary:
+            return sample.primaryUsedPercent
+        case .secondary:
+            return sample.secondaryUsedPercent
+        }
+    }
+
+    private nonisolated static func windowMinutes(
+        for sample: PlanUtilizationHistorySample,
+        slot: WindowSlot) -> Int?
+    {
+        switch slot {
+        case .primary:
+            sample.primaryWindowMinutes
+        case .secondary:
+            sample.secondaryWindowMinutes
+        }
+    }
+
+    private nonisolated static func aggregationMode(
+        period: Period,
+        source: WindowSourceSelection) -> AggregationMode
+    {
+        source.windowMinutes == period.chartWindowMinutes ? .exactFit : .derived
+    }
+
+    private nonisolated static func chartBuckets(
+        period: Period,
+        samples: [PlanUtilizationHistorySample],
+        source: WindowSourceSelection,
+        mode: AggregationMode,
+        calendar: Calendar) -> [Date: Double]
+    {
+        switch mode {
+        case .exactFit:
+            self.exactFitChartBuckets(period: period, samples: samples, source: source, calendar: calendar)
+        case .derived:
+            self.derivedChartBuckets(period: period, samples: samples, source: source, calendar: calendar)
+        }
+    }
+
+    private nonisolated static func exactFitChartBuckets(
+        period: Period,
+        samples: [PlanUtilizationHistorySample],
+        source: WindowSourceSelection,
+        calendar: Calendar) -> [Date: Double]
+    {
+        var buckets: [Date: Double] = [:]
+
+        for sample in samples {
+            guard let used = self.usedPercent(for: sample, source: source) else { continue }
+            guard let chartDate = self.bucketDate(for: sample.capturedAt, period: period, calendar: calendar) else {
+                continue
+            }
+            let clamped = max(0, min(100, used))
+            buckets[chartDate] = max(buckets[chartDate] ?? 0, clamped)
+        }
+
+        return buckets
+    }
+
+    private nonisolated static func derivedChartBuckets(
+        period: Period,
+        samples: [PlanUtilizationHistorySample],
+        source: WindowSourceSelection,
+        calendar: Calendar) -> [Date: Double]
+    {
+        let groups = self.derivedGroups(period: period, samples: samples, source: source, calendar: calendar)
+        guard !groups.isEmpty else { return [:] }
+
+        let sortedGroups = groups.values.sorted { lhs, rhs in
+            if lhs.boundaryDate != rhs.boundaryDate {
+                return lhs.boundaryDate < rhs.boundaryDate
+            }
+            return lhs.chartDate < rhs.chartDate
+        }
+
+        var previousResetBoundary: Date?
+        var weightedSums: [Date: Double] = [:]
+        var totalWeights: [Date: Double] = [:]
+        let nominalWindowMinutes = Double(source.windowMinutes)
+
+        for group in sortedGroups {
+            var weightMinutes = nominalWindowMinutes
+            if group.usesResetBoundary, let previousResetBoundary {
+                let factualWindowMinutes = group.boundaryDate.timeIntervalSince(previousResetBoundary) / 60
+                if factualWindowMinutes > 0, factualWindowMinutes < nominalWindowMinutes {
+                    weightMinutes = factualWindowMinutes
+                }
+            }
+
+            weightedSums[group.chartDate, default: 0] += group.maxUsedPercent * weightMinutes
+            totalWeights[group.chartDate, default: 0] += weightMinutes
+
+            if group.usesResetBoundary {
+                previousResetBoundary = group.boundaryDate
+            }
+        }
+
+        return weightedSums.reduce(into: [Date: Double]()) { output, entry in
+            let (chartDate, weightedSum) = entry
+            let totalWeight = totalWeights[chartDate] ?? 0
+            guard totalWeight > 0 else { return }
+            output[chartDate] = weightedSum / totalWeight
+        }
+    }
+
+    private nonisolated static func derivedGroups(
+        period: Period,
+        samples: [PlanUtilizationHistorySample],
+        source: WindowSourceSelection,
+        calendar: Calendar) -> [Date: DerivedGroupAccumulator]
+    {
+        var groups: [Date: DerivedGroupAccumulator] = [:]
+
+        for sample in samples {
+            guard let used = self.usedPercent(for: sample, source: source) else { continue }
+            guard let groupBoundary = self.derivedBoundaryDate(for: sample, source: source) else { continue }
+            guard let chartDate = self.bucketDate(for: groupBoundary, period: period, calendar: calendar) else {
+                continue
+            }
+
+            let clamped = max(0, min(100, used))
+            let usesResetBoundary = self.resetsAt(for: sample, source: source) != nil
+
+            if var existing = groups[groupBoundary] {
+                existing.maxUsedPercent = max(existing.maxUsedPercent, clamped)
+                groups[groupBoundary] = existing
+            } else {
+                groups[groupBoundary] = DerivedGroupAccumulator(
+                    chartDate: chartDate,
+                    boundaryDate: groupBoundary,
+                    usesResetBoundary: usesResetBoundary,
+                    maxUsedPercent: clamped)
+            }
+        }
+
+        return groups
+    }
+
+    private nonisolated static func derivedBoundaryDate(
+        for sample: PlanUtilizationHistorySample,
+        source: WindowSourceSelection) -> Date?
+    {
+        if let resetsAt = self.resetsAt(for: sample, source: source) {
+            return self.normalizedBoundaryDate(resetsAt)
+        }
+        return self.syntheticResetBoundaryDate(
+            for: sample.capturedAt,
+            windowMinutes: source.windowMinutes)
+    }
+
+    private nonisolated static func resetsAt(
+        for sample: PlanUtilizationHistorySample,
+        source: WindowSourceSelection) -> Date?
+    {
+        guard self.windowMinutes(for: sample, slot: source.slot) == source.windowMinutes else { return nil }
+        switch source.slot {
+        case .primary:
+            return sample.primaryResetsAt
+        case .secondary:
+            return sample.secondaryResetsAt
+        }
+    }
+
+    private nonisolated static func normalizedBoundaryDate(_ date: Date) -> Date {
+        Date(timeIntervalSince1970: floor(date.timeIntervalSince1970))
+    }
+
+    private nonisolated static func syntheticResetBoundaryDate(
+        for date: Date,
+        windowMinutes: Int) -> Date?
+    {
+        guard windowMinutes > 0 else { return nil }
+        let bucketSeconds = Double(windowMinutes) * 60
+        let bucketIndex = floor(date.timeIntervalSince1970 / bucketSeconds)
+        return Date(timeIntervalSince1970: (bucketIndex + 1) * bucketSeconds)
     }
 
     private nonisolated static func bucketDate(for date: Date, period: Period, calendar: Calendar) -> Date? {
@@ -384,13 +622,13 @@ struct PlanUtilizationHistoryChartMenuView: View {
         return model.pointsByID[selectedPointID]
     }
 
-    private func detailLines(model: Model) -> (primary: String, secondary: String) {
+    private func detailLines(model: Model, period: Period) -> (primary: String, secondary: String) {
         let activePoint = self.selectedPoint(model: model) ?? model.points.last
         guard let point = activePoint else {
             return ("No data", "")
         }
 
-        let dateLabel: String = switch self.selectedPeriod {
+        let dateLabel: String = switch period {
         case .daily, .weekly:
             point.date.formatted(.dateTime.month(.abbreviated).day())
         case .monthly:

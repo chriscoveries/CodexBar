@@ -165,8 +165,7 @@ extension UsageStore {
             await self.recordPlanUtilizationHistorySample(
                 provider: provider,
                 snapshot: labeled,
-                account: account,
-                credits: result.credits)
+                account: account)
         case let .failure(error):
             await MainActor.run {
                 let hadPriorData = self.snapshots[provider] != nil || fallbackSnapshot != nil

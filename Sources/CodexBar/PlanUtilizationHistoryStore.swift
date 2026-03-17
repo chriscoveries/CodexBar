@@ -3,9 +3,12 @@ import Foundation
 
 struct PlanUtilizationHistorySample: Codable, Sendable, Equatable {
     let capturedAt: Date
-    let dailyUsedPercent: Double?
-    let weeklyUsedPercent: Double?
-    let monthlyUsedPercent: Double?
+    let primaryUsedPercent: Double?
+    let primaryWindowMinutes: Int?
+    let primaryResetsAt: Date?
+    let secondaryUsedPercent: Double?
+    let secondaryWindowMinutes: Int?
+    let secondaryResetsAt: Date?
 }
 
 struct PlanUtilizationHistoryBuckets: Sendable, Equatable {
@@ -45,12 +48,8 @@ private struct ProviderHistoryFile: Codable, Sendable {
     let accounts: [String: [PlanUtilizationHistorySample]]
 }
 
-private struct LegacyPlanUtilizationHistoryFile: Codable, Sendable {
-    let providers: [String: [PlanUtilizationHistorySample]]
-}
-
 struct PlanUtilizationHistoryStore: Sendable {
-    private static let schemaVersion = 2
+    private static let schemaVersion = 3
 
     let fileURL: URL?
 
@@ -68,13 +67,10 @@ struct PlanUtilizationHistoryStore: Sendable {
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        if let decoded = try? decoder.decode(PlanUtilizationHistoryFile.self, from: data) {
-            return Self.decodeProviders(decoded.providers)
-        }
-        guard let legacy = try? decoder.decode(LegacyPlanUtilizationHistoryFile.self, from: data) else {
+        guard let decoded = try? decoder.decode(PlanUtilizationHistoryFile.self, from: data) else {
             return [:]
         }
-        return Self.decodeLegacyProviders(legacy.providers)
+        return Self.decodeProviders(decoded.providers)
     }
 
     func save(_ providers: [UsageProvider: PlanUtilizationHistoryBuckets]) {
@@ -128,23 +124,26 @@ struct PlanUtilizationHistoryStore: Sendable {
         return output
     }
 
-    private static func decodeLegacyProviders(
-        _ providers: [String: [PlanUtilizationHistorySample]]) -> [UsageProvider: PlanUtilizationHistoryBuckets]
-    {
-        var output: [UsageProvider: PlanUtilizationHistoryBuckets] = [:]
-        for (rawProvider, samples) in providers {
-            guard let provider = UsageProvider(rawValue: rawProvider) else { continue }
-            output[provider] = PlanUtilizationHistoryBuckets(
-                unscoped: samples.sorted { $0.capturedAt < $1.capturedAt })
-        }
-        return output
-    }
-
     private static func defaultFileURL() -> URL? {
         guard let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
             return nil
         }
         let dir = root.appendingPathComponent("com.steipete.codexbar", isDirectory: true)
         return dir.appendingPathComponent("plan-utilization-history.json")
+    }
+}
+
+extension PlanUtilizationHistoryFile {
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let version = try container.decode(Int.self, forKey: .version)
+        guard version == 3 else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .version,
+                in: container,
+                debugDescription: "Unsupported plan utilization history schema version \(version)")
+        }
+        self.version = version
+        self.providers = try container.decode([String: ProviderHistoryFile].self, forKey: .providers)
     }
 }

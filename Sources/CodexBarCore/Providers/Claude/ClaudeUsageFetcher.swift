@@ -58,6 +58,8 @@ public enum ClaudeUsageError: LocalizedError, Sendable {
 }
 
 public struct ClaudeUsageFetcher: ClaudeUsageFetching, Sendable {
+    private static let sessionWindowMinutes = 5 * 60
+    private static let weeklyWindowMinutes = 7 * 24 * 60
     private let environment: [String: String]
     private let dataSource: ClaudeUsageDataSource
     private let oauthKeychainPromptCooldownEnabled: Bool
@@ -199,21 +201,26 @@ public struct ClaudeUsageFetcher: ClaudeUsageFetching, Sendable {
             return nil
         }
 
-        func makeWindow(_ dict: [String: Any]?) -> RateWindow? {
+        func makeWindow(_ dict: [String: Any]?, windowMinutes: Int) -> RateWindow? {
             guard let dict else { return nil }
             let pct = (dict["pct_used"] as? NSNumber)?.doubleValue ?? 0
             let resetText = dict["resets"] as? String
             return RateWindow(
                 usedPercent: pct,
-                windowMinutes: nil,
+                windowMinutes: windowMinutes,
                 resetsAt: Self.parseReset(text: resetText),
                 resetDescription: resetText)
         }
 
-        guard let session = makeWindow(firstWindowDict(["session_5h"])) else {
+        guard let session = makeWindow(
+            firstWindowDict(["session_5h"]),
+            windowMinutes: Self.sessionWindowMinutes)
+        else {
             throw ClaudeUsageError.parseFailed("missing session data")
         }
-        let weekAll = makeWindow(firstWindowDict(["week_all_models", "week_all"]))
+        let weekAll = makeWindow(
+            firstWindowDict(["week_all_models", "week_all"]),
+            windowMinutes: Self.weeklyWindowMinutes)
 
         let rawEmail = (obj["account_email"] as? String)?.trimmingCharacters(
             in: .whitespacesAndNewlines)
@@ -234,7 +241,7 @@ public struct ClaudeUsageFetcher: ClaudeUsageFetching, Sendable {
             let resets = opus["resets"] as? String
             return RateWindow(
                 usedPercent: pct,
-                windowMinutes: nil,
+                windowMinutes: Self.weeklyWindowMinutes,
                 resetsAt: Self.parseReset(text: resets),
                 resetDescription: resets)
         }()
@@ -786,21 +793,29 @@ public struct ClaudeUsageFetcher: ClaudeUsageFetching, Sendable {
             throw ClaudeUsageError.parseFailed("missing session data")
         }
 
-        func makeWindow(pctLeft: Int?, reset: String?) -> RateWindow? {
+        func makeWindow(pctLeft: Int?, reset: String?, windowMinutes: Int) -> RateWindow? {
             guard let left = pctLeft else { return nil }
             let used = max(0, min(100, 100 - Double(left)))
             let resetClean = reset?.trimmingCharacters(in: .whitespacesAndNewlines)
             return RateWindow(
                 usedPercent: used,
-                windowMinutes: nil,
+                windowMinutes: windowMinutes,
                 resetsAt: ClaudeStatusProbe.parseResetDate(from: resetClean),
                 resetDescription: resetClean)
         }
 
-        let primary = makeWindow(pctLeft: sessionPctLeft, reset: snap.primaryResetDescription)!
+        let primary = makeWindow(
+            pctLeft: sessionPctLeft,
+            reset: snap.primaryResetDescription,
+            windowMinutes: Self.sessionWindowMinutes)!
         let weekly = makeWindow(
-            pctLeft: snap.weeklyPercentLeft, reset: snap.secondaryResetDescription)
-        let opus = makeWindow(pctLeft: snap.opusPercentLeft, reset: snap.opusResetDescription)
+            pctLeft: snap.weeklyPercentLeft,
+            reset: snap.secondaryResetDescription,
+            windowMinutes: Self.weeklyWindowMinutes)
+        let opus = makeWindow(
+            pctLeft: snap.opusPercentLeft,
+            reset: snap.opusResetDescription,
+            windowMinutes: Self.weeklyWindowMinutes)
 
         return ClaudeUsageSnapshot(
             primary: primary,
