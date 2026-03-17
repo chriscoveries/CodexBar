@@ -88,6 +88,13 @@ struct PlanUtilizationHistoryChartMenuView: View {
         let maxUsedPercent: Double
     }
 
+    private struct ExactFitPointAccumulator {
+        let keyDate: Date
+        let displayDate: Date
+        let observedAt: Date
+        let usedPercent: Double
+    }
+
     private enum AggregationMode {
         case exactFit
         case derived
@@ -229,25 +236,39 @@ struct PlanUtilizationHistoryChartMenuView: View {
             return Self.emptyModel(provider: provider, period: period)
         }
         let aggregationMode = Self.aggregationMode(period: period, source: selectedSource)
-        let buckets = Self.chartBuckets(
-            period: period,
-            samples: samples,
-            source: selectedSource,
-            mode: aggregationMode,
-            calendar: calendar)
+        let usesResetAlignedExactFit = aggregationMode == .exactFit
+            && self.hasAnyResetBoundary(samples: samples, source: selectedSource)
 
-        var points = buckets
-            .map { date, used in
-                Point(
-                    id: Self.pointID(date: date, period: period),
-                    index: 0,
-                    date: date,
-                    usedPercent: used)
-            }
-            .sorted { $0.date < $1.date }
+        var points: [Point]
+        if usesResetAlignedExactFit {
+            points = self.exactFitPoints(samples: samples, source: selectedSource, period: period, calendar: calendar)
+            points = self.filledExactFitPoints(
+                points: points,
+                period: period,
+                windowMinutes: selectedSource.windowMinutes,
+                referenceDate: referenceDate,
+                calendar: calendar)
+        } else {
+            let buckets = Self.chartBuckets(
+                period: period,
+                samples: samples,
+                source: selectedSource,
+                mode: aggregationMode,
+                calendar: calendar)
 
-        let currentBucketDate = self.bucketDate(for: referenceDate, period: period, calendar: calendar)
-        points = self.filledPoints(points: points, period: period, calendar: calendar, through: currentBucketDate)
+            points = buckets
+                .map { date, used in
+                    Point(
+                        id: Self.pointID(date: date, period: period, usesResetAlignedExactFit: false),
+                        index: 0,
+                        date: date,
+                        usedPercent: used)
+                }
+                .sorted { $0.date < $1.date }
+
+            let currentBucketDate = self.bucketDate(for: referenceDate, period: period, calendar: calendar)
+            points = self.filledPoints(points: points, period: period, calendar: calendar, through: currentBucketDate)
+        }
 
         if points.count > period.maxPoints {
             points = Array(points.suffix(period.maxPoints))
@@ -295,7 +316,7 @@ struct PlanUtilizationHistoryChartMenuView: View {
                 filled.append(existing)
             } else {
                 filled.append(Point(
-                    id: self.pointID(date: cursor, period: period),
+                    id: self.pointID(date: cursor, period: period, usesResetAlignedExactFit: false),
                     index: 0,
                     date: cursor,
                     usedPercent: 0))
@@ -345,6 +366,7 @@ struct PlanUtilizationHistoryChartMenuView: View {
         let xDomain: ClosedRange<Double>?
         let selectedSource: String?
         let usedPercents: [Double]
+        let pointDates: [String]
     }
 
     nonisolated static func _modelSnapshotForTesting(
@@ -367,7 +389,14 @@ struct PlanUtilizationHistoryChartMenuView: View {
             selectedSource: self.selectedSource(for: period, samples: samples).map {
                 "\($0.slot == .primary ? "primary" : "secondary"):\($0.windowMinutes)"
             },
-            usedPercents: model.points.map(\.usedPercent))
+            usedPercents: model.points.map(\.usedPercent),
+            pointDates: model.points.map { point in
+                let formatter = DateFormatter()
+                formatter.locale = Locale(identifier: "en_US_POSIX")
+                formatter.timeZone = TimeZone.current
+                formatter.dateFormat = "yyyy-MM-dd HH:mm"
+                return formatter.string(from: point.date)
+            })
     }
 
     nonisolated static func _emptyStateTextForTesting(periodRawValue: String, isRefreshing: Bool) -> String? {
@@ -672,17 +701,21 @@ struct PlanUtilizationHistoryChartMenuView: View {
         }
     }
 
-    private nonisolated static func pointID(date: Date, period: Period) -> String {
+    private nonisolated static func pointID(date: Date, period: Period, usesResetAlignedExactFit: Bool) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = TimeZone.current
-        formatter.dateFormat = switch period {
-        case .daily:
+        formatter.dateFormat = if usesResetAlignedExactFit {
             "yyyy-MM-dd"
-        case .weekly:
-            "yyyy-'W'ww"
-        case .monthly:
-            "yyyy-MM"
+        } else {
+            switch period {
+            case .daily:
+                "yyyy-MM-dd"
+            case .weekly:
+                "yyyy-'W'ww"
+            case .monthly:
+                "yyyy-MM"
+            }
         }
         return formatter.string(from: date)
     }
@@ -808,5 +841,114 @@ struct PlanUtilizationHistoryChartMenuView: View {
         if self.selectedPointID != best?.id {
             self.selectedPointID = best?.id
         }
+    }
+}
+
+extension PlanUtilizationHistoryChartMenuView {
+    private nonisolated static func exactFitPoints(
+        samples: [PlanUtilizationHistorySample],
+        source: WindowSourceSelection,
+        period: Period,
+        calendar: Calendar) -> [Point]
+    {
+        var buckets: [Date: ExactFitPointAccumulator] = [:]
+
+        for sample in samples {
+            guard let used = self.usedPercent(for: sample, source: source) else { continue }
+            guard let displayDate = self.exactFitDisplayDate(
+                for: sample,
+                source: source,
+                period: period,
+                calendar: calendar)
+            else {
+                continue
+            }
+
+            let keyDate = calendar.startOfDay(for: displayDate)
+            let candidate = ExactFitPointAccumulator(
+                keyDate: keyDate,
+                displayDate: displayDate,
+                observedAt: sample.capturedAt,
+                usedPercent: max(0, min(100, used)))
+
+            if let existing = buckets[keyDate], candidate.observedAt < existing.observedAt {
+                continue
+            }
+            buckets[keyDate] = candidate
+        }
+
+        return buckets.values
+            .sorted { lhs, rhs in
+                if lhs.keyDate != rhs.keyDate { return lhs.keyDate < rhs.keyDate }
+                return lhs.observedAt < rhs.observedAt
+            }
+            .map { point in
+                Point(
+                    id: self.pointID(date: point.keyDate, period: period, usesResetAlignedExactFit: true),
+                    index: 0,
+                    date: point.displayDate,
+                    usedPercent: point.usedPercent)
+            }
+    }
+
+    private nonisolated static func filledExactFitPoints(
+        points: [Point],
+        period: Period,
+        windowMinutes: Int,
+        referenceDate: Date,
+        calendar: Calendar) -> [Point]
+    {
+        guard windowMinutes > 0 else { return points }
+        guard var previous = points.first else { return points }
+
+        let windowInterval = Double(windowMinutes) * 60
+        var filled: [Point] = [previous]
+
+        for point in points.dropFirst() {
+            var cursor = previous.date.addingTimeInterval(windowInterval)
+            while calendar.startOfDay(for: cursor) < calendar.startOfDay(for: point.date) {
+                filled.append(self.emptyExactFitPoint(date: cursor, period: period, calendar: calendar))
+                cursor = cursor.addingTimeInterval(windowInterval)
+            }
+            filled.append(point)
+            previous = point
+        }
+
+        if previous.date <= referenceDate {
+            var cursor = previous.date.addingTimeInterval(windowInterval)
+            while cursor < referenceDate {
+                filled.append(self.emptyExactFitPoint(date: cursor, period: period, calendar: calendar))
+                cursor = cursor.addingTimeInterval(windowInterval)
+            }
+            filled.append(self.emptyExactFitPoint(date: cursor, period: period, calendar: calendar))
+        }
+
+        return filled
+    }
+
+    private nonisolated static func emptyExactFitPoint(date: Date, period: Period, calendar: Calendar) -> Point {
+        let keyDate = calendar.startOfDay(for: date)
+        return Point(
+            id: self.pointID(date: keyDate, period: period, usesResetAlignedExactFit: true),
+            index: 0,
+            date: date,
+            usedPercent: 0)
+    }
+
+    private nonisolated static func hasAnyResetBoundary(
+        samples: [PlanUtilizationHistorySample],
+        source: WindowSourceSelection) -> Bool
+    {
+        samples.contains { self.resetsAt(for: $0, source: source) != nil }
+    }
+
+    private nonisolated static func exactFitDisplayDate(
+        for sample: PlanUtilizationHistorySample,
+        source: WindowSourceSelection,
+        period: Period,
+        calendar: Calendar) -> Date?
+    {
+        if let resetsAt = self.resetsAt(for: sample, source: source) { return self.normalizedBoundaryDate(resetsAt) }
+        return self.bucketDate(for: sample.capturedAt, period: period, calendar: calendar)
     }
 }
