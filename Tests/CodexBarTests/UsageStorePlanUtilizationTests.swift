@@ -216,20 +216,13 @@ struct UsageStorePlanUtilizationTests {
 
     @MainActor
     @Test
-    func dailyModelLeftAlignsSparseHistory() throws {
+    func dailyModelShowsZeroBarsForMissingDays() throws {
         let calendar = Calendar(identifier: .gregorian)
         let firstBoundary = try #require(calendar.date(from: DateComponents(
             timeZone: TimeZone.current,
             year: 2026,
             month: 3,
             day: 4,
-            hour: 10,
-            minute: 0)))
-        let secondBoundary = try #require(calendar.date(from: DateComponents(
-            timeZone: TimeZone.current,
-            year: 2026,
-            month: 3,
-            day: 5,
             hour: 10,
             minute: 0)))
         let thirdBoundary = try #require(calendar.date(from: DateComponents(
@@ -246,13 +239,6 @@ struct UsageStorePlanUtilizationTests {
                 secondary: 35,
                 primaryWindowMinutes: 300,
                 primaryResetsAt: thirdBoundary,
-                secondaryWindowMinutes: 10080),
-            makePlanSample(
-                at: secondBoundary.addingTimeInterval(-30 * 60),
-                primary: 48,
-                secondary: 48,
-                primaryWindowMinutes: 300,
-                primaryResetsAt: secondBoundary,
                 secondaryWindowMinutes: 10080),
             makePlanSample(
                 at: firstBoundary.addingTimeInterval(-30 * 60),
@@ -275,13 +261,70 @@ struct UsageStorePlanUtilizationTests {
         #expect(model.selectedSource == "primary:300")
         #expect(model.usedPercents.count == 3)
         #expect(abs(model.usedPercents[0] - (62.0 * 5.0 / 24.0)) < 0.000_1)
-        #expect(abs(model.usedPercents[1] - 10.0) < 0.000_1)
+        #expect(model.usedPercents[1] == 0)
         #expect(abs(model.usedPercents[2] - (20.0 * 5.0 / 24.0)) < 0.000_1)
     }
 
     @MainActor
     @Test
-    func weeklyModelPacksExistingPeriodsWithoutPlaceholderGaps() throws {
+    func dailyModelShowsTrailingZeroBarsUpToReferenceDay() throws {
+        let calendar = Calendar(identifier: .gregorian)
+        let firstBoundary = try #require(calendar.date(from: DateComponents(
+            timeZone: TimeZone.current,
+            year: 2026,
+            month: 3,
+            day: 4,
+            hour: 10,
+            minute: 0)))
+        let lastBoundary = try #require(calendar.date(from: DateComponents(
+            timeZone: TimeZone.current,
+            year: 2026,
+            month: 3,
+            day: 6,
+            hour: 10,
+            minute: 0)))
+        let referenceDate = try #require(calendar.date(from: DateComponents(
+            timeZone: TimeZone.current,
+            year: 2026,
+            month: 3,
+            day: 8,
+            hour: 12,
+            minute: 0)))
+        let samples = [
+            makePlanSample(
+                at: lastBoundary.addingTimeInterval(-30 * 60),
+                primary: 20,
+                secondary: nil,
+                primaryWindowMinutes: 300,
+                primaryResetsAt: lastBoundary),
+            makePlanSample(
+                at: firstBoundary.addingTimeInterval(-30 * 60),
+                primary: 62,
+                secondary: nil,
+                primaryWindowMinutes: 300,
+                primaryResetsAt: firstBoundary),
+        ]
+
+        let model = try #require(
+            PlanUtilizationHistoryChartMenuView._modelSnapshotForTesting(
+                periodRawValue: "daily",
+                samples: samples,
+                provider: .codex,
+                referenceDate: referenceDate))
+
+        #expect(model.pointCount == 5)
+        #expect(model.axisIndexes == [0, 4])
+        #expect(model.usedPercents.count == 5)
+        #expect(abs(model.usedPercents[0] - (62.0 * 5.0 / 24.0)) < 0.000_1)
+        #expect(model.usedPercents[1] == 0)
+        #expect(abs(model.usedPercents[2] - (20.0 * 5.0 / 24.0)) < 0.000_1)
+        #expect(model.usedPercents[3] == 0)
+        #expect(model.usedPercents[4] == 0)
+    }
+
+    @MainActor
+    @Test
+    func weeklyModelShowsZeroBarsForMissingWeeks() throws {
         let calendar = Calendar(identifier: .gregorian)
         let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 3, day: 6)))
         let samples = [
@@ -298,7 +341,7 @@ struct UsageStorePlanUtilizationTests {
                 primaryWindowMinutes: 300,
                 secondaryWindowMinutes: 10080),
             makePlanSample(
-                at: now.addingTimeInterval(-14 * 24 * 3600),
+                at: now.addingTimeInterval(-21 * 24 * 3600),
                 primary: 30,
                 secondary: 62,
                 primaryWindowMinutes: 300,
@@ -311,11 +354,11 @@ struct UsageStorePlanUtilizationTests {
                 samples: samples,
                 provider: .codex))
 
-        #expect(model.pointCount == 3)
-        #expect(model.axisIndexes == [2])
+        #expect(model.pointCount == 4)
+        #expect(model.axisIndexes == [3])
         #expect(model.xDomain == -0.5...23.5)
         #expect(model.selectedSource == "secondary:10080")
-        #expect(model.usedPercents == [62, 48, 35])
+        #expect(model.usedPercents == [62, 0, 48, 35])
     }
 
     @MainActor

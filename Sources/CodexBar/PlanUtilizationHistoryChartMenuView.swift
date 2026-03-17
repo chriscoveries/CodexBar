@@ -121,7 +121,11 @@ struct PlanUtilizationHistoryChartMenuView: View {
         let effectiveSelectedPeriod = visiblePeriods.contains(self.selectedPeriod)
             ? self.selectedPeriod
             : (visiblePeriods.first ?? .daily)
-        let model = Self.makeModel(period: effectiveSelectedPeriod, samples: self.samples, provider: self.provider)
+        let model = Self.makeModel(
+            period: effectiveSelectedPeriod,
+            samples: self.samples,
+            provider: self.provider,
+            referenceDate: Date())
 
         VStack(alignment: .leading, spacing: 10) {
             if visiblePeriods.count > 1 {
@@ -217,7 +221,8 @@ struct PlanUtilizationHistoryChartMenuView: View {
     private nonisolated static func makeModel(
         period: Period,
         samples: [PlanUtilizationHistorySample],
-        provider: UsageProvider) -> Model
+        provider: UsageProvider,
+        referenceDate: Date) -> Model
     {
         let calendar = Calendar.current
         guard let selectedSource = Self.selectedSource(for: period, samples: samples) else {
@@ -240,6 +245,9 @@ struct PlanUtilizationHistoryChartMenuView: View {
                     usedPercent: used)
             }
             .sorted { $0.date < $1.date }
+
+        let currentBucketDate = self.bucketDate(for: referenceDate, period: period, calendar: calendar)
+        points = self.filledPoints(points: points, period: period, calendar: calendar, through: currentBucketDate)
 
         if points.count > period.maxPoints {
             points = Array(points.suffix(period.maxPoints))
@@ -268,6 +276,38 @@ struct PlanUtilizationHistoryChartMenuView: View {
             pointsByID: pointsByID,
             pointsByIndex: pointsByIndex,
             barColor: barColor)
+    }
+
+    private nonisolated static func filledPoints(
+        points: [Point],
+        period: Period,
+        calendar: Calendar,
+        through endDate: Date?) -> [Point]
+    {
+        guard let firstDate = points.first?.date, let lastDate = points.last?.date else { return points }
+        let effectiveEndDate = max(lastDate, endDate ?? lastDate)
+        let pointsByDate = Dictionary(uniqueKeysWithValues: points.map { ($0.date, $0) })
+
+        var filled: [Point] = []
+        var cursor = firstDate
+        while cursor <= effectiveEndDate {
+            if let existing = pointsByDate[cursor] {
+                filled.append(existing)
+            } else {
+                filled.append(Point(
+                    id: self.pointID(date: cursor, period: period),
+                    index: 0,
+                    date: cursor,
+                    usedPercent: 0))
+            }
+
+            guard let nextDate = self.nextBucketDate(after: cursor, period: period, calendar: calendar) else {
+                break
+            }
+            cursor = nextDate
+        }
+
+        return filled
     }
 
     private nonisolated static func emptyModel(provider: UsageProvider, period: Period) -> Model {
@@ -310,10 +350,16 @@ struct PlanUtilizationHistoryChartMenuView: View {
     nonisolated static func _modelSnapshotForTesting(
         periodRawValue: String,
         samples: [PlanUtilizationHistorySample],
-        provider: UsageProvider) -> ModelSnapshot?
+        provider: UsageProvider,
+        referenceDate: Date? = nil) -> ModelSnapshot?
     {
         guard let period = Period(rawValue: periodRawValue) else { return nil }
-        let model = self.makeModel(period: period, samples: samples, provider: provider)
+        let effectiveReferenceDate = referenceDate ?? samples.map(\.capturedAt).max() ?? Date()
+        let model = self.makeModel(
+            period: period,
+            samples: samples,
+            provider: provider,
+            referenceDate: effectiveReferenceDate)
         return ModelSnapshot(
             pointCount: model.points.count,
             axisIndexes: model.axisIndexes,
@@ -639,6 +685,21 @@ struct PlanUtilizationHistoryChartMenuView: View {
             "yyyy-MM"
         }
         return formatter.string(from: date)
+    }
+
+    private nonisolated static func nextBucketDate(
+        after date: Date,
+        period: Period,
+        calendar: Calendar) -> Date?
+    {
+        switch period {
+        case .daily:
+            calendar.date(byAdding: .day, value: 1, to: date)
+        case .weekly:
+            calendar.date(byAdding: .weekOfYear, value: 1, to: date)
+        case .monthly:
+            calendar.date(byAdding: .month, value: 1, to: date)
+        }
     }
 
     private func xValue(for index: Int) -> PlottableValue<Double> {
