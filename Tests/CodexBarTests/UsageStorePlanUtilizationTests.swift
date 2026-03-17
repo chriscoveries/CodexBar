@@ -757,10 +757,10 @@ struct UsageStorePlanUtilizationTests {
     func storeLoadsLegacyProviderHistoryIntoUnscopedBucket() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        let fileManager = PlanHistoryFileManager(applicationSupportURL: root)
         let url = root
             .appendingPathComponent("com.steipete.codexbar", isDirectory: true)
             .appendingPathComponent("plan-utilization-history.json")
+        let store = PlanUtilizationHistoryStore(fileURL: url)
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),
             withIntermediateDirectories: true)
@@ -776,7 +776,7 @@ struct UsageStorePlanUtilizationTests {
             providers: ["codex": [sample]]))
         try data.write(to: url, options: [.atomic])
 
-        let loaded = PlanUtilizationHistoryStore.load(fileManager: fileManager)
+        let loaded = store.load()
 
         #expect(loaded[.codex]?.unscoped == [sample])
         #expect(loaded[.codex]?.accounts.isEmpty == true)
@@ -786,7 +786,10 @@ struct UsageStorePlanUtilizationTests {
     func storeRoundTripsAccountBuckets() {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        let fileManager = PlanHistoryFileManager(applicationSupportURL: root)
+        let url = root
+            .appendingPathComponent("com.steipete.codexbar", isDirectory: true)
+            .appendingPathComponent("plan-utilization-history.json")
+        let store = PlanUtilizationHistoryStore(fileURL: url)
         let aliceSample = PlanUtilizationHistorySample(
             capturedAt: Date(timeIntervalSince1970: 1_700_000_000),
             dailyUsedPercent: 10,
@@ -801,8 +804,8 @@ struct UsageStorePlanUtilizationTests {
             unscoped: [legacySample],
             accounts: ["alice": [aliceSample]])
 
-        PlanUtilizationHistoryStore.save([.codex: buckets], fileManager: fileManager)
-        let loaded = PlanUtilizationHistoryStore.load(fileManager: fileManager)
+        store.save([.codex: buckets])
+        let loaded = store.load()
 
         #expect(loaded == [.codex: buckets])
     }
@@ -815,15 +818,19 @@ extension UsageStorePlanUtilizationTests {
         let defaults = UserDefaults(suiteName: suiteName) ?? .standard
         defaults.removePersistentDomain(forName: suiteName)
         let configStore = testConfigStore(suiteName: suiteName)
+        let planHistoryStore = testPlanUtilizationHistoryStore(suiteName: suiteName)
         let isolatedSettings = SettingsStore(
             userDefaults: defaults,
             configStore: configStore,
             tokenAccountStore: InMemoryTokenAccountStore())
-        return UsageStore(
+        let store = UsageStore(
             fetcher: UsageFetcher(),
             browserDetection: BrowserDetection(cacheTTL: 0),
             settings: isolatedSettings,
+            planUtilizationHistoryStore: planHistoryStore,
             startupBehavior: .testing)
+        store.planUtilizationHistory = [:]
+        return store
     }
 
     private static func makeSnapshot(provider: UsageProvider, email: String) -> UsageSnapshot {
@@ -841,20 +848,4 @@ extension UsageStorePlanUtilizationTests {
 
 private struct LegacyPlanUtilizationHistoryFileFixture: Codable {
     let providers: [String: [PlanUtilizationHistorySample]]
-}
-
-private final class PlanHistoryFileManager: FileManager {
-    private let applicationSupportURL: URL
-
-    init(applicationSupportURL: URL) {
-        self.applicationSupportURL = applicationSupportURL
-        super.init()
-    }
-
-    override func urls(for directory: SearchPathDirectory, in domainMask: SearchPathDomainMask) -> [URL] {
-        if directory == .applicationSupportDirectory, domainMask == .userDomainMask {
-            return [self.applicationSupportURL]
-        }
-        return super.urls(for: directory, in: domainMask)
-    }
 }

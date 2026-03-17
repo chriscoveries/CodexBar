@@ -4,7 +4,6 @@ import Foundation
 
 extension UsageStore {
     private nonisolated static let codexCreditsMonthlyCapTokens: Double = 1000
-    private nonisolated static let persistenceCoordinator = PlanUtilizationHistoryPersistenceCoordinator()
     private nonisolated static let planUtilizationMinSampleIntervalSeconds: TimeInterval = 60 * 60
     private nonisolated static let planUtilizationMaxSamples: Int = 24 * 730
 
@@ -60,7 +59,7 @@ extension UsageStore {
         }
 
         guard let snapshotToPersist else { return }
-        await Self.persistenceCoordinator.enqueue(snapshotToPersist)
+        await self.planUtilizationPersistenceCoordinator.enqueue(snapshotToPersist)
     }
 
     private nonisolated static func updatedPlanUtilizationHistory(
@@ -266,9 +265,14 @@ extension UsageStore {
     #endif
 }
 
-private actor PlanUtilizationHistoryPersistenceCoordinator {
+actor PlanUtilizationHistoryPersistenceCoordinator {
+    private let store: PlanUtilizationHistoryStore
     private var pendingSnapshot: [UsageProvider: PlanUtilizationHistoryBuckets]?
     private var isPersisting: Bool = false
+
+    init(store: PlanUtilizationHistoryStore) {
+        self.store = store
+    }
 
     func enqueue(_ snapshot: [UsageProvider: PlanUtilizationHistoryBuckets]) {
         self.pendingSnapshot = snapshot
@@ -283,15 +287,16 @@ private actor PlanUtilizationHistoryPersistenceCoordinator {
     private func persistLoop() async {
         while let nextSnapshot = self.pendingSnapshot {
             self.pendingSnapshot = nil
-            await Self.saveAsync(nextSnapshot)
+            await self.saveAsync(nextSnapshot)
         }
 
         self.isPersisting = false
     }
 
-    private nonisolated static func saveAsync(_ snapshot: [UsageProvider: PlanUtilizationHistoryBuckets]) async {
+    private func saveAsync(_ snapshot: [UsageProvider: PlanUtilizationHistoryBuckets]) async {
+        let store = self.store
         await Task.detached(priority: .utility) {
-            PlanUtilizationHistoryStore.save(snapshot)
+            store.save(snapshot)
         }.value
     }
 }

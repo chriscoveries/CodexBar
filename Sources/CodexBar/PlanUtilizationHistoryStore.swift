@@ -49,29 +49,36 @@ private struct LegacyPlanUtilizationHistoryFile: Codable, Sendable {
     let providers: [String: [PlanUtilizationHistorySample]]
 }
 
-enum PlanUtilizationHistoryStore {
+struct PlanUtilizationHistoryStore: Sendable {
     private static let schemaVersion = 2
 
-    static func load(fileManager: FileManager = .default) -> [UsageProvider: PlanUtilizationHistoryBuckets] {
-        guard let url = self.fileURL(fileManager: fileManager) else { return [:] }
+    let fileURL: URL?
+
+    init(fileURL: URL? = Self.defaultFileURL()) {
+        self.fileURL = fileURL
+    }
+
+    static func defaultAppSupport() -> Self {
+        Self()
+    }
+
+    func load() -> [UsageProvider: PlanUtilizationHistoryBuckets] {
+        guard let url = self.fileURL else { return [:] }
         guard let data = try? Data(contentsOf: url) else { return [:] }
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         if let decoded = try? decoder.decode(PlanUtilizationHistoryFile.self, from: data) {
-            return self.decodeProviders(decoded.providers)
+            return Self.decodeProviders(decoded.providers)
         }
         guard let legacy = try? decoder.decode(LegacyPlanUtilizationHistoryFile.self, from: data) else {
             return [:]
         }
-        return self.decodeLegacyProviders(legacy.providers)
+        return Self.decodeLegacyProviders(legacy.providers)
     }
 
-    static func save(
-        _ providers: [UsageProvider: PlanUtilizationHistoryBuckets],
-        fileManager: FileManager = .default)
-    {
-        guard let url = self.fileURL(fileManager: fileManager) else { return }
+    func save(_ providers: [UsageProvider: PlanUtilizationHistoryBuckets]) {
+        guard let url = self.fileURL else { return }
         let persistedProviders = providers.reduce(into: [String: ProviderHistoryFile]()) { output, entry in
             let (provider, buckets) = entry
             guard !buckets.isEmpty else { return }
@@ -87,14 +94,14 @@ enum PlanUtilizationHistoryStore {
         }
 
         let payload = PlanUtilizationHistoryFile(
-            version: self.schemaVersion,
+            version: Self.schemaVersion,
             providers: persistedProviders)
 
         do {
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
             let data = try encoder.encode(payload)
-            try fileManager.createDirectory(
+            try FileManager.default.createDirectory(
                 at: url.deletingLastPathComponent(),
                 withIntermediateDirectories: true)
             try data.write(to: url, options: Data.WritingOptions.atomic)
@@ -133,8 +140,8 @@ enum PlanUtilizationHistoryStore {
         return output
     }
 
-    private static func fileURL(fileManager: FileManager) -> URL? {
-        guard let root = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+    private static func defaultFileURL() -> URL? {
+        guard let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
             return nil
         }
         let dir = root.appendingPathComponent("com.steipete.codexbar", isDirectory: true)

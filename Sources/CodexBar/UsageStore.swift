@@ -153,6 +153,7 @@ final class UsageStore {
     @ObservationIgnored private var pathDebugRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var codexPlanHistoryBackfillTask: Task<Void, Never>?
     @ObservationIgnored let historicalUsageHistoryStore: HistoricalUsageHistoryStore
+    @ObservationIgnored let planUtilizationHistoryStore: PlanUtilizationHistoryStore
     @ObservationIgnored var codexHistoricalDataset: CodexHistoricalDataset?
     @ObservationIgnored var codexHistoricalDatasetAccountKey: String?
     @ObservationIgnored var lastKnownSessionRemaining: [UsageProvider: Double] = [:]
@@ -163,6 +164,7 @@ final class UsageStore {
     @ObservationIgnored private let tokenFetchTTL: TimeInterval = 60 * 60
     @ObservationIgnored private let tokenFetchTimeout: TimeInterval = 10 * 60
     @ObservationIgnored private let startupBehavior: StartupBehavior
+    @ObservationIgnored let planUtilizationPersistenceCoordinator: PlanUtilizationHistoryPersistenceCoordinator
 
     init(
         fetcher: UsageFetcher,
@@ -172,6 +174,7 @@ final class UsageStore {
         settings: SettingsStore,
         registry: ProviderRegistry = .shared,
         historicalUsageHistoryStore: HistoricalUsageHistoryStore = HistoricalUsageHistoryStore(),
+        planUtilizationHistoryStore: PlanUtilizationHistoryStore = .defaultAppSupport(),
         sessionQuotaNotifier: any SessionQuotaNotifying = SessionQuotaNotifier(),
         startupBehavior: StartupBehavior = .automatic)
     {
@@ -182,8 +185,11 @@ final class UsageStore {
         self.settings = settings
         self.registry = registry
         self.historicalUsageHistoryStore = historicalUsageHistoryStore
+        self.planUtilizationHistoryStore = planUtilizationHistoryStore
         self.sessionQuotaNotifier = sessionQuotaNotifier
         self.startupBehavior = startupBehavior.resolved(isRunningTests: Self.isRunningTestsProcess())
+        self.planUtilizationPersistenceCoordinator = PlanUtilizationHistoryPersistenceCoordinator(
+            store: planUtilizationHistoryStore)
         self.providerMetadata = registry.metadata
         self
             .failureGates = Dictionary(
@@ -201,7 +207,7 @@ final class UsageStore {
         self.providerRuntimes = Dictionary(uniqueKeysWithValues: ProviderCatalog.all.compactMap { implementation in
             implementation.makeRuntime().map { (implementation.id, $0) }
         })
-        self.planUtilizationHistory = PlanUtilizationHistoryStore.load()
+        self.planUtilizationHistory = planUtilizationHistoryStore.load()
         self.logStartupState()
         self.bindSettings()
         self.pathDebugInfo = PathDebugSnapshot(
