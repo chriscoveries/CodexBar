@@ -1,4 +1,3 @@
-// swiftlint:disable file_length
 import AppKit
 import CodexBarCore
 import Foundation
@@ -9,9 +8,6 @@ import SweetCookieKit
 
 @MainActor
 extension UsageStore {
-    private nonisolated static let codexSnapshotWaitTimeoutSeconds: TimeInterval = 6
-    private nonisolated static let codexSnapshotPollIntervalNanoseconds: UInt64 = 100_000_000
-
     var menuObservationToken: Int {
         _ = self.snapshots
         _ = self.errors
@@ -122,8 +118,8 @@ final class UsageStore {
     var statuses: [UsageProvider: ProviderStatus] = [:]
     var probeLogs: [UsageProvider: String] = [:]
     var historicalPaceRevision: Int = 0
-    @ObservationIgnored private var lastCreditsSnapshot: CreditsSnapshot?
-    @ObservationIgnored private var creditsFailureStreak: Int = 0
+    @ObservationIgnored var lastCreditsSnapshot: CreditsSnapshot?
+    @ObservationIgnored var creditsFailureStreak: Int = 0
     @ObservationIgnored private var lastOpenAIDashboardSnapshot: OpenAIDashboardSnapshot?
     @ObservationIgnored private var lastOpenAIDashboardTargetEmail: String?
     @ObservationIgnored private var lastOpenAIDashboardCookieImportAttemptAt: Date?
@@ -152,7 +148,7 @@ final class UsageStore {
     @ObservationIgnored private var tokenTimerTask: Task<Void, Never>?
     @ObservationIgnored private var tokenRefreshSequenceTask: Task<Void, Never>?
     @ObservationIgnored private var pathDebugRefreshTask: Task<Void, Never>?
-    @ObservationIgnored private var codexPlanHistoryBackfillTask: Task<Void, Never>?
+    @ObservationIgnored var codexPlanHistoryBackfillTask: Task<Void, Never>?
     @ObservationIgnored let historicalUsageHistoryStore: HistoricalUsageHistoryStore
     @ObservationIgnored let planUtilizationHistoryStore: PlanUtilizationHistoryStore
     @ObservationIgnored var codexHistoricalDataset: CodexHistoricalDataset?
@@ -632,63 +628,6 @@ final class UsageStore {
             }
         }
     }
-
-    private func refreshCreditsIfNeeded(minimumSnapshotUpdatedAt: Date? = nil) async {
-        guard self.isEnabled(.codex) else { return }
-        do {
-            let credits = try await self.codexFetcher.loadLatestCredits(
-                keepCLISessionsAlive: self.settings.debugKeepCLISessionsAlive)
-            await MainActor.run {
-                self.credits = credits
-                self.lastCreditsError = nil
-                self.lastCreditsSnapshot = credits
-                self.creditsFailureStreak = 0
-            }
-            let codexSnapshot = await MainActor.run {
-                self.snapshots[.codex]
-            }
-            if let minimumSnapshotUpdatedAt,
-               codexSnapshot == nil || codexSnapshot?.updatedAt ?? .distantPast < minimumSnapshotUpdatedAt
-            {
-                self.scheduleCodexPlanHistoryBackfill(
-                    minimumSnapshotUpdatedAt: minimumSnapshotUpdatedAt)
-                return
-            }
-
-            self.cancelCodexPlanHistoryBackfill()
-            guard let codexSnapshot else { return }
-            await self.recordPlanUtilizationHistorySample(
-                provider: .codex,
-                snapshot: codexSnapshot)
-        } catch {
-            let message = error.localizedDescription
-            if message.localizedCaseInsensitiveContains("data not available yet") {
-                await MainActor.run {
-                    if let cached = self.lastCreditsSnapshot {
-                        self.credits = cached
-                        self.lastCreditsError = nil
-                    } else {
-                        self.credits = nil
-                        self.lastCreditsError = "Codex credits are still loading; will retry shortly."
-                    }
-                }
-                return
-            }
-
-            await MainActor.run {
-                self.creditsFailureStreak += 1
-                if let cached = self.lastCreditsSnapshot {
-                    self.credits = cached
-                    let stamp = cached.updatedAt.formatted(date: .abbreviated, time: .shortened)
-                    self.lastCreditsError =
-                        "Last Codex credits refresh failed: \(message). Cached values from \(stamp)."
-                } else {
-                    self.lastCreditsError = message
-                    self.credits = nil
-                }
-            }
-        }
-    }
 }
 
 extension UsageStore {
@@ -897,43 +836,6 @@ extension UsageStore {
         } catch {
             await self.applyOpenAIDashboardFailure(message: error.localizedDescription)
         }
-    }
-
-    private func waitForCodexSnapshot(minimumUpdatedAt: Date) async -> UsageSnapshot? {
-        let deadline = Date().addingTimeInterval(Self.codexSnapshotWaitTimeoutSeconds)
-
-        while Date() < deadline {
-            if Task.isCancelled { return nil }
-            if let snapshot = await MainActor.run(body: { self.snapshots[.codex] }),
-               snapshot.updatedAt >= minimumUpdatedAt
-            {
-                return snapshot
-            }
-            try? await Task.sleep(nanoseconds: Self.codexSnapshotPollIntervalNanoseconds)
-        }
-
-        return nil
-    }
-
-    private func scheduleCodexPlanHistoryBackfill(
-        minimumSnapshotUpdatedAt: Date)
-    {
-        self.cancelCodexPlanHistoryBackfill()
-        self.codexPlanHistoryBackfillTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            guard let snapshot = await self.waitForCodexSnapshot(minimumUpdatedAt: minimumSnapshotUpdatedAt) else {
-                return
-            }
-            await self.recordPlanUtilizationHistorySample(
-                provider: .codex,
-                snapshot: snapshot)
-            self.codexPlanHistoryBackfillTask = nil
-        }
-    }
-
-    private func cancelCodexPlanHistoryBackfill() {
-        self.codexPlanHistoryBackfillTask?.cancel()
-        self.codexPlanHistoryBackfillTask = nil
     }
 
     // MARK: - OpenAI web account switching
