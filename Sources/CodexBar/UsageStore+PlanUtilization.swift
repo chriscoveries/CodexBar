@@ -3,7 +3,6 @@ import CryptoKit
 import Foundation
 
 extension UsageStore {
-    private nonisolated static let claudeBootstrapAnonymousAccountKey = "__claude_bootstrap_anonymous__"
     private nonisolated static let planUtilizationMinSampleIntervalSeconds: TimeInterval = 60 * 60
     private nonisolated static let planUtilizationMaxSamples: Int = 24 * 730
 
@@ -12,14 +11,10 @@ extension UsageStore {
             return []
         }
 
-        guard provider == .claude else {
-            let accountKey = self.planUtilizationAccountKey(for: provider)
-            return self.planUtilizationHistory[provider]?.samples(for: accountKey) ?? []
-        }
-
         var providerBuckets = self.planUtilizationHistory[provider] ?? PlanUtilizationHistoryBuckets()
         let originalProviderBuckets = providerBuckets
-        let accountKey = self.resolveClaudePlanUtilizationAccountKey(
+        let accountKey = self.resolvePlanUtilizationAccountKey(
+            provider: provider,
             snapshot: self.snapshots[provider],
             preferredAccount: nil,
             providerBuckets: &providerBuckets)
@@ -49,16 +44,11 @@ extension UsageStore {
             // into duplicate writes for the same provider/account bucket.
             var providerBuckets = self.planUtilizationHistory[provider] ?? PlanUtilizationHistoryBuckets()
             let preferredAccount = account ?? self.settings.selectedTokenAccount(for: provider)
-            let accountKey =
-                if provider == .claude {
-                    self.resolveClaudePlanUtilizationAccountKey(
-                        snapshot: snapshot,
-                        preferredAccount: preferredAccount,
-                        providerBuckets: &providerBuckets)
-                } else {
-                    Self.planUtilizationAccountKey(provider: provider, account: preferredAccount)
-                        ?? Self.planUtilizationIdentityAccountKey(provider: provider, snapshot: snapshot)
-                }
+            let accountKey = self.resolvePlanUtilizationAccountKey(
+                provider: provider,
+                snapshot: snapshot,
+                preferredAccount: preferredAccount,
+                providerBuckets: &providerBuckets)
             let history = providerBuckets.samples(for: accountKey)
             let sample = PlanUtilizationHistorySample(
                 capturedAt: now,
@@ -193,10 +183,6 @@ extension UsageStore {
         }
     }
 
-    private func planUtilizationAccountKey(for provider: UsageProvider) -> String? {
-        self.planUtilizationAccountKey(for: provider, snapshot: nil, preferredAccount: nil)
-    }
-
     private func planUtilizationAccountKey(
         for provider: UsageProvider,
         snapshot: UsageSnapshot? = nil,
@@ -265,59 +251,60 @@ extension UsageStore {
         return self.snapshots[.claude] == nil && self.error(for: .claude) == nil
     }
 
-    private func resolveClaudePlanUtilizationAccountKey(
+    private func resolvePlanUtilizationAccountKey(
+        provider: UsageProvider,
         snapshot: UsageSnapshot?,
         preferredAccount: ProviderTokenAccount?,
         providerBuckets: inout PlanUtilizationHistoryBuckets) -> String?
     {
-        let resolvedAccount = preferredAccount ?? self.settings.selectedTokenAccount(for: .claude)
-        if let tokenAccountKey = Self.planUtilizationAccountKey(provider: .claude, account: resolvedAccount) {
+        let resolvedAccount = preferredAccount ?? self.settings.selectedTokenAccount(for: provider)
+        if let tokenAccountKey = Self.planUtilizationAccountKey(provider: provider, account: resolvedAccount) {
             providerBuckets.preferredAccountKey = tokenAccountKey
-            self.adoptClaudeBootstrapHistoryIfNeeded(into: tokenAccountKey, providerBuckets: &providerBuckets)
+            self.adoptPlanUtilizationUnscopedHistoryIfNeeded(
+                into: tokenAccountKey,
+                provider: provider,
+                providerBuckets: &providerBuckets)
             return tokenAccountKey
         }
 
         if let snapshot,
-           let identityAccountKey = Self.planUtilizationIdentityAccountKey(provider: .claude, snapshot: snapshot)
+           let identityAccountKey = Self.planUtilizationIdentityAccountKey(provider: provider, snapshot: snapshot)
         {
             providerBuckets.preferredAccountKey = identityAccountKey
-            self.adoptClaudeBootstrapHistoryIfNeeded(into: identityAccountKey, providerBuckets: &providerBuckets)
+            self.adoptPlanUtilizationUnscopedHistoryIfNeeded(
+                into: identityAccountKey,
+                provider: provider,
+                providerBuckets: &providerBuckets)
             return identityAccountKey
         }
 
-        if let stickyAccountKey = self.stickyClaudePlanUtilizationAccountKey(providerBuckets: providerBuckets) {
+        if let stickyAccountKey = self.stickyPlanUtilizationAccountKey(providerBuckets: providerBuckets) {
             return stickyAccountKey
         }
 
-        let hasKnownAccounts = self.hasKnownClaudePlanUtilizationAccounts(providerBuckets: providerBuckets)
-        if hasKnownAccounts {
-            return nil
-        }
-
-        return Self.claudeBootstrapAnonymousAccountKey
+        return nil
     }
 
-    private func adoptClaudeBootstrapHistoryIfNeeded(
+    private func adoptPlanUtilizationUnscopedHistoryIfNeeded(
         into accountKey: String,
+        provider: UsageProvider,
         providerBuckets: inout PlanUtilizationHistoryBuckets)
     {
-        guard accountKey != Self.claudeBootstrapAnonymousAccountKey else { return }
-        let anonymousHistory = providerBuckets.accounts[Self.claudeBootstrapAnonymousAccountKey] ?? []
-        guard !anonymousHistory.isEmpty else { return }
+        guard !providerBuckets.unscoped.isEmpty else { return }
 
         let existingHistory = providerBuckets.accounts[accountKey] ?? []
-        let mergedHistory = Self.mergedPlanUtilizationHistories(provider: .claude, histories: [
+        let mergedHistory = Self.mergedPlanUtilizationHistories(provider: provider, histories: [
             existingHistory,
-            anonymousHistory,
+            providerBuckets.unscoped,
         ])
         providerBuckets.setSamples(mergedHistory, for: accountKey)
-        providerBuckets.setSamples([], for: Self.claudeBootstrapAnonymousAccountKey)
+        providerBuckets.setSamples([], for: nil)
     }
 
-    private func stickyClaudePlanUtilizationAccountKey(
+    private func stickyPlanUtilizationAccountKey(
         providerBuckets: PlanUtilizationHistoryBuckets) -> String?
     {
-        let knownAccountKeys = self.knownClaudePlanUtilizationAccountKeys(providerBuckets: providerBuckets)
+        let knownAccountKeys = self.knownPlanUtilizationAccountKeys(providerBuckets: providerBuckets)
         guard !knownAccountKeys.isEmpty else { return nil }
 
         if let preferredAccountKey = providerBuckets.preferredAccountKey,
@@ -340,13 +327,8 @@ extension UsageStore {
         }
     }
 
-    private func hasKnownClaudePlanUtilizationAccounts(providerBuckets: PlanUtilizationHistoryBuckets) -> Bool {
-        !self.knownClaudePlanUtilizationAccountKeys(providerBuckets: providerBuckets).isEmpty
-    }
-
-    private func knownClaudePlanUtilizationAccountKeys(providerBuckets: PlanUtilizationHistoryBuckets) -> [String] {
+    private func knownPlanUtilizationAccountKeys(providerBuckets: PlanUtilizationHistoryBuckets) -> [String] {
         providerBuckets.accounts.keys
-            .filter { $0 != Self.claudeBootstrapAnonymousAccountKey }
             .sorted()
     }
 
@@ -389,10 +371,6 @@ extension UsageStore {
         account: ProviderTokenAccount) -> String?
     {
         self.planUtilizationAccountKey(provider: provider, account: account)
-    }
-
-    nonisolated static var _claudeBootstrapAnonymousAccountKeyForTesting: String {
-        self.claudeBootstrapAnonymousAccountKey
     }
     #endif
 }

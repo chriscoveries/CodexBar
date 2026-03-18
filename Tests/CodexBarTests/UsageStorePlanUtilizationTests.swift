@@ -594,7 +594,10 @@ struct UsageStorePlanUtilizationTests {
             ])
 
         store._setSnapshotForTesting(aliceSnapshot, provider: .codex)
-        #expect(store.planUtilizationHistory(for: .codex) == [aliceSample])
+        #expect(store.planUtilizationHistory(for: .codex) == [
+            makePlanSample(at: Date(timeIntervalSince1970: 1_699_913_600), primary: 90, secondary: 90),
+            aliceSample,
+        ])
 
         store._setSnapshotForTesting(bobSnapshot, provider: .codex)
         #expect(store.planUtilizationHistory(for: .codex) == [bobSample])
@@ -709,6 +712,56 @@ struct UsageStorePlanUtilizationTests {
             provider: .codex)
 
         #expect(store.planUtilizationHistory(for: .codex) == [sample])
+    }
+
+    @MainActor
+    @Test
+    func firstResolvedCodexIdentityAdoptsUnscopedHistory() throws {
+        let store = Self.makeStore()
+        let unscopedSample = makePlanSample(
+            at: Date(timeIntervalSince1970: 1_700_000_000),
+            primary: 15,
+            secondary: 25)
+        store.planUtilizationHistory[.codex] = PlanUtilizationHistoryBuckets(unscoped: [unscopedSample])
+
+        let resolvedSnapshot = Self.makeSnapshot(provider: .codex, email: "alice@example.com")
+        let resolvedKey = try #require(
+            UsageStore._planUtilizationAccountKeyForTesting(
+                provider: .codex,
+                snapshot: resolvedSnapshot))
+        store._setSnapshotForTesting(resolvedSnapshot, provider: .codex)
+
+        let history = store.planUtilizationHistory(for: .codex)
+
+        #expect(history == [unscopedSample])
+        let buckets = try #require(store.planUtilizationHistory[.codex])
+        #expect(buckets.unscoped.isEmpty)
+        #expect(buckets.accounts[resolvedKey] == [unscopedSample])
+    }
+
+    @MainActor
+    @Test
+    func codexHistoryWithoutIdentityFallsBackToLastResolvedAccount() async {
+        let store = Self.makeStore()
+        let resolvedSnapshot = Self.makeSnapshot(provider: .codex, email: "alice@example.com")
+        store._setSnapshotForTesting(resolvedSnapshot, provider: .codex)
+
+        await store.recordPlanUtilizationHistorySample(
+            provider: .codex,
+            snapshot: resolvedSnapshot,
+            now: Date(timeIntervalSince1970: 1_700_000_000))
+
+        let identitylessSnapshot = UsageSnapshot(
+            primary: resolvedSnapshot.primary,
+            secondary: resolvedSnapshot.secondary,
+            updatedAt: resolvedSnapshot.updatedAt)
+        store._setSnapshotForTesting(identitylessSnapshot, provider: .codex)
+
+        let history = store.planUtilizationHistory(for: .codex)
+
+        #expect(history.count == 1)
+        #expect(history.first?.primaryUsedPercent == 10)
+        #expect(history.first?.secondaryUsedPercent == 20)
     }
 
     @Test

@@ -102,8 +102,7 @@ struct UsageStorePlanUtilizationClaudeIdentityTests {
         let store = UsageStorePlanUtilizationTests.makeStore()
         let sample = makePlanSample(at: Date(timeIntervalSince1970: 1_700_000_000), primary: 20, secondary: 30)
 
-        store.planUtilizationHistory[.claude] = PlanUtilizationHistoryBuckets(
-            accounts: [UsageStore._claudeBootstrapAnonymousAccountKeyForTesting: [sample]])
+        store.planUtilizationHistory[.claude] = PlanUtilizationHistoryBuckets(unscoped: [sample])
 
         #expect(store.planUtilizationHistory(for: .claude) == [sample])
     }
@@ -114,8 +113,7 @@ struct UsageStorePlanUtilizationClaudeIdentityTests {
         let store = UsageStorePlanUtilizationTests.makeStore()
         let sample = makePlanSample(at: Date(timeIntervalSince1970: 1_700_000_000), primary: 10, secondary: 20)
 
-        store.planUtilizationHistory[.claude] = PlanUtilizationHistoryBuckets(
-            accounts: [UsageStore._claudeBootstrapAnonymousAccountKeyForTesting: [sample]])
+        store.planUtilizationHistory[.claude] = PlanUtilizationHistoryBuckets(unscoped: [sample])
         store.refreshingProviders.insert(.claude)
 
         #expect(store.shouldShowPlanUtilizationRefreshingState(for: .claude))
@@ -176,7 +174,7 @@ struct UsageStorePlanUtilizationClaudeIdentityTests {
             now: Date(timeIntervalSince1970: 1_700_003_600))
 
         let buckets = try #require(store.planUtilizationHistory[.claude])
-        #expect(buckets.accounts[UsageStore._claudeBootstrapAnonymousAccountKeyForTesting]?.count == 1)
+        #expect(buckets.unscoped.count == 1)
     }
 
     @MainActor
@@ -223,8 +221,7 @@ struct UsageStorePlanUtilizationClaudeIdentityTests {
             at: Date(timeIntervalSince1970: 1_700_000_000),
             primary: 15,
             secondary: 25)
-        store.planUtilizationHistory[.claude] = PlanUtilizationHistoryBuckets(
-            accounts: [UsageStore._claudeBootstrapAnonymousAccountKeyForTesting: [anonymousSample]])
+        store.planUtilizationHistory[.claude] = PlanUtilizationHistoryBuckets(unscoped: [anonymousSample])
 
         let resolvedSnapshot = UsageStorePlanUtilizationTests.makeSnapshot(
             provider: .claude,
@@ -239,7 +236,7 @@ struct UsageStorePlanUtilizationClaudeIdentityTests {
 
         #expect(history == [anonymousSample])
         let buckets = try #require(store.planUtilizationHistory[.claude])
-        #expect(buckets.accounts[UsageStore._claudeBootstrapAnonymousAccountKeyForTesting] == nil)
+        #expect(buckets.unscoped.isEmpty)
         #expect(buckets.accounts[resolvedKey] == [anonymousSample])
     }
 
