@@ -557,6 +557,19 @@ struct UsageStorePlanUtilizationTests {
 
     @MainActor
     @Test
+    func makeStoreUsesIsolatedTemporaryStorage() throws {
+        let store = Self.makeStore()
+        let temporaryRoot = FileManager.default.temporaryDirectory.standardizedFileURL.path
+        let configURL = store.settings.configStore.fileURL.standardizedFileURL
+        let planHistoryURL = try #require(store.planUtilizationHistoryStore.fileURL?.standardizedFileURL)
+
+        #expect(configURL.path.hasPrefix(temporaryRoot))
+        #expect(configURL != CodexBarConfigStore.defaultURL().standardizedFileURL)
+        #expect(planHistoryURL.path.hasPrefix(temporaryRoot))
+    }
+
+    @MainActor
+    @Test
     func planHistorySelectsCurrentAccountBucket() throws {
         let store = Self.makeStore()
         let aliceSnapshot = Self.makeSnapshot(provider: .codex, email: "alice@example.com")
@@ -585,64 +598,6 @@ struct UsageStorePlanUtilizationTests {
 
         store._setSnapshotForTesting(bobSnapshot, provider: .codex)
         #expect(store.planUtilizationHistory(for: .codex) == [bobSample])
-    }
-
-    @MainActor
-    @Test
-    func planHistorySelectsConfiguredTokenAccountBucket() throws {
-        let store = Self.makeStore()
-        store.settings.addTokenAccount(provider: .claude, label: "Alice", token: "alice-token")
-        store.settings.addTokenAccount(provider: .claude, label: "Bob", token: "bob-token")
-
-        let accounts = store.settings.tokenAccounts(for: .claude)
-        let alice = try #require(accounts.first)
-        let bob = try #require(accounts.last)
-        let aliceKey = try #require(
-            UsageStore._planUtilizationTokenAccountKeyForTesting(
-                provider: .claude,
-                account: alice))
-        let bobKey = try #require(
-            UsageStore._planUtilizationTokenAccountKeyForTesting(
-                provider: .claude,
-                account: bob))
-
-        let aliceSample = makePlanSample(at: Date(timeIntervalSince1970: 1_700_000_000), primary: 15, secondary: 25)
-        let bobSample = makePlanSample(at: Date(timeIntervalSince1970: 1_700_086_400), primary: 45, secondary: 55)
-
-        store.planUtilizationHistory[.claude] = PlanUtilizationHistoryBuckets(
-            accounts: [
-                aliceKey: [aliceSample],
-                bobKey: [bobSample],
-            ])
-
-        store.settings.setActiveTokenAccountIndex(0, for: .claude)
-        #expect(store.planUtilizationHistory(for: .claude) == [aliceSample])
-
-        store.settings.setActiveTokenAccountIndex(1, for: .claude)
-        #expect(store.planUtilizationHistory(for: .claude) == [bobSample])
-    }
-
-    @MainActor
-    @Test
-    func recordPlanHistoryWithoutExplicitAccountUsesSelectedTokenAccountBucket() async throws {
-        let store = Self.makeStore()
-        store.settings.addTokenAccount(provider: .claude, label: "Alice", token: "alice-token")
-        store.settings.addTokenAccount(provider: .claude, label: "Bob", token: "bob-token")
-        store.settings.setActiveTokenAccountIndex(1, for: .claude)
-
-        let aliceSnapshot = Self.makeSnapshot(provider: .claude, email: "alice@example.com")
-        let selectedTokenKey = try #require(
-            store.settings.selectedTokenAccount(for: .claude).flatMap {
-                UsageStore._planUtilizationTokenAccountKeyForTesting(provider: .claude, account: $0)
-            })
-
-        await store.recordPlanUtilizationHistorySample(
-            provider: .claude,
-            snapshot: aliceSnapshot,
-            now: Date(timeIntervalSince1970: 1_700_000_000))
-
-        let buckets = try #require(store.planUtilizationHistory[.claude])
-        #expect(buckets.accounts[selectedTokenKey]?.count == 1)
     }
 
     @MainActor
@@ -741,39 +696,6 @@ struct UsageStorePlanUtilizationTests {
 
     @MainActor
     @Test
-    func applySelectedOutcomeRecordsPlanHistoryForSelectedTokenAccount() async throws {
-        let store = Self.makeStore()
-        store.settings.addTokenAccount(provider: .claude, label: "Alice", token: "alice-token")
-        store.settings.addTokenAccount(provider: .claude, label: "Bob", token: "bob-token")
-        store.settings.setActiveTokenAccountIndex(1, for: .claude)
-
-        let selectedAccount = try #require(store.settings.selectedTokenAccount(for: .claude))
-        let selectedTokenKey = try #require(
-            UsageStore._planUtilizationTokenAccountKeyForTesting(provider: .claude, account: selectedAccount))
-        let snapshot = Self.makeSnapshot(provider: .claude, email: "alice@example.com")
-        let outcome = ProviderFetchOutcome(
-            result: .success(
-                ProviderFetchResult(
-                    usage: snapshot,
-                    credits: nil,
-                    dashboard: nil,
-                    sourceLabel: "test",
-                    strategyID: "test",
-                    strategyKind: .web)),
-            attempts: [])
-
-        await store.applySelectedOutcome(
-            outcome,
-            provider: .claude,
-            account: selectedAccount,
-            fallbackSnapshot: snapshot)
-
-        let buckets = try #require(store.planUtilizationHistory[.claude])
-        #expect(buckets.accounts[selectedTokenKey]?.count == 1)
-    }
-
-    @MainActor
-    @Test
     func codexPlanHistoryFallsBackToUnscopedBucketWhenIdentityIsUnavailable() {
         let store = Self.makeStore()
         let sample = makePlanSample(at: Date(timeIntervalSince1970: 1_700_000_000), primary: 20, secondary: 30)
@@ -787,57 +709,6 @@ struct UsageStorePlanUtilizationTests {
             provider: .codex)
 
         #expect(store.planUtilizationHistory(for: .codex) == [sample])
-    }
-
-    @MainActor
-    @Test
-    func claudePlanHistoryReturnsEmptyWhenIdentityIsUnavailable() {
-        let store = Self.makeStore()
-        let sample = makePlanSample(at: Date(timeIntervalSince1970: 1_700_000_000), primary: 20, secondary: 30)
-
-        store.planUtilizationHistory[.claude] = PlanUtilizationHistoryBuckets(
-            unscoped: [sample],
-            accounts: ["claude-account-key": [sample]])
-
-        #expect(store.planUtilizationHistory(for: .claude).isEmpty)
-    }
-
-    @MainActor
-    @Test
-    func planHistoryDoesNotReadLegacyIdentityBucketForTokenAccounts() throws {
-        let store = Self.makeStore()
-        store.settings.addTokenAccount(provider: .claude, label: "Alice", token: "alice-token")
-
-        let snapshot = Self.makeSnapshot(provider: .claude, email: "alice@example.com")
-        let legacyKey = try #require(
-            UsageStore._planUtilizationAccountKeyForTesting(
-                provider: .claude,
-                snapshot: snapshot))
-        let legacySample = makePlanSample(at: Date(timeIntervalSince1970: 1_700_000_000), primary: 10, secondary: 20)
-
-        store.planUtilizationHistory[.claude] = PlanUtilizationHistoryBuckets(
-            accounts: [legacyKey: [legacySample]])
-        store._setSnapshotForTesting(snapshot, provider: .claude)
-
-        #expect(store.planUtilizationHistory(for: .claude).isEmpty)
-    }
-
-    @MainActor
-    @Test
-    func recordPlanHistoryWithoutIdentitySkipsClaudeWrite() async {
-        let store = Self.makeStore()
-        let snapshot = UsageSnapshot(
-            primary: RateWindow(usedPercent: 11, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
-            secondary: RateWindow(usedPercent: 21, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
-            updatedAt: Date(timeIntervalSince1970: 1_700_003_600))
-        let existingHistory = store.planUtilizationHistory[.claude]
-
-        await store.recordPlanUtilizationHistorySample(
-            provider: .claude,
-            snapshot: snapshot,
-            now: Date(timeIntervalSince1970: 1_700_003_600))
-
-        #expect(store.planUtilizationHistory[.claude] == existingHistory)
     }
 
     @Test
@@ -893,6 +764,7 @@ struct UsageStorePlanUtilizationTests {
             primary: 50,
             secondary: 60)
         let buckets = PlanUtilizationHistoryBuckets(
+            preferredAccountKey: "alice",
             unscoped: [legacySample],
             accounts: ["alice": [aliceSample]])
 
@@ -905,12 +777,20 @@ struct UsageStorePlanUtilizationTests {
 
 extension UsageStorePlanUtilizationTests {
     @MainActor
-    private static func makeStore() -> UsageStore {
+    static func makeStore() -> UsageStore {
         let suiteName = "UsageStorePlanUtilizationTests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName) ?? .standard
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            fatalError("Failed to create isolated UserDefaults suite for tests")
+        }
         defaults.removePersistentDomain(forName: suiteName)
         let configStore = testConfigStore(suiteName: suiteName)
         let planHistoryStore = testPlanUtilizationHistoryStore(suiteName: suiteName)
+        let temporaryRoot = FileManager.default.temporaryDirectory.standardizedFileURL.path
+        precondition(configStore.fileURL.standardizedFileURL.path.hasPrefix(temporaryRoot))
+        precondition(configStore.fileURL.standardizedFileURL != CodexBarConfigStore.defaultURL().standardizedFileURL)
+        if let historyURL = planHistoryStore.fileURL?.standardizedFileURL {
+            precondition(historyURL.path.hasPrefix(temporaryRoot))
+        }
         let isolatedSettings = SettingsStore(
             userDefaults: defaults,
             configStore: configStore,
@@ -925,7 +805,7 @@ extension UsageStorePlanUtilizationTests {
         return store
     }
 
-    private static func makeSnapshot(provider: UsageProvider, email: String) -> UsageSnapshot {
+    static func makeSnapshot(provider: UsageProvider, email: String) -> UsageSnapshot {
         UsageSnapshot(
             primary: RateWindow(usedPercent: 10, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
             secondary: RateWindow(usedPercent: 20, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
@@ -938,7 +818,7 @@ extension UsageStorePlanUtilizationTests {
     }
 }
 
-private func makePlanSample(
+func makePlanSample(
     at capturedAt: Date,
     primary: Double?,
     secondary: Double?,

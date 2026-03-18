@@ -27,7 +27,7 @@ extension StatusItemController {
         width: CGFloat) -> Bool
     {
         let samples = self.store.planUtilizationHistory(for: provider)
-        let isRefreshing = self.store.refreshingProviders.contains(provider) && samples.isEmpty
+        let isRefreshing = self.store.shouldShowPlanUtilizationRefreshingState(for: provider) && samples.isEmpty
 
         if !Self.menuCardRenderingEnabled {
             let chartItem = NSMenuItem()

@@ -12,6 +12,7 @@ struct PlanUtilizationHistorySample: Codable, Sendable, Equatable {
 }
 
 struct PlanUtilizationHistoryBuckets: Sendable, Equatable {
+    var preferredAccountKey: String?
     var unscoped: [PlanUtilizationHistorySample] = []
     var accounts: [String: [PlanUtilizationHistorySample]] = [:]
 
@@ -44,12 +45,13 @@ private struct PlanUtilizationHistoryFile: Codable, Sendable {
 }
 
 private struct ProviderHistoryFile: Codable, Sendable {
+    let preferredAccountKey: String?
     let unscoped: [PlanUtilizationHistorySample]
     let accounts: [String: [PlanUtilizationHistorySample]]
 }
 
 struct PlanUtilizationHistoryStore: Sendable {
-    private static let schemaVersion = 3
+    fileprivate static let schemaVersion = 4
 
     let fileURL: URL?
 
@@ -85,6 +87,7 @@ struct PlanUtilizationHistoryStore: Sendable {
                     return (accountKey, sorted)
                 })
             output[provider.rawValue] = ProviderHistoryFile(
+                preferredAccountKey: buckets.preferredAccountKey,
                 unscoped: buckets.unscoped.sorted { $0.capturedAt < $1.capturedAt },
                 accounts: accounts)
         }
@@ -113,6 +116,7 @@ struct PlanUtilizationHistoryStore: Sendable {
         for (rawProvider, providerHistory) in providers {
             guard let provider = UsageProvider(rawValue: rawProvider) else { continue }
             output[provider] = PlanUtilizationHistoryBuckets(
+                preferredAccountKey: providerHistory.preferredAccountKey,
                 unscoped: providerHistory.unscoped.sorted { $0.capturedAt < $1.capturedAt },
                 accounts: Dictionary(
                     uniqueKeysWithValues: providerHistory.accounts.compactMap { accountKey, samples in
@@ -137,7 +141,7 @@ extension PlanUtilizationHistoryFile {
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let version = try container.decode(Int.self, forKey: .version)
-        guard version == 3 else {
+        guard version == PlanUtilizationHistoryStore.schemaVersion else {
             throw DecodingError.dataCorruptedError(
                 forKey: .version,
                 in: container,
