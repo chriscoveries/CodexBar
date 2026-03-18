@@ -73,7 +73,7 @@ struct UsageStorePlanUtilizationTests {
     }
 
     @Test
-    func staleWriteInSameHourDoesNotOverrideNewerValues() throws {
+    func staleWriteInSameHourWithDifferentWindowMarkersIsRetainedSeparately() throws {
         let calendar = Calendar(identifier: .gregorian)
         let hourStart = try #require(calendar.date(from: DateComponents(
             timeZone: TimeZone(secondsFromGMT: 0),
@@ -99,14 +99,15 @@ struct UsageStorePlanUtilizationTests {
                 provider: .codex,
                 existingHistory: [],
                 sample: newer))
-        let updated = UsageStore._updatedPlanUtilizationHistoryForTesting(
-            provider: .codex,
-            existingHistory: initial,
-            sample: stale)
+        let updated = try #require(
+            UsageStore._updatedPlanUtilizationHistoryForTesting(
+                provider: .codex,
+                existingHistory: initial,
+                sample: stale))
 
-        #expect(updated == nil)
-        #expect(initial.count == 1)
-        #expect(initial.last == newer)
+        #expect(updated.count == 2)
+        #expect(updated.first == stale)
+        #expect(updated.last == newer)
     }
 
     @Test
@@ -561,7 +562,7 @@ struct UsageStorePlanUtilizationTests {
                 samples: samples,
                 provider: .codex))
 
-        #expect(detail.primary == "Mar 7: 10% used, 90% wasted")
+        #expect(detail.primary == "7 Mar: 10% used, 90% wasted")
         #expect(detail.secondary == "Estimated from provider-reported 5-hour windows.")
     }
 

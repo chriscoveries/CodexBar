@@ -174,7 +174,7 @@ struct UsageStorePlanUtilizationResetCoalescingTests {
     }
 
     @Test
-    func lateSameHourBackfillAfterResetMergesIntoLaterWindow() throws {
+    func lateSameHourBackfillAfterResetDoesNotOverrideLaterWindowValues() throws {
         let calendar = Calendar(identifier: .gregorian)
         let hourStart = try #require(calendar.date(from: DateComponents(
             timeZone: TimeZone(secondsFromGMT: 0),
@@ -203,21 +203,16 @@ struct UsageStorePlanUtilizationResetCoalescingTests {
             primaryWindowMinutes: 300,
             primaryResetsAt: nil)
 
-        let updated = try #require(
-            UsageStore._updatedPlanUtilizationHistoryForTesting(
-                provider: .codex,
-                existingHistory: [earlierWindow, laterWindow],
-                sample: lateBackfill))
+        let updated = UsageStore._updatedPlanUtilizationHistoryForTesting(
+            provider: .codex,
+            existingHistory: [earlierWindow, laterWindow],
+            sample: lateBackfill)
 
-        #expect(updated.count == 2)
-        #expect(updated[0] == earlierWindow)
-        #expect(updated[1].capturedAt == lateBackfill.capturedAt)
-        #expect(updated[1].primaryUsedPercent == 12)
-        #expect(updated[1].primaryResetsAt == nextResetBoundary)
+        #expect(updated == nil)
     }
 
     @Test
-    func sameHourBackfillTiePrefersLaterWindow() throws {
+    func sameHourBackfillTiePrefersLaterWindowWithoutOverridingValues() throws {
         let calendar = Calendar(identifier: .gregorian)
         let hourStart = try #require(calendar.date(from: DateComponents(
             timeZone: TimeZone(secondsFromGMT: 0),
@@ -246,17 +241,12 @@ struct UsageStorePlanUtilizationResetCoalescingTests {
             primaryWindowMinutes: 300,
             primaryResetsAt: nil)
 
-        let updated = try #require(
-            UsageStore._updatedPlanUtilizationHistoryForTesting(
-                provider: .codex,
-                existingHistory: [earlierWindow, laterWindow],
-                sample: ambiguousBackfill))
+        let updated = UsageStore._updatedPlanUtilizationHistoryForTesting(
+            provider: .codex,
+            existingHistory: [earlierWindow, laterWindow],
+            sample: ambiguousBackfill)
 
-        #expect(updated.count == 2)
-        #expect(updated[0] == earlierWindow)
-        #expect(updated[1].capturedAt == ambiguousBackfill.capturedAt)
-        #expect(updated[1].primaryUsedPercent == 12)
-        #expect(updated[1].primaryResetsAt == nextResetBoundary)
+        #expect(updated == nil)
     }
 
     @MainActor
@@ -322,9 +312,10 @@ struct UsageStorePlanUtilizationResetCoalescingTests {
                 samples: history,
                 provider: .codex))
 
-        #expect(model.pointCount == 1)
+        #expect(model.pointCount == 2)
         #expect(model.selectedSource == "primary:300")
-        #expect(model.usedPercents.count == 1)
-        #expect(abs(model.usedPercents[0] - ((20.0 + 82.0 + 4.0) * 5.0 / 24.0)) < 0.000_1)
+        #expect(model.usedPercents.count == 2)
+        #expect(abs(model.usedPercents[0] - (20.0 * 0.5 / 24.0)) < 0.000_1)
+        #expect(abs(model.usedPercents[1] - ((20.0 * 4.5 + 82.0 * 5.0 + 4.0 * 5.0) / 24.0)) < 0.000_1)
     }
 }
