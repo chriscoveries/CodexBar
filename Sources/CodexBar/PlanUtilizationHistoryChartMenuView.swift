@@ -910,6 +910,7 @@ extension PlanUtilizationHistoryChartMenuView {
         period: Period,
         calendar: Calendar) -> [Point]
     {
+        let boundaryAnchors = self.resetBoundaryAnchors(samples: samples, source: source)
         var buckets: [Date: ExactFitPointAccumulator] = [:]
 
         for sample in samples {
@@ -917,8 +918,7 @@ extension PlanUtilizationHistoryChartMenuView {
             guard let displayDate = self.exactFitDisplayDate(
                 for: sample,
                 source: source,
-                period: period,
-                calendar: calendar)
+                boundaryAnchors: boundaryAnchors)
             else {
                 continue
             }
@@ -1001,13 +1001,70 @@ extension PlanUtilizationHistoryChartMenuView {
         samples.contains { self.resetsAt(for: $0, source: source) != nil }
     }
 
+    private nonisolated static func resetBoundaryAnchors(
+        samples: [PlanUtilizationHistorySample],
+        source: WindowSourceSelection) -> [Date]
+    {
+        let boundaries: [Date] = samples.compactMap { sample in
+            guard let resetsAt = self.resetsAt(for: sample, source: source) else { return nil }
+            return self.normalizedBoundaryDate(resetsAt)
+        }
+        return Array(Set(boundaries)).sorted()
+    }
+
     private nonisolated static func exactFitDisplayDate(
         for sample: PlanUtilizationHistorySample,
         source: WindowSourceSelection,
-        period: Period,
-        calendar: Calendar) -> Date?
+        boundaryAnchors: [Date]) -> Date?
     {
         if let resetsAt = self.resetsAt(for: sample, source: source) { return self.normalizedBoundaryDate(resetsAt) }
-        return self.bucketDate(for: sample.capturedAt, period: period, calendar: calendar)
+        return self.estimatedResetBoundaryDate(
+            for: sample.capturedAt,
+            windowMinutes: source.windowMinutes,
+            anchors: boundaryAnchors)
+    }
+
+    private nonisolated static func estimatedResetBoundaryDate(
+        for capturedAt: Date,
+        windowMinutes: Int,
+        anchors: [Date]) -> Date?
+    {
+        guard windowMinutes > 0 else { return nil }
+        guard !anchors.isEmpty else { return nil }
+
+        let windowInterval = Double(windowMinutes) * 60
+        if let nextAnchor = anchors.first(where: { $0 >= capturedAt }),
+           nextAnchor.timeIntervalSince(capturedAt) <= windowInterval
+        {
+            return nextAnchor
+        }
+
+        if let previousAnchor = anchors.last(where: { $0 < capturedAt }) {
+            return self.projectedResetBoundaryDate(
+                for: capturedAt,
+                anchorBoundary: previousAnchor,
+                windowMinutes: windowMinutes)
+        }
+
+        if let nextAnchor = anchors.first {
+            return self.projectedResetBoundaryDate(
+                for: capturedAt,
+                anchorBoundary: nextAnchor,
+                windowMinutes: windowMinutes)
+        }
+
+        return nil
+    }
+
+    private nonisolated static func projectedResetBoundaryDate(
+        for capturedAt: Date,
+        anchorBoundary: Date,
+        windowMinutes: Int) -> Date?
+    {
+        guard windowMinutes > 0 else { return nil }
+        let windowInterval = Double(windowMinutes) * 60
+        let steps = ceil(capturedAt.timeIntervalSince(anchorBoundary) / windowInterval)
+        let boundary = anchorBoundary.addingTimeInterval(steps * windowInterval)
+        return self.normalizedBoundaryDate(boundary)
     }
 }
