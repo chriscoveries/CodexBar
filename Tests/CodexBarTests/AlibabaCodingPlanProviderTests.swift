@@ -940,6 +940,8 @@ final class AlibabaConsoleSECTokenStubURLProtocol: URLProtocol {
             "alibaba-proxy.test",
             "modelstudio.console.alibabacloud.com",
             "bailian-singapore-cs.alibabacloud.com",
+            "bailian.console.aliyun.com",
+            "bailian-beijing-cs.aliyuncs.com",
         ].contains(host)
     }
 
