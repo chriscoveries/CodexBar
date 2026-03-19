@@ -134,7 +134,12 @@ struct AlibabaCodingPlanUsageParsingTests {
               {
                 "planName": "Expired Starter",
                 "status": "EXPIRED",
-                "endTime": "2025-04-01 17:00"
+                "endTime": "2025-04-01 17:00",
+                "codingPlanQuotaInfo": {
+                  "per5HourUsedQuota": 7,
+                  "per5HourTotalQuota": 100,
+                  "per5HourQuotaNextRefreshTime": 1700000100000
+                }
               },
               {
                 "planName": "Active Pro",
@@ -615,6 +620,62 @@ struct AlibabaCodingPlanUsageFetcherRequestTests {
         }
     }
 
+    @Test
+    func cookieSECTokenFallbackSurvivesUserInfoRequestFailure() async throws {
+        let registered = URLProtocol.registerClass(AlibabaConsoleSECTokenStubURLProtocol.self)
+        defer {
+            if registered {
+                URLProtocol.unregisterClass(AlibabaConsoleSECTokenStubURLProtocol.self)
+            }
+            AlibabaConsoleSECTokenStubURLProtocol.handler = nil
+        }
+
+        AlibabaConsoleSECTokenStubURLProtocol.handler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+
+            if url.host == "modelstudio.console.alibabacloud.com", request.httpMethod == "GET" {
+                return Self.makeResponse(url: url, body: "<html></html>", statusCode: 200)
+            }
+
+            if url.host == "modelstudio.console.alibabacloud.com", url.path == "/tool/user/info.json" {
+                throw URLError(.timedOut)
+            }
+
+            if url.host == "bailian-singapore-cs.alibabacloud.com", request.httpMethod == "POST" {
+                let body = Self.requestBodyString(from: request)
+                #expect(body.contains("sec_token=cookie-sec-token"))
+                let json = """
+                {
+                  "data": {
+                    "codingPlanInstanceInfos": [
+                      { "planName": "Alibaba Coding Plan Pro", "status": "VALID" }
+                    ],
+                    "codingPlanQuotaInfo": {
+                      "per5HourUsedQuota": 52,
+                      "per5HourTotalQuota": 1000,
+                      "per5HourQuotaNextRefreshTime": 1700000300000
+                    }
+                  },
+                  "status_code": 0
+                }
+                """
+                return Self.makeResponse(url: url, body: json, statusCode: 200)
+            }
+
+            throw URLError(.unsupportedURL)
+        }
+
+        let snapshot = try await AlibabaCodingPlanUsageFetcher.fetchUsage(
+            cookieHeader: "sec_token=cookie-sec-token; login_aliyunid_ticket=ticket; login_aliyunid_pk=user",
+            region: .international,
+            environment: [:],
+            now: Date(timeIntervalSince1970: 1_700_000_000))
+
+        #expect(snapshot.planName == "Alibaba Coding Plan Pro")
+        #expect(snapshot.fiveHourUsedQuota == 52)
+        #expect(snapshot.fiveHourTotalQuota == 1000)
+    }
+
     private static func makeResponse(url: URL, body: String, statusCode: Int) -> (HTTPURLResponse, Data) {
         let response = HTTPURLResponse(
             url: url,
@@ -623,6 +684,34 @@ struct AlibabaCodingPlanUsageFetcherRequestTests {
             headerFields: ["Content-Type": "application/json"])!
         return (response, Data(body.utf8))
     }
+
+    private static func requestBodyString(from request: URLRequest) -> String {
+        if let data = request.httpBody {
+            return String(data: data, encoding: .utf8) ?? ""
+        }
+
+        guard let stream = request.httpBodyStream else {
+            return ""
+        }
+
+        stream.open()
+        defer { stream.close() }
+
+        var data = Data()
+        let bufferSize = 4096
+        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
+        defer { buffer.deallocate() }
+
+        while stream.hasBytesAvailable {
+            let count = stream.read(buffer, maxLength: bufferSize)
+            if count <= 0 {
+                break
+            }
+            data.append(buffer, count: count)
+        }
+
+        return String(data: data, encoding: .utf8) ?? ""
+    }
 }
 
 final class AlibabaUsageFetcherStubURLProtocol: URLProtocol {
@@ -630,6 +719,40 @@ final class AlibabaUsageFetcherStubURLProtocol: URLProtocol {
 
     override static func canInit(with request: URLRequest) -> Bool {
         request.url?.host == "alibaba-api.test"
+    }
+
+    override static func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        guard let handler = Self.handler else {
+            self.client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+            return
+        }
+
+        do {
+            let (response, data) = try handler(self.request)
+            self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            self.client?.urlProtocol(self, didLoad: data)
+            self.client?.urlProtocolDidFinishLoading(self)
+        } catch {
+            self.client?.urlProtocol(self, didFailWithError: error)
+        }
+    }
+
+    override func stopLoading() {}
+}
+
+final class AlibabaConsoleSECTokenStubURLProtocol: URLProtocol {
+    nonisolated(unsafe) static var handler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
+
+    override static func canInit(with request: URLRequest) -> Bool {
+        guard let host = request.url?.host else { return false }
+        return [
+            "modelstudio.console.alibabacloud.com",
+            "bailian-singapore-cs.alibabacloud.com",
+        ].contains(host)
     }
 
     override static func canonicalRequest(for request: URLRequest) -> URLRequest {

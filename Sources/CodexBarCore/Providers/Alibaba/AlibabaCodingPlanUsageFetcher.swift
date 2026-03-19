@@ -348,7 +348,7 @@ public struct AlibabaCodingPlanUsageFetcher: Sendable {
             return token
         }
 
-        if let token = try await self.fetchSECTokenFromUserInfo(cookieHeader: cookieHeader, region: region) {
+        if let token = try? await self.fetchSECTokenFromUserInfo(cookieHeader: cookieHeader, region: region) {
             return token
         }
 
@@ -460,7 +460,7 @@ public struct AlibabaCodingPlanUsageFetcher: Sendable {
         }
 
         let instanceInfo = self.findActiveInstanceInfo(in: dictionary, now: now)
-        guard let quota = self.findQuotaInfo(in: dictionary) ?? self.findQuotaInfo(in: instanceInfo ?? [:]) else {
+        guard let quota = self.findQuotaInfo(in: instanceInfo ?? [:]) ?? self.findQuotaInfo(in: dictionary) else {
             if let fallback = self.parsePlanVisibleActiveFallback(
                 payload: dictionary,
                 instanceInfo: instanceInfo,
