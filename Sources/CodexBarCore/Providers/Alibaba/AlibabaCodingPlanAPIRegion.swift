@@ -33,6 +33,24 @@ public enum AlibabaCodingPlanAPIRegion: String, CaseIterable, Sendable {
         }
     }
 
+    public var consoleDomain: String {
+        switch self {
+        case .international:
+            "modelstudio.console.alibabacloud.com"
+        case .chinaMainland:
+            "bailian.console.aliyun.com"
+        }
+    }
+
+    public var consoleSite: String {
+        switch self {
+        case .international:
+            "MODELSTUDIO_ALIBABACLOUD"
+        case .chinaMainland:
+            "BAILIAN_CONSOLE"
+        }
+    }
+
     public var consoleRefererURL: URL {
         switch self {
         case .international:

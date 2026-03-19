@@ -771,6 +771,70 @@ struct AlibabaCodingPlanUsageFetcherRequestTests {
         #expect(snapshot.fiveHourTotalQuota == 1000)
     }
 
+    @Test
+    func consoleRequestBodyUsesRegionSpecificMetadata() async throws {
+        let registered = URLProtocol.registerClass(AlibabaConsoleSECTokenStubURLProtocol.self)
+        defer {
+            if registered {
+                URLProtocol.unregisterClass(AlibabaConsoleSECTokenStubURLProtocol.self)
+            }
+            AlibabaConsoleSECTokenStubURLProtocol.handler = nil
+        }
+
+        AlibabaConsoleSECTokenStubURLProtocol.handler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+
+            if request.httpMethod == "GET", url.path == AlibabaCodingPlanAPIRegion.chinaMainland.dashboardURL.path {
+                return Self.makeResponse(url: url, body: "<html></html>", statusCode: 200)
+            }
+
+            if request.httpMethod == "GET", url.path == "/tool/user/info.json" {
+                return Self.makeResponse(url: url, body: #"{"data":{"secToken":"cn-sec-token"}}"#, statusCode: 200)
+            }
+
+            if request.httpMethod == "POST", url.path == "/data/api.json" {
+                let body = Self.requestBodyString(from: request)
+                let params = try #require(Self.requestParamsDictionary(from: body))
+                let data = try #require(params["Data"] as? [String: Any])
+                let cornerstone = try #require(data["cornerstoneParam"] as? [String: Any])
+                #expect(cornerstone["domain"] as? String == AlibabaCodingPlanAPIRegion.chinaMainland.consoleDomain)
+                #expect(cornerstone["consoleSite"] as? String == AlibabaCodingPlanAPIRegion.chinaMainland.consoleSite)
+                #expect(
+                    cornerstone["feURL"] as? String
+                        == AlibabaCodingPlanAPIRegion.chinaMainland.dashboardURL.absoluteString)
+
+                let json = """
+                {
+                  "data": {
+                    "codingPlanInstanceInfos": [
+                      { "planName": "Alibaba Coding Plan Pro", "status": "VALID" }
+                    ],
+                    "codingPlanQuotaInfo": {
+                      "per5HourUsedQuota": 21,
+                      "per5HourTotalQuota": 1000,
+                      "per5HourQuotaNextRefreshTime": 1700000300000
+                    }
+                  },
+                  "status_code": 0
+                }
+                """
+                return Self.makeResponse(url: url, body: json, statusCode: 200)
+            }
+
+            throw URLError(.unsupportedURL)
+        }
+
+        let snapshot = try await AlibabaCodingPlanUsageFetcher.fetchUsage(
+            cookieHeader: "sec_token=cookie-sec-token; login_aliyunid_ticket=ticket; login_aliyunid_pk=user",
+            region: .chinaMainland,
+            environment: [:],
+            now: Date(timeIntervalSince1970: 1_700_000_000))
+
+        #expect(snapshot.planName == "Alibaba Coding Plan Pro")
+        #expect(snapshot.fiveHourUsedQuota == 21)
+        #expect(snapshot.fiveHourTotalQuota == 1000)
+    }
+
     private static func makeResponse(url: URL, body: String, statusCode: Int) -> (HTTPURLResponse, Data) {
         let response = HTTPURLResponse(
             url: url,
@@ -806,6 +870,18 @@ struct AlibabaCodingPlanUsageFetcherRequestTests {
         }
 
         return String(data: data, encoding: .utf8) ?? ""
+    }
+
+    private static func requestParamsDictionary(from body: String) -> [String: Any]? {
+        guard var components = URLComponents(string: "https://example.invalid/?\(body)"),
+              let params = components.queryItems?.first(where: { $0.name == "params" })?.value,
+              let data = params.data(using: .utf8)
+        else {
+            return nil
+        }
+
+        let object = try? JSONSerialization.jsonObject(with: data, options: [])
+        return object as? [String: Any]
     }
 }
 
