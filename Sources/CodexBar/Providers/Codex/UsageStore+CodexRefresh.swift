@@ -32,7 +32,8 @@ extension UsageStore {
             guard let codexSnapshot else { return }
             await self.recordPlanUtilizationHistorySample(
                 provider: .codex,
-                snapshot: codexSnapshot)
+                snapshot: codexSnapshot,
+                now: codexSnapshot.updatedAt)
         } catch {
             let message = error.localizedDescription
             if message.localizedCaseInsensitiveContains("data not available yet") {
@@ -90,7 +91,8 @@ extension UsageStore {
             }
             await self.recordPlanUtilizationHistorySample(
                 provider: .codex,
-                snapshot: snapshot)
+                snapshot: snapshot,
+                now: snapshot.updatedAt)
             self.codexPlanHistoryBackfillTask = nil
         }
     }
