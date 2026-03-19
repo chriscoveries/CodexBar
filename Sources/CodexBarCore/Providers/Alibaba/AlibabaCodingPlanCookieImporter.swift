@@ -75,11 +75,7 @@ public enum AlibabaCodingPlanCookieImporter {
         let log: (String) -> Void = { msg in logger?("[alibaba-cookie] \(msg)") }
         var accessDeniedHints: [String] = []
         var failureDetails: [String] = []
-        var installedBrowsers = alibabaCookieImportOrder.cookieImportCandidates(using: browserDetection)
-        if let safariIndex = installedBrowsers.firstIndex(of: .safari) {
-            installedBrowsers.remove(at: safariIndex)
-        }
-        installedBrowsers.insert(.safari, at: 0)
+        let installedBrowsers = self.cookieImportCandidates(browserDetection: browserDetection)
         log("Cookie import candidates: \(installedBrowsers.map(\.displayName).joined(separator: ", "))")
 
         for browserSource in installedBrowsers {
@@ -166,6 +162,27 @@ public enum AlibabaCodingPlanCookieImporter {
             browser: browser,
             domains: self.cookieDomains,
             logger: logger)
+    }
+
+    static func cookieImportCandidates(
+        browserDetection: BrowserDetection,
+        importOrder: BrowserCookieImportOrder = alibabaCookieImportOrder) -> [Browser]
+    {
+        importOrder.cookieImportCandidates(using: browserDetection)
+    }
+
+    static func matchesCookieDomain(_ domain: String, patterns: [String] = Self.cookieDomains) -> Bool {
+        let normalized = self.normalizeCookieDomain(domain)
+        return patterns.contains { pattern in
+            let normalizedPattern = self.normalizeCookieDomain(pattern)
+            return normalized == normalizedPattern || normalized.hasSuffix(".\(normalizedPattern)")
+        }
+    }
+
+    static func normalizeCookieDomain(_ domain: String) -> String {
+        let trimmed = domain.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalized = trimmed.hasPrefix(".") ? String(trimmed.dropFirst()) : trimmed
+        return normalized.lowercased()
     }
 }
 
@@ -303,7 +320,7 @@ private enum AlibabaChromiumCookieFallbackImporter {
             guard let value, !value.isEmpty else { continue }
 
             records.append(ChromiumCookieRecord(
-                domain: self.normalizeDomain(hostKey),
+                domain: AlibabaCodingPlanCookieImporter.normalizeCookieDomain(hostKey),
                 name: name,
                 path: path,
                 value: value,
@@ -472,13 +489,8 @@ private enum AlibabaChromiumCookieFallbackImporter {
         return Data(bytes: bytes, count: Int(sqlite3_column_bytes(stmt, index)))
     }
 
-    private static func normalizeDomain(_ domain: String) -> String {
-        domain.hasPrefix(".") ? String(domain.dropFirst()) : domain
-    }
-
     private static func matches(domain: String, patterns: [String]) -> Bool {
-        let normalized = self.normalizeDomain(domain)
-        return patterns.contains { normalized.contains(self.normalizeDomain($0)) }
+        AlibabaCodingPlanCookieImporter.matchesCookieDomain(domain, patterns: patterns)
     }
 
     private static func chromiumExpiry(_ expiresUTC: Int64) -> Date? {
