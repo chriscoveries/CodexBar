@@ -86,24 +86,26 @@ struct PlanUtilizationHistoryBuckets: Sendable, Equatable {
     }
 }
 
-private struct PlanUtilizationHistoryFile: Codable, Sendable {
-    let version: Int
-    let providers: [String: ProviderHistoryFile]
-}
-
 private struct ProviderHistoryFile: Codable, Sendable {
     let preferredAccountKey: String?
     let unscoped: [PlanUtilizationSeriesHistory]
     let accounts: [String: [PlanUtilizationSeriesHistory]]
 }
 
+private struct ProviderHistoryDocument: Codable, Sendable {
+    let version: Int
+    let preferredAccountKey: String?
+    let unscoped: [PlanUtilizationSeriesHistory]
+    let accounts: [String: [PlanUtilizationSeriesHistory]]
+}
+
 struct PlanUtilizationHistoryStore: Sendable {
-    fileprivate static let schemaVersion = 6
+    fileprivate static let providerSchemaVersion = 1
 
-    let fileURL: URL?
+    let directoryURL: URL?
 
-    init(fileURL: URL? = Self.defaultFileURL()) {
-        self.fileURL = fileURL
+    init(directoryURL: URL? = Self.defaultDirectoryURL()) {
+        self.directoryURL = directoryURL
     }
 
     static func defaultAppSupport() -> Self {
@@ -111,49 +113,65 @@ struct PlanUtilizationHistoryStore: Sendable {
     }
 
     func load() -> [UsageProvider: PlanUtilizationHistoryBuckets] {
-        guard let url = self.fileURL else { return [:] }
-        guard let data = try? Data(contentsOf: url) else { return [:] }
-
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        guard let decoded = try? decoder.decode(PlanUtilizationHistoryFile.self, from: data) else {
-            return [:]
-        }
-        return Self.decodeProviders(decoded.providers)
+        self.loadProviderFiles()
     }
 
     func save(_ providers: [UsageProvider: PlanUtilizationHistoryBuckets]) {
-        guard let url = self.fileURL else { return }
-        let persistedProviders = providers.reduce(into: [String: ProviderHistoryFile]()) { output, entry in
-            let (provider, buckets) = entry
-            guard !buckets.isEmpty else { return }
-            let accounts: [String: [PlanUtilizationSeriesHistory]] = Dictionary(
-                uniqueKeysWithValues: buckets.accounts.compactMap { accountKey, histories in
-                    let sorted = Self.sortedHistories(histories)
-                    guard !sorted.isEmpty else { return nil }
-                    return (accountKey, sorted)
-                })
-            output[provider.rawValue] = ProviderHistoryFile(
-                preferredAccountKey: buckets.preferredAccountKey,
-                unscoped: Self.sortedHistories(buckets.unscoped),
-                accounts: accounts)
-        }
-
-        let payload = PlanUtilizationHistoryFile(
-            version: Self.schemaVersion,
-            providers: persistedProviders)
-
+        guard let directoryURL = self.directoryURL else { return }
         do {
+            try FileManager.default.createDirectory(
+                at: directoryURL,
+                withIntermediateDirectories: true)
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
-            let data = try encoder.encode(payload)
-            try FileManager.default.createDirectory(
-                at: url.deletingLastPathComponent(),
-                withIntermediateDirectories: true)
-            try data.write(to: url, options: Data.WritingOptions.atomic)
+            encoder.outputFormatting = [.sortedKeys]
+
+            for provider in UsageProvider.allCases {
+                let fileURL = self.providerFileURL(for: provider)
+                let buckets = providers[provider] ?? PlanUtilizationHistoryBuckets()
+                guard !buckets.isEmpty else {
+                    try? FileManager.default.removeItem(at: fileURL)
+                    continue
+                }
+
+                let payload = ProviderHistoryDocument(
+                    version: Self.providerSchemaVersion,
+                    preferredAccountKey: buckets.preferredAccountKey,
+                    unscoped: Self.sortedHistories(buckets.unscoped),
+                    accounts: Self.sortedAccounts(buckets.accounts))
+                let data = try encoder.encode(payload)
+                try data.write(to: fileURL, options: Data.WritingOptions.atomic)
+            }
         } catch {
             // Best-effort persistence only.
         }
+    }
+
+    private func loadProviderFiles() -> [UsageProvider: PlanUtilizationHistoryBuckets] {
+        guard self.directoryURL != nil else { return [:] }
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        var output: [UsageProvider: PlanUtilizationHistoryBuckets] = [:]
+
+        for provider in UsageProvider.allCases {
+            let fileURL = self.providerFileURL(for: provider)
+            guard FileManager.default.fileExists(atPath: fileURL.path) else { continue }
+            guard let data = try? Data(contentsOf: fileURL),
+                  let decoded = try? decoder.decode(ProviderHistoryDocument.self, from: data)
+            else {
+                continue
+            }
+
+            let history = ProviderHistoryFile(
+                preferredAccountKey: decoded.preferredAccountKey,
+                unscoped: decoded.unscoped,
+                accounts: decoded.accounts)
+            output[provider] = Self.decodeProvider(history)
+        }
+
+        return output
     }
 
     private static func decodeProviders(
@@ -162,17 +180,32 @@ struct PlanUtilizationHistoryStore: Sendable {
         var output: [UsageProvider: PlanUtilizationHistoryBuckets] = [:]
         for (rawProvider, providerHistory) in providers {
             guard let provider = UsageProvider(rawValue: rawProvider) else { continue }
-            output[provider] = PlanUtilizationHistoryBuckets(
-                preferredAccountKey: providerHistory.preferredAccountKey,
-                unscoped: Self.sortedHistories(providerHistory.unscoped),
-                accounts: Dictionary(
-                    uniqueKeysWithValues: providerHistory.accounts.compactMap { accountKey, histories in
-                        let sorted = Self.sortedHistories(histories)
-                        guard !sorted.isEmpty else { return nil }
-                        return (accountKey, sorted)
-                    }))
+            output[provider] = Self.decodeProvider(providerHistory)
         }
         return output
+    }
+
+    private static func decodeProvider(_ providerHistory: ProviderHistoryFile) -> PlanUtilizationHistoryBuckets {
+        PlanUtilizationHistoryBuckets(
+            preferredAccountKey: providerHistory.preferredAccountKey,
+            unscoped: self.sortedHistories(providerHistory.unscoped),
+            accounts: Dictionary(
+                uniqueKeysWithValues: providerHistory.accounts.compactMap { accountKey, histories in
+                    let sorted = Self.sortedHistories(histories)
+                    guard !sorted.isEmpty else { return nil }
+                    return (accountKey, sorted)
+                }))
+    }
+
+    private static func sortedAccounts(
+        _ accounts: [String: [PlanUtilizationSeriesHistory]]) -> [String: [PlanUtilizationSeriesHistory]]
+    {
+        Dictionary(
+            uniqueKeysWithValues: accounts.compactMap { accountKey, histories in
+                let sorted = Self.sortedHistories(histories)
+                guard !sorted.isEmpty else { return nil }
+                return (accountKey, sorted)
+            })
     }
 
     private static func sortedHistories(_ histories: [PlanUtilizationSeriesHistory]) -> [PlanUtilizationSeriesHistory] {
@@ -184,26 +217,33 @@ struct PlanUtilizationHistoryStore: Sendable {
         }
     }
 
-    private static func defaultFileURL() -> URL? {
+    private static func defaultDirectoryURL() -> URL? {
         guard let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
             return nil
         }
         let dir = root.appendingPathComponent("com.steipete.codexbar", isDirectory: true)
-        return dir.appendingPathComponent("plan-utilization-history.json")
+        return dir.appendingPathComponent("history", isDirectory: true)
+    }
+
+    private func providerFileURL(for provider: UsageProvider) -> URL {
+        let directoryURL = self.directoryURL ?? URL(fileURLWithPath: "/dev/null", isDirectory: true)
+        return directoryURL.appendingPathComponent("\(provider.rawValue).json", isDirectory: false)
     }
 }
 
-extension PlanUtilizationHistoryFile {
+extension ProviderHistoryDocument {
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let version = try container.decode(Int.self, forKey: .version)
-        guard version == PlanUtilizationHistoryStore.schemaVersion else {
+        guard version == PlanUtilizationHistoryStore.providerSchemaVersion else {
             throw DecodingError.dataCorruptedError(
                 forKey: .version,
                 in: container,
-                debugDescription: "Unsupported plan utilization history schema version \(version)")
+                debugDescription: "Unsupported provider history schema version \(version)")
         }
         self.version = version
-        self.providers = try container.decode([String: ProviderHistoryFile].self, forKey: .providers)
+        self.preferredAccountKey = try container.decodeIfPresent(String.self, forKey: .preferredAccountKey)
+        self.unscoped = try container.decode([PlanUtilizationSeriesHistory].self, forKey: .unscoped)
+        self.accounts = try container.decode([String: [PlanUtilizationSeriesHistory]].self, forKey: .accounts)
     }
 }

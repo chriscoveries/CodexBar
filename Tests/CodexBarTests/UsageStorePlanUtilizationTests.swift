@@ -602,26 +602,23 @@ struct UsageStorePlanUtilizationTests {
     func runtimeDoesNotLoadUnsupportedPlanHistoryFile() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        let url = root
+        let directoryURL = root
             .appendingPathComponent("com.steipete.codexbar", isDirectory: true)
-            .appendingPathComponent("plan-utilization-history.json")
-        let store = PlanUtilizationHistoryStore(fileURL: url)
+            .appendingPathComponent("history", isDirectory: true)
+        let providerURL = directoryURL.appendingPathComponent("codex.json")
+        let store = PlanUtilizationHistoryStore(directoryURL: directoryURL)
         try FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(),
+            at: directoryURL,
             withIntermediateDirectories: true)
 
         let unsupportedJSON = """
         {
           "version": 999,
-          "providers": {
-            "codex": {
-              "unscoped": [],
-              "accounts": {}
-            }
-          }
+          "unscoped": [],
+          "accounts": {}
         }
         """
-        try Data(unsupportedJSON.utf8).write(to: url, options: Data.WritingOptions.atomic)
+        try Data(unsupportedJSON.utf8).write(to: providerURL, options: Data.WritingOptions.atomic)
 
         let loaded = store.load()
         #expect(loaded.isEmpty)
@@ -631,10 +628,10 @@ struct UsageStorePlanUtilizationTests {
     func storeRoundTripsAccountBucketsWithSeriesEntries() {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        let url = root
+        let directoryURL = root
             .appendingPathComponent("com.steipete.codexbar", isDirectory: true)
-            .appendingPathComponent("plan-utilization-history.json")
-        let store = PlanUtilizationHistoryStore(fileURL: url)
+            .appendingPathComponent("history", isDirectory: true)
+        let store = PlanUtilizationHistoryStore(directoryURL: directoryURL)
         let buckets = PlanUtilizationHistoryBuckets(
             preferredAccountKey: "alice",
             unscoped: [
@@ -673,7 +670,7 @@ extension UsageStorePlanUtilizationTests {
         let temporaryRoot = FileManager.default.temporaryDirectory.standardizedFileURL.path
         precondition(configStore.fileURL.standardizedFileURL.path.hasPrefix(temporaryRoot))
         precondition(configStore.fileURL.standardizedFileURL != CodexBarConfigStore.defaultURL().standardizedFileURL)
-        if let historyURL = planHistoryStore.fileURL?.standardizedFileURL {
+        if let historyURL = planHistoryStore.directoryURL?.standardizedFileURL {
             precondition(historyURL.path.hasPrefix(temporaryRoot))
         }
         let isolatedSettings = SettingsStore(

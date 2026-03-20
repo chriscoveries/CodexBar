@@ -138,9 +138,9 @@ func testPlanUtilizationHistoryStore(suiteName: String, reset: Bool = true) -> P
     let base = FileManager.default.temporaryDirectory
         .appendingPathComponent("codexbar-tests", isDirectory: true)
         .appendingPathComponent(sanitized, isDirectory: true)
-    let url = base.appendingPathComponent("plan-utilization-history.json")
+    let url = base.appendingPathComponent("history", isDirectory: true)
     if reset {
         try? FileManager.default.removeItem(at: url)
     }
-    return PlanUtilizationHistoryStore(fileURL: url)
+    return PlanUtilizationHistoryStore(directoryURL: url)
 }
