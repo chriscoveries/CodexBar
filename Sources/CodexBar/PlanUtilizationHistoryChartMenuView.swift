@@ -67,7 +67,6 @@ struct PlanUtilizationHistoryChartMenuView: View {
     private let histories: [PlanUtilizationSeriesHistory]
     private let snapshot: UsageSnapshot?
     private let width: CGFloat
-    private let isRefreshing: Bool
 
     @State private var selectedSeriesID: String?
     @State private var selectedPointID: String?
@@ -76,14 +75,12 @@ struct PlanUtilizationHistoryChartMenuView: View {
         provider: UsageProvider,
         histories: [PlanUtilizationSeriesHistory],
         snapshot: UsageSnapshot? = nil,
-        width: CGFloat,
-        isRefreshing: Bool = false)
+        width: CGFloat)
     {
         self.provider = provider
         self.histories = histories
         self.snapshot = snapshot
         self.width = width
-        self.isRefreshing = isRefreshing
     }
 
     var body: some View {
@@ -118,7 +115,7 @@ struct PlanUtilizationHistoryChartMenuView: View {
 
             if model.points.isEmpty {
                 ZStack {
-                    Text(Self.emptyStateText(title: effectiveSelectedSeries?.title, isRefreshing: self.isRefreshing))
+                    Text(Self.emptyStateText(title: effectiveSelectedSeries?.title))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -622,10 +619,7 @@ struct PlanUtilizationHistoryChartMenuView: View {
         }
     }
 
-    private nonisolated static func emptyStateText(title: String?, isRefreshing: Bool) -> String {
-        if isRefreshing {
-            return "Refreshing..."
-        }
+    private nonisolated static func emptyStateText(title: String?) -> String {
         if let title {
             return "No \(title.lowercased()) utilization data yet."
         }
@@ -688,8 +682,8 @@ struct PlanUtilizationHistoryChartMenuView: View {
         return self.detailLine(point: model.points.last, windowMinutes: selectedSeries?.history.windowMinutes ?? 0)
     }
 
-    nonisolated static func _emptyStateTextForTesting(title: String?, isRefreshing: Bool) -> String {
-        self.emptyStateText(title: title, isRefreshing: isRefreshing)
+    nonisolated static func _emptyStateTextForTesting(title: String?) -> String {
+        self.emptyStateText(title: title)
     }
     #endif
 

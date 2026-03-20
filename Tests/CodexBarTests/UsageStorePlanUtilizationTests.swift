@@ -433,14 +433,14 @@ struct UsageStorePlanUtilizationTests {
     }
 
     @Test
-    func chartEmptyStateShowsRefreshingWhileLoading() {
-        let text = PlanUtilizationHistoryChartMenuView._emptyStateTextForTesting(title: "Session", isRefreshing: true)
-        #expect(text == "Refreshing...")
+    func chartEmptyStateShowsSeriesSpecificMessage() {
+        let text = PlanUtilizationHistoryChartMenuView._emptyStateTextForTesting(title: "Session")
+        #expect(text == "No session utilization data yet.")
     }
 
     @Test
     func chartEmptyStateShowsSeriesSpecificMessageWhenNotRefreshing() {
-        let text = PlanUtilizationHistoryChartMenuView._emptyStateTextForTesting(title: "Weekly", isRefreshing: false)
+        let text = PlanUtilizationHistoryChartMenuView._emptyStateTextForTesting(title: "Weekly")
         #expect(text == "No weekly utilization data yet.")
     }
 
@@ -485,7 +485,7 @@ struct UsageStorePlanUtilizationTests {
 
     @MainActor
     @Test
-    func claudeHistoryPresentationShowsRefreshingWhileRefreshingWithoutCurrentSnapshot() throws {
+    func planUtilizationMenuHidesWhileRefreshingWithoutCurrentSnapshot() throws {
         let store = Self.makeStore()
         let claudeKey = try #require(
             UsageStore._planUtilizationAccountKeyForTesting(
@@ -502,32 +502,44 @@ struct UsageStorePlanUtilizationTests {
         store.refreshingProviders.insert(.claude)
         store._setSnapshotForTesting(nil, provider: .claude)
 
-        let presentation = store.planUtilizationHistoryPresentation(for: .claude)
-        #expect(presentation.isRefreshing)
-        #expect(presentation.histories.isEmpty)
+        #expect(store.shouldShowRefreshingMenuCard(for: .claude))
+        #expect(store.shouldHidePlanUtilizationMenuItem(for: .claude))
     }
 
     @MainActor
     @Test
-    func claudeHistoryPresentationShowsStoredHistoryWhenNotRefreshing() throws {
+    func planUtilizationMenuStaysVisibleWithStoredSnapshotEvenDuringRefresh() throws {
         let store = Self.makeStore()
-        let claudeKey = try #require(
+        let codexSnapshot = Self.makeSnapshot(provider: .codex, email: "alice@example.com")
+        let codexKey = try #require(
             UsageStore._planUtilizationAccountKeyForTesting(
-                provider: .claude,
-                snapshot: Self.makeSnapshot(provider: .claude, email: "alice@example.com")))
+                provider: .codex,
+                snapshot: codexSnapshot))
         let weekly = planSeries(name: .weekly, windowMinutes: 10080, entries: [
             planEntry(at: Date(timeIntervalSince1970: 1_700_000_000), usedPercent: 64),
         ])
-        store.planUtilizationHistory[.claude] = PlanUtilizationHistoryBuckets(
-            preferredAccountKey: claudeKey,
+        store.planUtilizationHistory[.codex] = PlanUtilizationHistoryBuckets(
+            preferredAccountKey: codexKey,
             accounts: [
-                claudeKey: [weekly],
+                codexKey: [weekly],
             ])
-        store._setSnapshotForTesting(nil, provider: .claude)
+        store.refreshingProviders.insert(.codex)
+        store._setSnapshotForTesting(codexSnapshot, provider: .codex)
 
-        let presentation = store.planUtilizationHistoryPresentation(for: .claude)
-        #expect(!presentation.isRefreshing)
-        #expect(presentation.histories == [weekly])
+        #expect(!store.shouldShowRefreshingMenuCard(for: .codex))
+        #expect(!store.shouldHidePlanUtilizationMenuItem(for: .codex))
+        #expect(store.planUtilizationHistory(for: .codex) == [weekly])
+    }
+
+    @MainActor
+    @Test
+    func codexPlanUtilizationMenuHidesDuringProviderOnlyRefreshWithoutSnapshot() {
+        let store = Self.makeStore()
+        store.refreshingProviders.insert(.codex)
+        store._setSnapshotForTesting(nil, provider: .codex)
+
+        #expect(store.shouldShowRefreshingMenuCard(for: .codex))
+        #expect(store.shouldHidePlanUtilizationMenuItem(for: .codex))
     }
 
     @MainActor

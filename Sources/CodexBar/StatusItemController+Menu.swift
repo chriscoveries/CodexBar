@@ -1473,7 +1473,7 @@ extension StatusItemController {
             tokenSnapshot: tokenSnapshot,
             tokenError: tokenError,
             account: self.account,
-            isRefreshing: self.store.isRefreshing,
+            isRefreshing: self.store.shouldShowRefreshingMenuCard(for: target),
             lastError: errorOverride ?? self.store.error(for: target),
             usageBarsShowUsed: self.settings.usageBarsShowUsed,
             resetTimeDisplayStyle: self.settings.resetTimeDisplayStyle,

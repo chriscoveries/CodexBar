@@ -34,6 +34,7 @@ extension StatusItemController {
 
     private func makeUsageHistorySubmenu(provider: UsageProvider) -> NSMenu? {
         guard provider == .codex || provider == .claude else { return nil }
+        guard !self.store.shouldHidePlanUtilizationMenuItem(for: provider) else { return nil }
         let width: CGFloat = 310
         let submenu = NSMenu()
         submenu.delegate = self
@@ -45,10 +46,8 @@ extension StatusItemController {
         provider: UsageProvider,
         width: CGFloat) -> Bool
     {
-        let presentation = self.store.planUtilizationHistoryPresentation(for: provider)
-        let histories = presentation.histories
+        let histories = self.store.planUtilizationHistory(for: provider)
         let snapshot = self.store.snapshot(for: provider)
-        let isRefreshing = presentation.isRefreshing
 
         if !Self.menuCardRenderingEnabled {
             let chartItem = NSMenuItem()
@@ -62,8 +61,7 @@ extension StatusItemController {
             provider: provider,
             histories: histories,
             snapshot: snapshot,
-            width: width,
-            isRefreshing: isRefreshing)
+            width: width)
         let hosting = UsageHistoryMenuHostingView(rootView: chartView)
         let controller = NSHostingController(rootView: chartView)
         let size = controller.sizeThatFits(in: CGSize(width: width, height: .greatestFiniteMagnitude))

@@ -3,11 +3,6 @@ import CryptoKit
 import Foundation
 
 extension UsageStore {
-    struct PlanUtilizationHistoryPresentation: Equatable {
-        let histories: [PlanUtilizationSeriesHistory]
-        let isRefreshing: Bool
-    }
-
     private nonisolated static let planUtilizationMinSampleIntervalSeconds: TimeInterval = 60 * 60
     private nonisolated static let planUtilizationResetEquivalenceToleranceSeconds: TimeInterval = 2 * 60
     private nonisolated static let planUtilizationMaxSamples: Int = 24 * 730
@@ -41,14 +36,16 @@ extension UsageStore {
         return providerBuckets.histories(for: accountKey)
     }
 
-    func planUtilizationHistoryPresentation(for provider: UsageProvider) -> PlanUtilizationHistoryPresentation {
-        let isRefreshing = self.shouldShowPlanUtilizationRefreshingState(for: provider)
-        if isRefreshing {
-            return PlanUtilizationHistoryPresentation(histories: [], isRefreshing: true)
-        }
-        return PlanUtilizationHistoryPresentation(
-            histories: self.planUtilizationHistory(for: provider),
-            isRefreshing: false)
+    func shouldShowRefreshingMenuCard(for provider: UsageProvider) -> Bool {
+        let isRefreshing = self.isRefreshing || self.refreshingProviders.contains(provider)
+        return isRefreshing
+            && self.snapshots[provider] == nil
+            && self.error(for: provider) == nil
+    }
+
+    func shouldHidePlanUtilizationMenuItem(for provider: UsageProvider) -> Bool {
+        guard provider == .codex || provider == .claude else { return true }
+        return self.shouldShowRefreshingMenuCard(for: provider)
     }
 
     func recordPlanUtilizationHistorySample(
@@ -426,17 +423,7 @@ extension UsageStore {
     }
 
     private func shouldDeferClaudePlanUtilizationHistory(provider: UsageProvider) -> Bool {
-        provider == .claude && self.shouldShowPlanUtilizationRefreshingState(for: .claude)
-    }
-
-    func shouldShowPlanUtilizationRefreshingState(for provider: UsageProvider) -> Bool {
-        guard self.refreshingProviders.contains(provider) else { return false }
-
-        if provider != .claude {
-            return true
-        }
-
-        return self.snapshots[.claude] == nil && self.error(for: .claude) == nil
+        provider == .claude && self.shouldHidePlanUtilizationMenuItem(for: .claude)
     }
 
     private func resolvePlanUtilizationAccountKey(
