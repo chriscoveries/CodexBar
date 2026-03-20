@@ -6,7 +6,7 @@ import Testing
 @Suite
 struct UsageStorePlanUtilizationTests {
     @Test
-    func coalescesChangedUsageWithinHourIntoSingleSample() throws {
+    func coalescesChangedUsageWithinHourIntoSingleEntry() throws {
         let calendar = Calendar(identifier: .gregorian)
         let hourStart = try #require(calendar.date(from: DateComponents(
             timeZone: TimeZone(secondsFromGMT: 0),
@@ -14,31 +14,24 @@ struct UsageStorePlanUtilizationTests {
             month: 3,
             day: 17,
             hour: 10)))
-        let first = makePlanSample(at: hourStart, primary: 10, secondary: 20)
-        let second = makePlanSample(
-            at: hourStart.addingTimeInterval(25 * 60),
-            primary: 35,
-            secondary: 45,
-            primaryWindowMinutes: 300,
-            secondaryWindowMinutes: 10080)
+        let first = planEntry(at: hourStart, usedPercent: 10)
+        let second = planEntry(at: hourStart.addingTimeInterval(25 * 60), usedPercent: 35)
 
         let initial = try #require(
-            UsageStore._updatedPlanUtilizationHistoryForTesting(
-                provider: .codex,
-                existingHistory: [],
-                sample: first))
+            UsageStore._updatedPlanUtilizationEntriesForTesting(
+                existingEntries: [],
+                entry: first))
         let updated = try #require(
-            UsageStore._updatedPlanUtilizationHistoryForTesting(
-                provider: .codex,
-                existingHistory: initial,
-                sample: second))
+            UsageStore._updatedPlanUtilizationEntriesForTesting(
+                existingEntries: initial,
+                entry: second))
 
         #expect(updated.count == 1)
         #expect(updated.last == second)
     }
 
     @Test
-    func appendsNewSampleAfterCrossingIntoNextHourBucket() throws {
+    func changedResetBoundaryWithinHourAppendsNewEntry() throws {
         let calendar = Calendar(identifier: .gregorian)
         let hourStart = try #require(calendar.date(from: DateComponents(
             timeZone: TimeZone(secondsFromGMT: 0),
@@ -46,586 +39,378 @@ struct UsageStorePlanUtilizationTests {
             month: 3,
             day: 17,
             hour: 10)))
-        let first = makePlanSample(at: hourStart, primary: 10, secondary: 20)
-        let second = makePlanSample(at: hourStart.addingTimeInterval(50 * 60), primary: 35, secondary: 45)
-        let nextHour = makePlanSample(at: hourStart.addingTimeInterval(65 * 60), primary: 60, secondary: 70)
-
-        let oneHour = try #require(
-            UsageStore._updatedPlanUtilizationHistoryForTesting(
-                provider: .codex,
-                existingHistory: [],
-                sample: first))
-        let coalesced = try #require(
-            UsageStore._updatedPlanUtilizationHistoryForTesting(
-                provider: .codex,
-                existingHistory: oneHour,
-                sample: second))
-        let twoHours = try #require(
-            UsageStore._updatedPlanUtilizationHistoryForTesting(
-                provider: .codex,
-                existingHistory: coalesced,
-                sample: nextHour))
-
-        #expect(coalesced.count == 1)
-        #expect(twoHours.count == 2)
-        #expect(twoHours.first == second)
-        #expect(twoHours.last == nextHour)
-    }
-
-    @Test
-    func staleWriteInSameHourWithDifferentWindowMarkersIsRetainedSeparately() throws {
-        let calendar = Calendar(identifier: .gregorian)
-        let hourStart = try #require(calendar.date(from: DateComponents(
-            timeZone: TimeZone(secondsFromGMT: 0),
-            year: 2026,
-            month: 3,
-            day: 17,
-            hour: 10)))
-        let newer = makePlanSample(
-            at: hourStart.addingTimeInterval(45 * 60),
-            primary: 70,
-            secondary: 80,
-            primaryWindowMinutes: 300,
-            secondaryWindowMinutes: 10080)
-        let stale = makePlanSample(
+        let first = planEntry(
             at: hourStart.addingTimeInterval(5 * 60),
-            primary: 15,
-            secondary: 25,
-            primaryWindowMinutes: 60,
-            secondaryWindowMinutes: 1440)
+            usedPercent: 82,
+            resetsAt: hourStart.addingTimeInterval(30 * 60))
+        let second = planEntry(
+            at: hourStart.addingTimeInterval(35 * 60),
+            usedPercent: 4,
+            resetsAt: hourStart.addingTimeInterval(5 * 60 * 60))
 
         let initial = try #require(
-            UsageStore._updatedPlanUtilizationHistoryForTesting(
-                provider: .codex,
-                existingHistory: [],
-                sample: newer))
+            UsageStore._updatedPlanUtilizationEntriesForTesting(
+                existingEntries: [],
+                entry: first))
         let updated = try #require(
-            UsageStore._updatedPlanUtilizationHistoryForTesting(
-                provider: .codex,
-                existingHistory: initial,
-                sample: stale))
+            UsageStore._updatedPlanUtilizationEntriesForTesting(
+                existingEntries: initial,
+                entry: second))
 
         #expect(updated.count == 2)
-        #expect(updated.first == stale)
-        #expect(updated.last == newer)
+        #expect(updated[0] == first)
+        #expect(updated[1] == second)
     }
 
     @Test
-    func newerSameHourSampleKeepsNewerMetadataAndBackfillsMissingValues() throws {
-        let calendar = Calendar(identifier: .gregorian)
-        let hourStart = try #require(calendar.date(from: DateComponents(
-            timeZone: TimeZone(secondsFromGMT: 0),
-            year: 2026,
-            month: 3,
-            day: 17,
-            hour: 10)))
-        let existing = makePlanSample(
-            at: hourStart.addingTimeInterval(10 * 60),
-            primary: 20,
-            secondary: nil,
-            primaryWindowMinutes: 300,
-            secondaryWindowMinutes: 10080)
-        let incomingReset = Date(timeIntervalSince1970: 1_710_000_000)
-        let incoming = makePlanSample(
-            at: hourStart.addingTimeInterval(50 * 60),
-            primary: nil,
-            secondary: 45,
-            primaryResetsAt: incomingReset)
-
-        let updated = try #require(
-            UsageStore._updatedPlanUtilizationHistoryForTesting(
-                provider: .codex,
-                existingHistory: [existing],
-                sample: incoming))
-
-        let merged = try #require(updated.last)
-        #expect(merged.capturedAt == incoming.capturedAt)
-        #expect(merged.primaryUsedPercent == 20)
-        #expect(merged.primaryWindowMinutes == 300)
-        #expect(merged.primaryResetsAt == incomingReset)
-        #expect(merged.secondaryUsedPercent == 45)
-        #expect(merged.secondaryWindowMinutes == 10080)
-    }
-
-    @Test
-    func staleSameHourSampleOnlyFillsMissingMetadata() throws {
-        let calendar = Calendar(identifier: .gregorian)
-        let hourStart = try #require(calendar.date(from: DateComponents(
-            timeZone: TimeZone(secondsFromGMT: 0),
-            year: 2026,
-            month: 3,
-            day: 17,
-            hour: 10)))
-        let newer = makePlanSample(
-            at: hourStart.addingTimeInterval(50 * 60),
-            primary: 40,
-            secondary: 80,
-            primaryWindowMinutes: nil,
-            secondaryWindowMinutes: 10080)
-        let staleReset = Date(timeIntervalSince1970: 1_710_123_456)
-        let stale = makePlanSample(
-            at: hourStart.addingTimeInterval(5 * 60),
-            primary: 10,
-            secondary: 20,
-            primaryWindowMinutes: 300,
-            primaryResetsAt: staleReset,
-            secondaryWindowMinutes: nil)
-
-        let updated = try #require(
-            UsageStore._updatedPlanUtilizationHistoryForTesting(
-                provider: .codex,
-                existingHistory: [newer],
-                sample: stale))
-
-        let merged = try #require(updated.last)
-        #expect(merged.capturedAt == newer.capturedAt)
-        #expect(merged.primaryUsedPercent == 40)
-        #expect(merged.secondaryUsedPercent == 80)
-        #expect(merged.primaryWindowMinutes == 300)
-        #expect(merged.primaryResetsAt == staleReset)
-        #expect(merged.secondaryWindowMinutes == 10080)
-    }
-
-    @Test
-    func trimsHistoryToExpandedRetentionLimit() throws {
+    func trimsEntryHistoryToRetentionLimit() throws {
         let maxSamples = UsageStore._planUtilizationMaxSamplesForTesting
         let base = Date(timeIntervalSince1970: 1_700_000_000)
-        var history: [PlanUtilizationHistorySample] = []
+        var entries: [PlanUtilizationHistoryEntry] = []
 
         for offset in 0..<maxSamples {
-            history.append(makePlanSample(
+            entries.append(planEntry(
                 at: base.addingTimeInterval(Double(offset) * 3600),
-                primary: Double(offset % 100),
-                secondary: nil))
+                usedPercent: Double(offset % 100)))
         }
 
-        let appended = makePlanSample(
+        let appended = planEntry(
             at: base.addingTimeInterval(Double(maxSamples) * 3600),
-            primary: 50,
-            secondary: 60)
+            usedPercent: 50)
 
         let updated = try #require(
-            UsageStore._updatedPlanUtilizationHistoryForTesting(
-                provider: .codex,
-                existingHistory: history,
-                sample: appended))
+            UsageStore._updatedPlanUtilizationEntriesForTesting(
+                existingEntries: entries,
+                entry: appended))
 
         #expect(updated.count == maxSamples)
-        #expect(updated.first?.capturedAt == history[1].capturedAt)
+        #expect(updated.first?.capturedAt == entries[1].capturedAt)
         #expect(updated.last == appended)
     }
 
     @MainActor
     @Test
-    func dailyModelShowsZeroBarsForMissingDays() throws {
+    func nativeChartShowsVisibleSeriesTabsOnly() {
+        let histories = [
+            planSeries(name: .session, windowMinutes: 300, entries: [
+                planEntry(at: Date(timeIntervalSince1970: 1_700_000_000), usedPercent: 20),
+            ]),
+            planSeries(name: .weekly, windowMinutes: 10080, entries: [
+                planEntry(at: Date(timeIntervalSince1970: 1_700_086_400), usedPercent: 48),
+            ]),
+        ]
+
+        let model = PlanUtilizationHistoryChartMenuView._modelSnapshotForTesting(
+            histories: histories,
+            provider: .codex)
+
+        #expect(model.visibleSeries == ["session:300", "weekly:10080"])
+        #expect(model.selectedSeries == "session:300")
+    }
+
+    @MainActor
+    @Test
+    func claudeHistoryTabsMatchCurrentSnapshotBars() {
+        let histories = [
+            planSeries(name: .session, windowMinutes: 300, entries: [
+                planEntry(at: Date(timeIntervalSince1970: 1_700_000_000), usedPercent: 20),
+            ]),
+            planSeries(name: .weekly, windowMinutes: 10080, entries: [
+                planEntry(at: Date(timeIntervalSince1970: 1_700_086_400), usedPercent: 48),
+            ]),
+            planSeries(name: .opus, windowMinutes: 10080, entries: [
+                planEntry(at: Date(timeIntervalSince1970: 1_700_086_400), usedPercent: 12),
+            ]),
+        ]
+        let snapshot = UsageSnapshot(
+            primary: RateWindow(usedPercent: 3, windowMinutes: 300, resetsAt: nil, resetDescription: nil),
+            secondary: RateWindow(usedPercent: 10, windowMinutes: 10080, resetsAt: nil, resetDescription: nil),
+            tertiary: nil,
+            updatedAt: Date(timeIntervalSince1970: 1_700_086_400),
+            identity: nil)
+
+        let model = PlanUtilizationHistoryChartMenuView._modelSnapshotForTesting(
+            histories: histories,
+            provider: .claude,
+            snapshot: snapshot)
+
+        #expect(model.visibleSeries == ["session:300", "weekly:10080"])
+        #expect(model.selectedSeries == "session:300")
+    }
+
+    @MainActor
+    @Test
+    func sessionChartUsesNativeResetBoundariesAndFillsMissingWindows() throws {
         let calendar = Calendar(identifier: .gregorian)
         let firstBoundary = try #require(calendar.date(from: DateComponents(
             timeZone: TimeZone.current,
             year: 2026,
             month: 3,
             day: 4,
-            hour: 10,
-            minute: 0)))
+            hour: 10)))
         let thirdBoundary = try #require(calendar.date(from: DateComponents(
             timeZone: TimeZone.current,
             year: 2026,
             month: 3,
-            day: 6,
-            hour: 10,
-            minute: 0)))
-        let samples = [
-            makePlanSample(
-                at: thirdBoundary.addingTimeInterval(-30 * 60),
-                primary: 20,
-                secondary: 35,
-                primaryWindowMinutes: 300,
-                primaryResetsAt: thirdBoundary,
-                secondaryWindowMinutes: 10080),
-            makePlanSample(
-                at: firstBoundary.addingTimeInterval(-30 * 60),
-                primary: 62,
-                secondary: 62,
-                primaryWindowMinutes: 300,
-                primaryResetsAt: firstBoundary,
-                secondaryWindowMinutes: 10080),
+            day: 4,
+            hour: 20)))
+        let histories = [
+            planSeries(name: .session, windowMinutes: 300, entries: [
+                planEntry(at: firstBoundary.addingTimeInterval(-30 * 60), usedPercent: 62, resetsAt: firstBoundary),
+                planEntry(at: thirdBoundary.addingTimeInterval(-30 * 60), usedPercent: 20, resetsAt: thirdBoundary),
+            ]),
         ]
 
-        let model = try #require(
-            PlanUtilizationHistoryChartMenuView._modelSnapshotForTesting(
-                periodRawValue: "daily",
-                samples: samples,
-                provider: .codex))
+        let model = PlanUtilizationHistoryChartMenuView._modelSnapshotForTesting(
+            selectedSeriesRawValue: "session:300",
+            histories: histories,
+            provider: .codex,
+            referenceDate: thirdBoundary)
 
         #expect(model.pointCount == 3)
-        #expect(model.axisIndexes == [0, 2])
-        #expect(model.xDomain == -0.5...29.5)
-        #expect(model.selectedSource == "primary:300")
-        #expect(model.usedPercents.count == 3)
-        #expect(abs(model.usedPercents[0] - (62.0 * 5.0 / 24.0)) < 0.000_1)
-        #expect(model.usedPercents[1] == 0)
-        #expect(abs(model.usedPercents[2] - (20.0 * 5.0 / 24.0)) < 0.000_1)
+        #expect(model.usedPercents == [62, 0, 20])
+        #expect(model.pointDates == [
+            formattedBoundary(firstBoundary),
+            formattedBoundary(firstBoundary.addingTimeInterval(5 * 60 * 60)),
+            formattedBoundary(thirdBoundary),
+        ])
     }
 
     @MainActor
     @Test
-    func dailyModelShowsTrailingZeroBarsUpToReferenceDay() throws {
+    func sessionChartLabelsOnlyDayChanges() throws {
         let calendar = Calendar(identifier: .gregorian)
         let firstBoundary = try #require(calendar.date(from: DateComponents(
             timeZone: TimeZone.current,
             year: 2026,
             month: 3,
             day: 4,
-            hour: 10,
-            minute: 0)))
-        let lastBoundary = try #require(calendar.date(from: DateComponents(
+            hour: 20)))
+        let thirdBoundary = try #require(calendar.date(from: DateComponents(
             timeZone: TimeZone.current,
             year: 2026,
             month: 3,
-            day: 6,
-            hour: 10,
-            minute: 0)))
-        let referenceDate = try #require(calendar.date(from: DateComponents(
-            timeZone: TimeZone.current,
-            year: 2026,
-            month: 3,
-            day: 8,
-            hour: 12,
-            minute: 0)))
-        let samples = [
-            makePlanSample(
-                at: lastBoundary.addingTimeInterval(-30 * 60),
-                primary: 20,
-                secondary: nil,
-                primaryWindowMinutes: 300,
-                primaryResetsAt: lastBoundary),
-            makePlanSample(
-                at: firstBoundary.addingTimeInterval(-30 * 60),
-                primary: 62,
-                secondary: nil,
-                primaryWindowMinutes: 300,
-                primaryResetsAt: firstBoundary),
+            day: 5,
+            hour: 6)))
+        let histories = [
+            planSeries(name: .session, windowMinutes: 300, entries: [
+                planEntry(at: firstBoundary.addingTimeInterval(-30 * 60), usedPercent: 62, resetsAt: firstBoundary),
+                planEntry(at: thirdBoundary.addingTimeInterval(-30 * 60), usedPercent: 20, resetsAt: thirdBoundary),
+            ]),
         ]
 
-        let model = try #require(
-            PlanUtilizationHistoryChartMenuView._modelSnapshotForTesting(
-                periodRawValue: "daily",
-                samples: samples,
-                provider: .codex,
-                referenceDate: referenceDate))
+        let model = PlanUtilizationHistoryChartMenuView._modelSnapshotForTesting(
+            selectedSeriesRawValue: "session:300",
+            histories: histories,
+            provider: .codex,
+            referenceDate: thirdBoundary)
 
-        #expect(model.pointCount == 5)
-        #expect(model.axisIndexes == [0, 4])
-        #expect(model.usedPercents.count == 5)
-        #expect(abs(model.usedPercents[0] - (62.0 * 5.0 / 24.0)) < 0.000_1)
-        #expect(model.usedPercents[1] == 0)
-        #expect(abs(model.usedPercents[2] - (20.0 * 5.0 / 24.0)) < 0.000_1)
-        #expect(model.usedPercents[3] == 0)
-        #expect(model.usedPercents[4] == 0)
+        #expect(model.axisIndexes == [0])
     }
 
     @MainActor
     @Test
-    func weeklyModelShowsZeroBarsForMissingWeeks() throws {
-        let calendar = Calendar(identifier: .gregorian)
-        let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 3, day: 6)))
-        let samples = [
-            makePlanSample(
-                at: now,
-                primary: 10,
-                secondary: 35,
-                primaryWindowMinutes: 300,
-                secondaryWindowMinutes: 10080),
-            makePlanSample(
-                at: now.addingTimeInterval(-7 * 24 * 3600),
-                primary: 20,
-                secondary: 48,
-                primaryWindowMinutes: 300,
-                secondaryWindowMinutes: 10080),
-            makePlanSample(
-                at: now.addingTimeInterval(-21 * 24 * 3600),
-                primary: 30,
-                secondary: 62,
-                primaryWindowMinutes: 300,
-                secondaryWindowMinutes: 10080),
-        ]
-
-        let model = try #require(
-            PlanUtilizationHistoryChartMenuView._modelSnapshotForTesting(
-                periodRawValue: "weekly",
-                samples: samples,
-                provider: .codex))
-
-        #expect(model.pointCount == 4)
-        #expect(model.axisIndexes == [3])
-        #expect(model.xDomain == -0.5...23.5)
-        #expect(model.selectedSource == "secondary:10080")
-        #expect(model.usedPercents == [62, 0, 48, 35])
-    }
-
-    @MainActor
-    @Test
-    func monthlyModelDerivesFromSecondaryWindowHistory() throws {
-        let calendar = Calendar(identifier: .gregorian)
-        let start = try #require(calendar.date(from: DateComponents(year: 2024, month: 1, day: 1)))
-        var samples: [PlanUtilizationHistorySample] = []
-
-        for monthOffset in 0..<30 {
-            let date = try #require(calendar.date(byAdding: .month, value: monthOffset, to: start))
-            samples.append(makePlanSample(
-                at: date,
-                primary: nil,
-                secondary: Double((monthOffset % 10) * 10),
-                secondaryWindowMinutes: 10080))
-        }
-
-        let model = try #require(
-            PlanUtilizationHistoryChartMenuView._modelSnapshotForTesting(
-                periodRawValue: "monthly",
-                samples: samples,
-                provider: .codex))
-
-        #expect(model.pointCount == 24)
-        #expect(model.axisIndexes == [23])
-        #expect(model.xDomain == -0.5...23.5)
-        #expect(model.selectedSource == "secondary:10080")
-        #expect(model.usedPercents.count == 24)
-    }
-
-    @MainActor
-    @Test
-    func dailyModelHidesFreeCodexSevenDayOnlyHistory() throws {
-        let calendar = Calendar(identifier: .gregorian)
-        let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 3, day: 6)))
-        let samples = [
-            makePlanSample(at: now, primary: 20, secondary: nil, primaryWindowMinutes: 10080),
-            makePlanSample(
-                at: now.addingTimeInterval(-7 * 24 * 3600),
-                primary: 48,
-                secondary: nil,
-                primaryWindowMinutes: 10080),
-        ]
-
-        let model = try #require(
-            PlanUtilizationHistoryChartMenuView._modelSnapshotForTesting(
-                periodRawValue: "daily",
-                samples: samples,
-                provider: .codex))
-
-        #expect(model.pointCount == 0)
-        #expect(model.selectedSource == nil)
-    }
-
-    @MainActor
-    @Test
-    func freeCodexSevenDayOnlyHistoryShowsWeeklyAndMonthlyTabsOnly() throws {
-        let calendar = Calendar(identifier: .gregorian)
-        let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 3, day: 6)))
-        let samples = [
-            makePlanSample(at: now, primary: 20, secondary: nil, primaryWindowMinutes: 10080),
-            makePlanSample(
-                at: now.addingTimeInterval(-7 * 24 * 3600),
-                primary: 48,
-                secondary: nil,
-                primaryWindowMinutes: 10080),
-        ]
-
-        let visiblePeriods = PlanUtilizationHistoryChartMenuView._visiblePeriodsForTesting(samples: samples)
-
-        #expect(visiblePeriods == ["weekly", "monthly"])
-    }
-
-    @Test
-    func fiveHourOnlyHistoryShowsAllTabs() {
-        let base = Date(timeIntervalSince1970: Double(18000 * 100_000))
-        let samples = [
-            makePlanSample(at: base.addingTimeInterval(60), primary: 20, secondary: nil, primaryWindowMinutes: 300),
-            makePlanSample(at: base.addingTimeInterval(3600), primary: 10, secondary: nil, primaryWindowMinutes: 300),
-            makePlanSample(at: base.addingTimeInterval(18060), primary: 40, secondary: nil, primaryWindowMinutes: 300),
-        ]
-
-        let visiblePeriods = PlanUtilizationHistoryChartMenuView._visiblePeriodsForTesting(samples: samples)
-
-        #expect(visiblePeriods == ["daily", "weekly", "monthly"])
-    }
-
-    @MainActor
-    @Test
-    func weeklyAndMonthlyModelsUsePrimaryWhenItIsTheBestEligibleWindow() throws {
+    func sessionChartLabelsEverySecondDayChange() throws {
         let calendar = Calendar(identifier: .gregorian)
         let firstBoundary = try #require(calendar.date(from: DateComponents(
             timeZone: TimeZone.current,
             year: 2026,
             month: 3,
-            day: 8,
-            hour: 0,
-            minute: 0)))
+            day: 4,
+            hour: 20)))
         let secondBoundary = try #require(calendar.date(from: DateComponents(
             timeZone: TimeZone.current,
             year: 2026,
             month: 3,
-            day: 15,
-            hour: 0,
-            minute: 0)))
+            day: 5,
+            hour: 6)))
         let thirdBoundary = try #require(calendar.date(from: DateComponents(
             timeZone: TimeZone.current,
             year: 2026,
             month: 3,
-            day: 22,
-            hour: 0,
-            minute: 0)))
-        let samples = [
-            makePlanSample(
-                at: firstBoundary.addingTimeInterval(-30 * 60),
-                primary: 62,
-                secondary: nil,
-                primaryWindowMinutes: 10080,
-                primaryResetsAt: firstBoundary),
-            makePlanSample(
-                at: secondBoundary.addingTimeInterval(-30 * 60),
-                primary: 48,
-                secondary: nil,
-                primaryWindowMinutes: 10080,
-                primaryResetsAt: secondBoundary),
-            makePlanSample(
-                at: thirdBoundary.addingTimeInterval(-30 * 60),
-                primary: 20,
-                secondary: nil,
-                primaryWindowMinutes: 10080,
-                primaryResetsAt: thirdBoundary),
-        ]
-
-        let weeklyModel = try #require(
-            PlanUtilizationHistoryChartMenuView._modelSnapshotForTesting(
-                periodRawValue: "weekly",
-                samples: samples,
-                provider: .codex))
-        let monthlyModel = try #require(
-            PlanUtilizationHistoryChartMenuView._modelSnapshotForTesting(
-                periodRawValue: "monthly",
-                samples: samples,
-                provider: .codex))
-
-        #expect(weeklyModel.pointCount == 3)
-        #expect(weeklyModel.selectedSource == "primary:10080")
-        #expect(monthlyModel.pointCount == 1)
-        #expect(monthlyModel.selectedSource == "primary:10080")
-        #expect(weeklyModel.usedPercents == [62, 48, 20])
-        #expect(monthlyModel.usedPercents.count == 1)
-        #expect(abs(monthlyModel.usedPercents[0] - ((62.0 + 48.0 + 20.0) * 7.0 / 31.0)) < 0.000_1)
-    }
-
-    @MainActor
-    @Test
-    func weeklyModelDerivesFromPrimaryFiveHourHistoryWhenSevenDayWindowIsMissing() throws {
-        let base = Date(timeIntervalSince1970: Double(18000 * 100_000))
-        let samples = [
-            makePlanSample(at: base.addingTimeInterval(60), primary: 20, secondary: nil, primaryWindowMinutes: 300),
-            makePlanSample(at: base.addingTimeInterval(3600), primary: 10, secondary: nil, primaryWindowMinutes: 300),
-            makePlanSample(at: base.addingTimeInterval(18060), primary: 40, secondary: nil, primaryWindowMinutes: 300),
-        ]
-
-        let model = try #require(
-            PlanUtilizationHistoryChartMenuView._modelSnapshotForTesting(
-                periodRawValue: "weekly",
-                samples: samples,
-                provider: .codex))
-
-        #expect(model.pointCount == 1)
-        #expect(model.selectedSource == "primary:300")
-        #expect(model.usedPercents.count == 1)
-        #expect(abs(model.usedPercents[0] - ((20.0 * 5.0 + 40.0 * 5.0) / (7.0 * 24.0))) < 0.000_1)
-    }
-
-    @MainActor
-    @Test
-    func detailLinesShowUsedAndWastedOnSingleLineForDerivedData() throws {
-        let calendar = Calendar(identifier: .gregorian)
-        let boundary = try #require(calendar.date(from: DateComponents(
+            day: 6,
+            hour: 6)))
+        let fourthBoundary = try #require(calendar.date(from: DateComponents(
             timeZone: TimeZone.current,
             year: 2026,
             month: 3,
             day: 7,
-            hour: 5,
-            minute: 0)))
-        let samples = [
-            makePlanSample(
-                at: boundary.addingTimeInterval(-30 * 60),
-                primary: 48,
-                secondary: nil,
-                primaryWindowMinutes: 300,
-                primaryResetsAt: boundary),
+            hour: 6)))
+        let histories = [
+            planSeries(name: .session, windowMinutes: 300, entries: [
+                planEntry(at: firstBoundary.addingTimeInterval(-30 * 60), usedPercent: 62, resetsAt: firstBoundary),
+                planEntry(at: secondBoundary.addingTimeInterval(-30 * 60), usedPercent: 20, resetsAt: secondBoundary),
+                planEntry(at: thirdBoundary.addingTimeInterval(-30 * 60), usedPercent: 35, resetsAt: thirdBoundary),
+                planEntry(at: fourthBoundary.addingTimeInterval(-30 * 60), usedPercent: 18, resetsAt: fourthBoundary),
+            ]),
         ]
 
-        let detail = try #require(
-            PlanUtilizationHistoryChartMenuView._detailLinesForTesting(
-                periodRawValue: "daily",
-                samples: samples,
-                provider: .codex))
+        let model = PlanUtilizationHistoryChartMenuView._modelSnapshotForTesting(
+            selectedSeriesRawValue: "session:300",
+            histories: histories,
+            provider: .codex,
+            referenceDate: fourthBoundary)
 
-        #expect(detail.primary == "7 Mar: 10% used, 90% wasted")
-        #expect(detail.secondary == "Estimated from provider-reported 5-hour windows.")
+        #expect(model.axisIndexes == [0])
     }
 
     @MainActor
     @Test
-    func exactFitModelUsesDirectProviderReportedCopy() throws {
+    func sessionChartDropsTrailingDayLabelWhenItWouldClipAtChartEdge() throws {
         let calendar = Calendar(identifier: .gregorian)
-        let boundary = try #require(calendar.date(from: DateComponents(
+        let firstBoundary = try #require(calendar.date(from: DateComponents(
             timeZone: TimeZone.current,
             year: 2026,
             month: 3,
-            day: 15,
-            hour: 5,
-            minute: 0)))
-        let samples = [
-            makePlanSample(
-                at: boundary.addingTimeInterval(-30 * 60),
-                primary: nil,
-                secondary: 35,
-                secondaryWindowMinutes: 10080,
-                secondaryResetsAt: boundary),
+            day: 4,
+            hour: 20)))
+        let secondBoundary = try #require(calendar.date(from: DateComponents(
+            timeZone: TimeZone.current,
+            year: 2026,
+            month: 3,
+            day: 5,
+            hour: 6)))
+        let thirdBoundary = try #require(calendar.date(from: DateComponents(
+            timeZone: TimeZone.current,
+            year: 2026,
+            month: 3,
+            day: 6,
+            hour: 6)))
+        let fourthBoundary = try #require(calendar.date(from: DateComponents(
+            timeZone: TimeZone.current,
+            year: 2026,
+            month: 3,
+            day: 7,
+            hour: 20)))
+        let histories = [
+            planSeries(name: .session, windowMinutes: 300, entries: [
+                planEntry(at: firstBoundary.addingTimeInterval(-30 * 60), usedPercent: 62, resetsAt: firstBoundary),
+                planEntry(at: secondBoundary.addingTimeInterval(-30 * 60), usedPercent: 20, resetsAt: secondBoundary),
+                planEntry(at: thirdBoundary.addingTimeInterval(-30 * 60), usedPercent: 35, resetsAt: thirdBoundary),
+                planEntry(at: fourthBoundary.addingTimeInterval(-30 * 60), usedPercent: 18, resetsAt: fourthBoundary),
+            ]),
         ]
 
-        let model = try #require(
-            PlanUtilizationHistoryChartMenuView._modelSnapshotForTesting(
-                periodRawValue: "weekly",
-                samples: samples,
-                provider: .codex))
+        let model = PlanUtilizationHistoryChartMenuView._modelSnapshotForTesting(
+            selectedSeriesRawValue: "session:300",
+            histories: histories,
+            provider: .codex,
+            referenceDate: fourthBoundary)
 
-        #expect(model.provenanceText == "Provider-reported weekly usage.")
+        #expect(model.axisIndexes == [0, 10])
+    }
+
+    @MainActor
+    @Test
+    func detailLineShowsUsedAndWastedWithoutProvenanceCopy() {
+        let boundary = Date(timeIntervalSince1970: 1_710_000_000)
+        let histories = [
+            planSeries(name: .session, windowMinutes: 300, entries: [
+                planEntry(at: boundary.addingTimeInterval(-30 * 60), usedPercent: 48, resetsAt: boundary),
+            ]),
+        ]
+
+        let detail = PlanUtilizationHistoryChartMenuView._detailLineForTesting(
+            selectedSeriesRawValue: "session:300",
+            histories: histories,
+            provider: .codex,
+            referenceDate: boundary.addingTimeInterval(-1))
+
+        #expect(detail.contains("48% used"))
+        #expect(!detail.contains("Provider-reported"))
+        #expect(!detail.contains("Estimated"))
+        #expect(!detail.contains("wasted"))
+    }
+
+    @MainActor
+    @Test
+    func detailLineShowsDashForMissingWindow() {
+        let boundary = Date(timeIntervalSince1970: 1_710_000_000)
+        let histories = [
+            planSeries(name: .session, windowMinutes: 300, entries: [
+                planEntry(at: boundary.addingTimeInterval(-30 * 60), usedPercent: 48, resetsAt: boundary),
+            ]),
+        ]
+
+        let detail = PlanUtilizationHistoryChartMenuView._detailLineForTesting(
+            selectedSeriesRawValue: "session:300",
+            histories: histories,
+            provider: .codex,
+            referenceDate: boundary.addingTimeInterval(5 * 60 * 60))
+
+        #expect(detail.contains(": -"))
+    }
+
+    @MainActor
+    @Test
+    func detailLineKeepsZeroPercentForObservedZeroUsage() {
+        let boundary = Date(timeIntervalSince1970: 1_710_000_000)
+        let histories = [
+            planSeries(name: .session, windowMinutes: 300, entries: [
+                planEntry(at: boundary.addingTimeInterval(-30 * 60), usedPercent: 0, resetsAt: boundary),
+            ]),
+        ]
+
+        let detail = PlanUtilizationHistoryChartMenuView._detailLineForTesting(
+            selectedSeriesRawValue: "session:300",
+            histories: histories,
+            provider: .codex,
+            referenceDate: boundary.addingTimeInterval(-1))
+
+        #expect(detail.contains("0% used"))
+        #expect(!detail.contains(": -"))
+    }
+
+    @MainActor
+    @Test
+    func detailLineUsesLowercaseAmPmForSessionHover() {
+        let boundary = Date(timeIntervalSince1970: 1_710_048_000) // Mar 11, 2024 1:20 pm UTC
+        let histories = [
+            planSeries(name: .session, windowMinutes: 300, entries: [
+                planEntry(at: boundary.addingTimeInterval(-30 * 60), usedPercent: 48, resetsAt: boundary),
+            ]),
+        ]
+
+        let detail = PlanUtilizationHistoryChartMenuView._detailLineForTesting(
+            selectedSeriesRawValue: "session:300",
+            histories: histories,
+            provider: .codex,
+            referenceDate: boundary.addingTimeInterval(-1))
+
+        #expect(detail.contains("pm"))
+        #expect(!detail.contains("PM"))
+    }
+
+    @MainActor
+    @Test
+    func detailLineUsesLowercaseAmPmForWeeklyHover() {
+        let boundary = Date(timeIntervalSince1970: 1_710_048_000) // Mar 11, 2024 1:20 pm UTC
+        let histories = [
+            planSeries(name: .weekly, windowMinutes: 10080, entries: [
+                planEntry(at: boundary.addingTimeInterval(-30 * 60), usedPercent: 48, resetsAt: boundary),
+            ]),
+        ]
+
+        let detail = PlanUtilizationHistoryChartMenuView._detailLineForTesting(
+            selectedSeriesRawValue: "weekly:10080",
+            histories: histories,
+            provider: .codex,
+            referenceDate: boundary.addingTimeInterval(-1))
+
+        #expect(detail.contains("pm"))
+        #expect(!detail.contains("PM"))
     }
 
     @Test
-    func chartEmptyStateShowsRefreshingWhileLoading() throws {
-        let text = try #require(
-            PlanUtilizationHistoryChartMenuView._emptyStateTextForTesting(
-                periodRawValue: "daily",
-                isRefreshing: true))
-
+    func chartEmptyStateShowsRefreshingWhileLoading() {
+        let text = PlanUtilizationHistoryChartMenuView._emptyStateTextForTesting(title: "Session", isRefreshing: true)
         #expect(text == "Refreshing...")
     }
 
     @Test
-    func chartEmptyStateShowsPeriodSpecificMessageWhenNotRefreshing() throws {
-        let text = try #require(
-            PlanUtilizationHistoryChartMenuView._emptyStateTextForTesting(
-                periodRawValue: "weekly",
-                isRefreshing: false))
-
+    func chartEmptyStateShowsSeriesSpecificMessageWhenNotRefreshing() {
+        let text = PlanUtilizationHistoryChartMenuView._emptyStateTextForTesting(title: "Weekly", isRefreshing: false)
         #expect(text == "No weekly utilization data yet.")
-    }
-
-    @MainActor
-    @Test
-    func makeStoreUsesIsolatedTemporaryStorage() throws {
-        let store = Self.makeStore()
-        let temporaryRoot = FileManager.default.temporaryDirectory.standardizedFileURL.path
-        let configURL = store.settings.configStore.fileURL.standardizedFileURL
-        let planHistoryURL = try #require(store.planUtilizationHistoryStore.fileURL?.standardizedFileURL)
-
-        #expect(configURL.path.hasPrefix(temporaryRoot))
-        #expect(configURL != CodexBarConfigStore.defaultURL().standardizedFileURL)
-        #expect(planHistoryURL.path.hasPrefix(temporaryRoot))
     }
 
     @MainActor
@@ -643,29 +428,80 @@ struct UsageStorePlanUtilizationTests {
                 provider: .codex,
                 snapshot: bobSnapshot))
 
-        let aliceSample = makePlanSample(at: Date(timeIntervalSince1970: 1_700_000_000), primary: 10, secondary: 20)
-        let bobSample = makePlanSample(at: Date(timeIntervalSince1970: 1_700_086_400), primary: 40, secondary: 50)
+        let bootstrap = planSeries(name: .session, windowMinutes: 300, entries: [
+            planEntry(at: Date(timeIntervalSince1970: 1_699_913_600), usedPercent: 90),
+        ])
+        let aliceWeekly = planSeries(name: .weekly, windowMinutes: 10080, entries: [
+            planEntry(at: Date(timeIntervalSince1970: 1_700_000_000), usedPercent: 20),
+        ])
+        let bobWeekly = planSeries(name: .weekly, windowMinutes: 10080, entries: [
+            planEntry(at: Date(timeIntervalSince1970: 1_700_086_400), usedPercent: 50),
+        ])
 
         store.planUtilizationHistory[.codex] = PlanUtilizationHistoryBuckets(
-            unscoped: [makePlanSample(at: Date(timeIntervalSince1970: 1_699_913_600), primary: 90, secondary: 90)],
+            unscoped: [bootstrap],
             accounts: [
-                aliceKey: [aliceSample],
-                bobKey: [bobSample],
+                aliceKey: [aliceWeekly],
+                bobKey: [bobWeekly],
             ])
 
         store._setSnapshotForTesting(aliceSnapshot, provider: .codex)
-        #expect(store.planUtilizationHistory(for: .codex) == [
-            makePlanSample(at: Date(timeIntervalSince1970: 1_699_913_600), primary: 90, secondary: 90),
-            aliceSample,
-        ])
+        #expect(store.planUtilizationHistory(for: .codex) == [bootstrap, aliceWeekly])
 
         store._setSnapshotForTesting(bobSnapshot, provider: .codex)
-        #expect(store.planUtilizationHistory(for: .codex) == [bobSample])
+        #expect(store.planUtilizationHistory(for: .codex) == [bobWeekly])
     }
 
     @MainActor
     @Test
-    func recordPlanHistoryPersistsWindowMetadataFromSnapshot() async throws {
+    func claudeHistoryPresentationShowsRefreshingWhileRefreshingWithoutCurrentSnapshot() throws {
+        let store = Self.makeStore()
+        let claudeKey = try #require(
+            UsageStore._planUtilizationAccountKeyForTesting(
+                provider: .claude,
+                snapshot: Self.makeSnapshot(provider: .claude, email: "alice@example.com")))
+        let weekly = planSeries(name: .weekly, windowMinutes: 10080, entries: [
+            planEntry(at: Date(timeIntervalSince1970: 1_700_000_000), usedPercent: 64),
+        ])
+        store.planUtilizationHistory[.claude] = PlanUtilizationHistoryBuckets(
+            preferredAccountKey: claudeKey,
+            accounts: [
+                claudeKey: [weekly],
+            ])
+        store.refreshingProviders.insert(.claude)
+        store._setSnapshotForTesting(nil, provider: .claude)
+
+        let presentation = store.planUtilizationHistoryPresentation(for: .claude)
+        #expect(presentation.isRefreshing)
+        #expect(presentation.histories.isEmpty)
+    }
+
+    @MainActor
+    @Test
+    func claudeHistoryPresentationShowsStoredHistoryWhenNotRefreshing() throws {
+        let store = Self.makeStore()
+        let claudeKey = try #require(
+            UsageStore._planUtilizationAccountKeyForTesting(
+                provider: .claude,
+                snapshot: Self.makeSnapshot(provider: .claude, email: "alice@example.com")))
+        let weekly = planSeries(name: .weekly, windowMinutes: 10080, entries: [
+            planEntry(at: Date(timeIntervalSince1970: 1_700_000_000), usedPercent: 64),
+        ])
+        store.planUtilizationHistory[.claude] = PlanUtilizationHistoryBuckets(
+            preferredAccountKey: claudeKey,
+            accounts: [
+                claudeKey: [weekly],
+            ])
+        store._setSnapshotForTesting(nil, provider: .claude)
+
+        let presentation = store.planUtilizationHistoryPresentation(for: .claude)
+        #expect(!presentation.isRefreshing)
+        #expect(presentation.histories == [weekly])
+    }
+
+    @MainActor
+    @Test
+    func recordPlanHistoryPersistsNamedSeriesFromSnapshot() async {
         let store = Self.makeStore()
         let primaryReset = Date(timeIntervalSince1970: 1_710_000_000)
         let secondaryReset = Date(timeIntervalSince1970: 1_710_086_400)
@@ -685,7 +521,7 @@ struct UsageStorePlanUtilizationTests {
                 providerID: .codex,
                 accountEmail: "alice@example.com",
                 accountOrganization: nil,
-                loginMethod: "free"))
+                loginMethod: "plus"))
         store._setSnapshotForTesting(snapshot, provider: .codex)
 
         await store.recordPlanUtilizationHistorySample(
@@ -693,37 +529,43 @@ struct UsageStorePlanUtilizationTests {
             snapshot: snapshot,
             now: Date(timeIntervalSince1970: 1_700_000_000))
 
-        let sample = try #require(store.planUtilizationHistory(for: .codex).last)
-        #expect(sample.primaryUsedPercent == 100)
-        #expect(sample.primaryWindowMinutes == 300)
-        #expect(sample.primaryResetsAt == primaryReset)
-        #expect(sample.secondaryUsedPercent == 0)
-        #expect(sample.secondaryWindowMinutes == 10080)
-        #expect(sample.secondaryResetsAt == secondaryReset)
+        let histories = store.planUtilizationHistory(for: .codex)
+        #expect(findSeries(histories, name: .session, windowMinutes: 300)?.entries.last?.usedPercent == 100)
+        #expect(findSeries(histories, name: .session, windowMinutes: 300)?.entries.last?.resetsAt == primaryReset)
+        #expect(findSeries(histories, name: .weekly, windowMinutes: 10080)?.entries.last?.usedPercent == 0)
+        #expect(findSeries(histories, name: .weekly, windowMinutes: 10080)?.entries.last?.resetsAt == secondaryReset)
     }
 
     @MainActor
     @Test
-    func recordPlanHistoryKeepsMissingWindowValuesNil() async throws {
+    func recordPlanHistoryStoresClaudeOpusAsSeparateSeries() async {
         let store = Self.makeStore()
-        let snapshot = Self.makeSnapshot(provider: .codex, email: "alice@example.com")
-        store._setSnapshotForTesting(snapshot, provider: .codex)
+        let snapshot = UsageSnapshot(
+            primary: RateWindow(usedPercent: 10, windowMinutes: 300, resetsAt: nil, resetDescription: nil),
+            secondary: RateWindow(usedPercent: 20, windowMinutes: 10080, resetsAt: nil, resetDescription: nil),
+            tertiary: RateWindow(usedPercent: 30, windowMinutes: 10080, resetsAt: nil, resetDescription: nil),
+            updatedAt: Date(),
+            identity: ProviderIdentitySnapshot(
+                providerID: .claude,
+                accountEmail: "alice@example.com",
+                accountOrganization: nil,
+                loginMethod: "max"))
+        store._setSnapshotForTesting(snapshot, provider: .claude)
 
         await store.recordPlanUtilizationHistorySample(
-            provider: .codex,
+            provider: .claude,
             snapshot: snapshot,
             now: Date(timeIntervalSince1970: 1_700_000_000))
 
-        let sample = try #require(store.planUtilizationHistory(for: .codex).last)
-        #expect(sample.primaryWindowMinutes == nil)
-        #expect(sample.primaryResetsAt == nil)
-        #expect(sample.secondaryWindowMinutes == nil)
-        #expect(sample.secondaryResetsAt == nil)
+        let histories = store.planUtilizationHistory(for: .claude)
+        #expect(findSeries(histories, name: .session, windowMinutes: 300)?.entries.last?.usedPercent == 10)
+        #expect(findSeries(histories, name: .weekly, windowMinutes: 10080)?.entries.last?.usedPercent == 20)
+        #expect(findSeries(histories, name: .opus, windowMinutes: 10080)?.entries.last?.usedPercent == 30)
     }
 
     @MainActor
     @Test
-    func concurrentPlanHistoryWritesCoalesceWithinSingleHourBucket() async throws {
+    func concurrentPlanHistoryWritesCoalesceWithinSingleHourBucketPerSeries() async throws {
         let store = Self.makeStore()
         let snapshot = Self.makeSnapshot(provider: .codex, email: "alice@example.com")
         store._setSnapshotForTesting(snapshot, provider: .codex)
@@ -751,77 +593,9 @@ struct UsageStorePlanUtilizationTests {
             }
         }
 
-        let history = try #require(store.planUtilizationHistory[.codex]?.accounts.values.first)
-        #expect(history.count == 1)
-        let recordedAt = try #require(history.last?.capturedAt)
-        #expect(writeTimes.contains(recordedAt))
-    }
-
-    @MainActor
-    @Test
-    func codexPlanHistoryFallsBackToUnscopedBucketWhenIdentityIsUnavailable() {
-        let store = Self.makeStore()
-        let sample = makePlanSample(at: Date(timeIntervalSince1970: 1_700_000_000), primary: 20, secondary: 30)
-
-        store.planUtilizationHistory[.codex] = PlanUtilizationHistoryBuckets(unscoped: [sample])
-        store._setSnapshotForTesting(
-            UsageSnapshot(
-                primary: nil,
-                secondary: nil,
-                updatedAt: Date()),
-            provider: .codex)
-
-        #expect(store.planUtilizationHistory(for: .codex) == [sample])
-    }
-
-    @MainActor
-    @Test
-    func firstResolvedCodexIdentityAdoptsUnscopedHistory() throws {
-        let store = Self.makeStore()
-        let unscopedSample = makePlanSample(
-            at: Date(timeIntervalSince1970: 1_700_000_000),
-            primary: 15,
-            secondary: 25)
-        store.planUtilizationHistory[.codex] = PlanUtilizationHistoryBuckets(unscoped: [unscopedSample])
-
-        let resolvedSnapshot = Self.makeSnapshot(provider: .codex, email: "alice@example.com")
-        let resolvedKey = try #require(
-            UsageStore._planUtilizationAccountKeyForTesting(
-                provider: .codex,
-                snapshot: resolvedSnapshot))
-        store._setSnapshotForTesting(resolvedSnapshot, provider: .codex)
-
-        let history = store.planUtilizationHistory(for: .codex)
-
-        #expect(history == [unscopedSample])
-        let buckets = try #require(store.planUtilizationHistory[.codex])
-        #expect(buckets.unscoped.isEmpty)
-        #expect(buckets.accounts[resolvedKey] == [unscopedSample])
-    }
-
-    @MainActor
-    @Test
-    func codexHistoryWithoutIdentityFallsBackToLastResolvedAccount() async {
-        let store = Self.makeStore()
-        let resolvedSnapshot = Self.makeSnapshot(provider: .codex, email: "alice@example.com")
-        store._setSnapshotForTesting(resolvedSnapshot, provider: .codex)
-
-        await store.recordPlanUtilizationHistorySample(
-            provider: .codex,
-            snapshot: resolvedSnapshot,
-            now: Date(timeIntervalSince1970: 1_700_000_000))
-
-        let identitylessSnapshot = UsageSnapshot(
-            primary: resolvedSnapshot.primary,
-            secondary: resolvedSnapshot.secondary,
-            updatedAt: resolvedSnapshot.updatedAt)
-        store._setSnapshotForTesting(identitylessSnapshot, provider: .codex)
-
-        let history = store.planUtilizationHistory(for: .codex)
-
-        #expect(history.count == 1)
-        #expect(history.first?.primaryUsedPercent == 10)
-        #expect(history.first?.secondaryUsedPercent == 20)
+        let histories = try #require(store.planUtilizationHistory[.codex]?.accounts.values.first)
+        #expect(findSeries(histories, name: .session, windowMinutes: 300)?.entries.count == 1)
+        #expect(findSeries(histories, name: .weekly, windowMinutes: 10080)?.entries.count == 1)
     }
 
     @Test
@@ -850,36 +624,34 @@ struct UsageStorePlanUtilizationTests {
         try Data(unsupportedJSON.utf8).write(to: url, options: Data.WritingOptions.atomic)
 
         let loaded = store.load()
-
         #expect(loaded.isEmpty)
     }
 
     @Test
-    func storeRoundTripsAccountBucketsWithWindowMetadata() {
+    func storeRoundTripsAccountBucketsWithSeriesEntries() {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         let url = root
             .appendingPathComponent("com.steipete.codexbar", isDirectory: true)
             .appendingPathComponent("plan-utilization-history.json")
         let store = PlanUtilizationHistoryStore(fileURL: url)
-        let primaryReset = Date(timeIntervalSince1970: 1_710_000_000)
-        let secondaryReset = Date(timeIntervalSince1970: 1_710_086_400)
-        let aliceSample = makePlanSample(
-            at: Date(timeIntervalSince1970: 1_700_000_000),
-            primary: 10,
-            secondary: 20,
-            primaryWindowMinutes: 300,
-            primaryResetsAt: primaryReset,
-            secondaryWindowMinutes: 10080,
-            secondaryResetsAt: secondaryReset)
-        let legacySample = makePlanSample(
-            at: Date(timeIntervalSince1970: 1_699_913_600),
-            primary: 50,
-            secondary: 60)
         let buckets = PlanUtilizationHistoryBuckets(
             preferredAccountKey: "alice",
-            unscoped: [legacySample],
-            accounts: ["alice": [aliceSample]])
+            unscoped: [
+                planSeries(name: .session, windowMinutes: 300, entries: [
+                    planEntry(at: Date(timeIntervalSince1970: 1_699_913_600), usedPercent: 50),
+                ]),
+            ],
+            accounts: [
+                "alice": [
+                    planSeries(name: .session, windowMinutes: 300, entries: [
+                        planEntry(at: Date(timeIntervalSince1970: 1_700_000_000), usedPercent: 10),
+                    ]),
+                    planSeries(name: .weekly, windowMinutes: 10080, entries: [
+                        planEntry(at: Date(timeIntervalSince1970: 1_700_000_000), usedPercent: 20),
+                    ]),
+                ],
+            ])
 
         store.save([.codex: buckets])
         let loaded = store.load()
@@ -920,8 +692,8 @@ extension UsageStorePlanUtilizationTests {
 
     static func makeSnapshot(provider: UsageProvider, email: String) -> UsageSnapshot {
         UsageSnapshot(
-            primary: RateWindow(usedPercent: 10, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
-            secondary: RateWindow(usedPercent: 20, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
+            primary: RateWindow(usedPercent: 10, windowMinutes: 300, resetsAt: nil, resetDescription: nil),
+            secondary: RateWindow(usedPercent: 20, windowMinutes: 10080, resetsAt: nil, resetDescription: nil),
             updatedAt: Date(),
             identity: ProviderIdentitySnapshot(
                 providerID: provider,
@@ -931,21 +703,30 @@ extension UsageStorePlanUtilizationTests {
     }
 }
 
-func makePlanSample(
-    at capturedAt: Date,
-    primary: Double?,
-    secondary: Double?,
-    primaryWindowMinutes: Int? = nil,
-    primaryResetsAt: Date? = nil,
-    secondaryWindowMinutes: Int? = nil,
-    secondaryResetsAt: Date? = nil) -> PlanUtilizationHistorySample
+func planEntry(at capturedAt: Date, usedPercent: Double, resetsAt: Date? = nil) -> PlanUtilizationHistoryEntry {
+    PlanUtilizationHistoryEntry(capturedAt: capturedAt, usedPercent: usedPercent, resetsAt: resetsAt)
+}
+
+func planSeries(
+    name: PlanUtilizationSeriesName,
+    windowMinutes: Int,
+    entries: [PlanUtilizationHistoryEntry]) -> PlanUtilizationSeriesHistory
 {
-    PlanUtilizationHistorySample(
-        capturedAt: capturedAt,
-        primaryUsedPercent: primary,
-        primaryWindowMinutes: primaryWindowMinutes,
-        primaryResetsAt: primaryResetsAt,
-        secondaryUsedPercent: secondary,
-        secondaryWindowMinutes: secondaryWindowMinutes,
-        secondaryResetsAt: secondaryResetsAt)
+    PlanUtilizationSeriesHistory(name: name, windowMinutes: windowMinutes, entries: entries)
+}
+
+func findSeries(
+    _ histories: [PlanUtilizationSeriesHistory],
+    name: PlanUtilizationSeriesName,
+    windowMinutes: Int) -> PlanUtilizationSeriesHistory?
+{
+    histories.first { $0.name == name && $0.windowMinutes == windowMinutes }
+}
+
+func formattedBoundary(_ date: Date) -> String {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.timeZone = TimeZone.current
+    formatter.dateFormat = "yyyy-MM-dd HH:mm"
+    return formatter.string(from: date)
 }

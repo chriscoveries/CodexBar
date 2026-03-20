@@ -1190,33 +1190,43 @@ extension StatusItemController {
         return item
     }
 
+    func makeFixedWidthSubmenuItem(title: String, submenu: NSMenu, width: CGFloat) -> NSMenuItem {
+        self.makeMenuCardItem(
+            HStack(spacing: 0) {
+                Text(title)
+                    .font(.system(size: NSFont.menuFont(ofSize: 0).pointSize))
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.leading, 14)
+                    .padding(.trailing, 28)
+                    .padding(.vertical, 8)
+            },
+            id: "submenu-\(title)",
+            width: width,
+            submenu: submenu)
+    }
+
     @discardableResult
     private func addCreditsHistorySubmenu(to menu: NSMenu) -> Bool {
         guard let submenu = self.makeCreditsHistorySubmenu() else { return false }
-        let item = NSMenuItem(title: "Credits history", action: nil, keyEquivalent: "")
-        item.isEnabled = true
-        item.submenu = submenu
-        menu.addItem(item)
+        let width = self.menuCardWidth(for: self.store.enabledProvidersForDisplay(), menu: menu)
+        menu.addItem(self.makeFixedWidthSubmenuItem(title: "Credits history", submenu: submenu, width: width))
         return true
     }
 
     @discardableResult
     private func addUsageBreakdownSubmenu(to menu: NSMenu) -> Bool {
         guard let submenu = self.makeUsageBreakdownSubmenu() else { return false }
-        let item = NSMenuItem(title: "Usage breakdown", action: nil, keyEquivalent: "")
-        item.isEnabled = true
-        item.submenu = submenu
-        menu.addItem(item)
+        let width = self.menuCardWidth(for: self.store.enabledProvidersForDisplay(), menu: menu)
+        menu.addItem(self.makeFixedWidthSubmenuItem(title: "Usage breakdown", submenu: submenu, width: width))
         return true
     }
 
     @discardableResult
     private func addCostHistorySubmenu(to menu: NSMenu, provider: UsageProvider) -> Bool {
         guard let submenu = self.makeCostHistorySubmenu(provider: provider) else { return false }
-        let item = NSMenuItem(title: "Usage history (30 days)", action: nil, keyEquivalent: "")
-        item.isEnabled = true
-        item.submenu = submenu
-        menu.addItem(item)
+        let width = self.menuCardWidth(for: self.store.enabledProvidersForDisplay(), menu: menu)
+        menu.addItem(self.makeFixedWidthSubmenuItem(title: "Usage history (30 days)", submenu: submenu, width: width))
         return true
     }
 

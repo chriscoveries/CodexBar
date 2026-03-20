@@ -6,10 +6,8 @@ extension StatusItemController {
     @discardableResult
     func addUsageHistoryMenuItemIfNeeded(to menu: NSMenu, provider: UsageProvider) -> Bool {
         guard let submenu = self.makeUsageHistorySubmenu(provider: provider) else { return false }
-        let item = NSMenuItem(title: "Subscription Utilization", action: nil, keyEquivalent: "")
-        item.isEnabled = true
-        item.submenu = submenu
-        menu.addItem(item)
+        let width: CGFloat = 310
+        menu.addItem(self.makeFixedWidthSubmenuItem(title: "Subscription Utilization", submenu: submenu, width: width))
         return true
     }
 
@@ -26,8 +24,10 @@ extension StatusItemController {
         provider: UsageProvider,
         width: CGFloat) -> Bool
     {
-        let samples = self.store.planUtilizationHistory(for: provider)
-        let isRefreshing = self.store.shouldShowPlanUtilizationRefreshingState(for: provider) && samples.isEmpty
+        let presentation = self.store.planUtilizationHistoryPresentation(for: provider)
+        let histories = presentation.histories
+        let snapshot = self.store.snapshot(for: provider)
+        let isRefreshing = presentation.isRefreshing
 
         if !Self.menuCardRenderingEnabled {
             let chartItem = NSMenuItem()
@@ -39,7 +39,8 @@ extension StatusItemController {
 
         let chartView = PlanUtilizationHistoryChartMenuView(
             provider: provider,
-            samples: samples,
+            histories: histories,
+            snapshot: snapshot,
             width: width,
             isRefreshing: isRefreshing)
         let hosting = MenuHostingView(rootView: chartView)

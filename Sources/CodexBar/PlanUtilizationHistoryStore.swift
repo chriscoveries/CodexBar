@@ -1,28 +1,66 @@
 import CodexBarCore
 import Foundation
 
-struct PlanUtilizationHistorySample: Codable, Sendable, Equatable {
+struct PlanUtilizationSeriesName: RawRepresentable, Hashable, Codable, Sendable, ExpressibleByStringLiteral {
+    let rawValue: String
+
+    init(rawValue: String) {
+        self.rawValue = rawValue
+    }
+
+    init(stringLiteral value: StringLiteralType) {
+        self.rawValue = value
+    }
+
+    static let session: Self = "session"
+    static let weekly: Self = "weekly"
+    static let opus: Self = "opus"
+}
+
+struct PlanUtilizationHistoryEntry: Codable, Sendable, Equatable {
     let capturedAt: Date
-    let primaryUsedPercent: Double?
-    let primaryWindowMinutes: Int?
-    let primaryResetsAt: Date?
-    let secondaryUsedPercent: Double?
-    let secondaryWindowMinutes: Int?
-    let secondaryResetsAt: Date?
+    let usedPercent: Double
+    let resetsAt: Date?
+}
+
+struct PlanUtilizationSeriesHistory: Codable, Sendable, Equatable {
+    let name: PlanUtilizationSeriesName
+    let windowMinutes: Int
+    let entries: [PlanUtilizationHistoryEntry]
+
+    init(name: PlanUtilizationSeriesName, windowMinutes: Int, entries: [PlanUtilizationHistoryEntry]) {
+        self.name = name
+        self.windowMinutes = windowMinutes
+        self.entries = entries.sorted { lhs, rhs in
+            if lhs.capturedAt != rhs.capturedAt {
+                return lhs.capturedAt < rhs.capturedAt
+            }
+            if lhs.usedPercent != rhs.usedPercent {
+                return lhs.usedPercent < rhs.usedPercent
+            }
+            let lhsReset = lhs.resetsAt?.timeIntervalSince1970 ?? Date.distantPast.timeIntervalSince1970
+            let rhsReset = rhs.resetsAt?.timeIntervalSince1970 ?? Date.distantPast.timeIntervalSince1970
+            return lhsReset < rhsReset
+        }
+    }
+
+    var latestCapturedAt: Date? {
+        self.entries.last?.capturedAt
+    }
 }
 
 struct PlanUtilizationHistoryBuckets: Sendable, Equatable {
     var preferredAccountKey: String?
-    var unscoped: [PlanUtilizationHistorySample] = []
-    var accounts: [String: [PlanUtilizationHistorySample]] = [:]
+    var unscoped: [PlanUtilizationSeriesHistory] = []
+    var accounts: [String: [PlanUtilizationSeriesHistory]] = [:]
 
-    func samples(for accountKey: String?) -> [PlanUtilizationHistorySample] {
+    func histories(for accountKey: String?) -> [PlanUtilizationSeriesHistory] {
         guard let accountKey, !accountKey.isEmpty else { return self.unscoped }
         return self.accounts[accountKey] ?? []
     }
 
-    mutating func setSamples(_ samples: [PlanUtilizationHistorySample], for accountKey: String?) {
-        let sorted = samples.sorted { $0.capturedAt < $1.capturedAt }
+    mutating func setHistories(_ histories: [PlanUtilizationSeriesHistory], for accountKey: String?) {
+        let sorted = Self.sortedHistories(histories)
         guard let accountKey, !accountKey.isEmpty else {
             self.unscoped = sorted
             return
@@ -37,6 +75,15 @@ struct PlanUtilizationHistoryBuckets: Sendable, Equatable {
     var isEmpty: Bool {
         self.unscoped.isEmpty && self.accounts.values.allSatisfy(\.isEmpty)
     }
+
+    private static func sortedHistories(_ histories: [PlanUtilizationSeriesHistory]) -> [PlanUtilizationSeriesHistory] {
+        histories.sorted { lhs, rhs in
+            if lhs.windowMinutes != rhs.windowMinutes {
+                return lhs.windowMinutes < rhs.windowMinutes
+            }
+            return lhs.name.rawValue < rhs.name.rawValue
+        }
+    }
 }
 
 private struct PlanUtilizationHistoryFile: Codable, Sendable {
@@ -46,12 +93,12 @@ private struct PlanUtilizationHistoryFile: Codable, Sendable {
 
 private struct ProviderHistoryFile: Codable, Sendable {
     let preferredAccountKey: String?
-    let unscoped: [PlanUtilizationHistorySample]
-    let accounts: [String: [PlanUtilizationHistorySample]]
+    let unscoped: [PlanUtilizationSeriesHistory]
+    let accounts: [String: [PlanUtilizationSeriesHistory]]
 }
 
 struct PlanUtilizationHistoryStore: Sendable {
-    fileprivate static let schemaVersion = 4
+    fileprivate static let schemaVersion = 6
 
     let fileURL: URL?
 
@@ -80,15 +127,15 @@ struct PlanUtilizationHistoryStore: Sendable {
         let persistedProviders = providers.reduce(into: [String: ProviderHistoryFile]()) { output, entry in
             let (provider, buckets) = entry
             guard !buckets.isEmpty else { return }
-            let accounts: [String: [PlanUtilizationHistorySample]] = Dictionary(
-                uniqueKeysWithValues: buckets.accounts.compactMap { accountKey, samples in
-                    let sorted = samples.sorted { $0.capturedAt < $1.capturedAt }
+            let accounts: [String: [PlanUtilizationSeriesHistory]] = Dictionary(
+                uniqueKeysWithValues: buckets.accounts.compactMap { accountKey, histories in
+                    let sorted = Self.sortedHistories(histories)
                     guard !sorted.isEmpty else { return nil }
                     return (accountKey, sorted)
                 })
             output[provider.rawValue] = ProviderHistoryFile(
                 preferredAccountKey: buckets.preferredAccountKey,
-                unscoped: buckets.unscoped.sorted { $0.capturedAt < $1.capturedAt },
+                unscoped: Self.sortedHistories(buckets.unscoped),
                 accounts: accounts)
         }
 
@@ -117,15 +164,24 @@ struct PlanUtilizationHistoryStore: Sendable {
             guard let provider = UsageProvider(rawValue: rawProvider) else { continue }
             output[provider] = PlanUtilizationHistoryBuckets(
                 preferredAccountKey: providerHistory.preferredAccountKey,
-                unscoped: providerHistory.unscoped.sorted { $0.capturedAt < $1.capturedAt },
+                unscoped: Self.sortedHistories(providerHistory.unscoped),
                 accounts: Dictionary(
-                    uniqueKeysWithValues: providerHistory.accounts.compactMap { accountKey, samples in
-                        let sorted = samples.sorted { $0.capturedAt < $1.capturedAt }
+                    uniqueKeysWithValues: providerHistory.accounts.compactMap { accountKey, histories in
+                        let sorted = Self.sortedHistories(histories)
                         guard !sorted.isEmpty else { return nil }
                         return (accountKey, sorted)
                     }))
         }
         return output
+    }
+
+    private static func sortedHistories(_ histories: [PlanUtilizationSeriesHistory]) -> [PlanUtilizationSeriesHistory] {
+        histories.sorted { lhs, rhs in
+            if lhs.windowMinutes != rhs.windowMinutes {
+                return lhs.windowMinutes < rhs.windowMinutes
+            }
+            return lhs.name.rawValue < rhs.name.rawValue
+        }
     }
 
     private static func defaultFileURL() -> URL? {

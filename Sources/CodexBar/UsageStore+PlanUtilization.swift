@@ -3,14 +3,27 @@ import CryptoKit
 import Foundation
 
 extension UsageStore {
+    struct PlanUtilizationHistoryPresentation: Equatable {
+        let histories: [PlanUtilizationSeriesHistory]
+        let isRefreshing: Bool
+    }
+
     private nonisolated static let planUtilizationMinSampleIntervalSeconds: TimeInterval = 60 * 60
+    private nonisolated static let planUtilizationResetEquivalenceToleranceSeconds: TimeInterval = 2 * 60
     private nonisolated static let planUtilizationMaxSamples: Int = 24 * 730
 
-    func planUtilizationHistory(for provider: UsageProvider) -> [PlanUtilizationHistorySample] {
-        if self.shouldDeferClaudePlanUtilizationHistory(provider: provider) {
-            return []
-        }
+    private struct PlanUtilizationSeriesKey: Hashable {
+        let name: PlanUtilizationSeriesName
+        let windowMinutes: Int
+    }
 
+    private struct PlanUtilizationSeriesSample {
+        let name: PlanUtilizationSeriesName
+        let windowMinutes: Int
+        let entry: PlanUtilizationHistoryEntry
+    }
+
+    func planUtilizationHistory(for provider: UsageProvider) -> [PlanUtilizationSeriesHistory] {
         var providerBuckets = self.planUtilizationHistory[provider] ?? PlanUtilizationHistoryBuckets()
         let originalProviderBuckets = providerBuckets
         let accountKey = self.resolvePlanUtilizationAccountKey(
@@ -25,7 +38,17 @@ extension UsageStore {
                 await self.planUtilizationPersistenceCoordinator.enqueue(snapshotToPersist)
             }
         }
-        return providerBuckets.samples(for: accountKey)
+        return providerBuckets.histories(for: accountKey)
+    }
+
+    func planUtilizationHistoryPresentation(for provider: UsageProvider) -> PlanUtilizationHistoryPresentation {
+        let isRefreshing = self.shouldShowPlanUtilizationRefreshingState(for: provider)
+        if isRefreshing {
+            return PlanUtilizationHistoryPresentation(histories: [], isRefreshing: true)
+        }
+        return PlanUtilizationHistoryPresentation(
+            histories: self.planUtilizationHistory(for: provider),
+            isRefreshing: false)
     }
 
     func recordPlanUtilizationHistorySample(
@@ -42,8 +65,6 @@ extension UsageStore {
 
         var snapshotToPersist: [UsageProvider: PlanUtilizationHistoryBuckets]?
         await MainActor.run {
-            // History mutation stays serialized on MainActor so overlapping refresh tasks cannot race each other
-            // into duplicate writes for the same provider/account bucket.
             var providerBuckets = self.planUtilizationHistory[provider] ?? PlanUtilizationHistoryBuckets()
             let preferredAccount = account ?? self.settings.selectedTokenAccount(for: provider)
             let accountKey = self.resolvePlanUtilizationAccountKey(
@@ -53,25 +74,17 @@ extension UsageStore {
                 shouldUpdatePreferredAccountKey: shouldUpdatePreferredAccountKey,
                 shouldAdoptUnscopedHistory: shouldAdoptUnscopedHistory,
                 providerBuckets: &providerBuckets)
-            let history = providerBuckets.samples(for: accountKey)
-            let sample = PlanUtilizationHistorySample(
-                capturedAt: now,
-                primaryUsedPercent: Self.clampedPercent(snapshot.primary?.usedPercent),
-                primaryWindowMinutes: snapshot.primary?.windowMinutes,
-                primaryResetsAt: snapshot.primary?.resetsAt,
-                secondaryUsedPercent: Self.clampedPercent(snapshot.secondary?.usedPercent),
-                secondaryWindowMinutes: snapshot.secondary?.windowMinutes,
-                secondaryResetsAt: snapshot.secondary?.resetsAt)
+            let histories = providerBuckets.histories(for: accountKey)
+            let samples = Self.planUtilizationSeriesSamples(provider: provider, snapshot: snapshot, capturedAt: now)
 
-            guard let updatedHistory = Self.updatedPlanUtilizationHistory(
-                provider: provider,
-                existingHistory: history,
-                sample: sample)
+            guard let updatedHistories = Self.updatedPlanUtilizationHistories(
+                existingHistories: histories,
+                samples: samples)
             else {
                 return
             }
 
-            providerBuckets.setSamples(updatedHistory, for: accountKey)
+            providerBuckets.setHistories(updatedHistories, for: accountKey)
             self.planUtilizationHistory[provider] = providerBuckets
             snapshotToPersist = self.planUtilizationHistory
         }
@@ -80,57 +93,96 @@ extension UsageStore {
         await self.planUtilizationPersistenceCoordinator.enqueue(snapshotToPersist)
     }
 
-    private nonisolated static func updatedPlanUtilizationHistory(
-        provider: UsageProvider,
-        existingHistory: [PlanUtilizationHistorySample],
-        sample: PlanUtilizationHistorySample) -> [PlanUtilizationHistorySample]?
+    private nonisolated static func updatedPlanUtilizationHistories(
+        existingHistories: [PlanUtilizationSeriesHistory],
+        samples: [PlanUtilizationSeriesSample]) -> [PlanUtilizationSeriesHistory]?
     {
-        var history = existingHistory
-        let insertionIndex = history.firstIndex(where: { $0.capturedAt > sample.capturedAt }) ?? history.endIndex
+        guard !samples.isEmpty else { return nil }
 
-        if let matchingIndex = self.planUtilizationHistoryMergeIndex(
-            history: history,
-            insertionIndex: insertionIndex,
-            sample: sample)
-        {
-            let merged = self.mergedPlanUtilizationHistorySample(
-                existing: history[matchingIndex],
-                incoming: sample)
-            if merged == history[matchingIndex] {
-                return nil
+        var historiesByKey = Dictionary(uniqueKeysWithValues: existingHistories.map {
+            (PlanUtilizationSeriesKey(name: $0.name, windowMinutes: $0.windowMinutes), $0)
+        })
+        var didChange = false
+
+        for sample in samples {
+            let key = PlanUtilizationSeriesKey(name: sample.name, windowMinutes: sample.windowMinutes)
+            if let existingHistory = historiesByKey[key] {
+                guard let updatedEntries = self.updatedPlanUtilizationEntries(
+                    existingEntries: existingHistory.entries,
+                    entry: sample.entry)
+                else {
+                    continue
+                }
+                historiesByKey[key] = PlanUtilizationSeriesHistory(
+                    name: sample.name,
+                    windowMinutes: sample.windowMinutes,
+                    entries: updatedEntries)
+            } else {
+                historiesByKey[key] = PlanUtilizationSeriesHistory(
+                    name: sample.name,
+                    windowMinutes: sample.windowMinutes,
+                    entries: [sample.entry])
             }
-            history[matchingIndex] = merged
-            return history
+            didChange = true
         }
 
-        if insertionIndex < history.endIndex {
-            history.insert(sample, at: insertionIndex)
-        } else {
-            history.append(sample)
+        guard didChange else { return nil }
+        return historiesByKey.values.sorted { lhs, rhs in
+            if lhs.windowMinutes != rhs.windowMinutes {
+                return lhs.windowMinutes < rhs.windowMinutes
+            }
+            return lhs.name.rawValue < rhs.name.rawValue
         }
+    }
 
-        if history.count > self.planUtilizationMaxSamples {
-            history.removeFirst(history.count - self.planUtilizationMaxSamples)
+    private nonisolated static func updatedPlanUtilizationEntries(
+        existingEntries: [PlanUtilizationHistoryEntry],
+        entry: PlanUtilizationHistoryEntry) -> [PlanUtilizationHistoryEntry]?
+    {
+        var entries = existingEntries
+        let insertionIndex = entries.firstIndex(where: { $0.capturedAt > entry.capturedAt }) ?? entries.endIndex
+        let sampleHourBucket = self.planUtilizationHourBucket(for: entry.capturedAt)
+        let sameHourRange = self.planUtilizationHourRange(
+            entries: entries,
+            insertionIndex: insertionIndex,
+            hourBucket: sampleHourBucket)
+        let existingHourEntries = Array(entries[sameHourRange])
+        let canonicalHourEntries = self.canonicalPlanUtilizationHourEntries(
+            existingHourEntries: existingHourEntries,
+            incomingEntry: entry)
+
+        guard canonicalHourEntries != existingHourEntries else { return nil }
+        entries.replaceSubrange(sameHourRange, with: canonicalHourEntries)
+
+        if entries.count > self.planUtilizationMaxSamples {
+            entries.removeFirst(entries.count - self.planUtilizationMaxSamples)
         }
-        return history
+        return entries
     }
 
     #if DEBUG
-    nonisolated static func _updatedPlanUtilizationHistoryForTesting(
-        provider: UsageProvider,
-        existingHistory: [PlanUtilizationHistorySample],
-        sample: PlanUtilizationHistorySample) -> [PlanUtilizationHistorySample]?
+    nonisolated static func _updatedPlanUtilizationEntriesForTesting(
+        existingEntries: [PlanUtilizationHistoryEntry],
+        entry: PlanUtilizationHistoryEntry) -> [PlanUtilizationHistoryEntry]?
     {
-        self.updatedPlanUtilizationHistory(
-            provider: provider,
-            existingHistory: existingHistory,
-            sample: sample)
+        self.updatedPlanUtilizationEntries(existingEntries: existingEntries, entry: entry)
+    }
+
+    nonisolated static func _updatedPlanUtilizationHistoriesForTesting(
+        existingHistories: [PlanUtilizationSeriesHistory],
+        samples: [PlanUtilizationSeriesHistory]) -> [PlanUtilizationSeriesHistory]?
+    {
+        let normalized = samples.flatMap { history in
+            history.entries.map { entry in
+                PlanUtilizationSeriesSample(name: history.name, windowMinutes: history.windowMinutes, entry: entry)
+            }
+        }
+        return self.updatedPlanUtilizationHistories(existingHistories: existingHistories, samples: normalized)
     }
 
     nonisolated static var _planUtilizationMaxSamplesForTesting: Int {
         self.planUtilizationMaxSamples
     }
-
     #endif
 
     private nonisolated static func clampedPercent(_ value: Double?) -> Double? {
@@ -138,135 +190,181 @@ extension UsageStore {
         return max(0, min(100, value))
     }
 
+    private nonisolated static func planUtilizationSeriesSamples(
+        provider: UsageProvider,
+        snapshot: UsageSnapshot,
+        capturedAt: Date) -> [PlanUtilizationSeriesSample]
+    {
+        var samplesByKey: [PlanUtilizationSeriesKey: PlanUtilizationSeriesSample] = [:]
+
+        func appendWindow(_ window: RateWindow?, name: PlanUtilizationSeriesName?) {
+            guard let name,
+                  let window,
+                  let windowMinutes = window.windowMinutes,
+                  let usedPercent = self.clampedPercent(window.usedPercent)
+            else {
+                return
+            }
+
+            let key = PlanUtilizationSeriesKey(name: name, windowMinutes: windowMinutes)
+            samplesByKey[key] = PlanUtilizationSeriesSample(
+                name: name,
+                windowMinutes: windowMinutes,
+                entry: PlanUtilizationHistoryEntry(
+                    capturedAt: capturedAt,
+                    usedPercent: usedPercent,
+                    resetsAt: window.resetsAt))
+        }
+
+        switch provider {
+        case .codex:
+            appendWindow(snapshot.primary, name: self.codexSeriesName(for: snapshot.primary?.windowMinutes))
+            appendWindow(snapshot.secondary, name: self.codexSeriesName(for: snapshot.secondary?.windowMinutes))
+        case .claude:
+            appendWindow(snapshot.primary, name: .session)
+            appendWindow(snapshot.secondary, name: .weekly)
+            appendWindow(snapshot.tertiary, name: .opus)
+        default:
+            break
+        }
+
+        return samplesByKey.values.sorted { lhs, rhs in
+            if lhs.windowMinutes != rhs.windowMinutes {
+                return lhs.windowMinutes < rhs.windowMinutes
+            }
+            return lhs.name.rawValue < rhs.name.rawValue
+        }
+    }
+
+    private nonisolated static func codexSeriesName(for windowMinutes: Int?) -> PlanUtilizationSeriesName? {
+        switch windowMinutes {
+        case 300:
+            .session
+        case 10080:
+            .weekly
+        default:
+            nil
+        }
+    }
+
     private nonisolated static func planUtilizationHourBucket(for date: Date) -> Int64 {
         Int64(floor(date.timeIntervalSince1970 / self.planUtilizationMinSampleIntervalSeconds))
     }
 
-    private nonisolated static func planUtilizationHistoryMergeIndex(
-        history: [PlanUtilizationHistorySample],
+    private nonisolated static func planUtilizationHourRange(
+        entries: [PlanUtilizationHistoryEntry],
         insertionIndex: Int,
-        sample: PlanUtilizationHistorySample) -> Int?
+        hourBucket: Int64) -> Range<Int>
     {
-        let sampleHourBucket = self.planUtilizationHourBucket(for: sample.capturedAt)
-        var candidateIndexes: [Int] = []
-
-        let previousIndex = insertionIndex - 1
-        if previousIndex >= history.startIndex {
-            candidateIndexes.append(previousIndex)
+        var lowerBound = insertionIndex
+        while lowerBound > entries.startIndex {
+            let previousIndex = lowerBound - 1
+            let previousHourBucket = self.planUtilizationHourBucket(for: entries[previousIndex].capturedAt)
+            guard previousHourBucket == hourBucket else { break }
+            lowerBound = previousIndex
         }
 
-        if insertionIndex < history.endIndex {
-            candidateIndexes.append(insertionIndex)
+        var upperBound = insertionIndex
+        while upperBound < entries.endIndex {
+            let currentHourBucket = self.planUtilizationHourBucket(for: entries[upperBound].capturedAt)
+            guard currentHourBucket == hourBucket else { break }
+            upperBound += 1
         }
 
-        let compatibleIndexes = candidateIndexes.filter { index in
-            let existing = history[index]
-            return self.planUtilizationHourBucket(for: existing.capturedAt) == sampleHourBucket
-                && self.canMergePlanUtilizationHistorySamples(existing: existing, incoming: sample)
-        }
+        return lowerBound..<upperBound
+    }
 
-        guard !compatibleIndexes.isEmpty else { return nil }
-        if compatibleIndexes.count == 1 {
-            return compatibleIndexes[0]
-        }
-
-        return compatibleIndexes.min { lhs, rhs in
-            let lhsDistance = abs(history[lhs].capturedAt.timeIntervalSince(sample.capturedAt))
-            let rhsDistance = abs(history[rhs].capturedAt.timeIntervalSince(sample.capturedAt))
-            if lhsDistance == rhsDistance {
-                return history[lhs].capturedAt > history[rhs].capturedAt
+    private nonisolated static func canonicalPlanUtilizationHourEntries(
+        existingHourEntries: [PlanUtilizationHistoryEntry],
+        incomingEntry: PlanUtilizationHistoryEntry) -> [PlanUtilizationHistoryEntry]
+    {
+        let hourlyObservations = (existingHourEntries + [incomingEntry]).sorted { lhs, rhs in
+            if lhs.capturedAt != rhs.capturedAt {
+                return lhs.capturedAt < rhs.capturedAt
             }
-            return lhsDistance < rhsDistance
+            if lhs.usedPercent != rhs.usedPercent {
+                return lhs.usedPercent < rhs.usedPercent
+            }
+            let lhsReset = lhs.resetsAt?.timeIntervalSince1970 ?? Date.distantPast.timeIntervalSince1970
+            let rhsReset = rhs.resetsAt?.timeIntervalSince1970 ?? Date.distantPast.timeIntervalSince1970
+            return lhsReset < rhsReset
+        }
+        guard var activeSegmentPeak = hourlyObservations.first else { return [] }
+
+        var peakBeforeLatestReset: PlanUtilizationHistoryEntry?
+
+        for observation in hourlyObservations.dropFirst() {
+            if self.startsNewPlanUtilizationResetSegment(
+                activeSegmentPeak: activeSegmentPeak,
+                observation: observation)
+            {
+                if peakBeforeLatestReset == nil {
+                    peakBeforeLatestReset = activeSegmentPeak
+                }
+                activeSegmentPeak = observation
+                continue
+            }
+
+            activeSegmentPeak = self.segmentPeakEntry(
+                existingPeak: activeSegmentPeak,
+                observation: observation)
+        }
+
+        if let peakBeforeLatestReset {
+            return [peakBeforeLatestReset, activeSegmentPeak]
+        }
+        return [activeSegmentPeak]
+    }
+
+    private nonisolated static func startsNewPlanUtilizationResetSegment(
+        activeSegmentPeak: PlanUtilizationHistoryEntry,
+        observation: PlanUtilizationHistoryEntry) -> Bool
+    {
+        self.haveMeaningfullyDifferentResetBoundaries(
+            activeSegmentPeak.resetsAt,
+            observation.resetsAt)
+    }
+
+    private nonisolated static func segmentPeakEntry(
+        existingPeak: PlanUtilizationHistoryEntry,
+        observation: PlanUtilizationHistoryEntry) -> PlanUtilizationHistoryEntry
+    {
+        let hasHigherUsage = observation.usedPercent > existingPeak.usedPercent
+        let tiesUsageAndIsMoreRecent = observation.usedPercent == existingPeak.usedPercent
+            && observation.capturedAt >= existingPeak.capturedAt
+        let observationShouldReplacePeak = hasHigherUsage || tiesUsageAndIsMoreRecent
+        let peakSource = observationShouldReplacePeak ? observation : existingPeak
+        let preferObservationMetadata = observation.capturedAt >= existingPeak.capturedAt
+
+        return PlanUtilizationHistoryEntry(
+            capturedAt: peakSource.capturedAt,
+            usedPercent: peakSource.usedPercent,
+            resetsAt: self.preferredResetBoundary(
+                existing: existingPeak.resetsAt,
+                incoming: observation.resetsAt,
+                preferIncoming: preferObservationMetadata))
+    }
+
+    private nonisolated static func haveMeaningfullyDifferentResetBoundaries(_ lhs: Date?, _ rhs: Date?) -> Bool {
+        switch (lhs, rhs) {
+        case let (lhs?, rhs?):
+            abs(lhs.timeIntervalSince(rhs)) >= self.planUtilizationResetEquivalenceToleranceSeconds
+        case (.none, .none):
+            false
+        default:
+            false
         }
     }
 
-    private nonisolated static func canMergePlanUtilizationHistorySamples(
-        existing: PlanUtilizationHistorySample,
-        incoming: PlanUtilizationHistorySample) -> Bool
-    {
-        self.arePlanUtilizationWindowMarkersCompatible(
-            existingWindowMinutes: existing.primaryWindowMinutes,
-            existingResetsAt: existing.primaryResetsAt,
-            incomingWindowMinutes: incoming.primaryWindowMinutes,
-            incomingResetsAt: incoming.primaryResetsAt)
-            && self.arePlanUtilizationWindowMarkersCompatible(
-                existingWindowMinutes: existing.secondaryWindowMinutes,
-                existingResetsAt: existing.secondaryResetsAt,
-                incomingWindowMinutes: incoming.secondaryWindowMinutes,
-                incomingResetsAt: incoming.secondaryResetsAt)
-    }
-
-    private nonisolated static func arePlanUtilizationWindowMarkersCompatible(
-        existingWindowMinutes: Int?,
-        existingResetsAt: Date?,
-        incomingWindowMinutes: Int?,
-        incomingResetsAt: Date?) -> Bool
-    {
-        if let existingWindowMinutes, let incomingWindowMinutes, existingWindowMinutes != incomingWindowMinutes {
-            return false
-        }
-
-        let normalizedExistingReset = existingResetsAt.map(self.normalizedPlanUtilizationBoundaryDate)
-        let normalizedIncomingReset = incomingResetsAt.map(self.normalizedPlanUtilizationBoundaryDate)
-        if let normalizedExistingReset,
-           let normalizedIncomingReset,
-           normalizedExistingReset != normalizedIncomingReset
-        {
-            return false
-        }
-
-        return true
-    }
-
-    private nonisolated static func normalizedPlanUtilizationBoundaryDate(_ date: Date) -> Date {
-        Date(timeIntervalSince1970: floor(date.timeIntervalSince1970))
-    }
-
-    private nonisolated static func mergedPlanUtilizationHistorySample(
-        existing: PlanUtilizationHistorySample,
-        incoming: PlanUtilizationHistorySample) -> PlanUtilizationHistorySample
-    {
-        let preferIncoming = incoming.capturedAt >= existing.capturedAt
-        let capturedAt = preferIncoming ? incoming.capturedAt : existing.capturedAt
-
-        return PlanUtilizationHistorySample(
-            capturedAt: capturedAt,
-            primaryUsedPercent: self.mergedPlanUtilizationValue(
-                existing: existing.primaryUsedPercent,
-                incoming: incoming.primaryUsedPercent,
-                preferIncoming: preferIncoming),
-            primaryWindowMinutes: self.mergedPlanUtilizationValue(
-                existing: existing.primaryWindowMinutes,
-                incoming: incoming.primaryWindowMinutes,
-                preferIncoming: preferIncoming),
-            primaryResetsAt: self.mergedPlanUtilizationValue(
-                existing: existing.primaryResetsAt,
-                incoming: incoming.primaryResetsAt,
-                preferIncoming: preferIncoming),
-            secondaryUsedPercent: self.mergedPlanUtilizationValue(
-                existing: existing.secondaryUsedPercent,
-                incoming: incoming.secondaryUsedPercent,
-                preferIncoming: preferIncoming),
-            secondaryWindowMinutes: self.mergedPlanUtilizationValue(
-                existing: existing.secondaryWindowMinutes,
-                incoming: incoming.secondaryWindowMinutes,
-                preferIncoming: preferIncoming),
-            secondaryResetsAt: self.mergedPlanUtilizationValue(
-                existing: existing.secondaryResetsAt,
-                incoming: incoming.secondaryResetsAt,
-                preferIncoming: preferIncoming))
-    }
-
-    private nonisolated static func mergedPlanUtilizationValue<T>(
-        existing: T?,
-        incoming: T?,
-        preferIncoming: Bool) -> T?
+    private nonisolated static func preferredResetBoundary(
+        existing: Date?,
+        incoming: Date?,
+        preferIncoming: Bool) -> Date?
     {
         if preferIncoming {
-            incoming ?? existing
-        } else {
-            existing ?? incoming
+            return incoming ?? existing
         }
+        return existing ?? incoming
     }
 
     private func planUtilizationAccountKey(
@@ -393,8 +491,8 @@ extension UsageStore {
             existingHistory,
             providerBuckets.unscoped,
         ])
-        providerBuckets.setSamples(mergedHistory, for: accountKey)
-        providerBuckets.setSamples([], for: nil)
+        providerBuckets.setHistories(mergedHistory, for: accountKey)
+        providerBuckets.setHistories([], for: nil)
     }
 
     private func stickyPlanUtilizationAccountKey(
@@ -414,8 +512,8 @@ extension UsageStore {
         }
 
         return knownAccountKeys.max { lhs, rhs in
-            let lhsDate = providerBuckets.accounts[lhs]?.last?.capturedAt ?? .distantPast
-            let rhsDate = providerBuckets.accounts[rhs]?.last?.capturedAt ?? .distantPast
+            let lhsDate = providerBuckets.accounts[lhs]?.compactMap(\.latestCapturedAt).max() ?? .distantPast
+            let rhsDate = providerBuckets.accounts[rhs]?.compactMap(\.latestCapturedAt).max() ?? .distantPast
             if lhsDate == rhsDate {
                 return lhs > rhs
             }
@@ -429,29 +527,37 @@ extension UsageStore {
     }
 
     private nonisolated static func mergedPlanUtilizationHistories(
-        provider: UsageProvider,
-        histories: [[PlanUtilizationHistorySample]]) -> [PlanUtilizationHistorySample]
+        provider _: UsageProvider,
+        histories: [[PlanUtilizationSeriesHistory]]) -> [PlanUtilizationSeriesHistory]
     {
-        let orderedSamples = histories
-            .flatMap(\.self)
-            .sorted { lhs, rhs in
-                if lhs.capturedAt == rhs.capturedAt {
-                    return (lhs.primaryUsedPercent ?? -1) < (rhs.primaryUsedPercent ?? -1)
-                }
-                return lhs.capturedAt < rhs.capturedAt
-            }
+        var mergedByKey: [PlanUtilizationSeriesKey: PlanUtilizationSeriesHistory] = [:]
 
-        var mergedHistory: [PlanUtilizationHistorySample] = []
-        for sample in orderedSamples {
-            if let updated = self.updatedPlanUtilizationHistory(
-                provider: provider,
-                existingHistory: mergedHistory,
-                sample: sample)
-            {
-                mergedHistory = updated
+        for historyGroup in histories {
+            for history in historyGroup {
+                let key = PlanUtilizationSeriesKey(name: history.name, windowMinutes: history.windowMinutes)
+                let existingEntries = mergedByKey[key]?.entries ?? []
+                var mergedEntries = existingEntries
+                for entry in history.entries.sorted(by: { $0.capturedAt < $1.capturedAt }) {
+                    if let updatedEntries = self.updatedPlanUtilizationEntries(
+                        existingEntries: mergedEntries,
+                        entry: entry)
+                    {
+                        mergedEntries = updatedEntries
+                    }
+                }
+                mergedByKey[key] = PlanUtilizationSeriesHistory(
+                    name: history.name,
+                    windowMinutes: history.windowMinutes,
+                    entries: mergedEntries)
             }
         }
-        return mergedHistory
+
+        return mergedByKey.values.sorted { lhs, rhs in
+            if lhs.windowMinutes != rhs.windowMinutes {
+                return lhs.windowMinutes < rhs.windowMinutes
+            }
+            return lhs.name.rawValue < rhs.name.rawValue
+        }
     }
 
     #if DEBUG

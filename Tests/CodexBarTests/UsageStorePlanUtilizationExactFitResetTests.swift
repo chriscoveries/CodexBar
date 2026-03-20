@@ -7,424 +7,222 @@ import Testing
 struct UsageStorePlanUtilizationExactFitResetTests {
     @MainActor
     @Test
-    func weeklyExactFitUsesResetDateAsBarDate() throws {
-        let calendar = Calendar(identifier: .gregorian)
-        let firstBoundary = try #require(calendar.date(from: DateComponents(
-            timeZone: TimeZone.current,
-            year: 2026,
-            month: 3,
-            day: 8,
-            hour: 5,
-            minute: 0)))
-        let secondBoundary = try #require(calendar.date(from: DateComponents(
-            timeZone: TimeZone.current,
-            year: 2026,
-            month: 3,
-            day: 15,
-            hour: 5,
-            minute: 0)))
-        let thirdBoundary = try #require(calendar.date(from: DateComponents(
-            timeZone: TimeZone.current,
-            year: 2026,
-            month: 3,
-            day: 22,
-            hour: 5,
-            minute: 0)))
-        let samples = [
-            makeExactFitResetPlanSample(
-                at: firstBoundary.addingTimeInterval(-30 * 60),
-                secondary: 62,
-                secondaryResetsAt: firstBoundary),
-            makeExactFitResetPlanSample(
-                at: secondBoundary.addingTimeInterval(-30 * 60),
-                secondary: 48,
-                secondaryResetsAt: secondBoundary),
-            makeExactFitResetPlanSample(
-                at: thirdBoundary.addingTimeInterval(-30 * 60),
-                secondary: 20,
-                secondaryResetsAt: thirdBoundary),
+    func weeklyChartUsesResetDateAsBarDate() {
+        let firstBoundary = Date(timeIntervalSince1970: 1_710_000_000)
+        let secondBoundary = firstBoundary.addingTimeInterval(7 * 24 * 60 * 60)
+        let thirdBoundary = secondBoundary.addingTimeInterval(7 * 24 * 60 * 60)
+        let histories = [
+            planSeries(name: .weekly, windowMinutes: 10080, entries: [
+                planEntry(at: firstBoundary.addingTimeInterval(-30 * 60), usedPercent: 62, resetsAt: firstBoundary),
+                planEntry(at: secondBoundary.addingTimeInterval(-30 * 60), usedPercent: 48, resetsAt: secondBoundary),
+                planEntry(at: thirdBoundary.addingTimeInterval(-30 * 60), usedPercent: 20, resetsAt: thirdBoundary),
+            ]),
         ]
 
-        let model = try #require(
-            PlanUtilizationHistoryChartMenuView._modelSnapshotForTesting(
-                periodRawValue: "weekly",
-                samples: samples,
-                provider: .codex))
+        let model = PlanUtilizationHistoryChartMenuView._modelSnapshotForTesting(
+            selectedSeriesRawValue: "weekly:10080",
+            histories: histories,
+            provider: .codex,
+            referenceDate: thirdBoundary)
 
-        #expect(model.pointCount == 3)
-        #expect(model.selectedSource == "secondary:10080")
         #expect(model.usedPercents == [62, 48, 20])
-        #expect(model.pointDates == ["2026-03-08 05:00", "2026-03-15 05:00", "2026-03-22 05:00"])
-    }
-
-    @MainActor
-    @Test
-    func weeklyExactFitCoalescesSameDayResetShiftIntoSingleBar() throws {
-        let calendar = Calendar(identifier: .gregorian)
-        let firstBoundary = try #require(calendar.date(from: DateComponents(
-            timeZone: TimeZone.current,
-            year: 2026,
-            month: 3,
-            day: 8,
-            hour: 5,
-            minute: 0)))
-        let originalSecondBoundary = try #require(calendar.date(from: DateComponents(
-            timeZone: TimeZone.current,
-            year: 2026,
-            month: 3,
-            day: 15,
-            hour: 5,
-            minute: 0)))
-        let shiftedSecondBoundary = try #require(calendar.date(from: DateComponents(
-            timeZone: TimeZone.current,
-            year: 2026,
-            month: 3,
-            day: 15,
-            hour: 7,
-            minute: 0)))
-        let samples = [
-            makeExactFitResetPlanSample(
-                at: firstBoundary.addingTimeInterval(-30 * 60),
-                secondary: 62,
-                secondaryResetsAt: firstBoundary),
-            makeExactFitResetPlanSample(
-                at: originalSecondBoundary.addingTimeInterval(-30 * 60),
-                secondary: 48,
-                secondaryResetsAt: originalSecondBoundary),
-            makeExactFitResetPlanSample(
-                at: shiftedSecondBoundary.addingTimeInterval(-10 * 60),
-                secondary: 12,
-                secondaryResetsAt: shiftedSecondBoundary),
-        ]
-
-        let model = try #require(
-            PlanUtilizationHistoryChartMenuView._modelSnapshotForTesting(
-                periodRawValue: "weekly",
-                samples: samples,
-                provider: .codex))
-
-        #expect(model.pointCount == 2)
-        #expect(model.usedPercents == [62, 12])
-        #expect(model.pointDates == ["2026-03-08 05:00", "2026-03-15 07:00"])
-    }
-
-    @MainActor
-    @Test
-    func weeklyExactFitCreatesNewBarWhenEarlyResetMovesToDifferentDay() throws {
-        let calendar = Calendar(identifier: .gregorian)
-        let firstBoundary = try #require(calendar.date(from: DateComponents(
-            timeZone: TimeZone.current,
-            year: 2026,
-            month: 3,
-            day: 8,
-            hour: 5,
-            minute: 0)))
-        let secondBoundary = try #require(calendar.date(from: DateComponents(
-            timeZone: TimeZone.current,
-            year: 2026,
-            month: 3,
-            day: 15,
-            hour: 5,
-            minute: 0)))
-        let earlyResetBoundary = try #require(calendar.date(from: DateComponents(
-            timeZone: TimeZone.current,
-            year: 2026,
-            month: 3,
-            day: 16,
-            hour: 2,
-            minute: 0)))
-        let samples = [
-            makeExactFitResetPlanSample(
-                at: firstBoundary.addingTimeInterval(-30 * 60),
-                secondary: 62,
-                secondaryResetsAt: firstBoundary),
-            makeExactFitResetPlanSample(
-                at: secondBoundary.addingTimeInterval(-30 * 60),
-                secondary: 48,
-                secondaryResetsAt: secondBoundary),
-            makeExactFitResetPlanSample(
-                at: earlyResetBoundary.addingTimeInterval(-10 * 60),
-                secondary: 12,
-                secondaryResetsAt: earlyResetBoundary),
-        ]
-
-        let model = try #require(
-            PlanUtilizationHistoryChartMenuView._modelSnapshotForTesting(
-                periodRawValue: "weekly",
-                samples: samples,
-                provider: .codex))
-
-        #expect(model.pointCount == 3)
-        #expect(model.usedPercents == [62, 48, 12])
-        #expect(model.pointDates == ["2026-03-08 05:00", "2026-03-15 05:00", "2026-03-16 02:00"])
-    }
-
-    @MainActor
-    @Test
-    func weeklyExactFitShowsZeroBarsForMissingResetPeriods() throws {
-        let calendar = Calendar(identifier: .gregorian)
-        let firstBoundary = try #require(calendar.date(from: DateComponents(
-            timeZone: TimeZone.current,
-            year: 2026,
-            month: 3,
-            day: 8,
-            hour: 5,
-            minute: 0)))
-        let secondBoundary = try #require(calendar.date(from: DateComponents(
-            timeZone: TimeZone.current,
-            year: 2026,
-            month: 3,
-            day: 15,
-            hour: 5,
-            minute: 0)))
-        let fourthBoundary = try #require(calendar.date(from: DateComponents(
-            timeZone: TimeZone.current,
-            year: 2026,
-            month: 3,
-            day: 29,
-            hour: 5,
-            minute: 0)))
-        let samples = [
-            makeExactFitResetPlanSample(
-                at: firstBoundary.addingTimeInterval(-30 * 60),
-                secondary: 62,
-                secondaryResetsAt: firstBoundary),
-            makeExactFitResetPlanSample(
-                at: secondBoundary.addingTimeInterval(-30 * 60),
-                secondary: 48,
-                secondaryResetsAt: secondBoundary),
-            makeExactFitResetPlanSample(
-                at: fourthBoundary.addingTimeInterval(-30 * 60),
-                secondary: 20,
-                secondaryResetsAt: fourthBoundary),
-        ]
-
-        let model = try #require(
-            PlanUtilizationHistoryChartMenuView._modelSnapshotForTesting(
-                periodRawValue: "weekly",
-                samples: samples,
-                provider: .codex))
-
-        #expect(model.pointCount == 4)
-        #expect(model.usedPercents == [62, 48, 0, 20])
         #expect(model.pointDates == [
-            "2026-03-08 05:00",
-            "2026-03-15 05:00",
-            "2026-03-22 05:00",
-            "2026-03-29 05:00",
+            formattedBoundary(firstBoundary),
+            formattedBoundary(secondBoundary),
+            formattedBoundary(thirdBoundary),
         ])
     }
 
     @MainActor
     @Test
-    func weeklyExactFitInfersMissingResetFromObservedCadence() throws {
-        let calendar = Calendar(identifier: .gregorian)
-        let firstBoundary = try #require(calendar.date(from: DateComponents(
-            timeZone: TimeZone.current,
-            year: 2026,
-            month: 3,
-            day: 15,
-            hour: 5,
-            minute: 0)))
-        let secondBoundary = try #require(calendar.date(from: DateComponents(
-            timeZone: TimeZone.current,
-            year: 2026,
-            month: 3,
-            day: 22,
-            hour: 5,
-            minute: 0)))
-        let samples = [
-            makeExactFitResetPlanSample(
-                at: firstBoundary.addingTimeInterval(-30 * 60),
-                secondary: 48,
-                secondaryResetsAt: firstBoundary),
-            makeExactFitResetPlanSample(
-                at: secondBoundary.addingTimeInterval(-(3 * 24 * 60 * 60)),
-                secondary: 52,
-                secondaryResetsAt: nil),
-            makeExactFitResetPlanSample(
-                at: secondBoundary.addingTimeInterval(-30 * 60),
-                secondary: 62,
-                secondaryResetsAt: secondBoundary),
+    func chartKeepsMaximumUsageForEachEffectivePeriod() {
+        let firstBoundary = Date(timeIntervalSince1970: 1_710_000_000)
+        let secondBoundary = firstBoundary.addingTimeInterval(5 * 60 * 60)
+        let histories = [
+            planSeries(name: .session, windowMinutes: 300, entries: [
+                planEntry(at: firstBoundary.addingTimeInterval(-50 * 60), usedPercent: 22, resetsAt: firstBoundary),
+                planEntry(
+                    at: firstBoundary.addingTimeInterval(-20 * 60),
+                    usedPercent: 61,
+                    resetsAt: firstBoundary.addingTimeInterval(75)),
+                planEntry(at: secondBoundary.addingTimeInterval(-30 * 60), usedPercent: 18, resetsAt: secondBoundary),
+            ]),
         ]
 
-        let model = try #require(
-            PlanUtilizationHistoryChartMenuView._modelSnapshotForTesting(
-                periodRawValue: "weekly",
-                samples: samples,
-                provider: .codex))
+        let model = PlanUtilizationHistoryChartMenuView._modelSnapshotForTesting(
+            selectedSeriesRawValue: "session:300",
+            histories: histories,
+            provider: .codex,
+            referenceDate: secondBoundary)
 
-        #expect(model.pointCount == 2)
-        #expect(model.usedPercents == [48, 62])
-        #expect(model.pointDates == ["2026-03-15 05:00", "2026-03-22 05:00"])
+        #expect(model.usedPercents == [61, 18])
+        #expect(model.pointDates == [
+            formattedBoundary(firstBoundary.addingTimeInterval(75)),
+            formattedBoundary(secondBoundary),
+        ])
     }
 
     @MainActor
     @Test
-    func weeklyExactFitKeepsShiftedAnchorWhenLaterSampleMissesReset() throws {
-        let calendar = Calendar(identifier: .gregorian)
-        let firstBoundary = try #require(calendar.date(from: DateComponents(
-            timeZone: TimeZone.current,
-            year: 2026,
-            month: 3,
-            day: 8,
-            hour: 5,
-            minute: 0)))
-        let shiftedBoundary = try #require(calendar.date(from: DateComponents(
-            timeZone: TimeZone.current,
-            year: 2026,
-            month: 3,
-            day: 15,
-            hour: 7,
-            minute: 0)))
-        let samples = [
-            makeExactFitResetPlanSample(
-                at: firstBoundary.addingTimeInterval(-30 * 60),
-                secondary: 62,
-                secondaryResetsAt: firstBoundary),
-            makeExactFitResetPlanSample(
-                at: shiftedBoundary.addingTimeInterval(-10 * 60),
-                secondary: 48,
-                secondaryResetsAt: shiftedBoundary),
-            makeExactFitResetPlanSample(
-                at: shiftedBoundary.addingTimeInterval(-5 * 60),
-                secondary: 12,
-                secondaryResetsAt: nil),
+    func chartPrefersResetBackedEntryWhenUsageTiesWithinPeriod() {
+        let boundary = Date(timeIntervalSince1970: 1_710_000_000)
+        let histories = [
+            planSeries(name: .session, windowMinutes: 300, entries: [
+                planEntry(at: boundary.addingTimeInterval(-55 * 60), usedPercent: 48),
+                planEntry(at: boundary.addingTimeInterval(-20 * 60), usedPercent: 48, resetsAt: boundary),
+            ]),
         ]
 
-        let model = try #require(
-            PlanUtilizationHistoryChartMenuView._modelSnapshotForTesting(
-                periodRawValue: "weekly",
-                samples: samples,
-                provider: .codex))
+        let model = PlanUtilizationHistoryChartMenuView._modelSnapshotForTesting(
+            selectedSeriesRawValue: "session:300",
+            histories: histories,
+            provider: .codex,
+            referenceDate: boundary)
 
-        #expect(model.pointCount == 2)
-        #expect(model.usedPercents == [62, 12])
-        #expect(model.pointDates == ["2026-03-08 05:00", "2026-03-15 07:00"])
+        #expect(model.usedPercents == [48])
+        #expect(model.pointDates == [formattedBoundary(boundary)])
     }
 
     @MainActor
     @Test
-    func weeklyExactFitPrefersRealNextResetOverTemporaryShiftCadence() throws {
-        let calendar = Calendar(identifier: .gregorian)
-        let firstBoundary = try #require(calendar.date(from: DateComponents(
-            timeZone: TimeZone.current,
-            year: 2026,
-            month: 3,
-            day: 8,
-            hour: 5,
-            minute: 0)))
-        let shiftedBoundary = try #require(calendar.date(from: DateComponents(
-            timeZone: TimeZone.current,
-            year: 2026,
-            month: 3,
-            day: 16,
-            hour: 2,
-            minute: 0)))
-        let restoredBoundary = try #require(calendar.date(from: DateComponents(
-            timeZone: TimeZone.current,
-            year: 2026,
-            month: 3,
-            day: 22,
-            hour: 5,
-            minute: 0)))
-        let missingResetSampleDate = try #require(calendar.date(from: DateComponents(
-            timeZone: TimeZone.current,
-            year: 2026,
-            month: 3,
-            day: 19,
-            hour: 12,
-            minute: 0)))
-        let samples = [
-            makeExactFitResetPlanSample(
-                at: firstBoundary.addingTimeInterval(-30 * 60),
-                secondary: 62,
-                secondaryResetsAt: firstBoundary),
-            makeExactFitResetPlanSample(
-                at: shiftedBoundary.addingTimeInterval(-10 * 60),
-                secondary: 48,
-                secondaryResetsAt: shiftedBoundary),
-            makeExactFitResetPlanSample(
-                at: missingResetSampleDate,
-                secondary: 54,
-                secondaryResetsAt: nil),
-            makeExactFitResetPlanSample(
-                at: restoredBoundary.addingTimeInterval(-10 * 60),
-                secondary: 20,
-                secondaryResetsAt: restoredBoundary),
+    func chartAddsSyntheticCurrentBarWhenCurrentPeriodHasNoObservation() {
+        let firstBoundary = Date(timeIntervalSince1970: 1_710_000_000)
+        let currentBoundary = firstBoundary.addingTimeInterval(10 * 60 * 60)
+        let referenceDate = currentBoundary.addingTimeInterval(-30 * 60)
+        let histories = [
+            planSeries(name: .session, windowMinutes: 300, entries: [
+                planEntry(at: firstBoundary.addingTimeInterval(-30 * 60), usedPercent: 62, resetsAt: firstBoundary),
+            ]),
         ]
 
-        let model = try #require(
-            PlanUtilizationHistoryChartMenuView._modelSnapshotForTesting(
-                periodRawValue: "weekly",
-                samples: samples,
-                provider: .codex))
+        let model = PlanUtilizationHistoryChartMenuView._modelSnapshotForTesting(
+            selectedSeriesRawValue: "session:300",
+            histories: histories,
+            provider: .codex,
+            referenceDate: referenceDate)
 
-        #expect(model.pointCount == 4)
-        #expect(model.usedPercents == [62, 0, 48, 20])
-        #expect(model.pointDates == ["2026-03-08 05:00", "2026-03-15 05:00", "2026-03-16 02:00", "2026-03-22 05:00"])
+        #expect(model.usedPercents == [62, 0, 0])
+        #expect(model.pointDates == [
+            formattedBoundary(firstBoundary),
+            formattedBoundary(firstBoundary.addingTimeInterval(5 * 60 * 60)),
+            formattedBoundary(currentBoundary),
+        ])
     }
 
     @MainActor
     @Test
-    func weeklyExactFitShowsTrailingZeroBarForCurrentExpectedReset() throws {
-        let calendar = Calendar(identifier: .gregorian)
-        let firstBoundary = try #require(calendar.date(from: DateComponents(
-            timeZone: TimeZone.current,
-            year: 2026,
-            month: 3,
-            day: 8,
-            hour: 5,
-            minute: 0)))
-        let secondBoundary = try #require(calendar.date(from: DateComponents(
-            timeZone: TimeZone.current,
-            year: 2026,
-            month: 3,
-            day: 15,
-            hour: 5,
-            minute: 0)))
-        let referenceDate = try #require(calendar.date(from: DateComponents(
-            timeZone: TimeZone.current,
-            year: 2026,
-            month: 3,
-            day: 20,
-            hour: 12,
-            minute: 0)))
-        let samples = [
-            makeExactFitResetPlanSample(
-                at: firstBoundary.addingTimeInterval(-30 * 60),
-                secondary: 62,
-                secondaryResetsAt: firstBoundary),
-            makeExactFitResetPlanSample(
-                at: secondBoundary.addingTimeInterval(-30 * 60),
-                secondary: 48,
-                secondaryResetsAt: secondBoundary),
+    func weeklyChartShowsZeroBarsForMissingResetPeriods() {
+        let firstBoundary = Date(timeIntervalSince1970: 1_710_000_000)
+        let secondBoundary = firstBoundary.addingTimeInterval(7 * 24 * 60 * 60)
+        let fourthBoundary = secondBoundary.addingTimeInterval(14 * 24 * 60 * 60)
+        let histories = [
+            planSeries(name: .weekly, windowMinutes: 10080, entries: [
+                planEntry(at: firstBoundary.addingTimeInterval(-30 * 60), usedPercent: 62, resetsAt: firstBoundary),
+                planEntry(at: secondBoundary.addingTimeInterval(-30 * 60), usedPercent: 48, resetsAt: secondBoundary),
+                planEntry(at: fourthBoundary.addingTimeInterval(-30 * 60), usedPercent: 20, resetsAt: fourthBoundary),
+            ]),
         ]
 
-        let model = try #require(
-            PlanUtilizationHistoryChartMenuView._modelSnapshotForTesting(
-                periodRawValue: "weekly",
-                samples: samples,
-                provider: .codex,
-                referenceDate: referenceDate))
+        let model = PlanUtilizationHistoryChartMenuView._modelSnapshotForTesting(
+            selectedSeriesRawValue: "weekly:10080",
+            histories: histories,
+            provider: .codex,
+            referenceDate: fourthBoundary)
 
-        #expect(model.pointCount == 3)
-        #expect(model.usedPercents == [62, 48, 0])
-        #expect(model.pointDates == ["2026-03-08 05:00", "2026-03-15 05:00", "2026-03-22 05:00"])
+        #expect(model.usedPercents == [62, 48, 0, 20])
     }
-}
 
-private func makeExactFitResetPlanSample(
-    at capturedAt: Date,
-    secondary: Double,
-    secondaryResetsAt: Date?) -> PlanUtilizationHistorySample
-{
-    PlanUtilizationHistorySample(
-        capturedAt: capturedAt,
-        primaryUsedPercent: nil,
-        primaryWindowMinutes: nil,
-        primaryResetsAt: nil,
-        secondaryUsedPercent: secondary,
-        secondaryWindowMinutes: 10080,
-        secondaryResetsAt: secondaryResetsAt)
+    @MainActor
+    @Test
+    func weeklyChartStartsAxisLabelsFromFirstBar() {
+        let firstBoundary = Date(timeIntervalSince1970: 1_710_000_000)
+        let secondBoundary = firstBoundary.addingTimeInterval(7 * 24 * 60 * 60)
+        let thirdBoundary = secondBoundary.addingTimeInterval(7 * 24 * 60 * 60)
+        let fourthBoundary = thirdBoundary.addingTimeInterval(7 * 24 * 60 * 60)
+        let histories = [
+            planSeries(name: .weekly, windowMinutes: 10080, entries: [
+                planEntry(at: firstBoundary.addingTimeInterval(-30 * 60), usedPercent: 62, resetsAt: firstBoundary),
+                planEntry(at: secondBoundary.addingTimeInterval(-30 * 60), usedPercent: 48, resetsAt: secondBoundary),
+                planEntry(at: thirdBoundary.addingTimeInterval(-30 * 60), usedPercent: 20, resetsAt: thirdBoundary),
+                planEntry(at: fourthBoundary.addingTimeInterval(-30 * 60), usedPercent: 15, resetsAt: fourthBoundary),
+            ]),
+        ]
+
+        let model = PlanUtilizationHistoryChartMenuView._modelSnapshotForTesting(
+            selectedSeriesRawValue: "weekly:10080",
+            histories: histories,
+            provider: .codex,
+            referenceDate: fourthBoundary)
+
+        #expect(model.axisIndexes == [0])
+    }
+
+    @MainActor
+    @Test
+    func weeklyChartKeepsObservedCurrentBoundaryWhenResetTimesDriftSlightly() {
+        let firstBoundary = Date(timeIntervalSince1970: 1_710_000_055)
+        let secondBoundary = firstBoundary.addingTimeInterval(7 * 24 * 60 * 60 + 88)
+        let histories = [
+            planSeries(name: .weekly, windowMinutes: 10080, entries: [
+                planEntry(at: firstBoundary.addingTimeInterval(-30 * 60), usedPercent: 62, resetsAt: firstBoundary),
+                planEntry(at: secondBoundary.addingTimeInterval(-30 * 60), usedPercent: 33, resetsAt: secondBoundary),
+            ]),
+        ]
+
+        let model = PlanUtilizationHistoryChartMenuView._modelSnapshotForTesting(
+            selectedSeriesRawValue: "weekly:10080",
+            histories: histories,
+            provider: .codex,
+            referenceDate: secondBoundary.addingTimeInterval(-60))
+
+        #expect(model.usedPercents == [62, 33])
+    }
+
+    @MainActor
+    @Test
+    func weeklyChartPrefersResetBackedHistoryOverLegacySyntheticPoints() {
+        let legacyCapturedAt = Date(timeIntervalSince1970: 1_742_100_000)
+        let firstBoundary = Date(timeIntervalSince1970: 1_742_356_855) // 2026-03-18T17:00:55Z
+        let secondBoundary = Date(timeIntervalSince1970: 1_742_961_343) // 2026-03-25T17:02:23Z
+        let histories = [
+            planSeries(name: .weekly, windowMinutes: 10080, entries: [
+                planEntry(at: legacyCapturedAt, usedPercent: 57),
+                planEntry(at: firstBoundary.addingTimeInterval(-60 * 60), usedPercent: 73, resetsAt: firstBoundary),
+                planEntry(at: secondBoundary.addingTimeInterval(-60 * 60), usedPercent: 35, resetsAt: secondBoundary),
+            ]),
+        ]
+
+        let model = PlanUtilizationHistoryChartMenuView._modelSnapshotForTesting(
+            selectedSeriesRawValue: "weekly:10080",
+            histories: histories,
+            provider: .codex,
+            referenceDate: secondBoundary.addingTimeInterval(-60))
+
+        #expect(model.usedPercents == [73, 35])
+    }
+
+    @MainActor
+    @Test
+    func chartKeepsLegacyHistoryBeforeFirstResetBackedBoundary() {
+        let firstLegacyCapturedAt = Date(timeIntervalSince1970: 1_739_692_800) // 2026-02-23T07:00:00Z
+        let secondLegacyCapturedAt = firstLegacyCapturedAt.addingTimeInterval(7 * 24 * 60 * 60)
+        let firstBoundary = secondLegacyCapturedAt.addingTimeInterval(7 * 24 * 60 * 60 + 55)
+        let secondBoundary = firstBoundary.addingTimeInterval(7 * 24 * 60 * 60)
+        let histories = [
+            planSeries(name: .weekly, windowMinutes: 10080, entries: [
+                planEntry(at: firstLegacyCapturedAt, usedPercent: 20),
+                planEntry(at: secondLegacyCapturedAt, usedPercent: 40),
+                planEntry(at: firstBoundary.addingTimeInterval(-60 * 60), usedPercent: 73, resetsAt: firstBoundary),
+                planEntry(at: secondBoundary.addingTimeInterval(-60 * 60), usedPercent: 35, resetsAt: secondBoundary),
+            ]),
+        ]
+
+        let model = PlanUtilizationHistoryChartMenuView._modelSnapshotForTesting(
+            selectedSeriesRawValue: "weekly:10080",
+            histories: histories,
+            provider: .claude,
+            referenceDate: secondBoundary.addingTimeInterval(-60))
+
+        #expect(model.usedPercents == [20, 40, 73, 35])
+    }
 }

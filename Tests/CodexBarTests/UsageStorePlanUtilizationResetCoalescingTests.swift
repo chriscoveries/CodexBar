@@ -6,7 +6,7 @@ import Testing
 @Suite
 struct UsageStorePlanUtilizationResetCoalescingTests {
     @Test
-    func sameHourSampleWithChangedPrimaryResetBoundaryAppendsNewSample() throws {
+    func sameHourEntryBackfillsMissingResetMetadata() throws {
         let calendar = Calendar(identifier: .gregorian)
         let hourStart = try #require(calendar.date(from: DateComponents(
             timeZone: TimeZone(secondsFromGMT: 0),
@@ -14,308 +14,198 @@ struct UsageStorePlanUtilizationResetCoalescingTests {
             month: 3,
             day: 17,
             hour: 9)))
-        let firstReset = hourStart.addingTimeInterval(30 * 60)
-        let secondReset = hourStart.addingTimeInterval(5 * 60 + 5 * 60 * 60)
-        let beforeReset = makePlanSample(
-            at: hourStart.addingTimeInterval(25 * 60),
-            primary: 82,
-            secondary: 40,
-            primaryWindowMinutes: 300,
-            primaryResetsAt: firstReset,
-            secondaryWindowMinutes: 10080)
-        let afterReset = makePlanSample(
-            at: hourStart.addingTimeInterval(35 * 60),
-            primary: 4,
-            secondary: 41,
-            primaryWindowMinutes: 300,
-            primaryResetsAt: secondReset,
-            secondaryWindowMinutes: 10080)
-
-        let initial = try #require(
-            UsageStore._updatedPlanUtilizationHistoryForTesting(
-                provider: .codex,
-                existingHistory: [],
-                sample: beforeReset))
-        let updated = try #require(
-            UsageStore._updatedPlanUtilizationHistoryForTesting(
-                provider: .codex,
-                existingHistory: initial,
-                sample: afterReset))
-
-        #expect(updated.count == 2)
-        #expect(updated[0] == beforeReset)
-        #expect(updated[1] == afterReset)
-    }
-
-    @Test
-    func sameHourSampleWithChangedSecondaryResetBoundaryAppendsNewSample() throws {
-        let calendar = Calendar(identifier: .gregorian)
-        let hourStart = try #require(calendar.date(from: DateComponents(
-            timeZone: TimeZone(secondsFromGMT: 0),
-            year: 2026,
-            month: 3,
-            day: 17,
-            hour: 9)))
-        let firstReset = hourStart.addingTimeInterval(30 * 60)
-        let secondReset = firstReset.addingTimeInterval(7 * 24 * 60 * 60)
-        let shiftedReset = secondReset.addingTimeInterval(7 * 24 * 60 * 60)
-        let beforeReset = makePlanSample(
-            at: hourStart.addingTimeInterval(25 * 60),
-            primary: 40,
-            secondary: 77,
-            primaryWindowMinutes: 300,
-            primaryResetsAt: firstReset,
-            secondaryWindowMinutes: 10080,
-            secondaryResetsAt: secondReset)
-        let afterReset = makePlanSample(
-            at: hourStart.addingTimeInterval(35 * 60),
-            primary: 41,
-            secondary: 3,
-            primaryWindowMinutes: 300,
-            primaryResetsAt: firstReset,
-            secondaryWindowMinutes: 10080,
-            secondaryResetsAt: shiftedReset)
-
-        let initial = try #require(
-            UsageStore._updatedPlanUtilizationHistoryForTesting(
-                provider: .codex,
-                existingHistory: [],
-                sample: beforeReset))
-        let updated = try #require(
-            UsageStore._updatedPlanUtilizationHistoryForTesting(
-                provider: .codex,
-                existingHistory: initial,
-                sample: afterReset))
-
-        #expect(updated.count == 2)
-        #expect(updated[0] == beforeReset)
-        #expect(updated[1] == afterReset)
-    }
-
-    @Test
-    func sameHourSampleMergesWhenOnlyIncomingResetMetadataIsBackfilled() throws {
-        let calendar = Calendar(identifier: .gregorian)
-        let hourStart = try #require(calendar.date(from: DateComponents(
-            timeZone: TimeZone(secondsFromGMT: 0),
-            year: 2026,
-            month: 3,
-            day: 17,
-            hour: 9)))
-        let incomingReset = hourStart.addingTimeInterval(30 * 60)
-        let existing = makePlanSample(
+        let existing = planEntry(
             at: hourStart.addingTimeInterval(10 * 60),
-            primary: 20,
-            secondary: 35,
-            primaryWindowMinutes: 300,
-            secondaryWindowMinutes: 10080)
-        let incoming = makePlanSample(
+            usedPercent: 20)
+        let incoming = planEntry(
             at: hourStart.addingTimeInterval(45 * 60),
-            primary: 30,
-            secondary: 40,
-            primaryWindowMinutes: 300,
-            primaryResetsAt: incomingReset,
-            secondaryWindowMinutes: 10080)
+            usedPercent: 30,
+            resetsAt: hourStart.addingTimeInterval(30 * 60))
 
         let updated = try #require(
-            UsageStore._updatedPlanUtilizationHistoryForTesting(
-                provider: .codex,
-                existingHistory: [existing],
-                sample: incoming))
+            UsageStore._updatedPlanUtilizationEntriesForTesting(
+                existingEntries: [existing],
+                entry: incoming))
 
         #expect(updated.count == 1)
         #expect(updated[0].capturedAt == incoming.capturedAt)
-        #expect(updated[0].primaryUsedPercent == 30)
-        #expect(updated[0].secondaryUsedPercent == 40)
-        #expect(updated[0].primaryResetsAt == incomingReset)
+        #expect(updated[0].usedPercent == 30)
+        #expect(updated[0].resetsAt == incoming.resetsAt)
     }
 
-    @MainActor
     @Test
-    func lateSameHourBackfillBeforeResetMergesIntoEarlierWindow() throws {
+    func sameHourZeroUsageWithDriftingResetCoalescesToLatestEntry() throws {
         let calendar = Calendar(identifier: .gregorian)
         let hourStart = try #require(calendar.date(from: DateComponents(
             timeZone: TimeZone(secondsFromGMT: 0),
             year: 2026,
             month: 3,
-            day: 17,
-            hour: 9)))
-        let resetBoundary = hourStart.addingTimeInterval(30 * 60)
-        let nextResetBoundary = resetBoundary.addingTimeInterval(5 * 60 * 60)
-        let earlierWindow = makePlanSample(
-            at: hourStart.addingTimeInterval(25 * 60),
-            primary: 82,
-            secondary: nil,
-            primaryWindowMinutes: 300,
-            primaryResetsAt: resetBoundary)
-        let laterWindow = makePlanSample(
-            at: hourStart.addingTimeInterval(35 * 60),
-            primary: 4,
-            secondary: nil,
-            primaryWindowMinutes: 300,
-            primaryResetsAt: nextResetBoundary)
-        let lateBackfill = makePlanSample(
-            at: hourStart.addingTimeInterval(28 * 60),
-            primary: 95,
-            secondary: nil,
-            primaryWindowMinutes: 300,
-            primaryResetsAt: nil)
+            day: 20,
+            hour: 0)))
+        let existing = planEntry(
+            at: hourStart.addingTimeInterval(14 * 60),
+            usedPercent: 0,
+            resetsAt: hourStart.addingTimeInterval(5 * 60 * 60 + 14 * 60 + 2))
+        let incoming = planEntry(
+            at: hourStart.addingTimeInterval(23 * 60),
+            usedPercent: 0,
+            resetsAt: hourStart.addingTimeInterval(5 * 60 * 60 + 14 * 60 + 3))
 
         let updated = try #require(
-            UsageStore._updatedPlanUtilizationHistoryForTesting(
-                provider: .codex,
-                existingHistory: [earlierWindow, laterWindow],
-                sample: lateBackfill))
+            UsageStore._updatedPlanUtilizationEntriesForTesting(
+                existingEntries: [existing],
+                entry: incoming))
+
+        #expect(updated.count == 1)
+        #expect(updated[0] == incoming)
+    }
+
+    @Test
+    func sameHourResetTimesWithinTwoMinutesStillKeepSingleHourlyPeak() throws {
+        let calendar = Calendar(identifier: .gregorian)
+        let hourStart = try #require(calendar.date(from: DateComponents(
+            timeZone: TimeZone(secondsFromGMT: 0),
+            year: 2026,
+            month: 3,
+            day: 20,
+            hour: 0)))
+        let existing = planEntry(
+            at: hourStart.addingTimeInterval(21 * 60),
+            usedPercent: 10,
+            resetsAt: hourStart.addingTimeInterval(3 * 60 * 60))
+        let incoming = planEntry(
+            at: hourStart.addingTimeInterval(55 * 60),
+            usedPercent: 10,
+            resetsAt: hourStart.addingTimeInterval(3 * 60 * 60 + 1))
+
+        let updated = try #require(
+            UsageStore._updatedPlanUtilizationEntriesForTesting(
+                existingEntries: [existing],
+                entry: incoming))
+
+        #expect(updated.count == 1)
+        #expect(updated[0].capturedAt == incoming.capturedAt)
+        #expect(updated[0].usedPercent == 10)
+        #expect(updated[0].resetsAt == incoming.resetsAt)
+    }
+
+    @Test
+    func sameHourUsageDropWithoutMeaningfulResetStillKeepsSingleHourlyPeak() throws {
+        let calendar = Calendar(identifier: .gregorian)
+        let hourStart = try #require(calendar.date(from: DateComponents(
+            timeZone: TimeZone(secondsFromGMT: 0),
+            year: 2026,
+            month: 3,
+            day: 20,
+            hour: 0)))
+        let existing = planEntry(
+            at: hourStart.addingTimeInterval(15 * 60),
+            usedPercent: 40,
+            resetsAt: hourStart.addingTimeInterval(3 * 60 * 60))
+        let incoming = planEntry(
+            at: hourStart.addingTimeInterval(45 * 60),
+            usedPercent: 5,
+            resetsAt: hourStart.addingTimeInterval(3 * 60 * 60 + 30))
+
+        let updated = try #require(
+            UsageStore._updatedPlanUtilizationEntriesForTesting(
+                existingEntries: [existing],
+                entry: incoming))
+
+        #expect(updated.count == 1)
+        #expect(updated[0].capturedAt == existing.capturedAt)
+        #expect(updated[0].usedPercent == existing.usedPercent)
+        #expect(updated[0].resetsAt == incoming.resetsAt)
+    }
+
+    @Test
+    func sameHourResetKeepsPeakBeforeResetAndLatestPeakAfterReset() throws {
+        let calendar = Calendar(identifier: .gregorian)
+        let hourStart = try #require(calendar.date(from: DateComponents(
+            timeZone: TimeZone(secondsFromGMT: 0),
+            year: 2026,
+            month: 3,
+            day: 20,
+            hour: 0)))
+        let initial = [
+            planEntry(
+                at: hourStart.addingTimeInterval(5 * 60),
+                usedPercent: 40,
+                resetsAt: hourStart.addingTimeInterval(3 * 60 * 60)),
+            planEntry(
+                at: hourStart.addingTimeInterval(20 * 60),
+                usedPercent: 12,
+                resetsAt: hourStart.addingTimeInterval(8 * 60 * 60)),
+        ]
+        let incoming = planEntry(
+            at: hourStart.addingTimeInterval(45 * 60),
+            usedPercent: 18,
+            resetsAt: hourStart.addingTimeInterval(8 * 60 * 60))
+
+        let updated = try #require(
+            UsageStore._updatedPlanUtilizationEntriesForTesting(
+                existingEntries: initial,
+                entry: incoming))
 
         #expect(updated.count == 2)
-        #expect(updated[0].capturedAt == lateBackfill.capturedAt)
-        #expect(updated[0].primaryUsedPercent == 95)
-        #expect(updated[0].primaryResetsAt == resetBoundary)
-        #expect(updated[1] == laterWindow)
+        #expect(updated[0].usedPercent == 40)
+        #expect(updated[1].usedPercent == 18)
+        #expect(updated[1].resetsAt == incoming.resetsAt)
     }
 
     @Test
-    func lateSameHourBackfillAfterResetDoesNotOverrideLaterWindowValues() throws {
+    func newerResetWithinHourReplacesEarlierPostResetRecord() throws {
         let calendar = Calendar(identifier: .gregorian)
         let hourStart = try #require(calendar.date(from: DateComponents(
             timeZone: TimeZone(secondsFromGMT: 0),
             year: 2026,
             month: 3,
-            day: 17,
-            hour: 9)))
-        let resetBoundary = hourStart.addingTimeInterval(30 * 60)
-        let nextResetBoundary = resetBoundary.addingTimeInterval(5 * 60 * 60)
-        let earlierWindow = makePlanSample(
-            at: hourStart.addingTimeInterval(25 * 60),
-            primary: 82,
-            secondary: nil,
-            primaryWindowMinutes: 300,
-            primaryResetsAt: resetBoundary)
-        let laterWindow = makePlanSample(
-            at: hourStart.addingTimeInterval(35 * 60),
-            primary: 4,
-            secondary: nil,
-            primaryWindowMinutes: 300,
-            primaryResetsAt: nextResetBoundary)
-        let lateBackfill = makePlanSample(
-            at: hourStart.addingTimeInterval(32 * 60),
-            primary: 12,
-            secondary: nil,
-            primaryWindowMinutes: 300,
-            primaryResetsAt: nil)
+            day: 20,
+            hour: 0)))
+        let initial = [
+            planEntry(
+                at: hourStart.addingTimeInterval(5 * 60),
+                usedPercent: 40,
+                resetsAt: hourStart.addingTimeInterval(3 * 60 * 60)),
+            planEntry(
+                at: hourStart.addingTimeInterval(20 * 60),
+                usedPercent: 12,
+                resetsAt: hourStart.addingTimeInterval(8 * 60 * 60)),
+        ]
+        let incoming = planEntry(
+            at: hourStart.addingTimeInterval(50 * 60),
+            usedPercent: 3,
+            resetsAt: hourStart.addingTimeInterval(10 * 60 * 60))
 
-        let updated = UsageStore._updatedPlanUtilizationHistoryForTesting(
-            provider: .codex,
-            existingHistory: [earlierWindow, laterWindow],
-            sample: lateBackfill)
+        let updated = try #require(
+            UsageStore._updatedPlanUtilizationEntriesForTesting(
+                existingEntries: initial,
+                entry: incoming))
 
-        #expect(updated == nil)
+        #expect(updated.count == 2)
+        #expect(updated[0].usedPercent == 40)
+        #expect(updated[1] == incoming)
     }
 
     @Test
-    func sameHourBackfillTiePrefersLaterWindowWithoutOverridingValues() throws {
-        let calendar = Calendar(identifier: .gregorian)
-        let hourStart = try #require(calendar.date(from: DateComponents(
-            timeZone: TimeZone(secondsFromGMT: 0),
-            year: 2026,
-            month: 3,
-            day: 17,
-            hour: 9)))
-        let resetBoundary = hourStart.addingTimeInterval(30 * 60)
-        let nextResetBoundary = resetBoundary.addingTimeInterval(5 * 60 * 60)
-        let earlierWindow = makePlanSample(
-            at: hourStart.addingTimeInterval(25 * 60),
-            primary: 82,
-            secondary: nil,
-            primaryWindowMinutes: 300,
-            primaryResetsAt: resetBoundary)
-        let laterWindow = makePlanSample(
-            at: hourStart.addingTimeInterval(35 * 60),
-            primary: 4,
-            secondary: nil,
-            primaryWindowMinutes: 300,
-            primaryResetsAt: nextResetBoundary)
-        let ambiguousBackfill = makePlanSample(
-            at: hourStart.addingTimeInterval(30 * 60),
-            primary: 12,
-            secondary: nil,
-            primaryWindowMinutes: 300,
-            primaryResetsAt: nil)
-
-        let updated = UsageStore._updatedPlanUtilizationHistoryForTesting(
-            provider: .codex,
-            existingHistory: [earlierWindow, laterWindow],
-            sample: ambiguousBackfill)
-
-        #expect(updated == nil)
-    }
-
-    @MainActor
-    @Test
-    func dailyChartPreservesCompletedWindowAcrossResetWithinSameHour() throws {
-        let calendar = Calendar(identifier: .gregorian)
-        let firstBoundary = try #require(calendar.date(from: DateComponents(
-            timeZone: TimeZone.current,
-            year: 2026,
-            month: 3,
-            day: 17,
-            hour: 4,
-            minute: 30)))
-        let secondBoundary = try #require(calendar.date(from: DateComponents(
-            timeZone: TimeZone.current,
-            year: 2026,
-            month: 3,
-            day: 17,
-            hour: 9,
-            minute: 30)))
-        let thirdBoundary = try #require(calendar.date(from: DateComponents(
-            timeZone: TimeZone.current,
-            year: 2026,
-            month: 3,
-            day: 17,
-            hour: 14,
-            minute: 30)))
-        let samples = [
-            makePlanSample(
-                at: firstBoundary.addingTimeInterval(-20 * 60),
-                primary: 20,
-                secondary: nil,
-                primaryWindowMinutes: 300,
-                primaryResetsAt: firstBoundary),
-            makePlanSample(
-                at: secondBoundary.addingTimeInterval(-5 * 60),
-                primary: 82,
-                secondary: nil,
-                primaryWindowMinutes: 300,
-                primaryResetsAt: secondBoundary),
-            makePlanSample(
-                at: secondBoundary.addingTimeInterval(5 * 60),
-                primary: 4,
-                secondary: nil,
-                primaryWindowMinutes: 300,
-                primaryResetsAt: thirdBoundary),
+    func mergedHistoriesKeepSeriesSeparatedByStableName() throws {
+        let existing = [
+            planSeries(name: .session, windowMinutes: 300, entries: [
+                planEntry(at: Date(timeIntervalSince1970: 1_700_000_000), usedPercent: 20),
+            ]),
+        ]
+        let incoming = [
+            planSeries(name: .weekly, windowMinutes: 10080, entries: [
+                planEntry(at: Date(timeIntervalSince1970: 1_700_000_000), usedPercent: 40),
+            ]),
         ]
 
-        var history: [PlanUtilizationHistorySample] = []
-        for sample in samples {
-            history = try #require(
-                UsageStore._updatedPlanUtilizationHistoryForTesting(
-                    provider: .codex,
-                    existingHistory: history,
-                    sample: sample))
-        }
+        let updated = try #require(
+            UsageStore._updatedPlanUtilizationHistoriesForTesting(
+                existingHistories: existing,
+                samples: incoming))
 
-        #expect(history.count == 3)
-
-        let model = try #require(
-            PlanUtilizationHistoryChartMenuView._modelSnapshotForTesting(
-                periodRawValue: "daily",
-                samples: history,
-                provider: .codex))
-
-        #expect(model.pointCount == 2)
-        #expect(model.selectedSource == "primary:300")
-        #expect(model.usedPercents.count == 2)
-        #expect(abs(model.usedPercents[0] - (20.0 * 0.5 / 24.0)) < 0.000_1)
-        #expect(abs(model.usedPercents[1] - ((20.0 * 4.5 + 82.0 * 5.0 + 4.0 * 5.0) / 24.0)) < 0.000_1)
+        #expect(findSeries(updated, name: .session, windowMinutes: 300) != nil)
+        #expect(findSeries(updated, name: .weekly, windowMinutes: 10080) != nil)
     }
 }
