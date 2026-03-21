@@ -202,6 +202,8 @@ struct TokenAccountCLIContext {
                     manualCookieHeader: cookieHeader))
         case .gemini, .antigravity, .copilot, .kiro, .vertexai, .kimik2, .synthetic, .openrouter, .warp, .deepseek:
             return nil
+        case .windsurf:
+            return nil
         }
     }
 

@@ -887,7 +887,7 @@ extension UsageStore {
                         hasEnvToken: deepSeekHasEnvToken,
                         hasTokenAccount: deepSeekHasTokenAccount)
                 case .gemini, .antigravity, .opencode, .opencodego, .factory, .copilot, .vertexai, .kilo, .kiro, .kimi,
-                     .kimik2, .jetbrains, .perplexity, .abacus, .mistral:
+                     .kimik2, .jetbrains, .perplexity, .abacus, .mistral, .windsurf:
                     return unimplementedDebugLogMessages[provider] ?? "Debug log not yet implemented"
                 }
             }
