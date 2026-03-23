@@ -42,6 +42,7 @@ enum MenuBarMetricPreference: String, CaseIterable, Identifiable {
     case automatic
     case primary
     case secondary
+    case tertiary
     case average
 
     var id: String {
@@ -53,6 +54,7 @@ enum MenuBarMetricPreference: String, CaseIterable, Identifiable {
         case .automatic: "Automatic"
         case .primary: "Primary"
         case .secondary: "Secondary"
+        case .tertiary: "Tertiary"
         case .average: "Average"
         }
     }
@@ -148,6 +150,7 @@ final class SettingsStore {
         userDefaults.removeObject(forKey: "showClaudeUsage")
         LaunchAtLoginManager.setEnabled(self.launchAtLogin)
         self.runInitialProviderDetectionIfNeeded()
+        self.ensureAlibabaProviderAutoEnabledIfNeeded()
         self.applyTokenCostDefaultIfNeeded()
         if self.claudeUsageDataSource != .cli { self.claudeWebExtrasEnabled = false }
         if hasStoredOpenAIWebAccessPreference {
@@ -168,8 +171,12 @@ extension SettingsStore {
     }
 
     private static func loadDefaultsState(userDefaults: UserDefaults) -> SettingsDefaultsState {
-        let refreshRaw = userDefaults.string(forKey: "refreshFrequency") ?? RefreshFrequency.fiveMinutes.rawValue
-        let refreshFrequency = RefreshFrequency(rawValue: refreshRaw) ?? .fiveMinutes
+        let refreshDefault = userDefaults.string(forKey: "refreshFrequency")
+            .flatMap(RefreshFrequency.init(rawValue:))
+        let refreshFrequency = refreshDefault ?? .fiveMinutes
+        if refreshDefault == nil {
+            userDefaults.set(refreshFrequency.rawValue, forKey: "refreshFrequency")
+        }
         let launchAtLogin = userDefaults.object(forKey: "launchAtLogin") as? Bool ?? false
         let debugMenuEnabled = userDefaults.object(forKey: "debugMenuEnabled") as? Bool ?? false
         let debugDisableKeychainAccess: Bool = {
