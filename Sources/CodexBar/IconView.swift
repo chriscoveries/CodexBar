@@ -3,6 +3,12 @@ import SwiftUI
 
 enum IconRemainingResolver {
     static func resolvedRemaining(snapshot: UsageSnapshot, style: IconStyle) -> (primary: Double?, secondary: Double?) {
+        if style == .perplexity {
+            let windows = self.perplexityWindows(snapshot: snapshot)
+            return (
+                primary: windows.first?.remainingPercent,
+                secondary: windows.dropFirst().first?.remainingPercent)
+        }
         guard style == .antigravity else {
             return (
                 primary: snapshot.primary?.remainingPercent,
@@ -13,6 +19,17 @@ enum IconRemainingResolver {
         return (
             primary: windows.first?.remainingPercent,
             secondary: windows.dropFirst().first?.remainingPercent)
+    }
+
+    private static func perplexityWindows(snapshot: UsageSnapshot) -> [RateWindow] {
+        if let primary = snapshot.primary {
+            return [primary, snapshot.secondary, snapshot.tertiary].compactMap(\.self)
+        }
+
+        let fallbackWindows = [snapshot.secondary, snapshot.tertiary].compactMap(\.self)
+        let usableFallback = fallbackWindows.filter { $0.usedPercent < 100 }
+        let exhaustedFallback = fallbackWindows.filter { $0.usedPercent >= 100 }
+        return usableFallback + exhaustedFallback
     }
 }
 

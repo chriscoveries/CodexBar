@@ -29,6 +29,16 @@ struct PerplexityCookieHeaderTests {
     }
 
     @Test
+    func prefersAuthJSSessionCookieWhenBothNamesExist() {
+        let header = """
+        __Secure-next-auth.session-token=legacy-token; __Secure-authjs.session-token=live-token
+        """
+        let override = PerplexityCookieHeader.override(from: header)
+        #expect(override?.name == "__Secure-authjs.session-token")
+        #expect(override?.token == "live-token")
+    }
+
+    @Test
     func reassemblesChunkedNextAuthSessionCookieFromHeader() {
         let header = """
         foo=bar; __Secure-next-auth.session-token.1=chunk-b; __Secure-next-auth.session-token.0=chunk-a

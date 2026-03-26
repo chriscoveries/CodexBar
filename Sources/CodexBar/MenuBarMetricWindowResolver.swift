@@ -12,6 +12,9 @@ enum MenuBarMetricWindowResolver {
         guard let snapshot else { return nil }
         switch preference {
         case .tertiary:
+            if provider == .perplexity {
+                return snapshot.tertiary ?? snapshot.secondary ?? snapshot.primary
+            }
             guard provider == .cursor else {
                 if provider == .antigravity {
                     return snapshot.tertiary ?? snapshot.secondary ?? snapshot.primary
@@ -20,11 +23,17 @@ enum MenuBarMetricWindowResolver {
             }
             return snapshot.tertiary ?? snapshot.secondary ?? snapshot.primary
         case .primary:
+            if provider == .perplexity {
+                return snapshot.primary ?? Self.preferredPerplexityFallbackWindow(snapshot: snapshot)
+            }
             if provider == .antigravity {
                 return snapshot.primary ?? snapshot.secondary ?? snapshot.tertiary
             }
             return snapshot.primary ?? snapshot.secondary
         case .secondary:
+            if provider == .perplexity {
+                return snapshot.secondary ?? snapshot.tertiary ?? snapshot.primary
+            }
             if provider == .antigravity {
                 return snapshot.secondary ?? snapshot.primary ?? snapshot.tertiary
             }
@@ -45,6 +54,9 @@ enum MenuBarMetricWindowResolver {
             if provider == .antigravity {
                 return snapshot.primary ?? snapshot.secondary ?? snapshot.tertiary
             }
+            if provider == .perplexity {
+                return snapshot.primary ?? Self.preferredPerplexityFallbackWindow(snapshot: snapshot)
+            }
             if provider == .factory || provider == .kimi {
                 return snapshot.secondary ?? snapshot.primary
             }
@@ -62,6 +74,11 @@ enum MenuBarMetricWindowResolver {
             }
             return snapshot.primary ?? snapshot.secondary
         }
+    }
+
+    private static func preferredPerplexityFallbackWindow(snapshot: UsageSnapshot) -> RateWindow? {
+        let fallbackWindows = [snapshot.secondary, snapshot.tertiary].compactMap(\.self)
+        return fallbackWindows.first(where: { $0.usedPercent < 100 }) ?? fallbackWindows.first
     }
 
     private static func mostConstrainedWindow(

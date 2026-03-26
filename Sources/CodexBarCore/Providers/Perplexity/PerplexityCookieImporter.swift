@@ -13,6 +13,8 @@ public enum PerplexityCookieImporter {
         ProviderDefaults.metadata[.perplexity]?.browserCookieOrder ?? Browser.defaultImportOrder
     nonisolated(unsafe) static var importSessionOverrideForTesting:
         ((BrowserDetection, ((String) -> Void)?) throws -> SessionInfo)?
+    nonisolated(unsafe) static var importSessionsOverrideForTesting:
+        ((BrowserDetection, ((String) -> Void)?) throws -> [SessionInfo])?
 
     public struct SessionInfo: Sendable {
         public let cookies: [HTTPCookie]
@@ -36,6 +38,21 @@ public enum PerplexityCookieImporter {
         browserDetection: BrowserDetection = BrowserDetection(),
         logger: ((String) -> Void)? = nil) throws -> [SessionInfo]
     {
+        if let cached = self.cachedImportSessions() {
+            return cached
+        }
+        if let override = self.importSessionsOverrideForTesting {
+            let sessions = try override(browserDetection, logger)
+            self.storeImportSessions(sessions)
+            return sessions
+        }
+        if let override = self.importSessionOverrideForTesting {
+            let session = try override(browserDetection, logger)
+            let sessions = [session]
+            self.storeImportSessions(sessions)
+            return sessions
+        }
+
         var sessions: [SessionInfo] = []
         let candidates = self.cookieImportOrder.cookieImportCandidates(using: browserDetection)
         for browserSource in candidates {
@@ -53,6 +70,7 @@ public enum PerplexityCookieImporter {
         guard !sessions.isEmpty else {
             throw PerplexityCookieImportError.noCookies
         }
+        self.storeImportSessions(sessions)
         return sessions
     }
 
@@ -95,19 +113,10 @@ public enum PerplexityCookieImporter {
         browserDetection: BrowserDetection = BrowserDetection(),
         logger: ((String) -> Void)? = nil) throws -> SessionInfo
     {
-        if let cached = self.cachedImportSession() {
-            return cached
-        }
-        if let override = self.importSessionOverrideForTesting {
-            let session = try override(browserDetection, logger)
-            self.storeImportSession(session)
-            return session
-        }
         let sessions = try self.importSessions(browserDetection: browserDetection, logger: logger)
         guard let first = sessions.first else {
             throw PerplexityCookieImportError.noCookies
         }
-        self.storeImportSession(first)
         return first
     }
 
@@ -132,12 +141,12 @@ public enum PerplexityCookieImporter {
         self.log.debug(message)
     }
 
-    private static func cachedImportSession(now: Date = Date()) -> SessionInfo? {
+    private static func cachedImportSessions(now: Date = Date()) -> [SessionInfo]? {
         self.importSessionCache.load(now: now)
     }
 
-    private static func storeImportSession(_ session: SessionInfo, now: Date = Date()) {
-        self.importSessionCache.store(session, now: now)
+    private static func storeImportSessions(_ sessions: [SessionInfo], now: Date = Date()) {
+        self.importSessionCache.store(sessions, now: now)
     }
 
     private static func mergedLabel(for sources: [BrowserCookieStoreRecords]) -> String {
@@ -192,13 +201,13 @@ public enum PerplexityCookieImporter {
     private final class ImportSessionCache: @unchecked Sendable {
         private let ttl: TimeInterval
         private let lock = NSLock()
-        private var entry: (session: SessionInfo, expiresAt: Date)?
+        private var entry: (sessions: [SessionInfo], expiresAt: Date)?
 
         init(ttl: TimeInterval) {
             self.ttl = ttl
         }
 
-        func load(now: Date) -> SessionInfo? {
+        func load(now: Date) -> [SessionInfo]? {
             self.lock.lock()
             defer { self.lock.unlock() }
             guard let entry = self.entry else { return nil }
@@ -206,13 +215,13 @@ public enum PerplexityCookieImporter {
                 self.entry = nil
                 return nil
             }
-            return entry.session
+            return entry.sessions
         }
 
-        func store(_ session: SessionInfo, now: Date) {
+        func store(_ sessions: [SessionInfo], now: Date) {
             self.lock.lock()
             defer { self.lock.unlock() }
-            self.entry = (session: session, expiresAt: now.addingTimeInterval(self.ttl))
+            self.entry = (sessions: sessions, expiresAt: now.addingTimeInterval(self.ttl))
         }
 
         func invalidate() {

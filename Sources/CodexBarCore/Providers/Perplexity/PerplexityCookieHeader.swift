@@ -15,10 +15,10 @@ public struct PerplexityCookieOverride: Sendable {
 public enum PerplexityCookieHeader {
     public static let defaultSessionCookieName = "__Secure-next-auth.session-token"
     public static let supportedSessionCookieNames = [
-        "__Secure-next-auth.session-token",
-        "next-auth.session-token",
         "__Secure-authjs.session-token",
         "authjs.session-token",
+        "__Secure-next-auth.session-token",
+        "next-auth.session-token",
     ]
 
     public static func resolveCookieOverride(context: ProviderFetchContext) -> PerplexityCookieOverride? {
