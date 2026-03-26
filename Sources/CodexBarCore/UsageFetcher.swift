@@ -145,7 +145,7 @@ public struct UsageSnapshot: Codable, Sendable {
         return identity
     }
 
-    public func preferredPerplexityWindow() -> RateWindow? {
+    public func automaticPerplexityWindow() -> RateWindow? {
         let fallbackWindows = self.orderedPerplexityFallbackWindows()
         guard let primary = self.primary else {
             return fallbackWindows.first
@@ -173,7 +173,7 @@ public struct UsageSnapshot: Codable, Sendable {
             // Factory prefers secondary window
             return self.secondary ?? self.primary
         case .perplexity:
-            return self.preferredPerplexityWindow()
+            return self.automaticPerplexityWindow()
         case .cursor:
             // Cursor: fall back to on-demand budget when the included plan is exhausted (only in
             // "show remaining" mode). The secondary/tertiary lanes are Total/Auto/API breakdowns,

@@ -24,7 +24,7 @@ enum MenuBarMetricWindowResolver {
             return snapshot.tertiary ?? snapshot.secondary ?? snapshot.primary
         case .primary:
             if provider == .perplexity {
-                return snapshot.preferredPerplexityWindow()
+                return snapshot.primary ?? snapshot.secondary ?? snapshot.tertiary
             }
             if provider == .antigravity {
                 return snapshot.primary ?? snapshot.secondary ?? snapshot.tertiary
@@ -55,7 +55,7 @@ enum MenuBarMetricWindowResolver {
                 return snapshot.primary ?? snapshot.secondary ?? snapshot.tertiary
             }
             if provider == .perplexity {
-                return snapshot.preferredPerplexityWindow()
+                return snapshot.automaticPerplexityWindow()
             }
             if provider == .factory || provider == .kimi {
                 return snapshot.secondary ?? snapshot.primary
