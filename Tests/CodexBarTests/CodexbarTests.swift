@@ -101,6 +101,19 @@ struct CodexBarTests {
     }
 
     @Test
+    func `perplexity icon prefers purchased lane before bonus`() {
+        let snapshot = UsageSnapshot(
+            primary: nil,
+            secondary: RateWindow(usedPercent: 20, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
+            tertiary: RateWindow(usedPercent: 45, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
+            updatedAt: Date())
+
+        let remaining = IconRemainingResolver.resolvedRemaining(snapshot: snapshot, style: .perplexity)
+        #expect(remaining.primary == 55)
+        #expect(remaining.secondary == 80)
+    }
+
+    @Test
     func `icon renderer codex eyes punch through when unknown`() {
         // Regression: when remaining is nil, CoreGraphics inherits the previous fill alpha which caused
         // destinationOut “eyes” to become semi-transparent instead of fully punched through.

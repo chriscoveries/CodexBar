@@ -232,7 +232,7 @@ public struct UsageSnapshot: Codable, Sendable {
     }
 
     private func orderedPerplexityFallbackWindows() -> [RateWindow] {
-        let fallbackWindows = [self.secondary, self.tertiary].compactMap(\.self)
+        let fallbackWindows = [self.tertiary, self.secondary].compactMap(\.self)
         let usableFallback = fallbackWindows.filter { $0.remainingPercent > 0 }
         let exhaustedFallback = fallbackWindows.filter { $0.remainingPercent <= 0 }
         return usableFallback + exhaustedFallback

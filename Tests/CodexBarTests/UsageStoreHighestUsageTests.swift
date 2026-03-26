@@ -388,6 +388,45 @@ struct UsageStoreHighestUsageTests {
     }
 
     @Test
+    func `automatic metric prefers purchased perplexity credits before bonus in highest usage`() {
+        let settings = SettingsStore(
+            configStore: testConfigStore(suiteName: "UsageStoreHighestUsageTests-perplexity-purchased-before-bonus"),
+            zaiTokenStore: NoopZaiTokenStore(),
+            syntheticTokenStore: NoopSyntheticTokenStore())
+        settings.refreshFrequency = .manual
+        settings.statusChecksEnabled = false
+        settings.setMenuBarMetricPreference(.automatic, for: .perplexity)
+
+        let registry = ProviderRegistry.shared
+        if let codexMeta = registry.metadata[.codex] {
+            settings.setProviderEnabled(provider: .codex, metadata: codexMeta, enabled: true)
+        }
+        if let perplexityMeta = registry.metadata[.perplexity] {
+            settings.setProviderEnabled(provider: .perplexity, metadata: perplexityMeta, enabled: true)
+        }
+
+        let fetcher = UsageFetcher()
+        let store = UsageStore(fetcher: fetcher, browserDetection: BrowserDetection(cacheTTL: 0), settings: settings)
+
+        let codexSnapshot = UsageSnapshot(
+            primary: RateWindow(usedPercent: 30, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
+            secondary: nil,
+            updatedAt: Date())
+        let perplexitySnapshot = UsageSnapshot(
+            primary: RateWindow(usedPercent: 100, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
+            secondary: RateWindow(usedPercent: 20, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
+            tertiary: RateWindow(usedPercent: 45, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
+            updatedAt: Date())
+
+        store._setSnapshotForTesting(codexSnapshot, provider: .codex)
+        store._setSnapshotForTesting(perplexitySnapshot, provider: .perplexity)
+
+        let highest = store.providerWithHighestUsage()
+        #expect(highest?.provider == .perplexity)
+        #expect(highest?.usedPercent == 45)
+    }
+
+    @Test
     func `primary metric keeps exhausted recurring perplexity lane in highest usage selection`() {
         let settings = SettingsStore(
             configStore: testConfigStore(suiteName: "UsageStoreHighestUsageTests-perplexity-primary-exhausted"),
