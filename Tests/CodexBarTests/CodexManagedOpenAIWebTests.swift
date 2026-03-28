@@ -20,6 +20,7 @@ struct CodexManagedOpenAIWebTests {
             updatedAt: 1,
             lastAuthenticatedAt: 1)
         settings._test_activeManagedCodexAccount = managedAccount
+        settings.codexActiveSource = .managedAccount(id: managedAccount.id)
         defer { settings._test_activeManagedCodexAccount = nil }
 
         let otherAccountID = UUID()
@@ -49,6 +50,39 @@ struct CodexManagedOpenAIWebTests {
     }
 
     @Test
+    func `live system codex open A I web uses live identity and no managed cache scope`() {
+        let settings = self.makeSettingsStore(suite: "CodexManagedOpenAIWebTests-live-system")
+        let managedAccount = ManagedCodexAccount(
+            id: UUID(),
+            email: "managed@example.com",
+            managedHomePath: "/tmp/managed-codex-home",
+            createdAt: 1,
+            updatedAt: 1,
+            lastAuthenticatedAt: 1)
+        let liveAccount = ObservedSystemCodexAccount(
+            email: "system@example.com",
+            codexHomePath: "/tmp/live-codex-home",
+            observedAt: Date())
+        settings._test_activeManagedCodexAccount = managedAccount
+        settings._test_liveSystemCodexAccount = liveAccount
+        settings.codexActiveSource = .liveSystem
+        defer {
+            settings._test_activeManagedCodexAccount = nil
+            settings._test_liveSystemCodexAccount = nil
+        }
+
+        let store = UsageStore(
+            fetcher: UsageFetcher(environment: ["CODEX_HOME": liveAccount.codexHomePath]),
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings,
+            startupBehavior: .testing)
+
+        #expect(store.codexAccountEmailForOpenAIDashboard() == liveAccount.email)
+        #expect(store.codexAccountEmailForOpenAIDashboard() != managedAccount.email)
+        #expect(store.codexCookieCacheScopeForOpenAIWeb() == nil)
+    }
+
+    @Test
     func `open A I web import uses managed account target when live account differs`() async {
         let settings = self.makeSettingsStore(suite: "CodexManagedOpenAIWebTests-targeting-active-vs-live")
         let managedAccount = ManagedCodexAccount(
@@ -71,6 +105,7 @@ struct CodexManagedOpenAIWebTests {
 
         settings._test_activeManagedCodexAccount = managedAccount
         settings._test_liveSystemCodexAccount = liveAccount
+        settings.codexActiveSource = .managedAccount(id: managedAccount.id)
         defer {
             settings._test_activeManagedCodexAccount = nil
             settings._test_liveSystemCodexAccount = nil
@@ -134,6 +169,7 @@ struct CodexManagedOpenAIWebTests {
     func `unreadable managed codex store fails closed for open A I web`() async {
         let settings = self.makeSettingsStore(suite: "CodexManagedOpenAIWebTests-unreadable-store")
         settings._test_unreadableManagedCodexAccountStore = true
+        settings.codexActiveSource = .managedAccount(id: UUID())
         defer { settings._test_unreadableManagedCodexAccountStore = false }
 
         let store = UsageStore(
@@ -157,6 +193,73 @@ struct CodexManagedOpenAIWebTests {
         #expect(store.openAIDashboard == nil)
         #expect(store.openAIDashboardRequiresLogin == true)
         #expect(store.lastOpenAIDashboardError?.contains("Managed Codex account data is unavailable") == true)
+    }
+
+    @Test
+    func `missing managed codex open A I web target fails closed`() async {
+        let settings = self.makeSettingsStore(suite: "CodexManagedOpenAIWebTests-missing-managed-target")
+        let storedAccount = ManagedCodexAccount(
+            id: UUID(),
+            email: "stored@example.com",
+            managedHomePath: "/tmp/stored-managed-home",
+            createdAt: 1,
+            updatedAt: 1,
+            lastAuthenticatedAt: 1)
+        let storeURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-openai-web-\(UUID().uuidString).json")
+        let managedStore = FileManagedCodexAccountStore(fileURL: storeURL)
+        try? managedStore.storeAccounts(ManagedCodexAccountSet(
+            version: FileManagedCodexAccountStore.currentVersion,
+            accounts: [storedAccount],
+            activeAccountID: storedAccount.id))
+        settings._test_managedCodexAccountStoreURL = storeURL
+        settings.codexActiveSource = .managedAccount(id: UUID())
+        defer {
+            settings._test_managedCodexAccountStoreURL = nil
+            try? FileManager.default.removeItem(at: storeURL)
+        }
+
+        let store = UsageStore(
+            fetcher: UsageFetcher(environment: [:]),
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings,
+            startupBehavior: .testing)
+        var importWasCalled = false
+        store._test_openAIDashboardCookieImportOverride = { _, _, _, _, _ in
+            importWasCalled = true
+            return OpenAIDashboardBrowserCookieImporter.ImportResult(
+                sourceLabel: "test",
+                cookieCount: 1,
+                signedInEmail: "unexpected@example.com",
+                matchesCodexEmail: true)
+        }
+        defer { store._test_openAIDashboardCookieImportOverride = nil }
+        store.openAIDashboard = OpenAIDashboardSnapshot(
+            signedInEmail: "stale-dashboard@example.com",
+            codeReviewRemainingPercent: 100,
+            creditEvents: [],
+            dailyBreakdown: [],
+            usageBreakdown: [],
+            creditsPurchaseURL: nil,
+            updatedAt: Date())
+        store.lastOpenAIDashboardCookieImportEmail = "stale-import@example.com"
+
+        #expect(store.codexAccountEmailForOpenAIDashboard() == nil)
+        #expect(store.codexCookieCacheScopeForOpenAIWeb() != nil)
+        #expect(store.codexCookieCacheScopeForOpenAIWeb() != .managedStoreUnreadable)
+
+        let imported = await store.importOpenAIDashboardCookiesIfNeeded(targetEmail: nil, force: true)
+        #expect(imported == nil)
+        #expect(importWasCalled == false)
+        #expect(store.openAIDashboard == nil)
+        #expect(store.openAIDashboardRequiresLogin == true)
+        #expect(store.openAIDashboardCookieImportStatus?
+            .contains("selected managed Codex account is unavailable") == true)
+
+        await store.refreshOpenAIDashboardIfNeeded(force: true)
+        #expect(importWasCalled == false)
+        #expect(store.openAIDashboard == nil)
+        #expect(store.lastOpenAIDashboardError?.contains("selected managed Codex account is unavailable") == true)
     }
 
     @Test

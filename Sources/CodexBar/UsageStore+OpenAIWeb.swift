@@ -55,7 +55,7 @@ extension UsageStore {
 
     func applyOpenAIDashboardFailure(message: String) async {
         await MainActor.run {
-            if self.settings.hasUnreadableManagedCodexAccountStore {
+            if self.openAIWebManagedTargetStoreIsUnreadable() {
                 self.failClosedOpenAIDashboardSnapshot()
                 self.lastOpenAIDashboardError = message
                 return
@@ -89,7 +89,7 @@ extension UsageStore {
                 "Sign in using \(self.codexBrowserCookieOrder.loginHint), " +
                     "then update OpenAI cookies in Providers → Codex.",
             ].joined(separator: " ")
-            if self.settings.hasUnreadableManagedCodexAccountStore {
+            if self.openAIWebManagedTargetStoreIsUnreadable() {
                 self.failClosedOpenAIDashboardSnapshot()
                 return
             }
@@ -109,8 +109,12 @@ extension UsageStore {
             self.resetOpenAIWebState()
             return
         }
-        if self.settings.hasUnreadableManagedCodexAccountStore {
+        if self.openAIWebManagedTargetStoreIsUnreadable() {
             await self.failClosedRefreshForUnreadableManagedCodexStore()
+            return
+        }
+        if self.openAIWebManagedTargetIsMissing() {
+            await self.failClosedRefreshForMissingManagedCodexTarget()
             return
         }
 
@@ -298,9 +302,42 @@ extension UsageStore {
         }
     }
 
+    private func failClosedForMissingManagedCodexTarget() async -> String? {
+        await MainActor.run {
+            self.failClosedOpenAIDashboardSnapshot()
+            self.openAIDashboardCookieImportStatus = [
+                "The selected managed Codex account is unavailable.",
+                "Pick another Codex account before importing OpenAI cookies.",
+            ].joined(separator: " ")
+        }
+        return nil
+    }
+
+    private func failClosedRefreshForMissingManagedCodexTarget() async {
+        await MainActor.run {
+            self.failClosedOpenAIDashboardSnapshot()
+            self.lastOpenAIDashboardError = [
+                "The selected managed Codex account is unavailable.",
+                "Pick another Codex account before refreshing OpenAI web data.",
+            ].joined(separator: " ")
+        }
+    }
+
+    private func openAIWebCookieImportShouldFailClosed() async -> Bool {
+        if self.openAIWebManagedTargetStoreIsUnreadable() {
+            _ = await self.failClosedForUnreadableManagedCodexStore()
+            return true
+        }
+        if self.openAIWebManagedTargetIsMissing() {
+            _ = await self.failClosedForMissingManagedCodexTarget()
+            return true
+        }
+        return false
+    }
+
     func importOpenAIDashboardCookiesIfNeeded(targetEmail: String?, force: Bool) async -> String? {
-        if self.settings.hasUnreadableManagedCodexAccountStore {
-            return await self.failClosedForUnreadableManagedCodexStore()
+        if await self.openAIWebCookieImportShouldFailClosed() {
+            return nil
         }
 
         let normalizedTarget = targetEmail?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -491,20 +528,52 @@ extension UsageStore {
         return raw.lowercased() != expected.lowercased()
     }
 
-    func codexAccountEmailForOpenAIDashboard() -> String? {
-        if self.settings.hasUnreadableManagedCodexAccountStore {
+    private func openAIWebManagedTargetStoreIsUnreadable() -> Bool {
+        guard case .managedAccount = self.settings.codexActiveSource else {
+            return false
+        }
+        return self.settings.hasUnreadableManagedCodexAccountStore
+    }
+
+    private func openAIWebManagedTargetIsMissing() -> Bool {
+        guard case .managedAccount = self.settings.codexActiveSource else {
+            return false
+        }
+        return self.selectedManagedCodexAccountForOpenAIWeb() == nil
+    }
+
+    private func selectedManagedCodexAccountForOpenAIWeb() -> ManagedCodexAccount? {
+        guard case let .managedAccount(id) = self.settings.codexActiveSource else {
             return nil
         }
 
-        let managed = self.settings.activeManagedCodexAccount?.email
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        if let managed, !managed.isEmpty { return managed }
+        let snapshot = self.settings.codexAccountReconciliationSnapshot
+        return snapshot.storedAccounts.first { $0.id == id }
+    }
 
-        let direct = self.snapshots[.codex]?.accountEmail(for: .codex)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        if let direct, !direct.isEmpty { return direct }
-        let fallback = self.codexFetcher.loadAccountInfo().email?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let fallback, !fallback.isEmpty { return fallback }
+    func codexAccountEmailForOpenAIDashboard() -> String? {
+        switch self.settings.codexActiveSource {
+        case .liveSystem:
+            let liveSystem = self.settings.codexAccountReconciliationSnapshot.liveSystemAccount?.email
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if let liveSystem, !liveSystem.isEmpty { return liveSystem }
+
+            let direct = self.snapshots[.codex]?.accountEmail(for: .codex)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if let direct, !direct.isEmpty { return direct }
+            let fallback = self.codexFetcher.loadAccountInfo().email?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let fallback, !fallback.isEmpty { return fallback }
+        case .managedAccount:
+            if self.openAIWebManagedTargetStoreIsUnreadable() {
+                return nil
+            }
+
+            let managed = self.selectedManagedCodexAccountForOpenAIWeb()?.email
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if let managed, !managed.isEmpty { return managed }
+            return nil
+        }
+
         let cached = self.openAIDashboard?.signedInEmail?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let cached, !cached.isEmpty { return cached }
         let imported = self.lastOpenAIDashboardCookieImportEmail?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -513,7 +582,12 @@ extension UsageStore {
     }
 
     func codexCookieCacheScopeForOpenAIWeb() -> CookieHeaderCache.Scope? {
-        self.settings.activeManagedCodexCookieCacheScope
+        switch self.settings.codexActiveSource {
+        case .liveSystem:
+            nil
+        case let .managedAccount(id):
+            self.openAIWebManagedTargetStoreIsUnreadable() ? .managedStoreUnreadable : .managedAccount(id)
+        }
     }
 }
 
