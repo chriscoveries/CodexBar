@@ -31,7 +31,16 @@ extension UsageStore {
         self.status(for: provider)?.indicator ?? .none
     }
 
-    func accountInfo() -> AccountInfo {
-        self.codexFetcher.loadAccountInfo()
+    func accountInfo(for provider: UsageProvider) -> AccountInfo {
+        guard provider == .codex else {
+            return self.codexFetcher.loadAccountInfo()
+        }
+        let env = ProviderRegistry.makeEnvironment(
+            base: ProcessInfo.processInfo.environment,
+            provider: .codex,
+            settings: self.settings,
+            tokenOverride: nil)
+        let fetcher = ProviderRegistry.makeFetcher(base: self.codexFetcher, provider: .codex, env: env)
+        return fetcher.loadAccountInfo()
     }
 }

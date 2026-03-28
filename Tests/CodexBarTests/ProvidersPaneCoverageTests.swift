@@ -88,6 +88,44 @@ struct ProvidersPaneCoverageTests {
         #expect(row?.value == "Pro")
     }
 
+    @Test
+    func `codex providers pane uses managed account fallback instead of ambient account`() throws {
+        let settings = Self.makeSettingsStore(suite: "ProvidersPaneCoverageTests-codex-managed-fallback")
+        let ambientHome = FileManager.default.temporaryDirectory.appendingPathComponent(
+            UUID().uuidString,
+            isDirectory: true)
+        let managedHome = FileManager.default.temporaryDirectory.appendingPathComponent(
+            UUID().uuidString,
+            isDirectory: true)
+        defer {
+            try? FileManager.default.removeItem(at: ambientHome)
+            try? FileManager.default.removeItem(at: managedHome)
+        }
+
+        try Self.writeCodexAuthFile(homeURL: ambientHome, email: "ambient@example.com", plan: "plus")
+        try Self.writeCodexAuthFile(homeURL: managedHome, email: "managed@example.com", plan: "enterprise")
+        settings._test_activeManagedCodexRemoteHomePath = managedHome.path
+
+        let store = UsageStore(
+            fetcher: UsageFetcher(environment: ["CODEX_HOME": ambientHome.path]),
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings,
+            startupBehavior: .testing)
+        store._setSnapshotForTesting(
+            UsageSnapshot(
+                primary: RateWindow(usedPercent: 12, windowMinutes: 300, resetsAt: nil, resetDescription: nil),
+                secondary: RateWindow(usedPercent: 34, windowMinutes: 10080, resetsAt: nil, resetDescription: nil),
+                updatedAt: Date(),
+                identity: nil),
+            provider: .codex)
+
+        let pane = ProvidersPane(settings: settings, store: store)
+        let model = pane._test_menuCardModel(for: .codex)
+
+        #expect(model.email == "managed@example.com")
+        #expect(model.planText == "Enterprise")
+    }
+
     private static func makeSettingsStore(suite: String) -> SettingsStore {
         let defaults = UserDefaults(suiteName: suite)!
         defaults.removePersistentDomain(forName: suite)
@@ -118,5 +156,33 @@ struct ProvidersPaneCoverageTests {
             fetcher: UsageFetcher(environment: [:]),
             browserDetection: BrowserDetection(cacheTTL: 0),
             settings: settings)
+    }
+
+    private static func writeCodexAuthFile(homeURL: URL, email: String, plan: String) throws {
+        try FileManager.default.createDirectory(at: homeURL, withIntermediateDirectories: true)
+        let auth = [
+            "tokens": [
+                "idToken": Self.fakeJWT(email: email, plan: plan),
+            ],
+        ]
+        let data = try JSONSerialization.data(withJSONObject: auth)
+        try data.write(to: homeURL.appendingPathComponent("auth.json"))
+    }
+
+    private static func fakeJWT(email: String, plan: String) -> String {
+        let header = (try? JSONSerialization.data(withJSONObject: ["alg": "none"])) ?? Data()
+        let payload = (try? JSONSerialization.data(withJSONObject: [
+            "email": email,
+            "chatgpt_plan_type": plan,
+        ])) ?? Data()
+
+        func base64URL(_ data: Data) -> String {
+            data.base64EncodedString()
+                .replacingOccurrences(of: "=", with: "")
+                .replacingOccurrences(of: "+", with: "-")
+                .replacingOccurrences(of: "/", with: "_")
+        }
+
+        return "\(base64URL(header)).\(base64URL(payload))."
     }
 }

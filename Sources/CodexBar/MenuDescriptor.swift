@@ -60,12 +60,13 @@ struct MenuDescriptor {
         var sections: [Section] = []
 
         if let provider {
+            let fallbackAccount = store.accountInfo(for: provider)
             sections.append(Self.usageSection(for: provider, store: store, settings: settings))
             if let accountSection = Self.accountSection(
                 for: provider,
                 store: store,
                 settings: settings,
-                account: account)
+                account: fallbackAccount)
             {
                 sections.append(accountSection)
             }
@@ -78,11 +79,12 @@ struct MenuDescriptor {
             }
             if addedUsage {
                 if let accountProvider = Self.accountProviderForCombined(store: store),
+                   let fallbackAccount = Optional(store.accountInfo(for: accountProvider)),
                    let accountSection = Self.accountSection(
                        for: accountProvider,
                        store: store,
                        settings: settings,
-                       account: account)
+                       account: fallbackAccount)
                 {
                     sections.append(accountSection)
                 }
@@ -307,12 +309,13 @@ struct MenuDescriptor {
         var entries: [Entry] = []
         let targetProvider = provider ?? store.enabledProviders().first
         let metadata = targetProvider.map { store.metadata(for: $0) }
+        let fallbackAccount = targetProvider.map { store.accountInfo(for: $0) } ?? account
         let loginContext = targetProvider.map {
             ProviderMenuLoginContext(
                 provider: $0,
                 store: store,
                 settings: store.settings,
-                account: account)
+                account: fallbackAccount)
         }
 
         // Show "Add Account" if no account, "Switch Account" if logged in
@@ -326,7 +329,7 @@ struct MenuDescriptor {
                 entries.append(.action(override.label, override.action))
             } else {
                 let loginAction = self.switchAccountTarget(for: provider, store: store)
-                let hasAccount = self.hasAccount(for: provider, store: store, account: account)
+                let hasAccount = self.hasAccount(for: provider, store: store, account: fallbackAccount)
                 let accountLabel = hasAccount ? "Switch Account..." : "Add Account..."
                 entries.append(.action(accountLabel, loginAction))
             }
@@ -337,7 +340,7 @@ struct MenuDescriptor {
                 provider: targetProvider,
                 store: store,
                 settings: store.settings,
-                account: account)
+                account: fallbackAccount)
             ProviderCatalog.implementation(for: targetProvider)?
                 .appendActionMenuEntries(context: actionContext, entries: &entries)
         }

@@ -364,7 +364,7 @@ struct ProvidersPane: View {
             dashboardError: dashboardError,
             tokenSnapshot: tokenSnapshot,
             tokenError: tokenError,
-            account: self.store.accountInfo(),
+            account: self.store.accountInfo(for: provider),
             isRefreshing: self.store.refreshingProviders.contains(provider),
             lastError: self.store.error(for: provider),
             usageBarsShowUsed: self.settings.usageBarsShowUsed,
