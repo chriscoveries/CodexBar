@@ -92,6 +92,28 @@ struct CodexManagedRoutingTests {
     }
 
     @Test
+    func `usage store builds codex credits fetcher scoped to managed home`() throws {
+        let settings = self.makeSettingsStore(suite: "CodexManagedRoutingTests-credits-fetcher")
+        let managedHome = FileManager.default.temporaryDirectory.appendingPathComponent(
+            UUID().uuidString,
+            isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: managedHome) }
+
+        settings._test_activeManagedCodexRemoteHomePath = managedHome.path
+        try self.writeCodexAuthFile(homeURL: managedHome, email: "credits@example.com", plan: "enterprise")
+
+        let store = UsageStore(
+            fetcher: UsageFetcher(environment: [:]),
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings,
+            startupBehavior: .testing)
+        let account = store.codexCreditsFetcher().loadAccountInfo()
+
+        #expect(account.email == "credits@example.com")
+        #expect(account.plan == "enterprise")
+    }
+
+    @Test
     func `codex O auth strategy availability reads auth from context env`() async throws {
         let managedHome = FileManager.default.temporaryDirectory.appendingPathComponent(
             UUID().uuidString,
