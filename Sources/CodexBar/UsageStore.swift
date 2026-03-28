@@ -1131,6 +1131,11 @@ extension UsageStore {
         do {
             let fetcher = self.costUsageFetcher
             let timeoutSeconds = self.tokenFetchTimeout
+            // CostUsageFetcher scans local Codex session logs from this machine. That data is
+            // intentionally presented as provider-level local telemetry rather than managed-account
+            // remote state, so managed Codex account selection does not retarget this fetch.
+            // If the UI later needs account-scoped token history, it should label and source that
+            // separately instead of silently changing the meaning of this section.
             let snapshot = try await withThrowingTaskGroup(of: CostUsageTokenSnapshot.self) { group in
                 group.addTask(priority: .utility) {
                     try await fetcher.loadTokenSnapshot(
