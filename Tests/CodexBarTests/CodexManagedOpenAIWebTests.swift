@@ -49,6 +49,76 @@ struct CodexManagedOpenAIWebTests {
     }
 
     @Test
+    func `open A I web import uses managed account target when live account differs`() async {
+        let settings = self.makeSettingsStore(suite: "CodexManagedOpenAIWebTests-targeting-active-vs-live")
+        let managedAccount = ManagedCodexAccount(
+            id: UUID(),
+            email: "managed@example.com",
+            managedHomePath: "/tmp/managed-codex-home",
+            createdAt: 1,
+            updatedAt: 1,
+            lastAuthenticatedAt: 1)
+        let liveAccount = ObservedSystemCodexAccount(
+            email: "system@example.com",
+            codexHomePath: "/tmp/live-codex-home",
+            observedAt: Date())
+        let expectedScope = CookieHeaderCache.Scope.managedAccount(managedAccount.id)
+        let expectedEmail = managedAccount.email
+        var observedTargetEmail: String?
+        var observedScope: CookieHeaderCache.Scope?
+        var observedCookieSource: ProviderCookieSource?
+        var observedAllowAnyAccount = false
+
+        settings._test_activeManagedCodexAccount = managedAccount
+        settings._test_liveSystemCodexAccount = liveAccount
+        defer {
+            settings._test_activeManagedCodexAccount = nil
+            settings._test_liveSystemCodexAccount = nil
+        }
+
+        let snapshot = UsageSnapshot(
+            primary: nil,
+            secondary: nil,
+            updatedAt: Date(),
+            identity: ProviderIdentitySnapshot(
+                providerID: .codex,
+                accountEmail: liveAccount.email,
+                accountOrganization: nil,
+                loginMethod: nil))
+
+        let store = UsageStore(
+            fetcher: UsageFetcher(environment: ["CODEX_HOME": liveAccount.codexHomePath]),
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings,
+            startupBehavior: .testing)
+        store._setSnapshotForTesting(snapshot, provider: .codex)
+        store._test_openAIDashboardCookieImportOverride = { targetEmail, allowAnyAccount, cookieSource, scope, _ in
+            observedTargetEmail = targetEmail
+            observedScope = scope
+            observedCookieSource = cookieSource
+            observedAllowAnyAccount = allowAnyAccount
+            return OpenAIDashboardBrowserCookieImporter.ImportResult(
+                sourceLabel: "test",
+                cookieCount: 1,
+                signedInEmail: targetEmail,
+                matchesCodexEmail: targetEmail == expectedEmail)
+        }
+        defer { store._test_openAIDashboardCookieImportOverride = nil }
+
+        let importerTarget = store.codexAccountEmailForOpenAIDashboard()
+        let imported = await store.importOpenAIDashboardCookiesIfNeeded(targetEmail: importerTarget, force: true)
+
+        #expect(importerTarget == expectedEmail)
+        #expect(importerTarget != liveAccount.email)
+        #expect(imported == expectedEmail)
+        #expect(observedTargetEmail == expectedEmail)
+        #expect(observedScope == expectedScope)
+        #expect(observedAllowAnyAccount == false)
+        #expect(observedCookieSource == .auto)
+        #expect(store.codexCookieCacheScopeForOpenAIWeb() == expectedScope)
+    }
+
+    @Test
     func `unmanaged codex open A I web falls back to provider global cache scope`() {
         let settings = self.makeSettingsStore(suite: "CodexManagedOpenAIWebTests-unmanaged")
         let store = UsageStore(

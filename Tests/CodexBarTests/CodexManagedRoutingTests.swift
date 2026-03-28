@@ -28,6 +28,42 @@ struct CodexManagedRoutingTests {
     }
 
     @Test
+    func `provider registry keeps managed home when live account differs`() {
+        let settings = self.makeSettingsStore(suite: "CodexManagedRoutingTests-active-vs-live")
+        let managedHomePath = "/tmp/managed-remote-home"
+        let liveHomePath = "/tmp/system-remote-home"
+        let managedAccount = ManagedCodexAccount(
+            id: UUID(),
+            email: "managed@example.com",
+            managedHomePath: managedHomePath,
+            createdAt: 1,
+            updatedAt: 1,
+            lastAuthenticatedAt: 1)
+        let liveSystemAccount = ObservedSystemCodexAccount(
+            email: "system@example.com",
+            codexHomePath: liveHomePath,
+            observedAt: Date())
+
+        settings._test_activeManagedCodexRemoteHomePath = nil
+        settings._test_activeManagedCodexAccount = managedAccount
+        settings._test_liveSystemCodexAccount = liveSystemAccount
+        defer {
+            settings._test_activeManagedCodexAccount = nil
+            settings._test_activeManagedCodexRemoteHomePath = nil
+            settings._test_liveSystemCodexAccount = nil
+        }
+
+        let env = ProviderRegistry.makeEnvironment(
+            base: ["CODEX_HOME": liveHomePath],
+            provider: .codex,
+            settings: settings,
+            tokenOverride: nil)
+
+        #expect(env["CODEX_HOME"] == managedHomePath)
+        #expect(env["CODEX_HOME"] != liveHomePath)
+    }
+
+    @Test
     func `provider registry fails closed when managed account store is unreadable`() {
         let settings = self.makeSettingsStore(suite: "CodexManagedRoutingTests-unreadable-store")
         settings._test_unreadableManagedCodexAccountStore = true
