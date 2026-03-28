@@ -126,16 +126,93 @@ extension SettingsStore {
     func ensureCodexCookieLoaded() {}
 }
 
+extension SettingsStore {
+    var codexAccountReconciliationSnapshot: CodexAccountReconciliationSnapshot {
+        self.codexAccountReconciler().loadSnapshot(environment: self.codexReconciliationEnvironment())
+    }
+
+    var codexVisibleAccountProjection: CodexVisibleAccountProjection {
+        CodexVisibleAccountProjection.make(from: self.codexAccountReconciliationSnapshot)
+    }
+
+    var codexVisibleAccounts: [CodexVisibleAccount] {
+        self.codexVisibleAccountProjection.visibleAccounts
+    }
+
+    private func codexAccountReconciler() -> DefaultCodexAccountReconciler {
+        #if DEBUG
+        let liveSystemAccountOverride = CodexManagedRemoteHomeTestingOverride.liveSystemAccount(for: self)
+        let reconciliationEnvironmentOverride = CodexManagedRemoteHomeTestingOverride
+            .reconciliationEnvironment(for: self)
+        let managedAccountOverride = CodexManagedRemoteHomeTestingOverride.account(for: self)
+        let unreadableStoreOverride = CodexManagedRemoteHomeTestingOverride.isUnreadable(for: self)
+        guard CodexManagedRemoteHomeTestingOverride.hasAnyOverride(for: self) else {
+            return DefaultCodexAccountReconciler()
+        }
+
+        let storeLoader: @Sendable () throws -> ManagedCodexAccountSet
+        if unreadableStoreOverride {
+            storeLoader = { throw CodexManagedRemoteHomeTestingOverrideError.unreadableManagedStore }
+        } else if let managedAccountOverride {
+            let accounts = ManagedCodexAccountSet(
+                version: FileManagedCodexAccountStore.currentVersion,
+                accounts: [managedAccountOverride],
+                activeAccountID: managedAccountOverride.id)
+            storeLoader = { accounts }
+        } else {
+            let accounts = ManagedCodexAccountSet(
+                version: FileManagedCodexAccountStore.currentVersion,
+                accounts: [],
+                activeAccountID: nil)
+            storeLoader = { accounts }
+        }
+
+        return DefaultCodexAccountReconciler(
+            storeLoader: storeLoader,
+            systemObserver: CodexManagedRemoteHomeTestingSystemObserver(
+                overrideAccount: liveSystemAccountOverride,
+                usesInjectedEnvironment: reconciliationEnvironmentOverride != nil))
+        #else
+        return DefaultCodexAccountReconciler()
+        #endif
+    }
+
+    private func codexReconciliationEnvironment() -> [String: String] {
+        #if DEBUG
+        if let override = CodexManagedRemoteHomeTestingOverride.reconciliationEnvironment(for: self) {
+            return override
+        }
+        #endif
+        return ProcessInfo.processInfo.environment
+    }
+}
+
 #if DEBUG
 private enum CodexManagedRemoteHomeTestingOverride {
     private struct Override {
         var account: ManagedCodexAccount?
         var homePath: String?
         var unreadableStore: Bool = false
+        var liveSystemAccount: ObservedSystemCodexAccount?
+        var reconciliationEnvironment: [String: String]?
+
+        var isEmpty: Bool {
+            self.account == nil && self.homePath == nil && self.unreadableStore == false && self
+                .liveSystemAccount == nil && self.reconciliationEnvironment == nil
+        }
     }
 
     @MainActor
     private static var values: [ObjectIdentifier: Override] = [:]
+
+    @MainActor
+    private static func store(_ override: Override, for key: ObjectIdentifier) {
+        if override.isEmpty {
+            self.values.removeValue(forKey: key)
+        } else {
+            self.values[key] = override
+        }
+    }
 
     @MainActor
     static func account(for settings: SettingsStore) -> ManagedCodexAccount? {
@@ -147,11 +224,7 @@ private enum CodexManagedRemoteHomeTestingOverride {
         let key = ObjectIdentifier(settings)
         var override = self.values[key] ?? Override()
         override.account = account
-        if override.account == nil, override.homePath == nil, !override.unreadableStore {
-            self.values.removeValue(forKey: key)
-        } else {
-            self.values[key] = override
-        }
+        self.store(override, for: key)
     }
 
     @MainActor
@@ -164,11 +237,7 @@ private enum CodexManagedRemoteHomeTestingOverride {
         let key = ObjectIdentifier(settings)
         var override = self.values[key] ?? Override()
         override.homePath = value
-        if override.account == nil, override.homePath == nil, !override.unreadableStore {
-            self.values.removeValue(forKey: key)
-        } else {
-            self.values[key] = override
-        }
+        self.store(override, for: key)
     }
 
     @MainActor
@@ -181,11 +250,57 @@ private enum CodexManagedRemoteHomeTestingOverride {
         let key = ObjectIdentifier(settings)
         var override = self.values[key] ?? Override()
         override.unreadableStore = value
-        if override.account == nil, override.homePath == nil, !override.unreadableStore {
-            self.values.removeValue(forKey: key)
-        } else {
-            self.values[key] = override
+        self.store(override, for: key)
+    }
+
+    @MainActor
+    static func liveSystemAccount(for settings: SettingsStore) -> ObservedSystemCodexAccount? {
+        self.values[ObjectIdentifier(settings)]?.liveSystemAccount
+    }
+
+    @MainActor
+    static func setLiveSystemAccount(_ account: ObservedSystemCodexAccount?, for settings: SettingsStore) {
+        let key = ObjectIdentifier(settings)
+        var override = self.values[key] ?? Override()
+        override.liveSystemAccount = account
+        self.store(override, for: key)
+    }
+
+    @MainActor
+    static func reconciliationEnvironment(for settings: SettingsStore) -> [String: String]? {
+        self.values[ObjectIdentifier(settings)]?.reconciliationEnvironment
+    }
+
+    @MainActor
+    static func setReconciliationEnvironment(_ environment: [String: String]?, for settings: SettingsStore) {
+        let key = ObjectIdentifier(settings)
+        var override = self.values[key] ?? Override()
+        override.reconciliationEnvironment = environment
+        self.store(override, for: key)
+    }
+
+    @MainActor
+    static func hasAnyOverride(for settings: SettingsStore) -> Bool {
+        self.values[ObjectIdentifier(settings)]?.isEmpty == false
+    }
+}
+
+private enum CodexManagedRemoteHomeTestingOverrideError: Error {
+    case unreadableManagedStore
+}
+
+private struct CodexManagedRemoteHomeTestingSystemObserver: CodexSystemAccountObserving {
+    let overrideAccount: ObservedSystemCodexAccount?
+    let usesInjectedEnvironment: Bool
+
+    func loadSystemAccount(environment: [String: String]) throws -> ObservedSystemCodexAccount? {
+        if let overrideAccount {
+            return overrideAccount
         }
+        guard self.usesInjectedEnvironment else {
+            return nil
+        }
+        return try DefaultCodexSystemAccountObserver().loadSystemAccount(environment: environment)
     }
 }
 
@@ -203,6 +318,16 @@ extension SettingsStore {
     var _test_unreadableManagedCodexAccountStore: Bool {
         get { CodexManagedRemoteHomeTestingOverride.isUnreadable(for: self) }
         set { CodexManagedRemoteHomeTestingOverride.setUnreadable(newValue, for: self) }
+    }
+
+    var _test_liveSystemCodexAccount: ObservedSystemCodexAccount? {
+        get { CodexManagedRemoteHomeTestingOverride.liveSystemAccount(for: self) }
+        set { CodexManagedRemoteHomeTestingOverride.setLiveSystemAccount(newValue, for: self) }
+    }
+
+    var _test_codexReconciliationEnvironment: [String: String]? {
+        get { CodexManagedRemoteHomeTestingOverride.reconciliationEnvironment(for: self) }
+        set { CodexManagedRemoteHomeTestingOverride.setReconciliationEnvironment(newValue, for: self) }
     }
 }
 #endif
