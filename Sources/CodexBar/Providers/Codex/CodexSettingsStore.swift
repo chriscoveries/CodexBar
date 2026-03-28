@@ -100,6 +100,8 @@ extension SettingsStore {
     var codexCookieHeader: String {
         get { self.configSnapshot.providerConfig(for: .codex)?.sanitizedCookieHeader ?? "" }
         set {
+            // This is intentionally provider-scoped today. A per-managed-account manual cookie override would need
+            // its own storage and UI semantics so editing one account's header does not silently rewrite another's.
             self.updateProviderConfig(provider: .codex) { entry in
                 entry.cookieHeader = self.normalizedConfigValue(newValue)
             }
