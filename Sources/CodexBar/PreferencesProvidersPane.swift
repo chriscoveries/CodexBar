@@ -276,11 +276,12 @@ struct ProvidersPane: View {
             })
     }
 
-    private func providerErrorDisplay(_ provider: UsageProvider) -> ProviderErrorDisplay? {
-        guard let raw = self.store.error(for: provider), !raw.isEmpty else { return nil }
+    func providerErrorDisplay(_ provider: UsageProvider) -> ProviderErrorDisplay? {
+        guard let full = self.store.error(for: provider), !full.isEmpty else { return nil }
+        let preview = self.store.userFacingError(for: provider) ?? full
         return ProviderErrorDisplay(
-            preview: self.truncated(raw, prefix: ""),
-            full: raw)
+            preview: self.truncated(preview, prefix: ""),
+            full: full)
     }
 
     private func extraSettingsToggles(for provider: UsageProvider) -> [ProviderSettingsToggleDescriptor] {
@@ -472,9 +473,9 @@ struct ProvidersPane: View {
         let tokenError: String?
         if provider == .codex {
             credits = self.store.credits
-            creditsError = self.store.lastCreditsError
+            creditsError = self.store.userFacingLastCreditsError
             dashboard = self.store.openAIDashboardRequiresLogin ? nil : self.store.openAIDashboard
-            dashboardError = self.store.lastOpenAIDashboardError
+            dashboardError = self.store.userFacingLastOpenAIDashboardError
             tokenSnapshot = self.store.tokenSnapshot(for: provider)
             tokenError = self.store.tokenError(for: provider)
         } else if provider == .claude || provider == .vertexai {
@@ -509,7 +510,7 @@ struct ProvidersPane: View {
             tokenError: tokenError,
             account: self.store.accountInfo(for: provider),
             isRefreshing: self.store.refreshingProviders.contains(provider),
-            lastError: self.store.error(for: provider),
+            lastError: self.store.userFacingError(for: provider),
             usageBarsShowUsed: self.settings.usageBarsShowUsed,
             resetTimeDisplayStyle: self.settings.resetTimeDisplayStyle,
             tokenCostUsageEnabled: self.settings.isCostUsageEffectivelyEnabled(for: provider),

@@ -23,6 +23,10 @@ extension ProvidersPane {
         self.menuCardModel(for: provider)
     }
 
+    func _test_providerErrorDisplay(for provider: UsageProvider) -> ProviderErrorDisplay? {
+        self.providerErrorDisplay(provider)
+    }
+
     func _test_codexAccountsSectionState() -> CodexAccountsSectionState? {
         self.codexAccountsSectionState(for: .codex)
     }

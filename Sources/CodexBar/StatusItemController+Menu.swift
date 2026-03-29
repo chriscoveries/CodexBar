@@ -1538,9 +1538,9 @@ extension StatusItemController {
         let tokenError: String?
         if target == .codex, snapshotOverride == nil {
             credits = self.store.credits
-            creditsError = self.store.lastCreditsError
+            creditsError = self.store.userFacingLastCreditsError
             dashboard = self.store.openAIDashboardRequiresLogin ? nil : self.store.openAIDashboard
-            dashboardError = self.store.lastOpenAIDashboardError
+            dashboardError = self.store.userFacingLastOpenAIDashboardError
             tokenSnapshot = self.store.tokenSnapshot(for: target)
             tokenError = self.store.tokenError(for: target)
         } else if target == .claude || target == .vertexai, snapshotOverride == nil {
@@ -1577,7 +1577,7 @@ extension StatusItemController {
             tokenError: tokenError,
             account: self.store.accountInfo(for: target),
             isRefreshing: self.store.shouldShowRefreshingMenuCard(for: target),
-            lastError: errorOverride ?? self.store.error(for: target),
+            lastError: errorOverride ?? self.store.userFacingError(for: target),
             usageBarsShowUsed: self.settings.usageBarsShowUsed,
             resetTimeDisplayStyle: self.settings.resetTimeDisplayStyle,
             tokenCostUsageEnabled: self.settings.isCostUsageEffectivelyEnabled(for: target),
