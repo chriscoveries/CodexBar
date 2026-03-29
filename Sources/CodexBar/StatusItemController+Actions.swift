@@ -210,24 +210,8 @@ extension StatusItemController {
     }
 
     func presentCodexLoginResult(_ result: CodexLoginRunner.Result) {
-        switch result.outcome {
-        case .success:
-            return
-        case .missingBinary:
-            self.presentLoginAlert(
-                title: "Codex CLI not found",
-                message: "Install the Codex CLI (npm i -g @openai/codex) and try again.")
-        case let .launchFailed(message):
-            self.presentLoginAlert(title: "Could not start codex login", message: message)
-        case .timedOut:
-            self.presentLoginAlert(
-                title: "Codex login timed out",
-                message: self.trimmedLoginOutput(result.output))
-        case let .failed(status):
-            let statusLine = "codex login exited with status \(status)."
-            let message = self.trimmedLoginOutput(result.output.isEmpty ? statusLine : result.output)
-            self.presentLoginAlert(title: "Codex login failed", message: message)
-        }
+        guard let info = CodexLoginAlertPresentation.alertInfo(for: result) else { return }
+        self.presentLoginAlert(title: info.title, message: info.message)
     }
 
     func presentClaudeLoginResult(_ result: ClaudeLoginRunner.Result) {
