@@ -212,6 +212,7 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
         self.observeDebugForceAnimation()
         self.observeSettingsChanges()
         self.observeUpdaterChanges()
+        self.observeManagedCodexCoordinatorChanges()
     }
 
     private func observeStoreChanges() {
@@ -279,6 +280,19 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
                 guard let self else { return }
                 self.observeUpdaterChanges()
                 self.invalidateMenus()
+            }
+        }
+    }
+
+    private func observeManagedCodexCoordinatorChanges() {
+        withObservationTracking {
+            _ = self.managedCodexAccountCoordinator.isAuthenticatingManagedAccount
+            _ = self.managedCodexAccountCoordinator.authenticatingManagedAccountID
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.observeManagedCodexCoordinatorChanges()
+                self.refreshMenusForLoginStateChange()
             }
         }
     }

@@ -221,6 +221,23 @@ extension SettingsStore {
         self.codexVisibleAccountProjection.visibleAccounts
     }
 
+    @discardableResult
+    func selectCodexVisibleAccount(id: String) -> Bool {
+        guard let source = self.codexSource(forVisibleAccountID: id) else { return false }
+        self.codexActiveSource = source
+        return true
+    }
+
+    func selectAuthenticatedManagedCodexAccount(_ account: ManagedCodexAccount) {
+        let visibleAccountID = Self.codexVisibleAccountID(for: account.email)
+        if self.selectCodexVisibleAccount(id: visibleAccountID) {
+            return
+        }
+
+        self.codexActiveSource = .managedAccount(id: account.id)
+        _ = self.persistResolvedCodexActiveSourceCorrectionIfNeeded()
+    }
+
     func codexSource(forVisibleAccountID id: String) -> CodexActiveSource? {
         self.codexVisibleAccountProjection.source(forVisibleAccountID: id)
     }
@@ -273,6 +290,10 @@ extension SettingsStore {
         }
         #endif
         return ProcessInfo.processInfo.environment
+    }
+
+    private static func codexVisibleAccountID(for email: String) -> String {
+        email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 }
 

@@ -198,8 +198,7 @@ struct ProvidersPane: View {
 
     func selectCodexVisibleAccount(id: String) async {
         self.codexAccountsNotice = nil
-        guard let source = self.settings.codexSource(forVisibleAccountID: id) else { return }
-        self.settings.codexActiveSource = source
+        guard self.settings.selectCodexVisibleAccount(id: id) else { return }
         await self.refreshCodexProvider()
     }
 
@@ -524,13 +523,7 @@ struct ProvidersPane: View {
     }
 
     private func selectCodexVisibleAccountForAuthenticatedManagedAccount(_ account: ManagedCodexAccount) {
-        let visibleAccountID = Self.codexVisibleAccountID(for: account.email)
-        if let source = self.settings.codexSource(forVisibleAccountID: visibleAccountID) {
-            self.settings.codexActiveSource = source
-        } else {
-            self.settings.codexActiveSource = .managedAccount(id: account.id)
-            _ = self.settings.persistResolvedCodexActiveSourceCorrectionIfNeeded()
-        }
+        self.settings.selectAuthenticatedManagedCodexAccount(account)
     }
 
     private func codexAccountsNotice(for error: Error) -> CodexAccountsSectionNotice {
@@ -567,10 +560,6 @@ struct ProvidersPane: View {
         alert.informativeText = message
         alert.alertStyle = .warning
         alert.runModal()
-    }
-
-    private static func codexVisibleAccountID(for email: String) -> String {
-        email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
     private func runSettingsDidBecomeActiveHooks() {
