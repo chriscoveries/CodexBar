@@ -48,6 +48,8 @@ struct CodexSystemAccountObserverTests {
         try FileManager.default.createDirectory(at: homeURL, withIntermediateDirectories: true)
         let auth = [
             "tokens": [
+                "accessToken": "access-token",
+                "refreshToken": "refresh-token",
                 "idToken": Self.fakeJWT(email: email, plan: plan),
             ],
         ]
