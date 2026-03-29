@@ -190,7 +190,8 @@ struct CodexAccountReconciliationTests {
 
         #expect(settings.codexActiveSource == .liveSystem)
         #expect(settings.providerConfig(for: .codex)?.codexActiveSource == .liveSystem)
-        #expect(snapshot.storedAccounts.isEmpty)
+        #expect(snapshot.storedAccounts.map(\.id) == [ambient.id])
+        #expect(snapshot.storedAccounts.map(\.email) == [ambient.email])
         #expect(snapshot.activeStoredAccount == nil)
         #expect(snapshot.activeSource == .liveSystem)
     }
@@ -212,6 +213,47 @@ struct CodexAccountReconciliationTests {
         let snapshot = settings.codexAccountReconciliationSnapshot
 
         #expect(snapshot.activeSource == persistedSource)
+    }
+
+    @Test
+    @MainActor
+    func `settings store debug managed store U R L override loads on disk accounts`() throws {
+        let suite = "CodexAccountReconciliationTests-debug-store-url"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        let settings = SettingsStore(
+            userDefaults: defaults,
+            configStore: testConfigStore(suiteName: suite),
+            zaiTokenStore: NoopZaiTokenStore(),
+            syntheticTokenStore: NoopSyntheticTokenStore())
+        let stored = ManagedCodexAccount(
+            id: UUID(),
+            email: "stored@example.com",
+            managedHomePath: "/tmp/stored-managed-home",
+            createdAt: 1,
+            updatedAt: 2,
+            lastAuthenticatedAt: 3)
+        let accounts = ManagedCodexAccountSet(
+            version: FileManagedCodexAccountStore.currentVersion,
+            accounts: [stored])
+        let storeURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-managed-store-\(UUID().uuidString).json")
+        try Self.writeManagedCodexStore(accounts, to: storeURL)
+
+        settings._test_managedCodexAccountStoreURL = storeURL
+        settings.codexActiveSource = .managedAccount(id: stored.id)
+        defer {
+            settings._test_managedCodexAccountStoreURL = nil
+            try? FileManager.default.removeItem(at: storeURL)
+        }
+
+        let snapshot = settings.codexAccountReconciliationSnapshot
+
+        #expect(snapshot.storedAccounts.map(\.id) == [stored.id])
+        #expect(snapshot.storedAccounts.map(\.email) == [stored.email])
+        #expect(snapshot.activeStoredAccount?.id == stored.id)
+        #expect(snapshot.activeStoredAccount?.email == stored.email)
+        #expect(snapshot.activeSource == .managedAccount(id: stored.id))
     }
 
     @Test

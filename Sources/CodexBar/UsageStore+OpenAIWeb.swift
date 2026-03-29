@@ -569,6 +569,7 @@ extension UsageStore {
 
             let fallback = self.codexFetcher.loadAccountInfo().email?.trimmingCharacters(in: .whitespacesAndNewlines)
             if let fallback, !fallback.isEmpty { return fallback }
+            return nil
         case .managedAccount:
             if self.openAIWebManagedTargetStoreIsUnreadable() {
                 return nil
@@ -579,12 +580,6 @@ extension UsageStore {
             if let managed, !managed.isEmpty { return managed }
             return nil
         }
-
-        let cached = self.openAIDashboard?.signedInEmail?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let cached, !cached.isEmpty { return cached }
-        let imported = self.lastOpenAIDashboardCookieImportEmail?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let imported, !imported.isEmpty { return imported }
-        return nil
     }
 
     func codexCookieCacheScopeForOpenAIWeb() -> CookieHeaderCache.Scope? {

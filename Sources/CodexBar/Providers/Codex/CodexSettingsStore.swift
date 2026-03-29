@@ -207,6 +207,7 @@ extension SettingsStore {
         let reconciliationEnvironmentOverride = CodexManagedRemoteHomeTestingOverride
             .reconciliationEnvironment(for: self)
         let managedAccountOverride = CodexManagedRemoteHomeTestingOverride.account(for: self)
+        let managedStoreURLOverride = CodexManagedRemoteHomeTestingOverride.managedStoreURL(for: self)
         let unreadableStoreOverride = CodexManagedRemoteHomeTestingOverride.isUnreadable(for: self)
         guard CodexManagedRemoteHomeTestingOverride.hasAnyOverride(for: self) else {
             return DefaultCodexAccountReconciler(activeSource: self.codexActiveSource)
@@ -220,6 +221,9 @@ extension SettingsStore {
                 version: FileManagedCodexAccountStore.currentVersion,
                 accounts: [managedAccountOverride])
             storeLoader = { accounts }
+        } else if let managedStoreURLOverride {
+            let store = FileManagedCodexAccountStore(fileURL: managedStoreURLOverride)
+            storeLoader = { try store.loadAccounts() }
         } else {
             let accounts = ManagedCodexAccountSet(
                 version: FileManagedCodexAccountStore.currentVersion,
