@@ -59,6 +59,14 @@ extension UsageStore {
         self.logOpenAIWeb("[\(stamp)] OpenAI web refresh request: \(reason)")
         let forceRefresh = Self.forceOpenAIWebRefreshForStaleRequest(
             batterySaverEnabled: self.settings.openAIWebBatterySaverEnabled)
+        self.openAIWebLogger.debug(
+            "OpenAI web stale refresh gate",
+            metadata: [
+                "reason": reason,
+                "force": forceRefresh ? "1" : "0",
+                "batterySaverEnabled": self.settings.openAIWebBatterySaverEnabled ? "1" : "0",
+                "interaction": ProviderInteractionContext.current == .userInitiated ? "user" : "background",
+            ])
         let expectedGuard = self.currentCodexOpenAIWebRefreshGuard()
         Task { await self.refreshOpenAIDashboardIfNeeded(force: forceRefresh, expectedGuard: expectedGuard) }
     }

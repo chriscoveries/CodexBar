@@ -41,6 +41,7 @@ Change OpenAI web extras to be off by default for new installs while preserving 
 
 **Code changes**
 - `SettingsStore` now defaults `openAIWebAccessEnabled` to `false` when no prior preference exists.
+- `SettingsStore` now defaults `openAIWebBatterySaverEnabled` to `false`; users can still opt into reduced routine OpenAI web refreshes separately.
 - Existing users with an explicit Codex cookie configuration are inferred as enabled so upgrades do not silently break working setups.
 - The Codex settings copy now describes the feature as optional and warns about battery and network cost.
 - Documentation now labels the OpenAI web dashboard path as optional and off by default.

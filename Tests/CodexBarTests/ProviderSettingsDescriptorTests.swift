@@ -167,7 +167,7 @@ struct ProviderSettingsDescriptorTests {
         #expect(extrasToggle.subtitle.contains("Turn this on"))
 
         let batterySaverToggle = try #require(toggles.first(where: { $0.id == "codex-openai-web-battery-saver" }))
-        #expect(batterySaverToggle.binding.wrappedValue == true)
+        #expect(batterySaverToggle.binding.wrappedValue == false)
         #expect(batterySaverToggle.subtitle.contains("Recommended."))
         #expect(batterySaverToggle.isVisible?() == false)
 

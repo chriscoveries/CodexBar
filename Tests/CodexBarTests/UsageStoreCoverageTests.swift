@@ -159,11 +159,48 @@ struct UsageStoreCoverageTests {
 
         #expect(store.enabledProviders() == [.codex])
 
-        store.clearDisabledProviderState(enabledProviders: Set(store.enabledProviders()))
+        store.clearDisabledProviderState(enabledProviders: Set(store.enabledProvidersForDisplay()))
 
         #expect(store.snapshot(for: .claude) == nil)
         #expect(store.errors[.claude] == nil)
         #expect(store.statuses[.claude] == nil)
+    }
+
+    @Test
+    func cleanupPreservesEnabledButUnavailableProviderState() throws {
+        let settings = Self.makeSettingsStore(suite: "UsageStoreCoverageTests-preserve-unavailable")
+        settings.refreshFrequency = .manual
+        settings.statusChecksEnabled = false
+
+        let metadata = ProviderRegistry.shared.metadata
+        for provider in UsageProvider.allCases {
+            try settings.setProviderEnabled(
+                provider: provider,
+                metadata: #require(metadata[provider]),
+                enabled: false)
+        }
+        try settings.setProviderEnabled(
+            provider: .synthetic,
+            metadata: #require(metadata[.synthetic]),
+            enabled: true)
+
+        let store = Self.makeUsageStore(settings: settings)
+        let staleSnapshot = UsageSnapshot(
+            primary: RateWindow(usedPercent: 25, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
+            secondary: nil,
+            updatedAt: Date())
+        store._setSnapshotForTesting(staleSnapshot, provider: .synthetic)
+        store._setErrorForTesting("stale", provider: .synthetic)
+        store.statuses[.synthetic] = ProviderStatus(indicator: .major, description: "Outage", updatedAt: Date())
+
+        #expect(store.enabledProviders().isEmpty)
+        #expect(store.enabledProvidersForDisplay() == [.synthetic])
+
+        store.clearDisabledProviderState(enabledProviders: Set(store.enabledProvidersForDisplay()))
+
+        #expect(store.snapshot(for: .synthetic) != nil)
+        #expect(store.errors[.synthetic] == "stale")
+        #expect(store.statuses[.synthetic]?.indicator == .major)
     }
 
     @Test

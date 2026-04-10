@@ -436,8 +436,8 @@ final class UsageStore {
         guard !self.isRefreshing else { return }
         self.prepareRefreshState()
         let refreshPhase: ProviderRefreshPhase = self.hasCompletedInitialRefresh ? .regular : .startup
-        let providers = self.enabledProviders()
-        let enabledProviders = Set(providers)
+        let enabledProviders = self.enabledProvidersForDisplay()
+        let enabledProviderSet = Set(enabledProviders)
         let refreshStartedAt = Date()
 
         await ProviderRefreshContext.$current.withValue(refreshPhase) {
@@ -447,10 +447,10 @@ final class UsageStore {
                 self.hasCompletedInitialRefresh = true
             }
 
-            self.clearDisabledProviderState(enabledProviders: enabledProviders)
+            self.clearDisabledProviderState(enabledProviders: enabledProviderSet)
 
             await withTaskGroup(of: Void.self) { group in
-                for provider in providers {
+                for provider in enabledProviders {
                     group.addTask { await self.refreshProvider(provider) }
                     group.addTask { await self.refreshStatus(provider) }
                 }
@@ -469,7 +469,18 @@ final class UsageStore {
                     self.settings.codexCookieSource.isEnabled,
                 batterySaverEnabled: self.settings.openAIWebBatterySaverEnabled,
                 force: forceTokenUsage)
-            if Self.shouldRunOpenAIWebRefresh(refreshPolicy) {
+            let shouldRefreshOpenAIWeb = Self.shouldRunOpenAIWebRefresh(refreshPolicy)
+            self.openAIWebLogger.debug(
+                "OpenAI web refresh gate",
+                metadata: [
+                    "allowed": shouldRefreshOpenAIWeb ? "1" : "0",
+                    "accessEnabled": refreshPolicy.accessEnabled ? "1" : "0",
+                    "batterySaverEnabled": refreshPolicy.batterySaverEnabled ? "1" : "0",
+                    "force": refreshPolicy.force ? "1" : "0",
+                    "interaction": ProviderInteractionContext.current == .userInitiated ? "user" : "background",
+                    "phase": refreshPhase == .startup ? "startup" : "regular",
+                ])
+            if shouldRefreshOpenAIWeb {
                 let codexDashboardGuard = self.currentCodexOpenAIWebRefreshGuard()
                 await self.refreshOpenAIDashboardIfNeeded(
                     force: forceTokenUsage,
@@ -537,7 +548,7 @@ final class UsageStore {
             return
         }
 
-        let providers = self.enabledProviders()
+        let providers = self.enabledProvidersForDisplay()
         self.tokenRefreshSequenceTask = Task(priority: .utility) { [weak self] in
             guard let self else { return }
             defer {
