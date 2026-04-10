@@ -125,6 +125,7 @@ final class SettingsStore {
         tokenAccountStore: any ProviderTokenAccountStoring = FileTokenAccountStore())
     {
         let hasStoredOpenAIWebAccessPreference = userDefaults.object(forKey: "openAIWebAccessEnabled") != nil
+        let hadExistingConfig = (try? configStore.load()) != nil
         let legacyStores = CodexBarConfigMigrator.LegacyStores(
             zaiTokenStore: zaiTokenStore,
             syntheticTokenStore: syntheticTokenStore,
@@ -163,7 +164,9 @@ final class SettingsStore {
         if hasStoredOpenAIWebAccessPreference {
             self.openAIWebAccessEnabled = self.defaultsState.openAIWebAccessEnabled
         } else {
-            self.openAIWebAccessEnabled = Self.inferredInitialOpenAIWebAccessEnabled(config: config)
+            self.openAIWebAccessEnabled = Self.inferredInitialOpenAIWebAccessEnabled(
+                config: config,
+                hadExistingConfig: hadExistingConfig)
         }
         if Self.shouldBridgeSharedDefaults(for: userDefaults) {
             Self.sharedDefaults?.set(self.debugDisableKeychainAccess, forKey: "debugDisableKeychainAccess")
@@ -173,10 +176,14 @@ final class SettingsStore {
 }
 
 extension SettingsStore {
-    private static func inferredInitialOpenAIWebAccessEnabled(config: CodexBarConfig) -> Bool {
+    private static func inferredInitialOpenAIWebAccessEnabled(
+        config: CodexBarConfig,
+        hadExistingConfig: Bool) -> Bool
+    {
         guard let codex = config.providerConfig(for: .codex) else { return false }
         if let cookieSource = codex.cookieSource { return cookieSource.isEnabled }
-        return codex.sanitizedCookieHeader != nil
+        if codex.sanitizedCookieHeader != nil { return true }
+        return hadExistingConfig
     }
 
     private static func loadDefaultsState(userDefaults: UserDefaults) -> SettingsDefaultsState {

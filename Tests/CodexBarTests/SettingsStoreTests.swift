@@ -695,6 +695,31 @@ struct SettingsStoreTests {
     }
 
     @Test
+    func infersOpenAIWebAccessEnabledForLegacyCodexConfigWithImplicitAutoCookies() throws {
+        let suite = "SettingsStoreTests-openai-web-legacy-implicit-auto"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        defaults.removeObject(forKey: "openAIWebAccessEnabled")
+        defaults.set(false, forKey: "debugDisableKeychainAccess")
+        let configStore = testConfigStore(suiteName: suite)
+        try configStore.save(CodexBarConfig(providers: [
+            ProviderConfig(id: .codex),
+        ]))
+
+        let store = SettingsStore(
+            userDefaults: defaults,
+            configStore: configStore,
+            zaiTokenStore: NoopZaiTokenStore(),
+            syntheticTokenStore: NoopSyntheticTokenStore())
+
+        #expect(store.openAIWebAccessEnabled == true)
+        #expect(defaults.bool(forKey: "openAIWebAccessEnabled") == true)
+        #expect(store.openAIWebBatterySaverEnabled == false)
+        #expect(defaults.bool(forKey: "openAIWebBatterySaverEnabled") == false)
+        #expect(store.codexCookieSource == .auto)
+    }
+
+    @Test
     func disablingOpenAIWebAccessTurnsCodexCookieSourceOff() throws {
         let suite = "SettingsStoreTests-openai-web-toggle"
         let defaults = try #require(UserDefaults(suiteName: suite))
