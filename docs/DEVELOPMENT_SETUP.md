@@ -104,10 +104,12 @@ This script:
 5. Launches `CodexBar.app`
 6. Verifies it stays running
 
-When the script falls back to ad-hoc signing, it also clears CodexBar-owned keychain services before relaunching so
-the new build does not inherit stale ACLs from the previous app identity.
-This reduces repeat prompts for CodexBar-managed cache entries, but third-party keychain items still need stable
-signing if you want macOS to remember **Always Allow** across rebuilds.
+When the script falls back to ad-hoc signing, it preserves CodexBar-owned keychain state by default.
+That means you may still see keychain prompts for existing CodexBar cache entries, but allowing those prompts keeps the
+cached browser/OAuth state available across normal rebuilds.
+If you want a clean reset of CodexBar-owned keychain state for an ad-hoc build, run
+`./Scripts/compile_and_run.sh --clear-adhoc-keychain` before relaunching.
+Third-party keychain items still need stable signing if you want macOS to remember **Always Allow** across rebuilds.
 
 ### Quick Build (No Tests)
 
