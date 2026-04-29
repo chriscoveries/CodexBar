@@ -7,6 +7,10 @@ import SweetCookieKit
 enum WindsurfDevinSessionImporter {
     nonisolated(unsafe) static var importSessionsOverrideForTesting:
         ((BrowserDetection, ((String) -> Void)?) -> [SessionInfo])?
+    nonisolated(unsafe) static var importPreferredSessionsOverrideForTesting:
+        ((BrowserDetection, ((String) -> Void)?) -> [SessionInfo])?
+    nonisolated(unsafe) static var importFallbackSessionsOverrideForTesting:
+        ((BrowserDetection, ((String) -> Void)?) -> [SessionInfo])?
     static let defaultPreferredBrowsers: [Browser] = [.chrome]
     static let fallbackBrowsers: [Browser] = [
         .chromeBeta,
@@ -60,6 +64,34 @@ enum WindsurfDevinSessionImporter {
         }
 
         return sessions
+    }
+
+    static func importPreferredSessions(
+        browserDetection: BrowserDetection,
+        logger: ((String) -> Void)? = nil) -> [SessionInfo]
+    {
+        if let override = self.importPreferredSessionsOverrideForTesting {
+            return override(browserDetection, logger)
+        }
+        let log: (String) -> Void = { msg in logger?("[windsurf-storage] \(msg)") }
+        return self.importSessions(
+            browserDetection: browserDetection,
+            browsers: self.defaultPreferredBrowsers,
+            logger: log)
+    }
+
+    static func importFallbackSessions(
+        browserDetection: BrowserDetection,
+        logger: ((String) -> Void)? = nil) -> [SessionInfo]
+    {
+        if let override = self.importFallbackSessionsOverrideForTesting {
+            return override(browserDetection, logger)
+        }
+        let log: (String) -> Void = { msg in logger?("[windsurf-storage] \(msg)") }
+        return self.importSessions(
+            browserDetection: browserDetection,
+            browsers: self.fallbackBrowsersExcluding(self.defaultPreferredBrowsers),
+            logger: log)
     }
 
     static func fallbackBrowsersExcluding(_ preferredBrowsers: [Browser]) -> [Browser] {
