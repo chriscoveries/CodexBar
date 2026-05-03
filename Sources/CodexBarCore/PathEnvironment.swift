@@ -471,13 +471,9 @@ public enum ShellCommandLocator {
             return nil
         }
 
-        // Normal completion — clean up any background children spawned by shell init.
-        // Without this, helpers that inherited stdout/stderr keep the pipe write ends
-        // open and we never see EOF on the read ends.
-        self.signalProcessGroup(pid: pid, pgid: pgid, signal: SIGTERM)
-
         // Wait for both pipes to deliver EOF so no buffered bytes are lost.
-        // Bounded so a stuck handler can't hang the caller indefinitely.
+        // Bounded so a background helper that inherited stdout/stderr can't hang
+        // the caller indefinitely.
         self.finishPostExitDrain(
             pid: pid,
             pgid: pgid,
@@ -510,6 +506,10 @@ public enum ShellCommandLocator {
         drainState: DrainState)
     {
         if drainState.group.wait(timeout: .now() + 1.0) != .success {
+            self.signalProcessGroup(pid: pid, pgid: pgid, signal: SIGTERM)
+            if drainState.group.wait(timeout: .now() + 0.4) == .success {
+                return
+            }
             self.signalProcessGroup(pid: pid, pgid: pgid, signal: SIGKILL)
             _ = drainState.group.wait(timeout: .now() + 0.4)
             drainState.closeHandlers()
