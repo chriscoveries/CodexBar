@@ -295,6 +295,21 @@ public enum ShellCommandLocator {
         }
     }
 
+    private struct DrainState {
+        let stdoutHandle: FileHandle
+        let stderrHandle: FileHandle
+        let stdoutDone: OnceFlag
+        let stderrDone: OnceFlag
+        let group: DispatchGroup
+
+        func closeHandlers() {
+            self.stdoutHandle.readabilityHandler = nil
+            self.stderrHandle.readabilityHandler = nil
+            if self.stdoutDone.fire() { self.group.leave() }
+            if self.stderrDone.fire() { self.group.leave() }
+        }
+    }
+
     /// Runs a shell command, draining both stdout and stderr concurrently so that
     /// verbose shell init scripts (oh-my-zsh, nvm, pyenv, etc.) cannot deadlock on
     /// a full pipe buffer.  The child is launched via `posix_spawn` with
@@ -326,7 +341,7 @@ public enum ShellCommandLocator {
         // differs between platforms because the typedef is an opaque pointer on
         // Darwin and a struct on Glibc.
         #if canImport(Darwin)
-        var fileActions: posix_spawn_file_actions_t? = nil
+        var fileActions: posix_spawn_file_actions_t?
         #else
         var fileActions = posix_spawn_file_actions_t()
         #endif
@@ -347,7 +362,7 @@ public enum ShellCommandLocator {
         // Build attributes: set the child's process group to itself in the child,
         // before exec, eliminating the race that an after-launch setpgid(2) has.
         #if canImport(Darwin)
-        var attr: posix_spawnattr_t? = nil
+        var attr: posix_spawnattr_t?
         #else
         var attr = posix_spawnattr_t()
         #endif
@@ -363,9 +378,13 @@ public enum ShellCommandLocator {
         // Build argv (argv[0] is conventionally the executable path).
         var cArgs: [UnsafeMutablePointer<CChar>?] = []
         cArgs.append(strdup(shell))
-        for arg in arguments { cArgs.append(strdup(arg)) }
+        for arg in arguments {
+            cArgs.append(strdup(arg))
+        }
         cArgs.append(nil)
-        defer { for p in cArgs { if let p { free(p) } } }
+        defer { for p in cArgs {
+            if let p { free(p) }
+        } }
 
         // Inherit the parent environment.  Build a NULL-terminated `KEY=VALUE`
         // array since `extern char **environ` isn't directly visible from Swift.
@@ -374,7 +393,9 @@ public enum ShellCommandLocator {
             cEnv.append(strdup("\(key)=\(value)"))
         }
         cEnv.append(nil)
-        defer { for p in cEnv { if let p { free(p) } } }
+        defer { for p in cEnv {
+            if let p { free(p) }
+        } }
 
         var pid: pid_t = 0
         let spawnResult = shell.withCString { execPath in
@@ -423,47 +444,76 @@ public enum ShellCommandLocator {
                 if stderrDone.fire() { drainGroup.leave() }
             }
         }
+        let drainState = DrainState(
+            stdoutHandle: stdoutHandle,
+            stderrHandle: stderrHandle,
+            stdoutDone: stdoutDone,
+            stderrDone: stderrDone,
+            group: drainGroup)
 
         // Reap the child on a background queue and signal a semaphore on exit.
         let exitSemaphore = DispatchSemaphore(value: 0)
         let waitPid = pid
         DispatchQueue.global(qos: .userInitiated).async {
             var status: Int32 = 0
-            while waitpid(waitPid, &status, 0) == -1 && errno == EINTR { /* retry */ }
+            while waitpid(waitPid, &status, 0) == -1, errno == EINTR { /* retry */ }
             exitSemaphore.signal()
         }
 
         let finishedInTime = exitSemaphore.wait(timeout: .now() + timeout) == .success
 
         if !finishedInTime {
-            kill(-pgid, SIGTERM)
-            kill(pid, SIGTERM)
-            if exitSemaphore.wait(timeout: .now() + 0.4) != .success {
-                kill(-pgid, SIGKILL)
-                kill(pid, SIGKILL)
-                _ = exitSemaphore.wait(timeout: .now() + 1.0)
-            }
-            stdoutHandle.readabilityHandler = nil
-            stderrHandle.readabilityHandler = nil
-            if stdoutDone.fire() { drainGroup.leave() }
-            if stderrDone.fire() { drainGroup.leave() }
+            self.finishTimedOutShell(
+                pid: pid,
+                pgid: pgid,
+                exitSemaphore: exitSemaphore,
+                drainState: drainState)
             return nil
         }
 
         // Normal completion — clean up any background children spawned by shell init.
         // Without this, helpers that inherited stdout/stderr keep the pipe write ends
         // open and we never see EOF on the read ends.
-        kill(-pgid, SIGTERM)
+        self.signalProcessGroup(pid: pid, pgid: pgid, signal: SIGTERM)
 
         // Wait for both pipes to deliver EOF so no buffered bytes are lost.
         // Bounded so a stuck handler can't hang the caller indefinitely.
-        if drainGroup.wait(timeout: .now() + 1.0) != .success {
-            stdoutHandle.readabilityHandler = nil
-            stderrHandle.readabilityHandler = nil
-            if stdoutDone.fire() { drainGroup.leave() }
-            if stderrDone.fire() { drainGroup.leave() }
-        }
+        self.finishPostExitDrain(
+            pid: pid,
+            pgid: pgid,
+            drainState: drainState)
         return stdoutCollector.drain()
+    }
+
+    private static func signalProcessGroup(pid: pid_t, pgid: pid_t, signal: Int32) {
+        kill(-pgid, signal)
+        kill(pid, signal)
+    }
+
+    private static func finishTimedOutShell(
+        pid: pid_t,
+        pgid: pid_t,
+        exitSemaphore: DispatchSemaphore,
+        drainState: DrainState)
+    {
+        self.signalProcessGroup(pid: pid, pgid: pgid, signal: SIGTERM)
+        if exitSemaphore.wait(timeout: .now() + 0.4) != .success {
+            self.signalProcessGroup(pid: pid, pgid: pgid, signal: SIGKILL)
+            _ = exitSemaphore.wait(timeout: .now() + 1.0)
+        }
+        drainState.closeHandlers()
+    }
+
+    private static func finishPostExitDrain(
+        pid: pid_t,
+        pgid: pid_t,
+        drainState: DrainState)
+    {
+        if drainState.group.wait(timeout: .now() + 1.0) != .success {
+            self.signalProcessGroup(pid: pid, pgid: pgid, signal: SIGKILL)
+            _ = drainState.group.wait(timeout: .now() + 0.4)
+            drainState.closeHandlers()
+        }
     }
 
     private static func runShellCapture(_ shell: String?, _ timeout: TimeInterval, _ command: String) -> String? {
@@ -618,8 +668,8 @@ enum LoginShellPathCapturer {
             shell: shellPath,
             arguments: args,
             timeout: timeout),
-              let raw = String(data: data, encoding: .utf8),
-              !raw.isEmpty else { return nil }
+            let raw = String(data: data, encoding: .utf8),
+            !raw.isEmpty else { return nil }
 
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         let extracted = if let start = trimmed.range(of: marker),
