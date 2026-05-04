@@ -475,13 +475,16 @@ public enum ShellCommandLocator {
         // Bounded so a background helper that inherited stdout/stderr can't hang
         // the caller indefinitely.
         self.finishPostExitDrain(
-            pid: pid,
             pgid: pgid,
             drainState: drainState)
         return stdoutCollector.drain()
     }
 
-    private static func signalProcessGroup(pid: pid_t, pgid: pid_t, signal: Int32) {
+    private static func signalProcessGroup(pgid: pid_t, signal: Int32) {
+        kill(-pgid, signal)
+    }
+
+    private static func signalProcessTree(pid: pid_t, pgid: pid_t, signal: Int32) {
         kill(-pgid, signal)
         kill(pid, signal)
     }
@@ -492,25 +495,24 @@ public enum ShellCommandLocator {
         exitSemaphore: DispatchSemaphore,
         drainState: DrainState)
     {
-        self.signalProcessGroup(pid: pid, pgid: pgid, signal: SIGTERM)
+        self.signalProcessTree(pid: pid, pgid: pgid, signal: SIGTERM)
         if exitSemaphore.wait(timeout: .now() + 0.4) != .success {
-            self.signalProcessGroup(pid: pid, pgid: pgid, signal: SIGKILL)
+            self.signalProcessTree(pid: pid, pgid: pgid, signal: SIGKILL)
             _ = exitSemaphore.wait(timeout: .now() + 1.0)
         }
         drainState.closeHandlers()
     }
 
     private static func finishPostExitDrain(
-        pid: pid_t,
         pgid: pid_t,
         drainState: DrainState)
     {
         if drainState.group.wait(timeout: .now() + 1.0) != .success {
-            self.signalProcessGroup(pid: pid, pgid: pgid, signal: SIGTERM)
+            self.signalProcessGroup(pgid: pgid, signal: SIGTERM)
             if drainState.group.wait(timeout: .now() + 0.4) == .success {
                 return
             }
-            self.signalProcessGroup(pid: pid, pgid: pgid, signal: SIGKILL)
+            self.signalProcessGroup(pgid: pgid, signal: SIGKILL)
             _ = drainState.group.wait(timeout: .now() + 0.4)
             drainState.closeHandlers()
         }
