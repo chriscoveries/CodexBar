@@ -43,7 +43,7 @@ public enum CodebuffSettingsReader {
         guard let payload = try? JSONDecoder().decode(CredentialsFile.self, from: data) else {
             return nil
         }
-        return self.cleaned(payload.authToken)
+        return self.cleaned(payload.default?.authToken) ?? self.cleaned(payload.authToken)
     }
 
     static func cleaned(_ raw: String?) -> String? {
@@ -64,6 +64,11 @@ public enum CodebuffSettingsReader {
 }
 
 private struct CredentialsFile: Decodable {
+    let `default`: CredentialsProfile?
+    let authToken: String?
+}
+
+private struct CredentialsProfile: Decodable {
     let authToken: String?
     let fingerprintId: String?
     let email: String?

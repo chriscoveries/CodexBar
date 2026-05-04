@@ -80,12 +80,16 @@ public enum CodebuffUsageFetcher {
                 try? await Task.sleep(nanoseconds: nanos)
                 return nil
             }
-            let first = await group.next() ?? nil
+            let first: SubscriptionPayload? = if let value = await group.next() {
+                value
+            } else {
+                nil
+            }
             // Cancel whichever task is still running so we don't leak work or
             // (in the timeout case) keep the URLSession request open longer than needed.
             group.cancelAll()
             task.cancel()
-            return first ?? nil
+            return first
         }
     }
 
@@ -200,7 +204,7 @@ public enum CodebuffUsageFetcher {
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.httpBody = try? JSONSerialization.data(withJSONObject: [:] as [String: Any])
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["fingerprintId": "codexbar-usage"])
 
         let (data, response) = try await self.send(request: request, session: session)
         if let err = self.statusError(for: response.statusCode) {

@@ -2,19 +2,52 @@ import Foundation
 import Testing
 @testable import CodexBarCore
 
+@Suite(.serialized)
 struct CodebuffUsageFetcherTests {
     @Test
-    func `usage URL composes the correct endpoint`() {
-        let base = URL(string: "https://www.codebuff.com")!
+    func `usage URL composes the correct endpoint`() throws {
+        let base = try #require(URL(string: "https://www.codebuff.com"))
         let url = CodebuffUsageFetcher.usageURL(baseURL: base)
         #expect(url.absoluteString == "https://www.codebuff.com/api/v1/usage")
     }
 
     @Test
-    func `subscription URL composes the correct endpoint`() {
-        let base = URL(string: "https://www.codebuff.com")!
+    func `subscription URL composes the correct endpoint`() throws {
+        let base = try #require(URL(string: "https://www.codebuff.com"))
         let url = CodebuffUsageFetcher.subscriptionURL(baseURL: base)
         #expect(url.absoluteString == "https://www.codebuff.com/api/user/subscription")
+    }
+
+    @Test
+    func `usage request sends required fingerprint id`() async throws {
+        defer {
+            CodebuffStubURLProtocol.handler = nil
+            CodebuffStubURLProtocol.requests = []
+            CodebuffStubURLProtocol.requestBodies = []
+        }
+        CodebuffStubURLProtocol.requests = []
+        CodebuffStubURLProtocol.requestBodies = []
+        CodebuffStubURLProtocol.handler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            switch url.path {
+            case "/api/v1/usage":
+                return try Self.makeResponse(url: url, body: #"{"usage":25,"quota":100,"remainingBalance":75}"#)
+            case "/api/user/subscription":
+                return try Self.makeResponse(url: url, body: "{}")
+            default:
+                return try Self.makeResponse(url: url, body: "{}", statusCode: 404)
+            }
+        }
+
+        let snapshot = try await CodebuffUsageFetcher.fetchUsage(apiKey: "cb-test", session: Self.makeSession())
+        let usageIndex = try #require(CodebuffStubURLProtocol.requests.firstIndex {
+            $0.url?.path == "/api/v1/usage"
+        })
+        let body = try #require(CodebuffStubURLProtocol.requestBodies[usageIndex])
+        let payload = try #require(JSONSerialization.jsonObject(with: body) as? [String: String])
+
+        #expect(payload["fingerprintId"] == "codexbar-usage")
+        #expect(snapshot.creditsUsed == 25)
     }
 
     @Test
@@ -211,5 +244,82 @@ struct CodebuffUsageFetcherTests {
         } catch {
             Issue.record("Unexpected error: \(error)")
         }
+    }
+
+    private static func makeSession() -> URLSession {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [CodebuffStubURLProtocol.self]
+        return URLSession(configuration: config)
+    }
+
+    private static func makeResponse(
+        url: URL,
+        body: String,
+        statusCode: Int = 200) throws -> (HTTPURLResponse, Data)
+    {
+        guard let response = HTTPURLResponse(
+            url: url,
+            statusCode: statusCode,
+            httpVersion: nil,
+            headerFields: ["Content-Type": "application/json"])
+        else {
+            throw URLError(.badServerResponse)
+        }
+        return (response, Data(body.utf8))
+    }
+}
+
+final class CodebuffStubURLProtocol: URLProtocol {
+    nonisolated(unsafe) static var handler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
+    nonisolated(unsafe) static var requests: [URLRequest] = []
+    nonisolated(unsafe) static var requestBodies: [Data?] = []
+
+    override static func canInit(with request: URLRequest) -> Bool {
+        request.url?.host == "www.codebuff.com"
+    }
+
+    override static func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        Self.requests.append(self.request)
+        Self.requestBodies.append(Self.bodyData(from: self.request))
+        guard let handler = Self.handler else {
+            self.client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+            return
+        }
+        do {
+            let (response, data) = try handler(self.request)
+            self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            self.client?.urlProtocol(self, didLoad: data)
+            self.client?.urlProtocolDidFinishLoading(self)
+        } catch {
+            self.client?.urlProtocol(self, didFailWithError: error)
+        }
+    }
+
+    override func stopLoading() {}
+
+    private static func bodyData(from request: URLRequest) -> Data? {
+        if let httpBody = request.httpBody {
+            return httpBody
+        }
+        guard let stream = request.httpBodyStream else { return nil }
+
+        stream.open()
+        defer { stream.close() }
+
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 1024)
+        while stream.hasBytesAvailable {
+            let count = stream.read(&buffer, maxLength: buffer.count)
+            if count > 0 {
+                data.append(buffer, count: count)
+            } else {
+                break
+            }
+        }
+        return data.isEmpty ? nil : data
     }
 }

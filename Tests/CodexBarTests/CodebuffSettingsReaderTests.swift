@@ -50,6 +50,16 @@ struct CodebuffSettingsReaderTests {
     }
 
     @Test
+    func `auth token parses default profile credentials json`() throws {
+        let contents = #"{"default":{"authToken":"default-token","fingerprintId":"fp-1","email":"a@b.com"}}"#
+        let url = try self.writeTempFile(named: "credentials.json", contents: contents)
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+
+        let token = CodebuffSettingsReader.authToken(authFileURL: url)
+        #expect(token == "default-token")
+    }
+
+    @Test
     func `auth token returns nil for malformed credentials json`() throws {
         let url = try self.writeTempFile(named: "credentials.json", contents: "{not-json}")
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
