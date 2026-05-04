@@ -26,40 +26,11 @@ public enum CodebuffUsageFetcher {
 
         let baseURL = CodebuffSettingsReader.apiURL(environment: environment)
 
-        // Run usage and subscription in parallel. Usage data is required;
-        // subscription is best-effort and must never block the primary refresh.
-        let usageTask = Task {
-            try await self.fetchUsagePayload(apiKey: trimmed, baseURL: baseURL, session: session)
-        }
-        let subscriptionTask: Task<SubscriptionPayload?, Never>? = if includeSubscription {
-            Task {
-                try? await self.fetchSubscriptionPayload(
-                    apiKey: trimmed,
-                    baseURL: baseURL,
-                    session: session)
-            }
-        } else {
-            nil
-        }
-
-        let usageValues: UsagePayload
-        do {
-            usageValues = try await usageTask.value
-        } catch {
-            subscriptionTask?.cancel()
-            throw error
-        }
-
-        // Once usage is in hand, only wait a short grace period for the optional
-        // subscription payload. If it isn't ready we proceed without it rather than
-        // letting users wait up to the full 15 s request timeout.
-        let subscriptionValues: SubscriptionPayload? = if let subscriptionTask {
-            await Self.awaitSubscription(
-                task: subscriptionTask,
-                graceSeconds: Self.subscriptionGraceSeconds)
-        } else {
-            nil
-        }
+        let (usageValues, subscriptionValues) = try await self.fetchPayloads(
+            apiKey: trimmed,
+            baseURL: baseURL,
+            includeSubscription: includeSubscription,
+            session: session)
 
         return CodebuffUsageSnapshot(
             creditsUsed: usageValues.used,
@@ -77,33 +48,74 @@ public enum CodebuffUsageFetcher {
             updatedAt: Date())
     }
 
-    /// Awaits the subscription task with a bounded grace period. Returns `nil`
-    /// (and cancels the task) if the grace window elapses before completion.
-    private static func awaitSubscription(
-        task: Task<SubscriptionPayload?, Never>,
-        graceSeconds: TimeInterval) async -> SubscriptionPayload?
+    private static func fetchPayloads(
+        apiKey: String,
+        baseURL: URL,
+        includeSubscription: Bool,
+        session: URLSession) async throws -> (UsagePayload, SubscriptionPayload?)
     {
-        await withTaskGroup(of: SubscriptionPayload?.self) { group in
-            group.addTask { await task.value }
+        try await withThrowingTaskGroup(of: FetchResult.self) { group in
             group.addTask {
-                let nanos = UInt64(max(0, graceSeconds) * 1_000_000_000)
-                try? await Task.sleep(nanoseconds: nanos)
-                return nil
+                try await .usage(self.fetchUsagePayload(apiKey: apiKey, baseURL: baseURL, session: session))
             }
-            let first: SubscriptionPayload? = if let value = await group.next() {
-                value
-            } else {
-                nil
+            if includeSubscription {
+                group.addTask {
+                    await .subscription(try? self.fetchSubscriptionPayload(
+                        apiKey: apiKey,
+                        baseURL: baseURL,
+                        session: session))
+                }
             }
-            // Cancel whichever task is still running so we don't leak work or
-            // (in the timeout case) keep the URLSession request open longer than needed.
-            group.cancelAll()
-            task.cancel()
-            return first
+
+            var usageValues: UsagePayload?
+            var subscriptionValues: SubscriptionPayload?
+            var subscriptionFinished = !includeSubscription
+            var timeoutStarted = false
+
+            while let result = try await group.next() {
+                switch result {
+                case let .usage(payload):
+                    usageValues = payload
+                    if subscriptionFinished {
+                        group.cancelAll()
+                        return (payload, subscriptionValues)
+                    }
+                    if !timeoutStarted {
+                        timeoutStarted = true
+                        group.addTask {
+                            let nanos = UInt64(max(0, Self.subscriptionGraceSeconds) * 1_000_000_000)
+                            try? await Task.sleep(nanoseconds: nanos)
+                            return .subscriptionTimeout
+                        }
+                    }
+
+                case let .subscription(payload):
+                    subscriptionValues = payload
+                    subscriptionFinished = true
+                    if let usageValues {
+                        group.cancelAll()
+                        return (usageValues, payload)
+                    }
+
+                case .subscriptionTimeout:
+                    if let usageValues {
+                        group.cancelAll()
+                        return (usageValues, subscriptionValues)
+                    }
+                }
+            }
+
+            throw CodebuffUsageError.networkError("Usage request did not complete")
         }
     }
 
     // MARK: - Endpoint helpers
+
+    private enum FetchResult {
+        case usage(UsagePayload)
+        case subscription(SubscriptionPayload?)
+        case subscriptionTimeout
+    }
 
     struct UsagePayload {
         let used: Double?
@@ -293,10 +305,7 @@ public enum CodebuffUsageFetcher {
         case let number as NSNumber:
             let raw = number.doubleValue
             guard raw.isFinite else { return nil }
-            if raw.rounded(.towardZero) == raw {
-                return String(Int64(raw))
-            }
-            return String(raw)
+            return number.stringValue
         default:
             return nil
         }

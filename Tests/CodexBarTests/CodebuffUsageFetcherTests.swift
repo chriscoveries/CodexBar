@@ -213,6 +213,15 @@ struct CodebuffUsageFetcherTests {
     }
 
     @Test
+    func `subscription payload formats oversized numeric tier without trapping`() throws {
+        let json = """
+        { "subscription": { "scheduledTier": 9223372036854775808 } }
+        """
+        let payload = try CodebuffUsageFetcher._parseSubscriptionPayloadForTesting(Data(json.utf8))
+        #expect(payload.tier == "9223372036854775808")
+    }
+
+    @Test
     func `subscription payload tolerates missing rate limit`() throws {
         let json = """
         { "subscription": { "status": "trialing", "tier": "free" } }
