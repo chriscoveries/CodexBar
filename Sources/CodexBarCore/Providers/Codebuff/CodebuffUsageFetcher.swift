@@ -16,6 +16,7 @@ public enum CodebuffUsageFetcher {
     public static func fetchUsage(
         apiKey: String,
         environment: [String: String] = ProcessInfo.processInfo.environment,
+        includeSubscription: Bool = true,
         session: URLSession = .shared) async throws -> CodebuffUsageSnapshot
     {
         let trimmed = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -30,27 +31,35 @@ public enum CodebuffUsageFetcher {
         let usageTask = Task {
             try await self.fetchUsagePayload(apiKey: trimmed, baseURL: baseURL, session: session)
         }
-        let subscriptionTask = Task {
-            try? await self.fetchSubscriptionPayload(
-                apiKey: trimmed,
-                baseURL: baseURL,
-                session: session)
+        let subscriptionTask: Task<SubscriptionPayload?, Never>? = if includeSubscription {
+            Task {
+                try? await self.fetchSubscriptionPayload(
+                    apiKey: trimmed,
+                    baseURL: baseURL,
+                    session: session)
+            }
+        } else {
+            nil
         }
 
         let usageValues: UsagePayload
         do {
             usageValues = try await usageTask.value
         } catch {
-            subscriptionTask.cancel()
+            subscriptionTask?.cancel()
             throw error
         }
 
         // Once usage is in hand, only wait a short grace period for the optional
         // subscription payload. If it isn't ready we proceed without it rather than
         // letting users wait up to the full 15 s request timeout.
-        let subscriptionValues = await Self.awaitSubscription(
-            task: subscriptionTask,
-            graceSeconds: Self.subscriptionGraceSeconds)
+        let subscriptionValues: SubscriptionPayload? = if let subscriptionTask {
+            await Self.awaitSubscription(
+                task: subscriptionTask,
+                graceSeconds: Self.subscriptionGraceSeconds)
+        } else {
+            nil
+        }
 
         return CodebuffUsageSnapshot(
             creditsUsed: usageValues.used,
@@ -58,6 +67,7 @@ public enum CodebuffUsageFetcher {
             creditsRemaining: usageValues.remaining,
             weeklyUsed: subscriptionValues?.weeklyUsed,
             weeklyLimit: subscriptionValues?.weeklyLimit,
+            weeklyResetsAt: subscriptionValues?.weeklyResetsAt,
             billingPeriodEnd: subscriptionValues?.billingPeriodEnd,
             nextQuotaReset: usageValues.nextQuotaReset,
             tier: subscriptionValues?.tier,
@@ -109,6 +119,7 @@ public enum CodebuffUsageFetcher {
         let billingPeriodEnd: Date?
         let weeklyUsed: Double?
         let weeklyLimit: Double?
+        let weeklyResetsAt: Date?
         let email: String?
     }
 
@@ -156,9 +167,11 @@ public enum CodebuffUsageFetcher {
         let subscription = root["subscription"] as? [String: Any]
         let rateLimit = root["rateLimit"] as? [String: Any]
 
-        let tier = (subscription?["tier"] as? String)
-            ?? (root["tier"] as? String)
-            ?? (subscription?["scheduledTier"] as? String)
+        let tier = self.string(from: subscription?["displayName"])
+            ?? self.string(from: root["displayName"])
+            ?? self.string(from: subscription?["tier"])
+            ?? self.string(from: root["tier"])
+            ?? self.string(from: subscription?["scheduledTier"])
         let status = subscription?["status"] as? String
         let email = root["email"] as? String ?? (root["user"] as? [String: Any])?["email"] as? String
         let billingPeriodEnd = self.date(from: subscription?["billingPeriodEnd"])
@@ -167,6 +180,7 @@ public enum CodebuffUsageFetcher {
             ?? self.double(from: rateLimit?["used"])
         let weeklyLimit = self.double(from: rateLimit?["weeklyLimit"])
             ?? self.double(from: rateLimit?["limit"])
+        let weeklyResetsAt = self.date(from: rateLimit?["weeklyResetsAt"])
 
         return SubscriptionPayload(
             status: status,
@@ -174,6 +188,7 @@ public enum CodebuffUsageFetcher {
             billingPeriodEnd: billingPeriodEnd,
             weeklyUsed: weeklyUsed,
             weeklyLimit: weeklyLimit,
+            weeklyResetsAt: weeklyResetsAt,
             email: email)
     }
 
@@ -265,6 +280,23 @@ public enum CodebuffUsageFetcher {
             let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty, let raw = Double(trimmed), raw.isFinite else { return nil }
             return raw
+        default:
+            return nil
+        }
+    }
+
+    private static func string(from value: Any?) -> String? {
+        switch value {
+        case let string as String:
+            let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        case let number as NSNumber:
+            let raw = number.doubleValue
+            guard raw.isFinite else { return nil }
+            if raw.rounded(.towardZero) == raw {
+                return String(Int64(raw))
+            }
+            return String(raw)
         default:
             return nil
         }

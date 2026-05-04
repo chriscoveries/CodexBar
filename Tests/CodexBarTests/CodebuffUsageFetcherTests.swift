@@ -51,6 +51,46 @@ struct CodebuffUsageFetcherTests {
     }
 
     @Test
+    func `usage fetch can skip subscription endpoint for API key tokens`() async throws {
+        defer {
+            CodebuffStubURLProtocol.handler = nil
+            CodebuffStubURLProtocol.requests = []
+            CodebuffStubURLProtocol.requestBodies = []
+        }
+        CodebuffStubURLProtocol.requests = []
+        CodebuffStubURLProtocol.requestBodies = []
+        CodebuffStubURLProtocol.handler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            switch url.path {
+            case "/api/v1/usage":
+                return try Self.makeResponse(url: url, body: #"{"usage":25,"quota":100,"remainingBalance":75}"#)
+            case "/api/user/subscription":
+                Issue.record("Subscription endpoint should not be called for API key tokens")
+                return try Self.makeResponse(url: url, body: "{}", statusCode: 500)
+            default:
+                return try Self.makeResponse(url: url, body: "{}", statusCode: 404)
+            }
+        }
+
+        let snapshot = try await CodebuffUsageFetcher.fetchUsage(
+            apiKey: "cb-test",
+            includeSubscription: false,
+            session: Self.makeSession())
+
+        #expect(snapshot.creditsUsed == 25)
+        #expect(CodebuffStubURLProtocol.requests.map(\.url?.path) == ["/api/v1/usage"])
+    }
+
+    @Test
+    func `api strategy only fetches subscription for credentials file tokens`() {
+        let envResolution = ProviderTokenResolution(token: "env-token", source: .environment)
+        let fileResolution = ProviderTokenResolution(token: "file-token", source: .authFile)
+
+        #expect(CodebuffAPIFetchStrategy.shouldFetchSubscription(for: envResolution) == false)
+        #expect(CodebuffAPIFetchStrategy.shouldFetchSubscription(for: fileResolution) == true)
+    }
+
+    @Test
     func `status 401 maps to unauthorized`() {
         #expect(CodebuffUsageFetcher._statusErrorForTesting(401) == .unauthorized)
         #expect(CodebuffUsageFetcher._statusErrorForTesting(403) == .unauthorized)
@@ -137,7 +177,8 @@ struct CodebuffUsageFetcherTests {
           },
           "rateLimit": {
             "weeklyUsed": 2100,
-            "weeklyLimit": 7000
+            "weeklyLimit": 7000,
+            "weeklyResetsAt": "2026-05-08T00:00:00Z"
           },
           "email": "user@example.com"
         }
@@ -148,17 +189,27 @@ struct CodebuffUsageFetcherTests {
         #expect(payload.status == "active")
         #expect(payload.weeklyUsed == 2100)
         #expect(payload.weeklyLimit == 7000)
+        #expect(payload.weeklyResetsAt != nil)
         #expect(payload.email == "user@example.com")
         #expect(payload.billingPeriodEnd != nil)
     }
 
     @Test
-    func `subscription payload falls back to scheduled tier`() throws {
+    func `subscription payload prefers display name over numeric tier`() throws {
         let json = """
-        { "subscription": { "scheduledTier": "team" } }
+        { "subscription": { "tier": 2, "displayName": "Pro" } }
         """
         let payload = try CodebuffUsageFetcher._parseSubscriptionPayloadForTesting(Data(json.utf8))
-        #expect(payload.tier == "team")
+        #expect(payload.tier == "Pro")
+    }
+
+    @Test
+    func `subscription payload falls back to numeric scheduled tier`() throws {
+        let json = """
+        { "subscription": { "scheduledTier": 3 } }
+        """
+        let payload = try CodebuffUsageFetcher._parseSubscriptionPayloadForTesting(Data(json.utf8))
+        #expect(payload.tier == "3")
     }
 
     @Test
@@ -180,6 +231,7 @@ struct CodebuffUsageFetcherTests {
             creditsRemaining: 750,
             weeklyUsed: 100,
             weeklyLimit: 500,
+            weeklyResetsAt: Date(timeIntervalSince1970: 1_777_680_000),
             tier: "pro",
             autoTopUpEnabled: true,
             updatedAt: Date())
@@ -192,6 +244,7 @@ struct CodebuffUsageFetcherTests {
         #expect(unified.primary?.resetDescription == nil)
         #expect(unified.secondary?.usedPercent == 20)
         #expect(unified.secondary?.windowMinutes == 7 * 24 * 60)
+        #expect(unified.secondary?.resetsAt == Date(timeIntervalSince1970: 1_777_680_000))
         #expect(unified.secondary?.resetDescription == nil)
         #expect(unified.identity?.providerID == .codebuff)
         #expect(unified.identity?.loginMethod?.contains("Pro") == true)

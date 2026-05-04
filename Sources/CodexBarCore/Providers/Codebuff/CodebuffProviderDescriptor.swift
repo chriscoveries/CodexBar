@@ -54,10 +54,13 @@ struct CodebuffAPIFetchStrategy: ProviderFetchStrategy {
     }
 
     func fetch(_ context: ProviderFetchContext) async throws -> ProviderFetchResult {
-        guard let apiKey = Self.resolveToken(environment: context.env) else {
+        guard let resolution = Self.resolveToken(environment: context.env) else {
             throw CodebuffUsageError.missingCredentials
         }
-        let usage = try await CodebuffUsageFetcher.fetchUsage(apiKey: apiKey, environment: context.env)
+        let usage = try await CodebuffUsageFetcher.fetchUsage(
+            apiKey: resolution.token,
+            environment: context.env,
+            includeSubscription: Self.shouldFetchSubscription(for: resolution))
         return self.makeResult(
             usage: usage.toUsageSnapshot(),
             sourceLabel: "api")
@@ -67,8 +70,12 @@ struct CodebuffAPIFetchStrategy: ProviderFetchStrategy {
         false
     }
 
-    private static func resolveToken(environment: [String: String]) -> String? {
-        ProviderTokenResolver.codebuffToken(environment: environment)
+    static func shouldFetchSubscription(for resolution: ProviderTokenResolution) -> Bool {
+        resolution.source == .authFile
+    }
+
+    private static func resolveToken(environment: [String: String]) -> ProviderTokenResolution? {
+        ProviderTokenResolver.codebuffResolution(environment: environment)
     }
 }
 

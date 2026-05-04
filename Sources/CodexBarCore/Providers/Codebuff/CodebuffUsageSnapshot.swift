@@ -7,6 +7,7 @@ public struct CodebuffUsageSnapshot: Sendable {
     public let creditsRemaining: Double?
     public let weeklyUsed: Double?
     public let weeklyLimit: Double?
+    public let weeklyResetsAt: Date?
     public let billingPeriodEnd: Date?
     public let nextQuotaReset: Date?
     public let tier: String?
@@ -21,6 +22,7 @@ public struct CodebuffUsageSnapshot: Sendable {
         creditsRemaining: Double? = nil,
         weeklyUsed: Double? = nil,
         weeklyLimit: Double? = nil,
+        weeklyResetsAt: Date? = nil,
         billingPeriodEnd: Date? = nil,
         nextQuotaReset: Date? = nil,
         tier: String? = nil,
@@ -34,6 +36,7 @@ public struct CodebuffUsageSnapshot: Sendable {
         self.creditsRemaining = creditsRemaining
         self.weeklyUsed = weeklyUsed
         self.weeklyLimit = weeklyLimit
+        self.weeklyResetsAt = weeklyResetsAt
         self.billingPeriodEnd = billingPeriodEnd
         self.nextQuotaReset = nextQuotaReset
         self.tier = tier
@@ -98,7 +101,7 @@ public struct CodebuffUsageSnapshot: Sendable {
         return RateWindow(
             usedPercent: percent,
             windowMinutes: 7 * 24 * 60,
-            resetsAt: nil,
+            resetsAt: self.weeklyResetsAt,
             resetDescription: nil)
     }
 

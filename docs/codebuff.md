@@ -9,7 +9,7 @@ weekly rate limits next to your other AI providers.
   remaining balance, auto top-up state, and the next quota reset date.
 - `GET  https://www.codebuff.com/api/user/subscription` — subscription tier,
   billing period end, and the weekly rate-limit window (`weeklyUsed` /
-  `weeklyLimit`).
+  `weeklyLimit`) when CodexBar is using the CLI credentials-file session token.
 
 Both endpoints use a Bearer token. CodexBar never stores Codebuff credentials
 outside the existing macOS Keychain / `~/.codexbar/config.json` that the other
@@ -20,12 +20,14 @@ providers use.
 CodexBar resolves the Codebuff API token in this order:
 
 1. `CODEBUFF_API_KEY` environment variable (takes precedence so CI overrides
-   work).
+   work). API-key tokens fetch credit balance only.
 2. The per-provider API key stored in Settings → Providers → Codebuff (saved
-   in `~/.codexbar/config.json` via the normal CodexBar config flow).
+   in `~/.codexbar/config.json` via the normal CodexBar config flow). API-key
+   tokens fetch credit balance only.
 3. `~/.config/manicode/credentials.json` — the file the official `codebuff`
    CLI (formerly `manicode`) writes after `codebuff login`. CodexBar reads
-   the `authToken` field and treats it as a Bearer token.
+   the `authToken` field and uses that session token for both credit balance
+   and subscription metadata.
 
 If none of those is available, Codebuff shows the “missing token” error.
 
