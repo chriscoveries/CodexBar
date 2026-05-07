@@ -45,11 +45,16 @@ jobs:
         run: |
           swift test --parallel \
             --skip ClaudeOAuthCredentialsStoreSecurityCLITests \
+            --skip CLIOpenAIDashboardCacheTests \
+            --skip CodexAccountScopedRefreshDashboardCleanupTests \
+            --skip CodexAccountScopedRefreshTests \
+            --skip CodexDashboardWorkedExampleParityTests \
+            --skip CodexWebDashboardStrategyAuthorityTests \
             --skip OpenAIDashboardNavigationDelegateTests \
             --skip StatusMenuTokenAccountSwitcherTests \
             --skip SubprocessRunnerTests
           swift test --no-parallel \
-            --filter 'ClaudeOAuthCredentialsStoreSecurityCLITests|OpenAIDashboardNavigationDelegateTests|SubprocessRunnerTests'
+            --filter 'ClaudeOAuthCredentialsStoreSecurityCLITests|CLIOpenAIDashboardCacheTests|CodexAccountScopedRefreshDashboardCleanupTests|CodexAccountScopedRefreshTests|CodexDashboardWorkedExampleParityTests|CodexWebDashboardStrategyAuthorityTests|OpenAIDashboardNavigationDelegateTests|SubprocessRunnerTests'
 
   build-linux-cli:
     timeout-minutes: 20
