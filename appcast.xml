@@ -3,6 +3,25 @@
     <channel>
         <title>CodexBar</title>
         <item>
+            <title>0.25.1</title>
+            <pubDate>Mon, 11 May 2026 03:41:45 +0100</pubDate>
+            <link>https://raw.githubusercontent.com/steipete/CodexBar/main/appcast.xml</link>
+            <sparkle:version>61</sparkle:version>
+            <sparkle:shortVersionString>0.25.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[<h2>CodexBar 0.25.1</h2>
+<h3>Fixed</h3>
+<ul>
+<li>Settings: avoid packaged-app crashes from SwiftPM localization bundle lookup when opening Settings or About (#896, fixes #891). Thanks @lederniermagicien!</li>
+<li>CLI: include a VERSION file in standalone release archives so <code>--version</code> reports the release tag outside the app bundle (#898). Thanks @ThiagoCAltoe!</li>
+<li>Pi: rebuild stale session cost caches after cache-version migrations so refreshed cost history reflects current scanner data.</li>
+<li>Keychain cache: reduce repeated development prompt churn by trusting the bundled helper when writing CodexBar-owned cache items (#888).</li>
+</ul>
+<p><a href="https://github.com/steipete/CodexBar/blob/main/CHANGELOG.md">View full changelog</a></p>
+]]></description>
+            <enclosure url="https://github.com/steipete/CodexBar/releases/download/v0.25.1/CodexBar-0.25.1.zip" length="36140734" type="application/octet-stream" sparkle:edSignature="RMuKFcK4JcS4BGPni5EHGkr/Cb1OvWunvsUU/xm4Jc8mPGCM0zMLyZXpqe7GSqY1KGAsT/ppa3RRirjsgr3KDA=="/>
+        </item>
+        <item>
             <title>0.25</title>
             <pubDate>Sun, 10 May 2026 19:50:02 +0100</pubDate>
             <link>https://raw.githubusercontent.com/steipete/CodexBar/main/appcast.xml</link>
@@ -133,36 +152,6 @@
 <p><a href="https://github.com/steipete/CodexBar/blob/main/CHANGELOG.md">View full changelog</a></p>
 ]]></description>
             <enclosure url="https://github.com/steipete/CodexBar/releases/download/v0.24/CodexBar-0.24.zip" length="32355904" type="application/octet-stream" sparkle:edSignature="jYDd/Lh170ooYOeBUxMqkO0u1xEXPKwPh3217ROhKtkqTCKPgOInlft4VC/z+vy879Fjnf95RtsjG/K6/Wl1Dg=="/>
-        </item>
-        <item>
-            <title>0.23</title>
-            <pubDate>Sun, 26 Apr 2026 04:51:49 +0100</pubDate>
-            <link>https://raw.githubusercontent.com/steipete/CodexBar/main/appcast.xml</link>
-            <sparkle:version>58</sparkle:version>
-            <sparkle:shortVersionString>0.23</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <description><![CDATA[<h2>CodexBar 0.23</h2>
-<h3>Highlights</h3>
-<ul>
-<li>Mistral: add provider support with monthly spend tracking, browser-cookie import, manual cookies, and CLI/token-account support (#607). Thanks @welcoMattic!</li>
-<li>Claude: show Designs and Daily Routines usage bars from live Claude OAuth/Web quota data, and restore the Web-mode Sonnet bar (#740). Thanks @AISupplyGuy!</li>
-<li>Cursor: add an Extra usage menu bar metric for on-demand budgets (#789). Thanks @huiye98!</li>
-<li>Usage: add an opt-in confetti celebration when weekly limits reset after active use (#785). Thanks @zats!</li>
-<li>Codex: add GPT-5.5 and GPT-5.5 Pro pricing so local cost scanning recognizes the new models.</li>
-<li>Copilot: show a clearer GitHub Device Flow hint in Settings when the copied device code needs to be pasted into GitHub (#369). Thanks @amoranio!</li>
-</ul>
-<h3>Fixes</h3>
-<ul>
-<li>Droid: preserve Factory session fallbacks, use the current usage endpoint, and clarify browser-login messaging (#792). Thanks @JosephDoUrden for the original stale-session fix!</li>
-<li>Widgets: package App Intents metadata for the widget extension and use configuration defaults so configurable widgets load correctly in WidgetKit (#783). Thanks @ngutman and @vincentyangch!</li>
-<li>Menu: keep merged-menu cards, switcher rows, wrapped status text, and hosted chart submenus aligned with the real AppKit menu width so menus no longer grow oversized or show narrower chart submenus after width changes. Thanks @ngutman!</li>
-<li>Codex: ignore invalid zero-minute subscription history so the utilization submenu no longer shows duplicate Session tabs.</li>
-<li>CLI: report the app bundle version correctly when the bundled helper is launched through a symlink.</li>
-<li>Codex/Claude: clean up cached CLI status probes during app shutdown so <code>codex -s read-only</code> workers are not orphaned after restart.</li>
-</ul>
-<p><a href="https://github.com/steipete/CodexBar/blob/main/CHANGELOG.md">View full changelog</a></p>
-]]></description>
-            <enclosure url="https://github.com/steipete/CodexBar/releases/download/v0.23/CodexBar-0.23.zip" length="30631794" type="application/octet-stream" sparkle:edSignature="GNX7nts8CsKNPu5v6IRpAO41hY8HJHb5MkRep09uei0q7MbA/KH97//+4nVGum7JTnOMMigxoKcI+q98eqYlAQ=="/>
         </item>
         <item>
             <title>0.14.0</title>
