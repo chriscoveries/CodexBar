@@ -95,9 +95,9 @@ struct CLIEntryTests {
 
     @Test
     func `CLI version falls back to adjacent VERSION file`() throws {
-        try expectAdjacentVersionFile(raw: "v3.2.1\n", expected: "3.2.1")
-        try expectAdjacentVersionFile(raw: "3.2.2\n", expected: "3.2.2")
-        try expectAdjacentVersionFile(raw: "version-3.2.3\n", expected: "version-3.2.3")
+        try self.expectAdjacentVersionFile(raw: "v3.2.1\n", expected: "3.2.1")
+        try self.expectAdjacentVersionFile(raw: "3.2.2\n", expected: "3.2.2")
+        try self.expectAdjacentVersionFile(raw: "version-3.2.3\n", expected: "version-3.2.3")
     }
 
     private func expectAdjacentVersionFile(raw: String, expected: String) throws {
