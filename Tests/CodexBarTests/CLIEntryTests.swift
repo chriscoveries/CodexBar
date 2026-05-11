@@ -73,13 +73,11 @@ struct CLIEntryTests {
         defer { try? FileManager.default.removeItem(at: root) }
 
         let appURL = root.appendingPathComponent("CodexBar.app", isDirectory: true)
-        let emptyBundleURL = root.appendingPathComponent("Empty.bundle", isDirectory: true)
         let contentsURL = appURL.appendingPathComponent("Contents", isDirectory: true)
         let helpersURL = contentsURL.appendingPathComponent("Helpers", isDirectory: true)
         let binURL = root.appendingPathComponent("bin", isDirectory: true)
         try FileManager.default.createDirectory(at: helpersURL, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: binURL, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: emptyBundleURL, withIntermediateDirectories: true)
 
         let infoURL = contentsURL.appendingPathComponent("Info.plist")
         let plist: [String: Any] = ["CFBundleShortVersionString": "2.4.6"]
@@ -92,42 +90,32 @@ struct CLIEntryTests {
         let symlinkURL = binURL.appendingPathComponent("codexbar")
         try FileManager.default.createSymbolicLink(at: symlinkURL, withDestinationURL: helperURL)
 
-        let emptyBundle = try #require(Bundle(url: emptyBundleURL))
-        #expect(CodexBarCLI.currentVersion(bundle: emptyBundle, executablePath: symlinkURL.path) == "2.4.6")
+        #expect(CodexBarCLI.currentVersion(bundleVersion: nil, executablePath: symlinkURL.path) == "2.4.6")
     }
 
     @Test
     func `CLI version falls back to adjacent VERSION file`() throws {
+        try expectAdjacentVersionFile(raw: "v3.2.1\n", expected: "3.2.1")
+        try expectAdjacentVersionFile(raw: "3.2.2\n", expected: "3.2.2")
+        try expectAdjacentVersionFile(raw: "version-3.2.3\n", expected: "version-3.2.3")
+    }
+
+    private func expectAdjacentVersionFile(raw: String, expected: String) throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("codexbar-cli-version-file-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let emptyBundleURL = root.appendingPathComponent("Empty.bundle", isDirectory: true)
         let binURL = root.appendingPathComponent("bin", isDirectory: true)
-        try FileManager.default.createDirectory(at: emptyBundleURL, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: binURL, withIntermediateDirectories: true)
 
         let helperURL = binURL.appendingPathComponent("CodexBarCLI")
         try Data().write(to: helperURL)
-        try "v3.2.1\n".write(
+        try raw.write(
             to: binURL.appendingPathComponent("VERSION"),
-            atomically: true,
+            atomically: false,
             encoding: .utf8)
 
-        let emptyBundle = try #require(Bundle(url: emptyBundleURL))
-        #expect(CodexBarCLI.currentVersion(bundle: emptyBundle, executablePath: helperURL.path) == "3.2.1")
-
-        try "3.2.2\n".write(
-            to: binURL.appendingPathComponent("VERSION"),
-            atomically: true,
-            encoding: .utf8)
-        #expect(CodexBarCLI.currentVersion(bundle: emptyBundle, executablePath: helperURL.path) == "3.2.2")
-
-        try "version-3.2.3\n".write(
-            to: binURL.appendingPathComponent("VERSION"),
-            atomically: true,
-            encoding: .utf8)
-        #expect(CodexBarCLI.currentVersion(bundle: emptyBundle, executablePath: helperURL.path) == "version-3.2.3")
+        #expect(CodexBarCLI.currentVersion(bundleVersion: nil, executablePath: helperURL.path) == expected)
     }
 
     @Test

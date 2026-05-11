@@ -41,7 +41,13 @@ extension CodexBarCLI {
         bundle: Bundle = .main,
         executablePath: String? = CommandLine.arguments.first) -> String?
     {
-        if let version = bundle.infoDictionary?["CFBundleShortVersionString"] as? String {
+        self.currentVersion(
+            bundleVersion: bundle.infoDictionary?["CFBundleShortVersionString"] as? String,
+            executablePath: executablePath)
+    }
+
+    static func currentVersion(bundleVersion: String?, executablePath: String?) -> String? {
+        if let version = bundleVersion {
             return version
         }
         guard let executablePath, !executablePath.isEmpty else { return nil }
