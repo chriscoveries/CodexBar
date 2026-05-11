@@ -48,6 +48,7 @@ jobs:
             --skip CLIOpenAIDashboardCacheTests \
             --skip CodexAccountScopedRefreshDashboardCleanupTests \
             --skip CodexAccountScopedRefreshTests \
+            --skip CodexAccountPromotionServiceTests \
             --skip CodexBaselineCharacterizationTests \
             --skip CodexDashboardWorkedExampleParityTests \
             --skip CodexUsageFetcherFallbackTests \
@@ -64,7 +65,7 @@ jobs:
         timeout-minutes: 40
         run: |
           swift test --no-parallel \
-            --filter 'ClaudeOAuthCredentialsStoreSecurityCLITests|CLIOpenAIDashboardCacheTests|CodexAccountScopedRefreshDashboardCleanupTests|CodexAccountScopedRefreshTests|CodexBaselineCharacterizationTests|CodexDashboardWorkedExampleParityTests|CodexUsageFetcherFallbackTests|CodexWebDashboardStrategyAuthorityTests|OpenAIDashboardNavigationDelegateTests|StatusMenuCodexSwitcherTests|StatusMenuHostedSubmenuRefreshTests|StatusMenuSwitcherClickTests|StatusMenuTests|SubprocessRunnerTests'
+            --filter 'ClaudeOAuthCredentialsStoreSecurityCLITests|CLIOpenAIDashboardCacheTests|CodexAccountScopedRefreshDashboardCleanupTests|CodexAccountScopedRefreshTests|CodexAccountPromotionServiceTests|CodexBaselineCharacterizationTests|CodexDashboardWorkedExampleParityTests|CodexUsageFetcherFallbackTests|CodexWebDashboardStrategyAuthorityTests|OpenAIDashboardNavigationDelegateTests|StatusMenuCodexSwitcherTests|StatusMenuHostedSubmenuRefreshTests|StatusMenuSwitcherClickTests|StatusMenuTests|SubprocessRunnerTests'
 
   build-linux-cli:
     timeout-minutes: 20
