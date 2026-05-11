@@ -12,7 +12,7 @@ concurrency:
 jobs:
   lint-build-test:
     runs-on: macos-15-intel
-    timeout-minutes: 35
+    timeout-minutes: 70
     steps:
       - uses: actions/checkout@v6
 
@@ -40,7 +40,7 @@ jobs:
       - name: Lint
         run: ./Scripts/lint.sh lint
 
-      - name: Swift Test
+      - name: Swift Test (parallel)
         timeout-minutes: 25
         run: |
           swift test --parallel \
@@ -59,6 +59,10 @@ jobs:
             --skip StatusMenuTests \
             --skip StatusMenuTokenAccountSwitcherTests \
             --skip SubprocessRunnerTests
+
+      - name: Swift Test (serial)
+        timeout-minutes: 40
+        run: |
           swift test --no-parallel \
             --filter 'ClaudeOAuthCredentialsStoreSecurityCLITests|CLIOpenAIDashboardCacheTests|CodexAccountScopedRefreshDashboardCleanupTests|CodexAccountScopedRefreshTests|CodexBaselineCharacterizationTests|CodexDashboardWorkedExampleParityTests|CodexUsageFetcherFallbackTests|CodexWebDashboardStrategyAuthorityTests|OpenAIDashboardNavigationDelegateTests|StatusMenuCodexSwitcherTests|StatusMenuHostedSubmenuRefreshTests|StatusMenuSwitcherClickTests|StatusMenuTests|SubprocessRunnerTests'
 
