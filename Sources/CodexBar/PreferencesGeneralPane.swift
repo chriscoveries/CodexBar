@@ -136,8 +136,8 @@ struct GeneralPane: View {
                         subtitle: L("session_quota_notifications_subtitle"),
                         binding: self.$settings.sessionQuotaNotificationsEnabled)
                     PreferenceToggleRow(
-                        title: "Quota warning notifications",
-                        subtitle: "Warns when session or weekly quota remaining crosses configured thresholds.",
+                        title: L("quota_warning_notifications_title"),
+                        subtitle: L("quota_warning_notifications_subtitle"),
                         binding: self.$settings.quotaWarningNotificationsEnabled)
                     if self.settings.quotaWarningNotificationsEnabled {
                         GlobalQuotaWarningSettingsView(settings: self.settings)

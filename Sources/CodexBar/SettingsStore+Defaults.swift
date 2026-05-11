@@ -573,9 +573,15 @@ extension SettingsStore {
             self.defaultsState.appLanguageRaw = stored
             if let stored {
                 self.userDefaults.set(stored, forKey: "appLanguage")
+                if self.userDefaults !== UserDefaults.standard {
+                    UserDefaults.standard.set(stored, forKey: "appLanguage")
+                }
                 UserDefaults.standard.set([stored], forKey: "AppleLanguages")
             } else {
                 self.userDefaults.removeObject(forKey: "appLanguage")
+                if self.userDefaults !== UserDefaults.standard {
+                    UserDefaults.standard.removeObject(forKey: "appLanguage")
+                }
                 UserDefaults.standard.removeObject(forKey: "AppleLanguages")
             }
         }
