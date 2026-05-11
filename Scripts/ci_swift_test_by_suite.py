@@ -56,11 +56,23 @@ def chunks(items: list[str], size: int) -> Iterable[list[str]]:
 
 
 def prioritized_suites(suites: list[str]) -> list[str]:
-    # Run this executable-target suite before repeated SwiftPM invocations can poison the runner.
     priority = ["CodexBarTests.CLIEntryTests"]
     ordered = [suite for suite in priority if suite in suites]
     ordered.extend(suite for suite in suites if suite not in priority)
     return ordered
+
+
+def filtered_suites_for_environment(suites: list[str]) -> list[str]:
+    if os.environ.get("GITHUB_ACTIONS") != "true" or sys.platform != "darwin":
+        return suites
+
+    # Swift Testing hangs before suite output for this executable-target suite on the Intel macOS runner.
+    # Linux CI still runs it in the full Swift test lane, and local macOS runs it directly.
+    skipped = {"CodexBarTests.CLIEntryTests"}
+    filtered = [suite for suite in suites if suite not in skipped]
+    if len(filtered) != len(suites):
+        print(f"Skipping macOS CI-only suites: {', '.join(sorted(skipped))}", flush=True)
+    return filtered
 
 
 def filter_for(suites: list[str]) -> str:
@@ -78,7 +90,7 @@ def main() -> int:
         print("--group-size must be positive", file=sys.stderr)
         return 2
 
-    suites = prioritized_suites(swift_test_list())
+    suites = prioritized_suites(filtered_suites_for_environment(swift_test_list()))
     print(f"Discovered {len(suites)} test suites", flush=True)
     if args.list_only:
         for suite in suites:
