@@ -61,7 +61,7 @@ def filter_for(suites: list[str]) -> str:
 
 
 def run_group(suites: list[str], timeout: int) -> int:
-    return run_command(["swift", "test", "--filter", filter_for(suites)], timeout=timeout)
+    return run_command(["swift", "test", "--no-parallel", "--filter", filter_for(suites)], timeout=timeout)
 
 
 def main() -> int:
