@@ -397,8 +397,10 @@ struct TokenAccountEnvironmentPrecedenceTests {
         try Self.withCLIKnownOwnerFixtures(
             ambientHome: ambientHome,
             managedAccounts: [])
-        {
-            let rawCLIOwners = try Self.codexCLIKnownOwners()
+        { managedStoreURL in
+            let rawCLIOwners = try Self.codexCLIKnownOwners(
+                ambientHome: ambientHome,
+                managedStoreURL: managedStoreURL)
             let cliOwners = try #require(rawCLIOwners)
             let appOwners = appStore.codexDashboardKnownOwnerCandidates()
 
@@ -444,8 +446,10 @@ struct TokenAccountEnvironmentPrecedenceTests {
         try Self.withCLIKnownOwnerFixtures(
             ambientHome: ambientHome,
             managedAccounts: [managedAccount])
-        {
-            let rawCLIOwners = try Self.codexCLIKnownOwners()
+        { managedStoreURL in
+            let rawCLIOwners = try Self.codexCLIKnownOwners(
+                ambientHome: ambientHome,
+                managedStoreURL: managedStoreURL)
             let cliOwners = try #require(rawCLIOwners)
             let appOwners = appStore.codexDashboardKnownOwnerCandidates()
 
@@ -492,8 +496,10 @@ struct TokenAccountEnvironmentPrecedenceTests {
         try Self.withCLIKnownOwnerFixtures(
             ambientHome: ambientHome,
             managedAccounts: [managedAccount])
-        {
-            let rawCLIOwners = try Self.codexCLIKnownOwners()
+        { managedStoreURL in
+            let rawCLIOwners = try Self.codexCLIKnownOwners(
+                ambientHome: ambientHome,
+                managedStoreURL: managedStoreURL)
             let cliOwners = try #require(rawCLIOwners)
             let appOwners = appStore.codexDashboardKnownOwnerCandidates()
 
@@ -533,11 +539,16 @@ struct TokenAccountEnvironmentPrecedenceTests {
             settings: settings)
     }
 
-    private static func codexCLIKnownOwners() throws -> [CodexDashboardKnownOwnerCandidate]? {
+    private static func codexCLIKnownOwners(
+        ambientHome: URL,
+        managedStoreURL: URL) throws -> [CodexDashboardKnownOwnerCandidate]?
+    {
         let context = try TokenAccountCLIContext(
             selection: TokenAccountCLISelection(label: nil, index: nil, allAccounts: false),
             config: CodexBarConfig(providers: [ProviderConfig(id: .codex)]),
-            verbose: false)
+            verbose: false,
+            baseEnvironment: ["CODEX_HOME": ambientHome.path],
+            managedCodexAccountStoreURL: managedStoreURL)
         return context.settingsSnapshot(for: .codex, account: nil)?.codex?.dashboardAuthorityKnownOwners
     }
 
@@ -587,38 +598,20 @@ struct TokenAccountEnvironmentPrecedenceTests {
     private static func withCLIKnownOwnerFixtures<T>(
         ambientHome: URL,
         managedAccounts: [ManagedCodexAccount],
-        operation: () throws -> T) throws -> T
+        operation: (URL) throws -> T) throws -> T
     {
-        let managedStoreURL = FileManagedCodexAccountStore.defaultURL()
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-known-owner-store-\(UUID().uuidString)", isDirectory: true)
+        let managedStoreURL = root.appendingPathComponent("managed-codex-accounts.json", isDirectory: false)
         let fileManager = FileManager.default
-        let originalManagedStoreData = try? Data(contentsOf: managedStoreURL)
-        let hadOriginalManagedStore = fileManager.fileExists(atPath: managedStoreURL.path)
-        let originalCodexHome = getenv("CODEX_HOME").map { String(cString: $0) }
+        defer { try? fileManager.removeItem(at: root) }
 
         let managedStore = FileManagedCodexAccountStore(fileURL: managedStoreURL)
         try managedStore.storeAccounts(ManagedCodexAccountSet(
             version: FileManagedCodexAccountStore.currentVersion,
             accounts: managedAccounts))
-        setenv("CODEX_HOME", ambientHome.path, 1)
 
-        defer {
-            if let originalCodexHome {
-                setenv("CODEX_HOME", originalCodexHome, 1)
-            } else {
-                unsetenv("CODEX_HOME")
-            }
-
-            if hadOriginalManagedStore, let originalManagedStoreData {
-                try? fileManager.createDirectory(
-                    at: managedStoreURL.deletingLastPathComponent(),
-                    withIntermediateDirectories: true)
-                try? originalManagedStoreData.write(to: managedStoreURL, options: [.atomic])
-            } else {
-                try? fileManager.removeItem(at: managedStoreURL)
-            }
-        }
-
-        return try operation()
+        return try operation(managedStoreURL)
     }
 
     private static func makeSnapshotWithAllFields(provider: UsageProvider) -> UsageSnapshot {

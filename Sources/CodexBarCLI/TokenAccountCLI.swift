@@ -33,10 +33,20 @@ struct TokenAccountCLIContext {
     let selection: TokenAccountCLISelection
     let config: CodexBarConfig
     let accountsByProvider: [UsageProvider: ProviderTokenAccountData]
+    private let baseEnvironment: [String: String]
+    private let managedCodexAccountStoreURL: URL?
 
-    init(selection: TokenAccountCLISelection, config: CodexBarConfig, verbose _: Bool) throws {
+    init(
+        selection: TokenAccountCLISelection,
+        config: CodexBarConfig,
+        verbose _: Bool,
+        baseEnvironment: [String: String] = ProcessInfo.processInfo.environment,
+        managedCodexAccountStoreURL: URL? = nil) throws
+    {
         self.selection = selection
         self.config = config
+        self.baseEnvironment = baseEnvironment
+        self.managedCodexAccountStoreURL = managedCodexAccountStoreURL
         self.accountsByProvider = Dictionary(uniqueKeysWithValues: config.providers.compactMap { provider in
             guard let accounts = provider.tokenAccounts else { return nil }
             return (provider.id, accounts)
@@ -346,9 +356,19 @@ struct TokenAccountCLIContext {
     }
 
     private func codexAccountReconciler() -> DefaultCodexAccountReconciler {
-        DefaultCodexAccountReconciler(
+        let storeLoader: @Sendable () throws -> ManagedCodexAccountSet = if let managedCodexAccountStoreURL {
+            {
+                try FileManagedCodexAccountStore(fileURL: managedCodexAccountStoreURL).loadAccounts()
+            }
+        } else {
+            {
+                try FileManagedCodexAccountStore().loadAccounts()
+            }
+        }
+        return DefaultCodexAccountReconciler(
+            storeLoader: storeLoader,
             activeSource: self.providerConfig(for: .codex)?.codexActiveSource ?? .liveSystem,
-            baseEnvironment: ProcessInfo.processInfo.environment,
+            baseEnvironment: self.baseEnvironment,
             managedEnvironmentBuilder: { environment, account in
                 CodexHomeScope.scopedEnvironment(base: environment, codexHome: account.managedHomePath)
             })
