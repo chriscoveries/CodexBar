@@ -24,12 +24,14 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         let defaults = UserDefaults(suiteName: suite)!
         defaults.removePersistentDomain(forName: suite)
         let configStore = testConfigStore(suiteName: suite)
-        return SettingsStore(
+        let settings = SettingsStore(
             userDefaults: defaults,
             configStore: configStore,
             zaiTokenStore: NoopZaiTokenStore(),
             syntheticTokenStore: NoopSyntheticTokenStore(),
             tokenAccountStore: InMemoryTokenAccountStore())
+        settings.providerDetectionCompleted = true
+        return settings
     }
 
     private func enableOnlyClaude(_ settings: SettingsStore) {
@@ -115,7 +117,7 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
             updater: DisabledUpdaterController(),
             preferencesSelection: PreferencesSelection(),
             statusBar: self.makeStatusBarForTesting())
-        defer { withExtendedLifetime(controller) {} }
+        defer { controller.releaseStatusItemsForTesting() }
 
         let refreshTask = Task { @MainActor in
             await store.refresh()
@@ -139,7 +141,7 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(startedCallCount, 2)
     }
 
-    func test_multiAccountSegmentedLayoutShowsCopilotSwitcher() {
+    func test_multiAccountSegmentedLayoutShowsCopilotSwitcher() throws {
         self.disableMenuCardsForTesting()
         let settings = self.makeSettings()
         settings.statusChecksEnabled = false
@@ -164,7 +166,7 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         let menu = controller.makeMenu(for: .copilot)
         controller.menuWillOpen(menu)
 
-        XCTAssertNotNil(menu.items.compactMap { $0.view as? TokenAccountSwitcherView }.first)
+        _ = try XCTUnwrap(menu.items.compactMap { $0.view as? TokenAccountSwitcherView }.first)
         XCTAssertEqual(self.representedIDs(in: menu).filter { $0.hasPrefix("menuCard") }, ["menuCard"])
     }
 
@@ -238,13 +240,15 @@ private actor BlockingTokenAccountFetchStrategy {
     private var startedCount = 0
 
     func awaitResult() async throws -> UsageSnapshot {
-        self.startedCount += 1
-        self.resumeStartedWaiters()
         if let resolvedResult {
+            self.startedCount += 1
+            self.resumeStartedWaiters()
             return try resolvedResult.get()
         }
         let result = await withCheckedContinuation { continuation in
             self.waiters.append(continuation)
+            self.startedCount += 1
+            self.resumeStartedWaiters()
         }
         return try result.get()
     }
