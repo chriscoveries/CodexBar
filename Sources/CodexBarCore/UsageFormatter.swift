@@ -119,6 +119,16 @@ public enum UsageFormatter {
 
     public static let costEstimateHint = "Estimated from local logs · may differ from your bill"
 
+    public static func costEstimateHint(provider: UsageProvider) -> String {
+        switch provider {
+        case .claude:
+            "Estimated from local Claude logs at API rates; token totals include cache read/write tokens " +
+                "and may differ from Claude Code /status."
+        default:
+            self.costEstimateHint
+        }
+    }
+
     /// Formats a currency value with the specified currency code.
     /// Uses FormatStyle with explicit en_US locale to ensure consistent formatting
     /// regardless of the user's system locale (e.g., pt-BR users see $54.72 not US$ 54,72).

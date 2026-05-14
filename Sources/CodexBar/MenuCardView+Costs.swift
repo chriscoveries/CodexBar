@@ -68,8 +68,10 @@ extension UsageMenuCardView.Model {
         switch provider {
         case .codex:
             "Estimated from local Codex logs for the selected account."
-        case .claude, .vertexai:
-            String(localized: "cost_estimate_hint")
+        case .claude:
+            UsageFormatter.costEstimateHint(provider: provider)
+        case .vertexai:
+            UsageFormatter.costEstimateHint
         case .bedrock:
             "Reported by AWS Cost Explorer; daily billing data can lag."
         default:

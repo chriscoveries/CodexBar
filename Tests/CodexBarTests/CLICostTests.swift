@@ -33,7 +33,8 @@ struct CLICostTests {
         #expect(output.contains("Claude Cost (API-rate estimate)"))
         #expect(output.contains("Today: $1.25 · 1.2K tokens"))
         #expect(output.contains("Last 30 days: $9.99 · 9K tokens"))
-        #expect(output.contains(UsageFormatter.costEstimateHint))
+        #expect(output.contains("cache read/write tokens"))
+        #expect(output.contains("Claude Code /status"))
     }
 
     @Test
@@ -145,5 +146,6 @@ struct CLICostTests {
         let hint = UsageFormatter.costEstimateHint
         #expect(!hint.isEmpty)
         #expect(hint.contains("Estimated"))
+        #expect(UsageFormatter.costEstimateHint(provider: .claude).contains("cache read/write tokens"))
     }
 }

@@ -19,6 +19,7 @@
 - OpenCode Go: let automatic cookie import scan all supported browser sources instead of Chrome only (#665).
 - Codex: pause background CLI launches after macOS blocks or quarantines `codex`, avoiding repeated "Malware Blocked" prompts (#942).
 - Cost history: label local log totals as API-rate estimates in menu cards, charts, and CLI output (#926). Thanks @yashiels!
+- Claude: clarify that local cost/token estimates include cache read/write tokens and may differ from Claude Code `/status` (#781, #787).
 - Codex: scope local cost history to the selected managed account's `CODEX_HOME` and label cost cards as local-log estimates (#910).
 - Cursor: open Add Account in the user's browser and import the resulting browser session instead of trapping login in an embedded web view (#922).
 - Menu: disable implicit provider-switcher layer animations and reuse the deferred rebuild path so open menus stay stable under pointer movement (#950).
