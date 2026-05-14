@@ -3,11 +3,13 @@
 ## 0.26 — Unreleased
 
 ### Added
+- Localization: add Simplified Chinese translations for Claude peak-hour labels (#921). Thanks @whtis!
 - Display: add a setting to hide quota-warning tick marks on usage bars while keeping quota warning notifications active (#918, fixes #916). Thanks @ThiagoCAltoe!
 - Menu: add an opt-in setting for provider changelog links, starting with Codex, Claude Code, and Gemini CLI (#929, fixes #660). Thanks @ThiagoCAltoe!
 - Moonshot / Kimi API: add API-key balance tracking, CLI support, docs, and menu bar balance copy (#899). Thanks @giuseppebisemi!
 
 ### Fixed
+- Kimi: rebalance provider icon alignment within its viewBox (#912). Thanks @giuseppebisemi!
 - Claude: show Enterprise OAuth spend-limit usage when the API returns only `extra_usage` data instead of session windows (#925).
 - CLI: route Claude token-account `--source cli` reads through the selected OAuth/session credential so `--all-accounts` no longer relabels ambient CLI usage (#403).
 - Codex: keep session and weekly quota-warning marker thresholds independent so usage bars do not duplicate marker lines (#938, fixes #927). Thanks @iam-brain!
