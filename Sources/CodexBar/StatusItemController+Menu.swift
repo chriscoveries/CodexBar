@@ -206,7 +206,9 @@ extension StatusItemController {
         let switcherUsageBarsShowUsedMatch = self.settings.usageBarsShowUsed == self.lastSwitcherUsageBarsShowUsed
         let switcherSelectionMatches = switcherSelection == self.lastMergedSwitcherSelection
         let switcherOverviewAvailabilityMatches = includesOverview == self.lastSwitcherIncludesOverview
-        let tokenSwitcherCompatible = tokenAccountDisplay == nil && !hasTokenSwitcher
+        let tokenSwitcherCompatible = tokenAccountDisplay == self.lastTokenAccountMenuDisplay &&
+            ((tokenAccountDisplay?.showSwitcher == true && hasTokenSwitcher) ||
+                (tokenAccountDisplay?.showSwitcher != true && !hasTokenSwitcher))
         let codexSwitcherCompatible = codexAccountDisplay == self.lastCodexAccountMenuDisplay &&
             ((codexAccountDisplay?.showSwitcher == true && hasCodexSwitcher) ||
                 (codexAccountDisplay?.showSwitcher != true && !hasCodexSwitcher))
@@ -292,35 +294,19 @@ extension StatusItemController {
             self.menuLogger.debug("populateMenu(open): rebuilding whole menu and replacing provider switcher")
         }
         #endif
-        menu.removeAllItems()
-        self.addProviderSwitcherIfNeeded(
-            to: menu,
-            enabledProviders: enabledProviders,
-            includesOverview: includesOverview,
-            selection: switcherSelection ?? .provider(currentProvider),
-            width: menuWidth)
-        // Track which providers the switcher was built with for smart update detection
-        if self.shouldMergeIcons, enabledProviders.count > 1 {
-            self.lastSwitcherProviders = enabledProviders
-            self.lastSwitcherUsageBarsShowUsed = self.settings.usageBarsShowUsed
-            self.lastMergedSwitcherSelection = switcherSelection
-            self.lastSwitcherIncludesOverview = includesOverview
-        }
-        self.addCodexAccountSwitcherIfNeeded(to: menu, display: codexAccountDisplay, width: menuWidth)
-        self.lastCodexAccountMenuDisplay = codexAccountDisplay
-        self.addTokenAccountSwitcherIfNeeded(to: menu, display: tokenAccountDisplay, width: menuWidth)
-        let menuContext = MenuCardContext(
-            currentProvider: currentProvider,
-            selectedProvider: selectedProvider,
-            menuWidth: menuWidth,
-            codexAccountDisplay: codexAccountDisplay,
-            tokenAccountDisplay: tokenAccountDisplay,
-            openAIContext: openAIContext)
-        self.addPrimaryMenuContent(
-            to: menu,
-            context: menuContext,
-            switcherSelection: switcherSelection ?? .provider(currentProvider))
-        self.addActionableSections(descriptor.sections, to: menu, width: menuWidth)
+        self.rebuildMenuContent(
+            menu,
+            context: MenuRebuildContext(
+                enabledProviders: enabledProviders,
+                includesOverview: includesOverview,
+                switcherSelection: switcherSelection,
+                currentProvider: currentProvider,
+                selectedProvider: selectedProvider,
+                menuWidth: menuWidth,
+                codexAccountDisplay: codexAccountDisplay,
+                tokenAccountDisplay: tokenAccountDisplay,
+                openAIContext: openAIContext,
+                descriptor: descriptor))
     }
 
     private func reusableFixedWidthRows(in menu: NSMenu) -> [NSMenuItem] {
@@ -362,62 +348,93 @@ extension StatusItemController {
         _ menu: NSMenu,
         context: MenuUpdateContext)
     {
-        // Batch menu updates to prevent visual flickering during provider switch.
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        defer { CATransaction.commit() }
+        self.performMenuMutationWithoutAnimation {
+            let contentStartIndex = menu.items.first?.view is ProviderSwitcherView ? 2 : 0
+            (menu.items.first?.view as? ProviderSwitcherView)?.updateSelection(context.switcherSelection)
+            while menu.items.count > contentStartIndex {
+                menu.removeItem(at: contentStartIndex)
+            }
 
-        let contentStartIndex = menu.items.first?.view is ProviderSwitcherView ? 2 : 0
-        (menu.items.first?.view as? ProviderSwitcherView)?.updateSelection(context.switcherSelection)
-        while menu.items.count > contentStartIndex {
-            menu.removeItem(at: contentStartIndex)
+            self.lastMergedSwitcherSelection = context.switcherSelection
+            let enabledProviders = self.store.enabledProvidersForDisplay()
+            self.lastSwitcherProviders = enabledProviders
+            self.lastSwitcherUsageBarsShowUsed = self.settings.usageBarsShowUsed
+            self.lastSwitcherIncludesOverview = self.includesOverviewTab(enabledProviders: enabledProviders)
+            self.addCodexAccountSwitcherIfNeeded(
+                to: menu,
+                display: context.codexAccountDisplay,
+                width: context.menuWidth)
+            self.lastCodexAccountMenuDisplay = context.codexAccountDisplay
+            self.addTokenAccountSwitcherIfNeeded(
+                to: menu,
+                display: context.tokenAccountDisplay,
+                width: context.menuWidth)
+            self.lastTokenAccountMenuDisplay = context.tokenAccountDisplay
+
+            let descriptor = MenuDescriptor.build(
+                provider: context.provider,
+                store: self.store,
+                settings: self.settings,
+                account: self.account,
+                managedCodexAccountCoordinator: self.managedCodexAccountCoordinator,
+                codexAccountPromotionCoordinator: self.codexAccountPromotionCoordinator,
+                updateReady: self.updater.updateStatus.isUpdateReady,
+                includeContextualActions: context.switcherSelection != .overview)
+
+            let menuContext = MenuCardContext(
+                currentProvider: context.currentProvider,
+                selectedProvider: context.provider,
+                menuWidth: context.menuWidth,
+                codexAccountDisplay: context.codexAccountDisplay,
+                tokenAccountDisplay: context.tokenAccountDisplay,
+                openAIContext: context.openAIContext)
+            self.addPrimaryMenuContent(to: menu, context: menuContext, switcherSelection: context.switcherSelection)
+            self.addActionableSections(descriptor.sections, to: menu, width: context.menuWidth)
         }
-
-        self.lastMergedSwitcherSelection = context.switcherSelection
-        let enabledProviders = self.store.enabledProvidersForDisplay()
-        self.lastSwitcherProviders = enabledProviders
-        self.lastSwitcherUsageBarsShowUsed = self.settings.usageBarsShowUsed
-        self.lastSwitcherIncludesOverview = self.includesOverviewTab(enabledProviders: enabledProviders)
-        self.addCodexAccountSwitcherIfNeeded(to: menu, display: context.codexAccountDisplay, width: context.menuWidth)
-        self.lastCodexAccountMenuDisplay = context.codexAccountDisplay
-        self.addTokenAccountSwitcherIfNeeded(to: menu, display: context.tokenAccountDisplay, width: context.menuWidth)
-
-        let descriptor = MenuDescriptor.build(
-            provider: context.provider,
-            store: self.store,
-            settings: self.settings,
-            account: self.account,
-            managedCodexAccountCoordinator: self.managedCodexAccountCoordinator,
-            codexAccountPromotionCoordinator: self.codexAccountPromotionCoordinator,
-            updateReady: self.updater.updateStatus.isUpdateReady,
-            includeContextualActions: context.switcherSelection != .overview)
-
-        let menuContext = MenuCardContext(
-            currentProvider: context.currentProvider,
-            selectedProvider: context.provider,
-            menuWidth: context.menuWidth,
-            codexAccountDisplay: context.codexAccountDisplay,
-            tokenAccountDisplay: context.tokenAccountDisplay,
-            openAIContext: context.openAIContext)
-        self.addPrimaryMenuContent(to: menu, context: menuContext, switcherSelection: context.switcherSelection)
-        self.addActionableSections(descriptor.sections, to: menu, width: context.menuWidth)
     }
 
-    private struct OpenAIWebContext {
-        let hasUsageBreakdown: Bool
-        let hasCreditsHistory: Bool
-        let hasCostHistory: Bool
-        let canShowBuyCredits: Bool
-        let hasOpenAIWebMenuItems: Bool
-    }
-
-    private struct MenuCardContext {
-        let currentProvider: UsageProvider
-        let selectedProvider: UsageProvider?
-        let menuWidth: CGFloat
-        let codexAccountDisplay: CodexAccountMenuDisplay?
-        let tokenAccountDisplay: TokenAccountMenuDisplay?
-        let openAIContext: OpenAIWebContext
+    private func rebuildMenuContent(
+        _ menu: NSMenu,
+        context: MenuRebuildContext)
+    {
+        self.performMenuMutationWithoutAnimation {
+            menu.removeAllItems()
+            self.addProviderSwitcherIfNeeded(
+                to: menu,
+                enabledProviders: context.enabledProviders,
+                includesOverview: context.includesOverview,
+                selection: context.switcherSelection ?? .provider(context.currentProvider),
+                width: context.menuWidth)
+            // Track which providers the switcher was built with for smart update detection
+            if self.shouldMergeIcons, context.enabledProviders.count > 1 {
+                self.lastSwitcherProviders = context.enabledProviders
+                self.lastSwitcherUsageBarsShowUsed = self.settings.usageBarsShowUsed
+                self.lastMergedSwitcherSelection = context.switcherSelection
+                self.lastSwitcherIncludesOverview = context.includesOverview
+            }
+            self.addCodexAccountSwitcherIfNeeded(
+                to: menu,
+                display: context.codexAccountDisplay,
+                width: context.menuWidth)
+            self.lastCodexAccountMenuDisplay = context.codexAccountDisplay
+            self.addTokenAccountSwitcherIfNeeded(
+                to: menu,
+                display: context.tokenAccountDisplay,
+                width: context.menuWidth)
+            self.lastTokenAccountMenuDisplay = context.tokenAccountDisplay
+            let menuContext = MenuCardContext(
+                currentProvider: context.currentProvider,
+                selectedProvider: context.selectedProvider,
+                menuWidth: context.menuWidth,
+                codexAccountDisplay: context.codexAccountDisplay,
+                tokenAccountDisplay: context.tokenAccountDisplay,
+                openAIContext: context.openAIContext)
+            self.addPrimaryMenuContent(
+                to: menu,
+                context: menuContext,
+                switcherSelection: context.switcherSelection ?? .provider(context.currentProvider))
+            self.addActionableSections(context.descriptor.sections, to: menu, width: context.menuWidth)
+        }
     }
 
     private func openAIWebContext(
@@ -946,11 +963,8 @@ extension StatusItemController {
             onSelect: { [weak self, weak menu] index -> Task<Void, Never>? in
                 guard let self, let menu else { return nil }
                 self.settings.setActiveTokenAccountIndex(index, for: display.provider)
-                // Immediately rebuild to show the new selection, then refresh data
-                // and rebuild again once fresh data arrives.
-                self.populateMenu(menu, provider: display.provider)
-                self.markMenuFresh(menu)
                 self.applyIcon(phase: nil)
+                self.deferSwitcherMenuRebuildIfStillVisible(menu, provider: display.provider)
                 return Task { @MainActor [weak self, weak menu] in
                     guard let self else { return }
                     await ProviderInteractionContext.$current.withValue(.userInitiated) {
@@ -990,7 +1004,7 @@ extension StatusItemController {
         let visibleAccountID = account.id
         self.settings.selectDisplayedCodexVisibleAccount(account)
         if self.store.prepareCodexAccountScopedRefreshIfNeeded(), let menu {
-            self.refreshOpenMenuIfStillVisible(menu, provider: .codex)
+            self.deferSwitcherMenuRebuildIfStillVisible(menu, provider: .codex)
         }
         Task { @MainActor in
             await ProviderInteractionContext.$current.withValue(.userInitiated) {
@@ -1117,7 +1131,7 @@ extension StatusItemController {
         }
     }
 
-    private func rebuildOpenMenuIfStillVisible(_ menu: NSMenu, provider: UsageProvider?) {
+    func rebuildOpenMenuIfStillVisible(_ menu: NSMenu, provider: UsageProvider?) {
         guard self.openMenus[ObjectIdentifier(menu)] != nil else { return }
         guard self.isHostedSubviewMenu(menu) || !self.hasOpenHostedSubviewMenu() else { return }
         self.populateMenu(menu, provider: provider)

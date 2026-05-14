@@ -11,6 +11,7 @@
 
 ### Fixed
 - Kimi: rebalance provider icon alignment within its viewBox (#912). Thanks @giuseppebisemi!
+- Menu: defer account-switcher menu rebuilds so switching Codex or token accounts does not send the open menu into a flicker loop (#946, fixes #944). Thanks @kubahasek!
 - Menu bar: detect when macOS Tahoe hides CodexBar behind the new Allow in Menu Bar setting and show recovery guidance (#945, fixes #890). Thanks @pdurlej!
 - Claude: show Enterprise OAuth spend-limit usage when the API returns only `extra_usage` data instead of session windows (#925).
 - CLI: route Claude token-account `--source cli` reads through the selected OAuth/session credential so `--all-accounts` no longer relabels ambient CLI usage (#403).

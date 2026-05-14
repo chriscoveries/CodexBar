@@ -145,6 +145,8 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
     var lastMergedSwitcherSelection: ProviderSwitcherSelection?
     /// Tracks the visible Codex account switcher contents for merged-menu smart updates.
     var lastCodexAccountMenuDisplay: CodexAccountMenuDisplay?
+    /// Tracks the visible token account switcher contents for merged-menu smart updates.
+    var lastTokenAccountMenuDisplay: TokenAccountMenuDisplay?
     /// Monotonic token used to ignore stale deferred provider-switcher menu rebuilds.
     var providerSwitcherUpdateToken = 0
     var lastAppliedMergedIconRenderSignature: String?
