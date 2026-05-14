@@ -11,6 +11,9 @@
 - Localization: add Simplified Chinese translations for Claude peak-hour labels (#921). Thanks @whtis!
 
 ### Fixed
+- Codex: scope local cost history to the selected managed account's `CODEX_HOME` and label cost cards as local-log estimates (#910).
+- Cursor: open Add Account in the user's browser and import the resulting browser session instead of trapping login in an embedded web view (#922).
+- Menu: disable implicit provider-switcher layer animations and reuse the deferred rebuild path so open menus stay stable under pointer movement (#950).
 - Updates: make the restart/apply-update menu action use Sparkle's prepared install callback on the first click (#947). Thanks @velvet-shark!
 - Multi-account menus: keep stacked token-account cards capped to current accounts and ignore stale snapshots from removed accounts (#949).
 - Droid: accept pasted Factory `Authorization: Bearer` headers and bearer tokens for manual sessions when cookies alone are insufficient (#914).

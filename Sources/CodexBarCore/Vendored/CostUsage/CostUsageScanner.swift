@@ -1055,7 +1055,11 @@ enum CostUsageScanner {
         let nowMs = Int64(now.timeIntervalSince1970 * 1000)
 
         let refreshMs = Int64(max(0, options.refreshMinIntervalSeconds) * 1000)
+        let roots = self.codexSessionsRoots(options: options)
+        let rootsFingerprint = Self.codexRootsFingerprint(roots)
+        let rootsChanged = cache.roots != nil && cache.roots != rootsFingerprint
         let shouldRefresh = options.forceRescan
+            || rootsChanged
             || refreshMs == 0
             || cache.lastScanUnixMs == 0
             || nowMs - cache.lastScanUnixMs > refreshMs
@@ -1065,10 +1069,7 @@ enum CostUsageScanner {
                 cache = CostUsageCache()
             }
 
-            let roots = self.codexSessionsRoots(options: options)
             let includeRecursive = options.forceRescan
-            let rootsFingerprint = Self.codexRootsFingerprint(roots)
-            let rootsChanged = cache.roots != nil && cache.roots != rootsFingerprint
             let shouldRunColdCacheLookback = cache.files.isEmpty || rootsChanged
             let coldCacheLookbackStart = Self.parseDayKey(range.scanSinceKey)
                 .map { Calendar.current.startOfDay(for: $0) }

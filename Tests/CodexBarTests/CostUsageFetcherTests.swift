@@ -4,6 +4,71 @@ import Testing
 
 struct CostUsageFetcherTests {
     @Test
+    func `fetcher scopes codex history to selected codex home`() async throws {
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+
+        func writeSessionFile(
+            homeRoot: URL,
+            day: Date,
+            filename: String,
+            tokens: Int) throws
+        {
+            let comps = Calendar.current.dateComponents([.year, .month, .day], from: day)
+            let dir = homeRoot
+                .appendingPathComponent("sessions", isDirectory: true)
+                .appendingPathComponent(String(format: "%04d", comps.year ?? 1970), isDirectory: true)
+                .appendingPathComponent(String(format: "%02d", comps.month ?? 1), isDirectory: true)
+                .appendingPathComponent(String(format: "%02d", comps.day ?? 1), isDirectory: true)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let url = dir.appendingPathComponent(filename, isDirectory: false)
+            let model = "openai/gpt-5.4"
+            try env.jsonl([
+                [
+                    "type": "turn_context",
+                    "timestamp": env.isoString(for: day),
+                    "payload": ["model": model],
+                ],
+                [
+                    "type": "event_msg",
+                    "timestamp": env.isoString(for: day.addingTimeInterval(1)),
+                    "payload": [
+                        "type": "token_count",
+                        "info": [
+                            "last_token_usage": [
+                                "input_tokens": tokens,
+                                "cached_input_tokens": 0,
+                                "output_tokens": 0,
+                            ],
+                            "model": model,
+                        ],
+                    ],
+                ],
+            ]).write(to: url, atomically: true, encoding: .utf8)
+        }
+
+        let day = try env.makeLocalNoon(year: 2026, month: 4, day: 8)
+        let otherHome = env.root.appendingPathComponent("other-codex-home", isDirectory: true)
+        try writeSessionFile(homeRoot: env.codexHomeRoot, day: day, filename: "ambient.jsonl", tokens: 100)
+        try writeSessionFile(homeRoot: otherHome, day: day, filename: "managed.jsonl", tokens: 10)
+
+        let options = CostUsageScanner.Options(cacheRoot: env.cacheRoot)
+        let ambient = try await CostUsageFetcher.loadTokenSnapshot(
+            provider: .codex,
+            now: day,
+            codexHomePath: env.codexHomeRoot.path,
+            scannerOptions: options)
+        let managed = try await CostUsageFetcher.loadTokenSnapshot(
+            provider: .codex,
+            now: day,
+            codexHomePath: otherHome.path,
+            scannerOptions: options)
+
+        #expect(ambient.sessionTokens == 100)
+        #expect(managed.sessionTokens == 10)
+    }
+
+    @Test
     func `fetcher merges native and pi codex history with normalized model names`() async throws {
         let env = try CostUsageTestEnvironment()
         defer { env.cleanup() }

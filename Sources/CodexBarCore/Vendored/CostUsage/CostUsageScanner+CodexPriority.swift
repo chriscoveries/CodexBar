@@ -4,7 +4,7 @@ import SQLite3
 #endif
 
 extension CostUsageScanner {
-    struct CodexPriorityTurnMetadata: Codable, Equatable, Sendable {
+    struct CodexPriorityTurnMetadata: Codable, Equatable {
         var threadID: String?
         var turnID: String
         var model: String?

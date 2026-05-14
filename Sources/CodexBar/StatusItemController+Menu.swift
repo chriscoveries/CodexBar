@@ -934,17 +934,7 @@ extension StatusItemController {
                     self.lastMenuProvider = provider
                 }
                 self.lastMergedSwitcherSelection = selection
-                self.providerSwitcherUpdateToken &+= 1
-                let updateToken = self.providerSwitcherUpdateToken
-                Task { @MainActor [weak self, weak menu] in
-                    await Task.yield()
-                    guard let self, let menu else { return }
-                    guard self.providerSwitcherUpdateToken == updateToken else { return }
-                    self.applyIcon(phase: nil)
-                    guard self.openMenus[ObjectIdentifier(menu)] != nil else { return }
-                    self.populateMenu(menu, provider: provider)
-                    self.markMenuFresh(menu)
-                }
+                self.deferSwitcherMenuRebuildIfStillVisible(menu, provider: provider)
             })
         let item = NSMenuItem()
         item.view = view

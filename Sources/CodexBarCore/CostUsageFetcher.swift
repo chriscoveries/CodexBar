@@ -24,13 +24,15 @@ public struct CostUsageFetcher: Sendable {
         provider: UsageProvider,
         now: Date = Date(),
         forceRefresh: Bool = false,
-        allowVertexClaudeFallback: Bool = false) async throws -> CostUsageTokenSnapshot
+        allowVertexClaudeFallback: Bool = false,
+        codexHomePath: String? = nil) async throws -> CostUsageTokenSnapshot
     {
         try await Self.loadTokenSnapshot(
             provider: provider,
             now: now,
             forceRefresh: forceRefresh,
-            allowVertexClaudeFallback: allowVertexClaudeFallback)
+            allowVertexClaudeFallback: allowVertexClaudeFallback,
+            codexHomePath: codexHomePath)
     }
 
     static func loadTokenSnapshot(
@@ -38,6 +40,7 @@ public struct CostUsageFetcher: Sendable {
         now: Date = Date(),
         forceRefresh: Bool = false,
         allowVertexClaudeFallback: Bool = false,
+        codexHomePath: String? = nil,
         scannerOptions overrideScannerOptions: CostUsageScanner.Options? = nil,
         piScannerOptions overridePiScannerOptions: PiSessionCostScanner
             .Options? = nil) async throws -> CostUsageTokenSnapshot
@@ -51,6 +54,13 @@ public struct CostUsageFetcher: Sendable {
         let since = Calendar.current.date(byAdding: .day, value: -29, to: now) ?? now
 
         var options = overrideScannerOptions ?? CostUsageScanner.Options()
+        if provider == .codex,
+           let codexHomePath = codexHomePath?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !codexHomePath.isEmpty
+        {
+            options.codexSessionsRoot = URL(fileURLWithPath: codexHomePath, isDirectory: true)
+                .appendingPathComponent("sessions", isDirectory: true)
+        }
         if provider == .codex || provider == .claude {
             await ModelsDevPricingPipeline.refreshIfNeeded(now: now, cacheRoot: options.cacheRoot)
         }

@@ -1556,9 +1556,20 @@ extension UsageMenuCardView.Model {
         return TokenUsageSection(
             sessionLine: sessionLine,
             monthLine: monthLine,
-            hintLine: nil,
+            hintLine: Self.tokenUsageHint(provider: provider),
             errorLine: err,
             errorCopyText: (error?.isEmpty ?? true) ? nil : error)
+    }
+
+    private static func tokenUsageHint(provider: UsageProvider) -> String? {
+        switch provider {
+        case .codex:
+            "Estimated from local Codex logs for the selected account."
+        case .claude, .vertexai:
+            "Estimated from local logs; may differ from your bill."
+        default:
+            nil
+        }
     }
 
     private static func providerCostSection(
