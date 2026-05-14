@@ -572,12 +572,19 @@ private final class CodexRPCClient: @unchecked Sendable {
         self.process.standardOutput = self.stdoutPipe
         self.process.standardError = self.stderrPipe
 
+        if let message = CodexCLILaunchGate.shared.backgroundSkipMessage(binary: resolvedExec) {
+            Self.log.warning("Codex RPC launch skipped after recent launch failure", metadata: ["binary": resolvedExec])
+            throw RPCWireError.startFailed(message)
+        }
+
         do {
             try self.process.run()
             Self.log.debug("Codex RPC started", metadata: ["binary": resolvedExec])
         } catch {
-            Self.log.warning("Codex RPC failed to start", metadata: ["error": error.localizedDescription])
-            throw RPCWireError.startFailed(error.localizedDescription)
+            let message = error.localizedDescription
+            let throttled = CodexCLILaunchGate.shared.recordLaunchFailure(binary: resolvedExec, message: message)
+            Self.log.warning("Codex RPC failed to start", metadata: ["error": message])
+            throw RPCWireError.startFailed(throttled ?? message)
         }
 
         let stdoutHandle = self.stdoutPipe.fileHandleForReading
