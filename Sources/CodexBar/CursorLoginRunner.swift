@@ -25,15 +25,17 @@ final class CursorLoginRunner {
 
     typealias SnapshotLoader = @Sendable () async throws -> CursorStatusSnapshot
     typealias Sleeper = @Sendable (UInt64) async throws -> Void
+    typealias SessionCacheResetter = @Sendable () async -> Void
 
     private let loadSnapshot: SnapshotLoader
     private let openURL: @MainActor (URL) -> Bool
     private let sleeper: Sleeper
+    private let resetSessionCache: SessionCacheResetter
     private let timeout: TimeInterval
     private let pollInterval: TimeInterval
     private let logger = CodexBarLog.logger(LogCategories.cursorLogin)
 
-    static let dashboardURL = URL(string: "https://cursor.com/dashboard")!
+    static let authURL = URL(string: "https://authenticator.cursor.sh/")!
 
     init(
         browserDetection: BrowserDetection,
@@ -41,23 +43,29 @@ final class CursorLoginRunner {
         pollInterval: TimeInterval = 2,
         openURL: @escaping @MainActor (URL) -> Bool = { NSWorkspace.shared.open($0) },
         loadSnapshot: SnapshotLoader? = nil,
-        sleeper: @escaping Sleeper = { try await Task.sleep(nanoseconds: $0) })
+        sleeper: @escaping Sleeper = { try await Task.sleep(nanoseconds: $0) },
+        resetSessionCache: @escaping SessionCacheResetter = {
+            CookieHeaderCache.clear(provider: .cursor)
+            CursorSessionStore.shared.clearCookies()
+        })
     {
         self.timeout = timeout
         self.pollInterval = pollInterval
         self.openURL = openURL
         self.sleeper = sleeper
+        self.resetSessionCache = resetSessionCache
         self.loadSnapshot = loadSnapshot ?? {
             let probe = CursorStatusProbe(browserDetection: browserDetection)
-            return try await probe.fetch()
+            return try await probe.fetch(allowCachedSessions: false)
         }
     }
 
     func run(onPhaseChange: @escaping @MainActor (Phase) -> Void) async -> Result {
         onPhaseChange(.loading)
         self.logger.info("Cursor login started")
+        await self.resetSessionCache()
 
-        guard self.openURL(Self.dashboardURL) else {
+        guard self.openURL(Self.authURL) else {
             let message = "Could not open Cursor login in your browser."
             onPhaseChange(.failed(message))
             self.logger.error("Cursor login browser launch failed")
