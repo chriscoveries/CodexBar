@@ -219,6 +219,66 @@ struct TokenAccountEnvironmentPrecedenceTests {
     }
 
     @Test
+    func `claude OAuth token selection reroutes explicit CLI source to OAuth in CLI`() throws {
+        let account = ProviderTokenAccount(
+            id: UUID(),
+            label: "Primary",
+            token: "Bearer sk-ant-oat-account-token",
+            addedAt: 0,
+            lastUsed: nil)
+        let config = CodexBarConfig(providers: [ProviderConfig(id: .claude)])
+        let tokenContext = try TokenAccountCLIContext(
+            selection: TokenAccountCLISelection(label: nil, index: nil, allAccounts: false),
+            config: config,
+            verbose: false)
+
+        let effectiveSourceMode = tokenContext.effectiveSourceMode(
+            base: .cli,
+            provider: .claude,
+            account: account)
+
+        #expect(effectiveSourceMode == .oauth)
+    }
+
+    @Test
+    func `claude session key selection reroutes explicit CLI source to Web in CLI`() throws {
+        let account = ProviderTokenAccount(
+            id: UUID(),
+            label: "Primary",
+            token: "sk-ant-session-token",
+            addedAt: 0,
+            lastUsed: nil)
+        let config = CodexBarConfig(providers: [ProviderConfig(id: .claude)])
+        let tokenContext = try TokenAccountCLIContext(
+            selection: TokenAccountCLISelection(label: nil, index: nil, allAccounts: false),
+            config: config,
+            verbose: false)
+
+        let effectiveSourceMode = tokenContext.effectiveSourceMode(
+            base: .cli,
+            provider: .claude,
+            account: account)
+
+        #expect(effectiveSourceMode == .web)
+    }
+
+    @Test
+    func `claude ambient explicit CLI source remains CLI in CLI`() throws {
+        let config = CodexBarConfig(providers: [ProviderConfig(id: .claude)])
+        let tokenContext = try TokenAccountCLIContext(
+            selection: TokenAccountCLISelection(label: nil, index: nil, allAccounts: false),
+            config: config,
+            verbose: false)
+
+        let effectiveSourceMode = tokenContext.effectiveSourceMode(
+            base: .cli,
+            provider: .claude,
+            account: nil)
+
+        #expect(effectiveSourceMode == .cli)
+    }
+
+    @Test
     func `claude session key selection stays in manual cookie mode in CLI settings snapshot`() throws {
         let accounts = ProviderTokenAccountData(
             version: 1,
