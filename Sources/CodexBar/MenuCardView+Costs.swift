@@ -60,7 +60,7 @@ extension UsageMenuCardView.Model {
         case .codex:
             "Estimated from local Codex logs for the selected account."
         case .claude, .vertexai:
-            "Estimated from local logs; may differ from your bill."
+            String(localized: "cost_estimate_hint")
         default:
             nil
         }
