@@ -3,6 +3,7 @@
 ## 0.26 — Unreleased
 
 ### Added
+- z.ai: add an hourly per-model token usage chart in the menu (#913). Thanks @n1majne3!
 - Kilo: add organization selection, scoped organization fetches, and stacked Kilo usage cards (#920). Thanks @NoeFabris!
 - Antigravity: add Google OAuth token-account switching with selected-account refresh persistence (#937, fixes #936). Thanks @hhh2210!
 - Kiro: show account/auth details, plan labels, credit and bonus-credit balances, overage state, and Kiro-specific menu bar display options (#933, fixes #934). Thanks @solnikhil!
@@ -14,6 +15,7 @@
 - Localization: add Simplified Chinese translations for Claude peak-hour labels (#921). Thanks @whtis!
 
 ### Fixed
+- OpenCode Go: let automatic cookie import scan all supported browser sources instead of Chrome only (#665).
 - Codex: pause background CLI launches after macOS blocks or quarantines `codex`, avoiding repeated "Malware Blocked" prompts (#942).
 - Cost history: label local log totals as API-rate estimates in menu cards, charts, and CLI output (#926). Thanks @yashiels!
 - Codex: scope local cost history to the selected managed account's `CODEX_HOME` and label cost cards as local-log estimates (#910).
