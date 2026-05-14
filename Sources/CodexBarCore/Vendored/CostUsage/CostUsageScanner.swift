@@ -1057,7 +1057,7 @@ enum CostUsageScanner {
         let refreshMs = Int64(max(0, options.refreshMinIntervalSeconds) * 1000)
         let roots = self.codexSessionsRoots(options: options)
         let rootsFingerprint = Self.codexRootsFingerprint(roots)
-        let rootsChanged = cache.roots != nil && cache.roots != rootsFingerprint
+        let rootsChanged = cache.roots != rootsFingerprint
         let shouldRefresh = options.forceRescan
             || rootsChanged
             || refreshMs == 0
