@@ -208,7 +208,11 @@ public enum ClaudeWebAPIFetcher {
 
         var usage = try await fetchUsageData(orgId: organization.id, sessionKey: sessionKey, logger: log)
         if usage.extraUsageCost == nil,
-           let extra = await fetchExtraUsageCost(orgId: organization.id, sessionKey: sessionKey, logger: log)
+           let extra = await ClaudeWebExtraUsageCost.fetch(
+               baseURL: Self.baseURL,
+               orgId: organization.id,
+               sessionKey: sessionKey,
+               logger: log)
         {
             usage = WebUsageData(
                 sessionPercentUsed: usage.sessionPercentUsed,
@@ -517,7 +521,7 @@ public enum ClaudeWebAPIFetcher {
         if let sourceKey = extraRateParse.sourceKeys["claude-routines"] {
             logger?("Usage API extra window key matched: routines=\(sourceKey)")
         }
-        let extraUsageCost = Self.parseExtraUsageCost(from: json["extra_usage"])
+        let extraUsageCost = ClaudeWebExtraUsageCost.parse(from: json["extra_usage"])
 
         return WebUsageData(
             sessionPercentUsed: resolvedSessionPercent,
@@ -542,103 +546,6 @@ public enum ClaudeWebAPIFetcher {
         return nil
     }
 
-    // MARK: - Extra usage cost (Claude "Extra")
-
-    private static func parseExtraUsageCost(from value: Any?) -> ProviderCostSnapshot? {
-        guard let extraUsage = value as? [String: Any] else { return nil }
-        guard let used = Self.doubleValue(extraUsage["used_credits"]),
-              let limit = Self.doubleValue(extraUsage["monthly_limit"] ?? extraUsage["monthly_credit_limit"]),
-              limit > 0 else { return nil }
-        let currency = (extraUsage["currency"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let currencyCode = currency?.isEmpty == false ? currency ?? "USD" : "USD"
-        return Self.makeExtraUsageCost(
-            usedCredits: used,
-            monthlyCreditLimit: limit,
-            currencyCode: currencyCode)
-    }
-
-    private struct OverageSpendLimitResponse: Decodable {
-        let monthlyCreditLimit: Double?
-        let currency: String?
-        let usedCredits: Double?
-        let isEnabled: Bool?
-
-        enum CodingKeys: String, CodingKey {
-            case monthlyCreditLimit = "monthly_credit_limit"
-            case currency
-            case usedCredits = "used_credits"
-            case isEnabled = "is_enabled"
-        }
-    }
-
-    /// Best-effort fetch of Claude Extra spend/limit (does not fail the main usage fetch).
-    private static func fetchExtraUsageCost(
-        orgId: String,
-        sessionKey: String,
-        logger: ((String) -> Void)? = nil) async -> ProviderCostSnapshot?
-    {
-        let url = URL(string: "\(baseURL)/organizations/\(orgId)/overage_spend_limit")!
-        var request = URLRequest(url: url)
-        request.setValue("sessionKey=\(sessionKey)", forHTTPHeaderField: "Cookie")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.httpMethod = "GET"
-        request.timeoutInterval = 15
-
-        do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let httpResponse = response as? HTTPURLResponse else { return nil }
-            logger?("Overage API status: \(httpResponse.statusCode)")
-            guard httpResponse.statusCode == 200 else { return nil }
-            return Self.parseOverageSpendLimit(data)
-        } catch {
-            return nil
-        }
-    }
-
-    private static func parseOverageSpendLimit(_ data: Data) -> ProviderCostSnapshot? {
-        guard let decoded = try? JSONDecoder().decode(OverageSpendLimitResponse.self, from: data) else { return nil }
-        guard decoded.isEnabled == true else { return nil }
-        guard let used = decoded.usedCredits,
-              let limit = decoded.monthlyCreditLimit,
-              let currency = decoded.currency,
-              !currency.isEmpty else { return nil }
-
-        return Self.makeExtraUsageCost(
-            usedCredits: used,
-            monthlyCreditLimit: limit,
-            currencyCode: currency)
-    }
-
-    private static func makeExtraUsageCost(
-        usedCredits: Double,
-        monthlyCreditLimit: Double,
-        currencyCode: String) -> ProviderCostSnapshot
-    {
-        let usedAmount = usedCredits / 100.0
-        let limitAmount = monthlyCreditLimit / 100.0
-
-        return ProviderCostSnapshot(
-            used: usedAmount,
-            limit: limitAmount,
-            currencyCode: currencyCode,
-            period: "Monthly",
-            resetsAt: nil,
-            updatedAt: Date())
-    }
-
-    private static func doubleValue(_ value: Any?) -> Double? {
-        switch value {
-        case let int as Int:
-            Double(int)
-        case let double as Double:
-            double
-        case let string as String:
-            Double(string)
-        default:
-            nil
-        }
-    }
-
     #if DEBUG
 
     // MARK: - Test hooks (DEBUG-only)
@@ -655,7 +562,7 @@ public enum ClaudeWebAPIFetcher {
     }
 
     public static func _parseOverageSpendLimitForTesting(_ data: Data) -> ProviderCostSnapshot? {
-        self.parseOverageSpendLimit(data)
+        ClaudeWebExtraUsageCost.parseOverageSpendLimit(data)
     }
 
     public static func _parseAccountInfoForTesting(_ data: Data, orgId: String?) -> WebAccountInfo? {
@@ -967,6 +874,106 @@ public enum ClaudeWebAPIFetcher {
     }
 
     #endif
+}
+
+private enum ClaudeWebExtraUsageCost {
+    // MARK: - Extra usage cost (Claude "Extra")
+
+    static func parse(from value: Any?) -> ProviderCostSnapshot? {
+        guard let extraUsage = value as? [String: Any] else { return nil }
+        guard let used = Self.doubleValue(extraUsage["used_credits"]),
+              let limit = Self.doubleValue(extraUsage["monthly_limit"] ?? extraUsage["monthly_credit_limit"]),
+              limit > 0 else { return nil }
+        let currency = (extraUsage["currency"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let currencyCode = currency?.isEmpty == false ? currency ?? "USD" : "USD"
+        return Self.makeExtraUsageCost(
+            usedCredits: used,
+            monthlyCreditLimit: limit,
+            currencyCode: currencyCode)
+    }
+
+    struct OverageSpendLimitResponse: Decodable {
+        let monthlyCreditLimit: Double?
+        let currency: String?
+        let usedCredits: Double?
+        let isEnabled: Bool?
+
+        enum CodingKeys: String, CodingKey {
+            case monthlyCreditLimit = "monthly_credit_limit"
+            case currency
+            case usedCredits = "used_credits"
+            case isEnabled = "is_enabled"
+        }
+    }
+
+    /// Best-effort fetch of Claude Extra spend/limit (does not fail the main usage fetch).
+    static func fetch(
+        baseURL: String,
+        orgId: String,
+        sessionKey: String,
+        logger: ((String) -> Void)? = nil) async -> ProviderCostSnapshot?
+    {
+        let url = URL(string: "\(baseURL)/organizations/\(orgId)/overage_spend_limit")!
+        var request = URLRequest(url: url)
+        request.setValue("sessionKey=\(sessionKey)", forHTTPHeaderField: "Cookie")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.httpMethod = "GET"
+        request.timeoutInterval = 15
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else { return nil }
+            logger?("Overage API status: \(httpResponse.statusCode)")
+            guard httpResponse.statusCode == 200 else { return nil }
+            return Self.parseOverageSpendLimit(data)
+        } catch {
+            return nil
+        }
+    }
+
+    static func parseOverageSpendLimit(_ data: Data) -> ProviderCostSnapshot? {
+        guard let decoded = try? JSONDecoder().decode(OverageSpendLimitResponse.self, from: data) else { return nil }
+        guard decoded.isEnabled == true else { return nil }
+        guard let used = decoded.usedCredits,
+              let limit = decoded.monthlyCreditLimit,
+              let currency = decoded.currency,
+              !currency.isEmpty else { return nil }
+
+        return Self.makeExtraUsageCost(
+            usedCredits: used,
+            monthlyCreditLimit: limit,
+            currencyCode: currency)
+    }
+
+    static func makeExtraUsageCost(
+        usedCredits: Double,
+        monthlyCreditLimit: Double,
+        currencyCode: String) -> ProviderCostSnapshot
+    {
+        let usedAmount = usedCredits / 100.0
+        let limitAmount = monthlyCreditLimit / 100.0
+
+        return ProviderCostSnapshot(
+            used: usedAmount,
+            limit: limitAmount,
+            currencyCode: currencyCode,
+            period: "Monthly",
+            resetsAt: nil,
+            updatedAt: Date())
+    }
+
+    static func doubleValue(_ value: Any?) -> Double? {
+        switch value {
+        case let int as Int:
+            Double(int)
+        case let double as Double:
+            double
+        case let string as String:
+            Double(string)
+        default:
+            nil
+        }
+    }
 }
 
 private struct ClaudeWebOrganizationResponse: Decodable {
