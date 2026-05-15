@@ -121,6 +121,13 @@ extension TokenAccountSupportCatalog {
             injection: .environment(key: VeniceSettingsReader.apiKeyEnvironmentKey),
             requiresManualCookieSource: false,
             cookieName: nil),
+        .elevenlabs: TokenAccountSupport(
+            title: "API keys",
+            subtitle: "Store multiple ElevenLabs API keys.",
+            placeholder: "Paste API key…",
+            injection: .environment(key: ElevenLabsSettingsReader.apiKeyEnvironmentKey),
+            requiresManualCookieSource: false,
+            cookieName: nil),
         .stepfun: TokenAccountSupport(
             title: "Session tokens",
             subtitle: "Store multiple StepFun Oasis-Token values.",

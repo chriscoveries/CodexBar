@@ -66,6 +66,8 @@ public enum ProviderConfigEnvironment {
             SyntheticSettingsReader.apiKeyKey
         case .openrouter:
             OpenRouterSettingsReader.envKey
+        case .elevenlabs:
+            ElevenLabsSettingsReader.apiKeyEnvironmentKey
         case .moonshot:
             MoonshotSettingsReader.apiKeyEnvironmentKeys.first
         case .venice:

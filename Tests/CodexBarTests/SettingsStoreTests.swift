@@ -1186,6 +1186,7 @@ struct SettingsStoreTests {
             .synthetic,
             .warp,
             .openrouter,
+            .elevenlabs,
             .windsurf,
             .perplexity,
             .mimo,
