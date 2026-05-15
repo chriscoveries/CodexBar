@@ -66,6 +66,22 @@ struct ProviderConfigEnvironmentTests {
     }
 
     @Test
+    func `openai config override uses preferred admin key environment`() {
+        let config = ProviderConfig(id: .openai, apiKey: "config-openai-token")
+        let env = ProviderConfigEnvironment.applyAPIKeyOverride(
+            base: [
+                OpenAIAPISettingsReader.adminAPIKeyEnvironmentKey: "env-admin-token",
+                OpenAIAPISettingsReader.apiKeyEnvironmentKey: "env-api-token",
+            ],
+            provider: .openai,
+            config: config)
+
+        #expect(env[OpenAIAPISettingsReader.adminAPIKeyEnvironmentKey] == "config-openai-token")
+        #expect(env[OpenAIAPISettingsReader.apiKeyEnvironmentKey] == "env-api-token")
+        #expect(ProviderTokenResolver.openAIAPIToken(environment: env) == "config-openai-token")
+    }
+
+    @Test
     func `bedrock config maps AWS credential fields`() {
         let config = ProviderConfig(
             id: .bedrock,

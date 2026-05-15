@@ -3,6 +3,7 @@
 ## 0.26.1 — Unreleased
 
 ### Added
+- OpenAI API: show Admin API usage inline with Today/7d/30d summaries, a 30-day spend graph, and an interactive detail chart for daily spend, tokens, and requests.
 - CLI: add `codexbar serve` for localhost JSON access to usage and cost endpoints (#957). Thanks @ThiagoCAltoe!
 
 ### Fixed

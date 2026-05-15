@@ -5,8 +5,8 @@ extension TokenAccountSupportCatalog {
         .openai: TokenAccountSupport(
             title: "API keys",
             subtitle: "Store multiple OpenAI API keys.",
-            placeholder: "sk-...",
-            injection: .environment(key: OpenAIAPISettingsReader.apiKeyEnvironmentKey),
+            placeholder: "sk-admin-...",
+            injection: .environment(key: OpenAIAPISettingsReader.adminAPIKeyEnvironmentKey),
             requiresManualCookieSource: false,
             cookieName: nil),
         .claude: TokenAccountSupport(

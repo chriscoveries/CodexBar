@@ -59,6 +59,68 @@ struct OverviewMenuCardVisibilityTests {
     }
 }
 
+struct OpenAIAPIMenuCardModelTests {
+    @Test
+    func `admin usage model shows summaries and spend without fake quota bars`() throws {
+        let now = Date(timeIntervalSince1970: 1_700_179_200)
+        let metadata = try #require(ProviderDefaults.metadata[.openai])
+        let apiUsage = OpenAIAPIUsageSnapshot(
+            daily: [
+                OpenAIAPIUsageSnapshot.DailyBucket(
+                    day: "2023-11-14",
+                    startTime: now,
+                    endTime: now.addingTimeInterval(86400),
+                    costUSD: 12.5,
+                    requests: 40,
+                    inputTokens: 1000,
+                    cachedInputTokens: 250,
+                    outputTokens: 500,
+                    totalTokens: 1500,
+                    lineItems: [
+                        OpenAIAPIUsageSnapshot.LineItemBreakdown(name: "Text tokens", costUSD: 12.5),
+                    ],
+                    models: [
+                        OpenAIAPIUsageSnapshot.ModelBreakdown(
+                            name: "gpt-5.2",
+                            requests: 40,
+                            inputTokens: 1000,
+                            cachedInputTokens: 250,
+                            outputTokens: 500,
+                            totalTokens: 1500),
+                    ]),
+            ],
+            updatedAt: now)
+
+        let model = UsageMenuCardView.Model.make(.init(
+            provider: .openai,
+            metadata: metadata,
+            snapshot: apiUsage.toUsageSnapshot(),
+            credits: nil,
+            creditsError: nil,
+            dashboard: nil,
+            dashboardError: nil,
+            tokenSnapshot: nil,
+            tokenError: nil,
+            account: AccountInfo(email: nil, plan: nil),
+            isRefreshing: false,
+            lastError: nil,
+            usageBarsShowUsed: false,
+            resetTimeDisplayStyle: .countdown,
+            tokenCostUsageEnabled: false,
+            showOptionalCreditsAndExtraUsage: true,
+            hidePersonalInfo: false,
+            now: now))
+
+        #expect(model.metrics.isEmpty)
+        #expect(model.openAIAPIUsage != nil)
+        #expect(model.providerCost == nil)
+        #expect(model.usageNotes.contains { $0.contains("Today: $12.50") })
+        #expect(model.usageNotes.contains("Top model: gpt-5.2"))
+        #expect(model.creditsText == nil)
+        #expect(model.planText == "Admin API")
+    }
+}
+
 struct FactoryMenuCardModelTests {
     @Test
     func `factory token rate billing uses time window labels`() throws {

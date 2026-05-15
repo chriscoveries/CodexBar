@@ -53,7 +53,7 @@ public enum ProviderConfigEnvironment {
     private static func directAPIKeyEnvironmentKey(for provider: UsageProvider) -> String? {
         switch provider {
         case .openai:
-            OpenAIAPISettingsReader.apiKeyEnvironmentKey
+            OpenAIAPISettingsReader.adminAPIKeyEnvironmentKey
         case .zai:
             ZaiSettingsReader.apiTokenKey
         case .minimax:

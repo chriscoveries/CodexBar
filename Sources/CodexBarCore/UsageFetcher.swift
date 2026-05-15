@@ -89,6 +89,7 @@ public struct UsageSnapshot: Codable, Sendable {
     public let zaiUsage: ZaiUsageSnapshot?
     public let minimaxUsage: MiniMaxUsageSnapshot?
     public let openRouterUsage: OpenRouterUsageSnapshot?
+    public let openAIAPIUsage: OpenAIAPIUsageSnapshot?
     public let cursorRequests: CursorRequestUsage?
     public let updatedAt: Date
     public let identity: ProviderIdentitySnapshot?
@@ -101,6 +102,7 @@ public struct UsageSnapshot: Codable, Sendable {
         case providerCost
         case kiroUsage
         case openRouterUsage
+        case openAIAPIUsage
         case updatedAt
         case identity
         case accountEmail
@@ -118,6 +120,7 @@ public struct UsageSnapshot: Codable, Sendable {
         zaiUsage: ZaiUsageSnapshot? = nil,
         minimaxUsage: MiniMaxUsageSnapshot? = nil,
         openRouterUsage: OpenRouterUsageSnapshot? = nil,
+        openAIAPIUsage: OpenAIAPIUsageSnapshot? = nil,
         cursorRequests: CursorRequestUsage? = nil,
         updatedAt: Date,
         identity: ProviderIdentitySnapshot? = nil)
@@ -131,6 +134,7 @@ public struct UsageSnapshot: Codable, Sendable {
         self.zaiUsage = zaiUsage
         self.minimaxUsage = minimaxUsage
         self.openRouterUsage = openRouterUsage
+        self.openAIAPIUsage = openAIAPIUsage
         self.cursorRequests = cursorRequests
         self.updatedAt = updatedAt
         self.identity = identity
@@ -147,6 +151,7 @@ public struct UsageSnapshot: Codable, Sendable {
         self.zaiUsage = nil // Not persisted, fetched fresh each time
         self.minimaxUsage = nil // Not persisted, fetched fresh each time
         self.openRouterUsage = try container.decodeIfPresent(OpenRouterUsageSnapshot.self, forKey: .openRouterUsage)
+        self.openAIAPIUsage = try container.decodeIfPresent(OpenAIAPIUsageSnapshot.self, forKey: .openAIAPIUsage)
         self.cursorRequests = nil // Not persisted, fetched fresh each time
         self.updatedAt = try container.decode(Date.self, forKey: .updatedAt)
         if let identity = try container.decodeIfPresent(ProviderIdentitySnapshot.self, forKey: .identity) {
@@ -177,6 +182,7 @@ public struct UsageSnapshot: Codable, Sendable {
         try container.encodeIfPresent(self.providerCost, forKey: .providerCost)
         try container.encodeIfPresent(self.kiroUsage, forKey: .kiroUsage)
         try container.encodeIfPresent(self.openRouterUsage, forKey: .openRouterUsage)
+        try container.encodeIfPresent(self.openAIAPIUsage, forKey: .openAIAPIUsage)
         try container.encode(self.updatedAt, forKey: .updatedAt)
         try container.encodeIfPresent(self.identity, forKey: .identity)
         try container.encodeIfPresent(self.identity?.accountEmail, forKey: .accountEmail)
@@ -274,6 +280,7 @@ public struct UsageSnapshot: Codable, Sendable {
             zaiUsage: self.zaiUsage,
             minimaxUsage: self.minimaxUsage,
             openRouterUsage: self.openRouterUsage,
+            openAIAPIUsage: self.openAIAPIUsage,
             cursorRequests: self.cursorRequests,
             updatedAt: self.updatedAt,
             identity: identity)

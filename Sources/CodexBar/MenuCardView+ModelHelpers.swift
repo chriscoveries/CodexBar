@@ -13,10 +13,18 @@ extension UsageMenuCardView.Model {
         self.subtitleStyle == .error &&
             self.metrics.isEmpty &&
             self.usageNotes.isEmpty &&
+            self.openAIAPIUsage == nil &&
             self.creditsRemaining == nil &&
             self.providerCost == nil &&
             self.tokenUsage == nil &&
             self.placeholder == nil
+    }
+
+    var hasUsageContent: Bool {
+        !self.metrics.isEmpty ||
+            !self.usageNotes.isEmpty ||
+            self.openAIAPIUsage != nil ||
+            self.placeholder != nil
     }
 
     static func progressColor(for provider: UsageProvider) -> Color {
