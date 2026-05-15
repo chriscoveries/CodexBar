@@ -52,10 +52,10 @@ extension CodexBarCLI {
     static func currentVersion(bundleVersion: String?, executablePath: String?) -> String? {
         if let executablePath, !executablePath.isEmpty {
             let executableURL = URL(fileURLWithPath: executablePath).resolvingSymlinksInPath()
-            if let version = Self.containingAppVersion(for: executableURL) {
+            if let version = Self.adjacentVersionFileVersion(for: executableURL) {
                 return version
             }
-            if let version = Self.adjacentVersionFileVersion(for: executableURL) {
+            if let version = Self.containingAppVersion(for: executableURL) {
                 return version
             }
         }
