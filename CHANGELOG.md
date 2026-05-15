@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.26.1 — Unreleased
+## 0.26.1 — 2026-05-15
 
 ### Added
 - OpenAI API: show Admin API usage inline with Today/7d/30d summaries, a 30-day spend graph, and an interactive detail chart for daily spend, tokens, and requests.
