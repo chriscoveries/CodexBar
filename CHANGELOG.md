@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.26 — Unreleased
+## 0.26.0 — 2026-05-15
 
 ### Added
 - Codex: add tiered long-context and Fast/Priority pricing to local cost history using local app-server priority traces (#917). Thanks @iam-brain!
