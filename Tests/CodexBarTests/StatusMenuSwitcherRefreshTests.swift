@@ -35,6 +35,8 @@ struct StatusMenuSwitcherRefreshTests {
 
         let fetcher = UsageFetcher()
         let store = UsageStore(fetcher: fetcher, browserDetection: BrowserDetection(cacheTTL: 0), settings: settings)
+        store.isRefreshing = true
+        defer { store.isRefreshing = false }
         let controller = StatusItemController(
             store: store,
             settings: settings,
