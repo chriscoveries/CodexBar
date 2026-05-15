@@ -32,6 +32,8 @@ actor CodexCLISession {
     private var ptyRows: UInt16 = 0
     private var ptyCols: UInt16 = 0
     private var sessionEnvironment: [String: String]?
+    private var sessionArguments: [String] = []
+    private var sessionWorkingDirectory: URL?
 
     private struct RollingBuffer {
         private let maxNeedle: Int
@@ -87,9 +89,17 @@ actor CodexCLISession {
         timeout: TimeInterval,
         rows: UInt16,
         cols: UInt16,
-        environment: [String: String]) async throws -> String
+        environment: [String: String],
+        extraArgs: [String],
+        workingDirectory: URL?) async throws -> String
     {
-        try self.ensureStarted(binary: binary, rows: rows, cols: cols, environment: environment)
+        try self.ensureStarted(
+            binary: binary,
+            rows: rows,
+            cols: cols,
+            environment: environment,
+            extraArgs: extraArgs,
+            workingDirectory: workingDirectory)
         if let startedAt {
             let sinceStart = Date().timeIntervalSince(startedAt)
             if sinceStart < 0.4 {
@@ -254,14 +264,18 @@ actor CodexCLISession {
         binary: String,
         rows: UInt16,
         cols: UInt16,
-        environment: [String: String]) throws
+        environment: [String: String],
+        extraArgs: [String],
+        workingDirectory: URL?) throws
     {
         if let proc = self.process,
            proc.isRunning,
            self.binaryPath == binary,
            self.ptyRows == rows,
            self.ptyCols == cols,
-           self.sessionEnvironment == environment
+           self.sessionEnvironment == environment,
+           self.sessionArguments == extraArgs,
+           self.sessionWorkingDirectory == workingDirectory
         {
             return
         }
@@ -281,10 +295,11 @@ actor CodexCLISession {
         let proc = Process()
         let resolvedURL = URL(fileURLWithPath: binary)
         proc.executableURL = resolvedURL
-        proc.arguments = ["-s", "read-only", "-a", "untrusted"]
+        proc.arguments = extraArgs
         proc.standardInput = secondaryHandle
         proc.standardOutput = secondaryHandle
         proc.standardError = secondaryHandle
+        proc.currentDirectoryURL = workingDirectory
 
         let env = TTYCommandRunner.enrichedEnvironment(
             baseEnv: environment,
@@ -327,6 +342,8 @@ actor CodexCLISession {
         self.ptyRows = rows
         self.ptyCols = cols
         self.sessionEnvironment = environment
+        self.sessionArguments = extraArgs
+        self.sessionWorkingDirectory = workingDirectory
     }
 
     private func cleanup() {
@@ -366,6 +383,8 @@ actor CodexCLISession {
         self.ptyRows = 0
         self.ptyCols = 0
         self.sessionEnvironment = nil
+        self.sessionArguments = []
+        self.sessionWorkingDirectory = nil
     }
 
     private func readChunk() -> Data {

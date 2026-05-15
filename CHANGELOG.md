@@ -2,6 +2,9 @@
 
 ## 0.26.1 — Unreleased
 
+### Fixed
+- Codex: keep background `/status` probes out of Codex Desktop history by using isolated non-persistent CLI storage (#953).
+
 ## 0.26.0 — 2026-05-15
 
 ### Added
