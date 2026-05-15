@@ -101,6 +101,7 @@ struct UsageMenuCardView: View {
         let metrics: [Metric]
         let usageNotes: [String]
         let openAIAPIUsage: OpenAIAPIUsageSnapshot?
+        let inlineUsageDashboard: InlineUsageDashboardModel?
         let creditsText: String?
         let creditsRemaining: Double?
         let creditsHintText: String?
@@ -131,8 +132,8 @@ struct UsageMenuCardView: View {
             }
 
             if self.model.metrics.isEmpty {
-                if let usage = self.model.openAIAPIUsage {
-                    OpenAIAPIInlineDashboardContent(snapshot: usage)
+                if let dashboard = self.model.inlineUsageDashboard {
+                    InlineUsageDashboardContent(model: dashboard)
                 } else if !self.model.usageNotes.isEmpty {
                     UsageNotesContent(notes: self.model.usageNotes)
                 } else if let placeholder = self.model.placeholder {
@@ -155,8 +156,8 @@ struct UsageMenuCardView: View {
                                     title: Self.popupMetricTitle(provider: self.model.provider, metric: metric),
                                     progressColor: self.model.progressColor)
                             }
-                            if let usage = self.model.openAIAPIUsage {
-                                OpenAIAPIInlineDashboardContent(snapshot: usage)
+                            if let dashboard = self.model.inlineUsageDashboard {
+                                InlineUsageDashboardContent(model: dashboard)
                             } else if !self.model.usageNotes.isEmpty {
                                 UsageNotesContent(notes: self.model.usageNotes)
                             }
@@ -475,8 +476,8 @@ struct UsageMenuCardUsageSectionView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             if self.model.metrics.isEmpty {
-                if let usage = self.model.openAIAPIUsage {
-                    OpenAIAPIInlineDashboardContent(snapshot: usage)
+                if let dashboard = self.model.inlineUsageDashboard {
+                    InlineUsageDashboardContent(model: dashboard)
                 } else if !self.model.usageNotes.isEmpty {
                     UsageNotesContent(notes: self.model.usageNotes)
                 } else if let placeholder = self.model.placeholder {
@@ -491,8 +492,8 @@ struct UsageMenuCardUsageSectionView: View {
                         title: UsageMenuCardView.popupMetricTitle(provider: self.model.provider, metric: metric),
                         progressColor: self.model.progressColor)
                 }
-                if let usage = self.model.openAIAPIUsage {
-                    OpenAIAPIInlineDashboardContent(snapshot: usage)
+                if let dashboard = self.model.inlineUsageDashboard {
+                    InlineUsageDashboardContent(model: dashboard)
                 } else if !self.model.usageNotes.isEmpty {
                     UsageNotesContent(notes: self.model.usageNotes)
                 }
@@ -754,6 +755,7 @@ extension UsageMenuCardView.Model {
             metadata: input.metadata)
         let metrics = Self.metrics(input: input)
         let openAIAPIUsage = input.snapshot?.openAIAPIUsage
+        let inlineUsageDashboard = Self.inlineUsageDashboard(input: input)
         let usageNotes = Self.usageNotes(input: input)
         let creditsText: String? = if input.provider == .openrouter {
             nil
@@ -794,6 +796,7 @@ extension UsageMenuCardView.Model {
             metrics: metrics,
             usageNotes: usageNotes,
             openAIAPIUsage: openAIAPIUsage,
+            inlineUsageDashboard: inlineUsageDashboard,
             creditsText: creditsText,
             creditsRemaining: input.credits?.remaining,
             creditsHintText: redacted.creditsHintText,

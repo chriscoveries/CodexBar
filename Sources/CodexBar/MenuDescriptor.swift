@@ -248,6 +248,12 @@ struct MenuDescriptor {
             if let openAIAPIUsage = snap.openAIAPIUsage {
                 Self.appendOpenAIAPIUsageSummary(entries: &entries, usage: openAIAPIUsage)
             }
+            if let openRouterUsage = snap.openRouterUsage {
+                Self.appendOpenRouterUsageSummary(entries: &entries, usage: openRouterUsage)
+            }
+            if let mistralUsage = snap.mistralUsage, !mistralUsage.daily.isEmpty {
+                Self.appendMistralUsageSummary(entries: &entries, usage: mistralUsage)
+            }
         } else {
             entries.append(.text("No usage yet", .secondary))
         }
@@ -287,6 +293,55 @@ struct MenuDescriptor {
         if let topModel = usage.topModels.first?.name {
             entries.append(.text("Top model: \(topModel)", .secondary))
         }
+    }
+
+    private static func appendOpenRouterUsageSummary(
+        entries: inout [Entry],
+        usage: OpenRouterUsageSnapshot)
+    {
+        if let daily = usage.keyUsageDaily {
+            entries.append(.text("Today: \(UsageFormatter.usdString(daily))", .secondary))
+        }
+        if let weekly = usage.keyUsageWeekly {
+            entries.append(.text("Week: \(UsageFormatter.usdString(weekly))", .secondary))
+        }
+        if let monthly = usage.keyUsageMonthly {
+            entries.append(.text("Month: \(UsageFormatter.usdString(monthly))", .secondary))
+        }
+    }
+
+    private static func appendMistralUsageSummary(
+        entries: inout [Entry],
+        usage: MistralUsageSnapshot)
+    {
+        let latest = usage.daily.last
+        if let latest {
+            entries.append(.text(
+                "Latest: \(usage.currencySymbol)\(String(format: "%.4f", max(0, latest.cost))) · " +
+                    "\(UsageFormatter.tokenCountString(latest.totalTokens)) tokens",
+                .secondary))
+        }
+        let totalTokens = usage.totalInputTokens + usage.totalCachedTokens + usage.totalOutputTokens
+        entries.append(.text(
+            "Month: \(usage.currencySymbol)\(String(format: "%.4f", max(0, usage.totalCost))) · " +
+                "\(UsageFormatter.tokenCountString(totalTokens)) tokens",
+            .secondary))
+        if let top = Self.topMistralModel(from: usage.daily) {
+            entries.append(.text("Top model: \(top)", .secondary))
+        }
+    }
+
+    private static func topMistralModel(from entries: [MistralDailyUsageBucket]) -> String? {
+        var tokens: [String: Int] = [:]
+        for entry in entries {
+            for model in entry.models {
+                tokens[model.name, default: 0] += model.totalTokens
+            }
+        }
+        return tokens.max {
+            if $0.value == $1.value { return $0.key > $1.key }
+            return $0.value < $1.value
+        }?.key
     }
 
     private static func accountSection(

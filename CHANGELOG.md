@@ -2,6 +2,12 @@
 
 ## 0.26.2 — Unreleased
 
+### Added
+- Usage charts: reuse the OpenAI API inline dashboard for local Codex/Claude/Vertex/Bedrock cost history, OpenRouter day/week/month spend, z.ai hourly tokens, and Mistral daily spend.
+
+### Fixed
+- Claude: keep the last successful usage card visible when a transient probe timeout happens instead of replacing it with a red timeout error.
+
 ## 0.26.1 — 2026-05-15
 
 ### Added
