@@ -98,6 +98,7 @@ actor ClaudeCLISession {
         timeout: TimeInterval,
         idleTimeout: TimeInterval? = 3.0,
         stopOnSubstrings: [String] = [],
+        stopWhenNormalized: (@Sendable (String) -> Bool)? = nil,
         settleAfterStop: TimeInterval = 0.25,
         sendEnterEvery: TimeInterval? = nil) async throws -> String
     {
@@ -170,7 +171,7 @@ actor ClaudeCLISession {
                 }
             }
 
-            if stopNeedles.contains(where: normalizedScan.contains) {
+            if stopNeedles.contains(where: normalizedScan.contains) || (stopWhenNormalized?(normalizedScan) == true) {
                 stoppedEarly = true
                 break
             }
