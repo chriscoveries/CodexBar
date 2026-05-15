@@ -149,23 +149,61 @@ extension UsageStore {
             {
                 return
             }
-            await MainActor.run {
-                let hadPriorData = self.snapshots[provider] != nil
-                let shouldSurface =
-                    self.failureGates[provider]?
-                        .shouldSurfaceError(onFailureWithPriorData: hadPriorData) ?? true
-                if shouldSurface {
-                    self.errors[provider] = error.localizedDescription
-                    self.snapshots.removeValue(forKey: provider)
-                } else {
-                    self.errors[provider] = nil
-                }
+            await self.handleProviderFetchFailure(provider: provider, error: error)
+        }
+    }
+
+    private func handleProviderFetchFailure(provider: UsageProvider, error: Error) async {
+        await MainActor.run {
+            let hadPriorData = self.snapshots[provider] != nil
+            let preservesPriorData = Self.shouldPreservePriorSnapshot(
+                after: error,
+                hadPriorData: hadPriorData)
+            let shouldSurface =
+                self.failureGates[provider]?
+                    .shouldSurfaceError(onFailureWithPriorData: hadPriorData) ?? true
+            if preservesPriorData, !shouldSurface {
+                self.errors[provider] = nil
+                return
             }
-            if let runtime = self.providerRuntimes[provider] {
-                let context = ProviderRuntimeContext(
-                    provider: provider, settings: self.settings, store: self)
-                runtime.providerDidFail(context: context, provider: provider, error: error)
+            if shouldSurface {
+                self.errors[provider] = error.localizedDescription
+                if !preservesPriorData {
+                    self.snapshots.removeValue(forKey: provider)
+                }
+            } else {
+                self.errors[provider] = nil
             }
         }
+        if let runtime = self.providerRuntimes[provider] {
+            let context = ProviderRuntimeContext(
+                provider: provider, settings: self.settings, store: self)
+            runtime.providerDidFail(context: context, provider: provider, error: error)
+        }
+    }
+
+    private static func shouldPreservePriorSnapshot(after error: Error, hadPriorData: Bool) -> Bool {
+        guard hadPriorData else { return false }
+        if error is CancellationError { return true }
+
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain {
+            switch nsError.code {
+            case NSURLErrorTimedOut,
+                 NSURLErrorCancelled,
+                 NSURLErrorNetworkConnectionLost,
+                 NSURLErrorNotConnectedToInternet:
+                return true
+            default:
+                break
+            }
+        }
+
+        let message = error.localizedDescription.lowercased()
+        return message.contains("timed out") ||
+            message.contains("timeout") ||
+            message.contains("cancelled") ||
+            message.contains("network connection was lost") ||
+            message.contains("not connected to the internet")
     }
 }
