@@ -7,6 +7,7 @@
 
 ### Fixed
 - Claude: keep the last successful usage card visible when a transient probe timeout happens instead of replacing it with a red timeout error.
+- Claude: show Enterprise spend-limit usage in automatic menu bar metrics and expose the Extra usage metric picker when spend data is available (#964).
 
 ## 0.26.1 — 2026-05-15
 
