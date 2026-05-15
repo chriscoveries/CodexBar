@@ -61,7 +61,9 @@ struct TTYIntegrationTests {
         let cli = try Self.makeSlowUsageClaudeCLI()
         defer { Task { await ClaudeCLISession.shared.reset() } }
 
-        let snapshot = try await ClaudeStatusProbe(claudeBinary: cli.path, timeout: 8).fetch()
+        let snapshot = try await ClaudeCLISession.withIsolatedSessionForTesting {
+            try await ClaudeStatusProbe(claudeBinary: cli.path, timeout: 8).fetch()
+        }
 
         #expect(snapshot.sessionPercentLeft == 93)
         #expect(snapshot.weeklyPercentLeft == 79)
@@ -76,7 +78,7 @@ struct TTYIntegrationTests {
         #!/bin/sh
         while IFS= read -r line; do
           case "$line" in
-            "/usage")
+            *"/usage"*)
               printf '%s\\n' 'Settings  Status  Config  Usage'
               printf '%s\\n' 'Current session'
               sleep 4
@@ -84,7 +86,7 @@ struct TTYIntegrationTests {
               printf '%s\\n' 'Current week (all models)'
               printf '%s\\n' '79% left'
               ;;
-            "/status")
+            *"/status"*)
               printf '%s\\n' 'Account: slow-usage@example.com'
               ;;
           esac

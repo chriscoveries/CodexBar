@@ -6,7 +6,7 @@
 - Usage charts: reuse the OpenAI API inline dashboard for local Codex/Claude/Vertex/Bedrock cost history, OpenRouter day/week/month spend, z.ai hourly tokens, and Mistral daily spend.
 
 ### Fixed
-- Claude: keep the last successful usage card visible when a transient probe timeout happens instead of replacing it with a red timeout error.
+- Claude: keep the last successful usage card visible across transient probe timeouts while still clearing stale data after Claude auth changes.
 - Claude: wait for the CLI usage panel to finish rendering after the Current session label so slow Claude Code builds do not produce false "Missing Current session" errors (#959).
 - Claude: label five-hour session pace as "Projected empty" so it is not confused with the reset countdown (#960).
 - Claude: show Enterprise spend-limit usage in automatic menu bar metrics and expose the Extra usage metric picker when spend data is available (#964).

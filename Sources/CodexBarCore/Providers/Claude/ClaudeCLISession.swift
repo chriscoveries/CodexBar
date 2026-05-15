@@ -8,6 +8,25 @@ import Foundation
 actor ClaudeCLISession {
     static let shared = ClaudeCLISession()
     private static let log = CodexBarLog.logger(LogCategories.claudeCLI)
+    #if DEBUG
+    @TaskLocal private static var sessionOverrideForTesting: ClaudeCLISession?
+
+    static var current: ClaudeCLISession {
+        self.sessionOverrideForTesting ?? self.shared
+    }
+
+    static func withIsolatedSessionForTesting<T>(operation: () async throws -> T) async rethrows -> T {
+        let session = ClaudeCLISession()
+        defer { Task { await session.reset() } }
+        return try await self.$sessionOverrideForTesting.withValue(session) {
+            try await operation()
+        }
+    }
+    #else
+    static var current: ClaudeCLISession {
+        self.shared
+    }
+    #endif
 
     enum SessionError: LocalizedError {
         case launchFailed(String)

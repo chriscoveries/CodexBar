@@ -820,7 +820,7 @@ public struct ClaudeStatusProbe: Sendable {
             }
             : nil
         do {
-            return try await ClaudeCLISession.shared.capture(
+            return try await ClaudeCLISession.current.capture(
                 subcommand: subcommand,
                 binary: binary,
                 timeout: timeout,
@@ -830,14 +830,14 @@ public struct ClaudeStatusProbe: Sendable {
                 settleAfterStop: subcommand == "/usage" ? 2.0 : 0.25,
                 sendEnterEvery: sendEnterEvery)
         } catch ClaudeCLISession.SessionError.processExited {
-            await ClaudeCLISession.shared.reset()
+            await ClaudeCLISession.current.reset()
             throw ClaudeStatusProbeError.timedOut
         } catch ClaudeCLISession.SessionError.timedOut {
             throw ClaudeStatusProbeError.timedOut
         } catch ClaudeCLISession.SessionError.launchFailed(_) {
             throw ClaudeStatusProbeError.claudeNotInstalled
         } catch {
-            await ClaudeCLISession.shared.reset()
+            await ClaudeCLISession.current.reset()
             throw error
         }
     }
