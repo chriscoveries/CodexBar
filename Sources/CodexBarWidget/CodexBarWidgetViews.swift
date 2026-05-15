@@ -258,7 +258,7 @@ private struct ProviderSwitchChip: View {
     private var shortLabel: String {
         switch self.provider {
         case .codex: "Codex"
-        case .openai: "OpenAI API"
+        case .openai: "OpenAI"
         case .claude: "Claude"
         case .gemini: "Gemini"
         case .antigravity: "Anti"
