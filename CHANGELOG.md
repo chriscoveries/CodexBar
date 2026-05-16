@@ -13,6 +13,7 @@
 
 ### Fixed
 - OpenAI: accept numeric-string Admin API cost amounts so usage does not fail when `/v1/organization/costs` returns `"amount": { "value": "12.50" }` (#999, #1000). Thanks @SergeyLavrentev!
+- Menu: keep the persistent Refresh row at a fixed height while highlighted or pressed so nearby items no longer jump (#1001).
 - Grok: retry transient web billing timeouts once and allow slower billing RPCs to finish before showing an error.
 - Claude: reset stuck CLI sessions after usage probe timeouts, give slow probes longer to render, and keep stale data visible across transient timeouts.
 - Menu: keep provider switcher buttons centered by moving quota indicators out of the button layout.
