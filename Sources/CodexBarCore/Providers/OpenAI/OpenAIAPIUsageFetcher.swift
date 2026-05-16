@@ -353,6 +353,17 @@ private struct CostResult: Decodable {
     struct Amount: Decodable {
         let value: Double?
         let currency: String?
+
+        private enum CodingKeys: String, CodingKey {
+            case value
+            case currency
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.value = try container.decodeFlexibleDoubleIfPresent(forKey: .value)
+            self.currency = try container.decodeIfPresent(String.self, forKey: .currency)
+        }
     }
 
     let amount: Amount?
@@ -361,6 +372,33 @@ private struct CostResult: Decodable {
     private enum CodingKeys: String, CodingKey {
         case amount
         case lineItem = "line_item"
+    }
+}
+
+extension KeyedDecodingContainer {
+    fileprivate func decodeFlexibleDoubleIfPresent(forKey key: Key) throws -> Double? {
+        guard self.contains(key), try !self.decodeNil(forKey: key) else {
+            return nil
+        }
+
+        if let value = try? self.decode(Double.self, forKey: key) {
+            return value
+        }
+
+        if let rawValue = try? self.decode(String.self, forKey: key) {
+            let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                return nil
+            }
+            if let value = Double(trimmed) {
+                return value
+            }
+        }
+
+        throw DecodingError.dataCorruptedError(
+            forKey: key,
+            in: self,
+            debugDescription: "Expected a number or numeric string for \(key.stringValue)")
     }
 }
 
