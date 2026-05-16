@@ -80,4 +80,74 @@ struct MenuBarVisibilityWatcherTests {
             defaults: defaults,
             now: now.addingTimeInterval(MenuBarVisibilityWatcher.guidanceRepeatInterval)))
     }
+
+    @Test
+    func `startup recovery triggers for blocked visible snapshot`() {
+        let launchedAt = Date(timeIntervalSince1970: 1000)
+        let blocked = StatusItemVisibilitySnapshot(
+            isVisible: true,
+            hasButton: true,
+            hasWindow: false,
+            hasScreen: false,
+            buttonWidth: 18)
+
+        #expect(MenuBarVisibilityWatcher.shouldAttemptStartupRecovery(
+            appLaunchedAt: launchedAt,
+            now: launchedAt.addingTimeInterval(2),
+            snapshots: [blocked]))
+    }
+
+    @Test
+    func `startup recovery triggers when one split status item is blocked`() {
+        let launchedAt = Date(timeIntervalSince1970: 1000)
+        let healthy = StatusItemVisibilitySnapshot(
+            isVisible: true,
+            hasButton: true,
+            hasWindow: true,
+            hasScreen: true,
+            buttonWidth: 18)
+        let blocked = StatusItemVisibilitySnapshot(
+            isVisible: true,
+            hasButton: true,
+            hasWindow: false,
+            hasScreen: false,
+            buttonWidth: 18)
+
+        #expect(MenuBarVisibilityWatcher.shouldAttemptStartupRecovery(
+            appLaunchedAt: launchedAt,
+            now: launchedAt.addingTimeInterval(2),
+            snapshots: [healthy, blocked]))
+    }
+
+    @Test
+    func `startup recovery ignores stale checks`() {
+        let launchedAt = Date(timeIntervalSince1970: 1000)
+        let blocked = StatusItemVisibilitySnapshot(
+            isVisible: true,
+            hasButton: true,
+            hasWindow: false,
+            hasScreen: false,
+            buttonWidth: 18)
+
+        #expect(!MenuBarVisibilityWatcher.shouldAttemptStartupRecovery(
+            appLaunchedAt: launchedAt,
+            now: launchedAt.addingTimeInterval(MenuBarVisibilityWatcher.startupFreshnessInterval + 1),
+            snapshots: [blocked]))
+    }
+
+    @Test
+    func `startup recovery ignores healthy visible snapshot`() {
+        let launchedAt = Date(timeIntervalSince1970: 1000)
+        let healthy = StatusItemVisibilitySnapshot(
+            isVisible: true,
+            hasButton: true,
+            hasWindow: true,
+            hasScreen: true,
+            buttonWidth: 18)
+
+        #expect(!MenuBarVisibilityWatcher.shouldAttemptStartupRecovery(
+            appLaunchedAt: launchedAt,
+            now: launchedAt.addingTimeInterval(2),
+            snapshots: [healthy]))
+    }
 }

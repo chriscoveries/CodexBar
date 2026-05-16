@@ -157,6 +157,13 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
         set { self.settings.selectedMenuProvider = newValue }
     }
 
+    private static func makeStatusItem(statusBar: NSStatusBar) -> NSStatusItem {
+        let item = statusBar.statusItem(withLength: NSStatusItem.variableLength)
+        // Ensure the icon is rendered at 1:1 without resampling (crisper edges for template images).
+        item.button?.imageScaling = .scaleNone
+        return item
+    }
+
     struct BlinkState {
         var nextBlink: Date
         var blinkStart: Date?
@@ -261,16 +268,13 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
         self.lastObservedUsageBarsShowUsed = settings.usageBarsShowUsed
         self.lastSwitcherUsageBarsShowUsed = settings.usageBarsShowUsed
         self.statusBar = statusBar
-        let item = statusBar.statusItem(withLength: NSStatusItem.variableLength)
-        // Ensure the icon is rendered at 1:1 without resampling (crisper edges for template images).
-        item.button?.imageScaling = .scaleNone
-        self.statusItem = item
+        self.statusItem = Self.makeStatusItem(statusBar: statusBar)
         // Status items for individual providers are now created lazily in updateVisibility()
         super.init()
         self.wireBindings()
         self.updateVisibility()
         self.updateIcons()
-        self.scheduleTahoeAllowListVisibilityCheck()
+        self.scheduleStartupStatusItemVisibilityCheck()
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(self.handleDebugReplayNotification(_:)),
@@ -563,10 +567,24 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
         if let existing = self.statusItems[provider] {
             return existing
         }
-        let item = self.statusBar.statusItem(withLength: NSStatusItem.variableLength)
-        item.button?.imageScaling = .scaleNone
+        let item = Self.makeStatusItem(statusBar: self.statusBar)
         self.statusItems[provider] = item
         return item
+    }
+
+    func recreateStatusItemsForVisibilityRecovery() {
+        #if DEBUG
+        guard !self.isReleasedForTesting else { return }
+        #endif
+        self.statusItem.menu = nil
+        self.statusBar.removeStatusItem(self.statusItem)
+        self.statusItem = Self.makeStatusItem(statusBar: self.statusBar)
+        for provider in Array(self.statusItems.keys) {
+            self.removeProviderStatusItem(for: provider)
+        }
+        self.lastAppliedMergedIconRenderSignature = nil
+        self.updateVisibility()
+        self.updateIcons()
     }
 
     private func updateVisibility() {
@@ -585,7 +603,7 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
         } else {
             self.statusItem.isVisible = false
             let fallback = self.fallbackProvider
-            for provider in UsageProvider.allCases {
+            for provider in self.settings.orderedProviders() {
                 let isEnabled = self.isEnabled(provider)
                 let shouldBeVisible = isEnabled || fallback == provider || force
                 if shouldBeVisible {

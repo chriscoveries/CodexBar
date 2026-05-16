@@ -9,15 +9,16 @@ struct StatusItemVisibilitySnapshot: Equatable {
     let buttonWidth: CGFloat
 }
 
+extension StatusItemVisibilitySnapshot: CustomStringConvertible {
+    var description: String {
+        "visible=\(self.isVisible),button=\(self.hasButton),window=\(self.hasWindow),"
+            + "screen=\(self.hasScreen),width=\(String(format: "%.1f", Double(self.buttonWidth)))"
+    }
+}
+
 @MainActor
 func isStatusItemBlocked(_ item: NSStatusItem) -> Bool {
-    MenuBarVisibilityWatcher.isBlockedSnapshot(
-        snapshot: StatusItemVisibilitySnapshot(
-            isVisible: item.isVisible,
-            hasButton: item.button != nil,
-            hasWindow: item.button?.window != nil,
-            hasScreen: item.button?.window?.screen != nil,
-            buttonWidth: item.button?.frame.size.width ?? 0))
+    MenuBarVisibilityWatcher.isBlockedSnapshot(snapshot: MenuBarVisibilityWatcher.visibilitySnapshot(item))
 }
 
 enum MenuBarVisibilityWatcher {
@@ -25,7 +26,18 @@ enum MenuBarVisibilityWatcher {
     static let guidanceLastShownAtKey = "tahoeAllowListGuidanceLastShownAt"
     static let guidanceRepeatInterval: TimeInterval = 24 * 60 * 60
     static let startupFreshnessInterval: TimeInterval = 10
+    static let startupCheckDelay: TimeInterval = 2
     static let settingsURL = URL(string: "x-apple.systempreferences:com.apple.MenuBarSettings")!
+
+    @MainActor
+    static func visibilitySnapshot(_ item: NSStatusItem) -> StatusItemVisibilitySnapshot {
+        StatusItemVisibilitySnapshot(
+            isVisible: item.isVisible,
+            hasButton: item.button != nil,
+            hasWindow: item.button?.window != nil,
+            hasScreen: item.button?.window?.screen != nil,
+            buttonWidth: item.button?.frame.size.width ?? 0)
+    }
 
     static func isBlockedSnapshot(snapshot: StatusItemVisibilitySnapshot) -> Bool {
         guard snapshot.isVisible else { return false }
@@ -33,13 +45,40 @@ enum MenuBarVisibilityWatcher {
         return !snapshot.hasWindow || !snapshot.hasScreen || snapshot.buttonWidth <= 0
     }
 
+    static func hasBlockedVisibleSnapshots(_ snapshots: [StatusItemVisibilitySnapshot]) -> Bool {
+        let visibleItems = snapshots.filter(\.isVisible)
+        guard !visibleItems.isEmpty else { return false }
+        return visibleItems.allSatisfy { snapshot in
+            self.isBlockedSnapshot(snapshot: snapshot)
+        }
+    }
+
+    static func hasAnyBlockedVisibleSnapshot(_ snapshots: [StatusItemVisibilitySnapshot]) -> Bool {
+        snapshots.contains { snapshot in
+            snapshot.isVisible && self.isBlockedSnapshot(snapshot: snapshot)
+        }
+    }
+
+    @MainActor
+    static func visibilitySnapshots(_ items: [NSStatusItem]) -> [StatusItemVisibilitySnapshot] {
+        items.map { item in
+            self.visibilitySnapshot(item)
+        }
+    }
+
     @MainActor
     static func hasBlockedVisibleStatusItems(_ items: [NSStatusItem]) -> Bool {
-        let visibleItems = items.filter(\.isVisible)
-        guard !visibleItems.isEmpty else { return false }
-        return visibleItems.allSatisfy { item in
-            isStatusItemBlocked(item)
-        }
+        self.hasBlockedVisibleSnapshots(self.visibilitySnapshots(items))
+    }
+
+    static func shouldAttemptStartupRecovery(
+        appLaunchedAt: Date,
+        now: Date = Date(),
+        snapshots: [StatusItemVisibilitySnapshot])
+        -> Bool
+    {
+        guard now.timeIntervalSince(appLaunchedAt) <= self.startupFreshnessInterval else { return false }
+        return self.hasAnyBlockedVisibleSnapshot(snapshots)
     }
 
     static func shouldShowGuidance(defaults: UserDefaults, now: Date = Date()) -> Bool {
@@ -78,33 +117,54 @@ enum MenuBarVisibilityWatcher {
 }
 
 extension StatusItemController {
-    func scheduleTahoeAllowListVisibilityCheck(appLaunchedAt: Date = Date()) {
+    func scheduleStartupStatusItemVisibilityCheck(appLaunchedAt: Date = Date()) {
         guard !SettingsStore.isRunningTests else { return }
-        if #available(macOS 26.0, *) {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
-                Task { @MainActor [weak self] in
-                    self?.checkTahoeAllowListVisibility(appLaunchedAt: appLaunchedAt)
-                }
+        DispatchQueue.main.asyncAfter(deadline: .now() + MenuBarVisibilityWatcher.startupCheckDelay) { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.checkStartupStatusItemVisibility(appLaunchedAt: appLaunchedAt)
             }
         }
     }
 
-    private func checkTahoeAllowListVisibility(appLaunchedAt: Date, now: Date = Date()) {
-        guard now.timeIntervalSince(appLaunchedAt) <= MenuBarVisibilityWatcher.startupFreshnessInterval else {
-            return
-        }
-        guard MenuBarVisibilityWatcher.hasBlockedVisibleStatusItems(self.tahoeAllowListStatusItems) else {
+    private func checkStartupStatusItemVisibility(appLaunchedAt: Date, now: Date = Date()) {
+        let snapshots = MenuBarVisibilityWatcher.visibilitySnapshots(self.startupVisibilityStatusItems)
+        guard MenuBarVisibilityWatcher.shouldAttemptStartupRecovery(
+            appLaunchedAt: appLaunchedAt,
+            now: now,
+            snapshots: snapshots)
+        else {
             return
         }
 
-        self.menuLogger.error("Status item failed to materialize — likely blocked by Tahoe Allow in Menu Bar panel")
-        guard MenuBarVisibilityWatcher.shouldShowGuidance(defaults: self.settings.userDefaults, now: now) else {
+        self.menuLogger.error(
+            "Status item failed to materialize; recreating status items",
+            metadata: ["snapshots": snapshots.map(\.description).joined(separator: " | ")])
+        self.recreateStatusItemsForVisibilityRecovery()
+
+        let recoveredSnapshots = MenuBarVisibilityWatcher.visibilitySnapshots(self.startupVisibilityStatusItems)
+        guard MenuBarVisibilityWatcher.shouldAttemptStartupRecovery(
+            appLaunchedAt: appLaunchedAt,
+            now: now,
+            snapshots: recoveredSnapshots)
+        else {
+            self.menuLogger.info(
+                "Status item materialized after recreation",
+                metadata: ["snapshots": recoveredSnapshots.map(\.description).joined(separator: " | ")])
+            return
+        }
+
+        self.menuLogger.error(
+            "Status item still failed to materialize after recreation",
+            metadata: ["snapshots": recoveredSnapshots.map(\.description).joined(separator: " | ")])
+        guard #available(macOS 26.0, *),
+              MenuBarVisibilityWatcher.shouldShowGuidance(defaults: self.settings.userDefaults, now: now)
+        else {
             return
         }
         MenuBarVisibilityWatcher.presentGuidance(defaults: self.settings.userDefaults, now: now)
     }
 
-    private var tahoeAllowListStatusItems: [NSStatusItem] {
+    private var startupVisibilityStatusItems: [NSStatusItem] {
         [self.statusItem] + Array(self.statusItems.values)
     }
 }
