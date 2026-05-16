@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.26.2 — Unreleased
+## 0.27.0 — Unreleased
 
 ### Added
 - Website: replace provider-letter tiles with brand logos, add light/dark landing-page themes, and collapse OpenCode/OpenCode Go into one company entry (#989). Thanks @pasangimhana!
@@ -12,6 +12,7 @@
 - Usage charts: reuse the OpenAI API inline dashboard for local Codex/Claude/Vertex/Bedrock cost history, OpenRouter day/week/month spend, z.ai hourly tokens, and Mistral daily spend.
 
 ### Fixed
+- OpenAI: accept numeric-string Admin API cost amounts so usage does not fail when `/v1/organization/costs` returns `"amount": { "value": "12.50" }` (#999, #1000). Thanks @SergeyLavrentev!
 - Grok: retry transient web billing timeouts once and allow slower billing RPCs to finish before showing an error.
 - Claude: reset stuck CLI sessions after usage probe timeouts, give slow probes longer to render, and keep stale data visible across transient timeouts.
 - Menu: keep provider switcher buttons centered by moving quota indicators out of the button layout.
