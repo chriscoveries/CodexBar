@@ -164,9 +164,7 @@ extension CodexBarCLI {
                 print(sections.joined(separator: "\n\n"))
             }
         case .json:
-            if !payload.isEmpty {
-                Self.printJSON(payload, pretty: output.pretty)
-            }
+            Self.printJSON(payload, pretty: output.pretty)
         }
 
         Self.exit(code: exitCode, output: output, kind: exitCode == .success ? .runtime : .provider)

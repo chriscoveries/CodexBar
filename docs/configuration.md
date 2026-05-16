@@ -13,6 +13,7 @@ API keys, manual cookie headers, source selection, ordering, and token accounts 
 
 ## Location
 - `~/.codexbar/config.json`
+- Override for scripts/tests: set `CODEXBAR_CONFIG=/path/to/config.json`.
 - The directory is created if missing.
 - Permissions are set to `0600` whenever CodexBar writes the file on macOS and Linux.
 
@@ -89,6 +90,17 @@ codexbar config validate
 codexbar usage --provider example-provider --verbose
 ```
 
+CLI shortcuts:
+
+```bash
+codexbar config providers
+codexbar config enable --provider grok
+codexbar config disable --provider cursor
+printf '%s' "$ELEVENLABS_API_KEY" | codexbar config set-api-key --provider elevenlabs --stdin
+```
+
+See [CLI configuration](cli-configuration.md) for scripting examples and output formats.
+
 Manual cookies are secrets. Keep `~/.codexbar/config.json` private, leave its permissions at `0600`, never commit it,
 and never paste real cookie values or readable DevTools screenshots into public issues.
 
@@ -111,7 +123,7 @@ and never paste real cookie values or readable DevTools screenshots into public 
 
 ## Provider IDs
 Current IDs (see `Sources/CodexBarCore/Providers/Providers.swift`):
-`codex`, `claude`, `cursor`, `opencode`, `opencodego`, `alibaba`, `factory`, `gemini`, `antigravity`, `copilot`, `zai`, `minimax`, `kimi`, `kilo`, `kiro`, `vertexai`, `augment`, `jetbrains`, `kimik2`, `amp`, `ollama`, `synthetic`, `warp`, `openrouter`, `windsurf`, `perplexity`, `mimo`, `doubao`, `abacus`, `mistral`, `deepseek`, `codebuff`, `crof`, `venice`, `commandcode`, `stepfun`.
+`codex`, `openai`, `claude`, `cursor`, `opencode`, `opencodego`, `alibaba`, `factory`, `gemini`, `antigravity`, `copilot`, `zai`, `minimax`, `manus`, `kimi`, `kilo`, `kiro`, `vertexai`, `augment`, `jetbrains`, `kimik2`, `moonshot`, `amp`, `ollama`, `synthetic`, `warp`, `openrouter`, `elevenlabs`, `windsurf`, `perplexity`, `mimo`, `doubao`, `abacus`, `mistral`, `deepseek`, `codebuff`, `crof`, `venice`, `commandcode`, `stepfun`, `bedrock`, `grok`.
 
 ## Ordering
 The order of `providers` controls display/order in the app and CLI. Reorder the array to change ordering.

@@ -58,4 +58,13 @@ struct ConfigValidationTests {
         let issues = CodexBarConfigValidator.validate(config)
         #expect(!issues.contains(where: { $0.provider == .kilo && $0.field == "extrasEnabled" }))
     }
+
+    @Test
+    func `config store default url honors environment override`() {
+        let url = CodexBarConfigStore.defaultURL(environment: [
+            CodexBarConfigStore.pathEnvironmentKey: "~/tmp/codexbar-test-config.json",
+        ])
+
+        #expect(url.path.hasSuffix("/tmp/codexbar-test-config.json"))
+    }
 }

@@ -49,13 +49,22 @@ Or download release tarballs from GitHub Releases:
 - Optional: Settings → Providers → Codex → OpenAI cookies (Automatic or Manual) to add dashboard extras.
 
 ### Set API keys from the CLI
-For API-key providers, store a key in `~/.codexbar/config.json` without opening Settings:
+Provider toggles and API keys live in `~/.codexbar/config.json`. You can script the same provider list that Settings → Providers uses:
+
+```bash
+codexbar config providers
+codexbar config enable --provider grok
+codexbar config disable --provider cursor
+```
+
+For API-key providers, store a key without opening Settings:
 
 ```bash
 printf '%s' "$ELEVENLABS_API_KEY" | codexbar config set-api-key --provider elevenlabs --stdin
 ```
 
 `set-api-key` trims the piped value, stores it with restrictive config-file permissions, and enables the provider by default. Use `--no-enable` to only save the key, or `--api-key <key>` for one-off local scripts where shell history is not a concern.
+See [CLI configuration](docs/cli-configuration.md) for the full flow.
 
 ## Providers
 
