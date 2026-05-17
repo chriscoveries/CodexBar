@@ -507,10 +507,15 @@ extension StatusItemController {
         for (index, row) in rows.enumerated() {
             let identifier = "\(Self.overviewRowIdentifierPrefix)\(row.provider.rawValue)"
             let storageText = self.store.storageFootprintText(for: row.provider)
+            let submenu = self.makeOverviewRowSubmenu(
+                provider: row.provider,
+                model: row.model,
+                width: menuWidth)
             let item = self.makeMenuCardItem(
                 OverviewMenuCardRowView(model: row.model, storageText: storageText, width: menuWidth),
                 id: identifier,
                 width: menuWidth,
+                submenu: submenu,
                 onClick: { [weak self, weak menu] in
                     guard let self, let menu else { return }
                     self.selectOverviewProvider(row.provider, menu: menu)
@@ -1488,7 +1493,7 @@ extension StatusItemController {
         return nil
     }
 
-    private func makeZaiUsageDetailsSubmenu(snapshot: UsageSnapshot?) -> NSMenu? {
+    func makeZaiUsageDetailsSubmenu(snapshot: UsageSnapshot?) -> NSMenu? {
         guard let timeLimit = snapshot?.zaiUsage?.timeLimit else { return nil }
         guard !timeLimit.usageDetails.isEmpty else { return nil }
 
@@ -1545,7 +1550,7 @@ extension StatusItemController {
         return self.makeHostedSubviewPlaceholderMenu(chartID: Self.creditsHistoryChartID)
     }
 
-    private func makeCostHistorySubmenu(provider: UsageProvider, width: CGFloat? = nil) -> NSMenu? {
+    func makeCostHistorySubmenu(provider: UsageProvider, width: CGFloat? = nil) -> NSMenu? {
         guard [.codex, .claude, .vertexai, .bedrock].contains(provider) else { return nil }
         guard self.store.tokenSnapshot(for: provider)?.daily.isEmpty == false else { return nil }
         if let width {
@@ -1557,7 +1562,7 @@ extension StatusItemController {
         return self.makeHostedSubviewPlaceholderMenu(chartID: Self.costHistoryChartID, provider: provider)
     }
 
-    private func makeOpenAIAPIUsageSubmenu(provider: UsageProvider, width: CGFloat? = nil) -> NSMenu? {
+    func makeOpenAIAPIUsageSubmenu(provider: UsageProvider, width: CGFloat? = nil) -> NSMenu? {
         guard self.hasOpenAIAPIUsageSubmenu(provider: provider) else { return nil }
         if let width {
             return self.makeHostedSubviewPlaceholderMenu(
@@ -1572,7 +1577,7 @@ extension StatusItemController {
         provider == .openai && self.store.snapshot(for: provider)?.openAIAPIUsage?.daily.isEmpty == false
     }
 
-    private func makeStorageBreakdownSubmenu(provider: UsageProvider, width: CGFloat? = nil) -> NSMenu? {
+    func makeStorageBreakdownSubmenu(provider: UsageProvider, width: CGFloat? = nil) -> NSMenu? {
         guard self.store.storageFootprint(for: provider)?.components.isEmpty == false else { return nil }
         if let width {
             return self.makeHostedSubviewPlaceholderMenu(
