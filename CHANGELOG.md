@@ -11,6 +11,7 @@
 - CLI: add `codexbar config set-api-key` for safely storing provider API keys from stdin.
 - CLI: add `codexbar config providers`, `enable`, and `disable` for scripting the same provider toggles used by Settings.
 - Usage charts: reuse the OpenAI API inline dashboard for local Codex/Claude/Vertex/Bedrock cost history, OpenRouter day/week/month spend, z.ai hourly tokens, and Mistral daily spend.
+- Quota warnings: include the triggering account in notification copy when personal info is visible (#973). Thanks @raflyazf!
 
 ### Fixed
 - OpenAI: accept numeric-string Admin API cost amounts so usage does not fail when `/v1/organization/costs` returns `"amount": { "value": "12.50" }` (#999, #1000). Thanks @SergeyLavrentev!
