@@ -34,6 +34,42 @@ struct ProviderHTTPClientTests {
         #expect(StubURLProtocol.requests.count == 1)
         #expect(StubURLProtocol.requests.first?.url?.host == "example.com")
     }
+
+    @Test
+    func `response helper unwraps HTTP responses`() async throws {
+        let transport = ProviderHTTPTransportHandler { request in
+            let response = try HTTPURLResponse(
+                url: #require(request.url),
+                statusCode: 204,
+                httpVersion: "HTTP/1.1",
+                headerFields: ["X-Test": "ok"])!
+            return (Data("done".utf8), response)
+        }
+        let request = try URLRequest(url: #require(URL(string: "https://example.com/ok")))
+
+        let response = try await transport.response(for: request)
+
+        #expect(response.statusCode == 204)
+        #expect(response.response.value(forHTTPHeaderField: "X-Test") == "ok")
+        #expect(String(data: response.data, encoding: .utf8) == "done")
+    }
+
+    @Test
+    func `response helper rejects non HTTP responses`() async throws {
+        let transport = ProviderHTTPTransportHandler { request in
+            let response = URLResponse(
+                url: request.url ?? URL(string: "https://example.com/not-http")!,
+                mimeType: nil,
+                expectedContentLength: 0,
+                textEncodingName: nil)
+            return (Data(), response)
+        }
+        let request = try URLRequest(url: #require(URL(string: "https://example.com/not-http")))
+
+        await #expect(throws: URLError.self) {
+            _ = try await transport.response(for: request)
+        }
+    }
 }
 
 final class StubURLProtocol: URLProtocol {

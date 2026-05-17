@@ -642,15 +642,14 @@ public struct OpenCodeGoUsageFetcher: Sendable {
             urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
 
-        let (data, response) = try await session.data(for: urlRequest)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw OpenCodeGoUsageError.networkError("Invalid response")
-        }
+        let httpResponse = try await session.response(for: urlRequest)
 
         guard httpResponse.statusCode == 200 else {
-            let bodyText = String(data: data, encoding: .utf8) ?? ""
-            let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type") ?? "unknown"
-            Self.log.error("OpenCode Go returned \(httpResponse.statusCode) (type=\(contentType) length=\(data.count))")
+            let bodyText = String(data: httpResponse.data, encoding: .utf8) ?? ""
+            let contentType = httpResponse.response.value(forHTTPHeaderField: "Content-Type") ?? "unknown"
+            let dataLength = httpResponse.data.count
+            Self.log.error(
+                "OpenCode Go returned \(httpResponse.statusCode) (type=\(contentType) length=\(dataLength))")
             if self.looksSignedOut(text: bodyText) {
                 throw OpenCodeGoUsageError.invalidCredentials
             }
@@ -663,7 +662,7 @@ public struct OpenCodeGoUsageFetcher: Sendable {
             throw OpenCodeGoUsageError.apiError("HTTP \(httpResponse.statusCode)")
         }
 
-        guard let text = String(data: data, encoding: .utf8) else {
+        guard let text = String(data: httpResponse.data, encoding: .utf8) else {
             throw OpenCodeGoUsageError.parseFailed("Response was not UTF-8.")
         }
         return text
@@ -684,12 +683,9 @@ public struct OpenCodeGoUsageFetcher: Sendable {
             "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             forHTTPHeaderField: "Accept")
 
-        let (data, response) = try await session.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw OpenCodeGoUsageError.networkError("Invalid response")
-        }
+        let httpResponse = try await session.response(for: request)
         guard httpResponse.statusCode == 200 else {
-            let bodyText = String(data: data, encoding: .utf8) ?? ""
+            let bodyText = String(data: httpResponse.data, encoding: .utf8) ?? ""
             if self.looksSignedOut(text: bodyText) {
                 throw OpenCodeGoUsageError.invalidCredentials
             }
@@ -701,7 +697,7 @@ public struct OpenCodeGoUsageFetcher: Sendable {
             }
             throw OpenCodeGoUsageError.apiError("HTTP \(httpResponse.statusCode)")
         }
-        guard let text = String(data: data, encoding: .utf8) else {
+        guard let text = String(data: httpResponse.data, encoding: .utf8) else {
             throw OpenCodeGoUsageError.parseFailed("Response was not UTF-8.")
         }
         return text

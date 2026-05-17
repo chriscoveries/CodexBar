@@ -196,19 +196,15 @@ public struct ElevenLabsUsageFetcher: Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.timeoutInterval = Self.timeoutSeconds
 
-        let (data, response) = try await ProviderHTTPClient.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw ElevenLabsUsageError.networkError("Invalid response")
-        }
-
-        switch httpResponse.statusCode {
+        let response = try await ProviderHTTPClient.shared.response(for: request)
+        switch response.statusCode {
         case 200:
-            return try Self.parseSnapshot(data: data, updatedAt: Date())
+            return try Self.parseSnapshot(data: response.data, updatedAt: Date())
         case 401, 403:
             throw ElevenLabsUsageError.missingCredentials
         default:
-            Self.log.error("ElevenLabs API returned \(httpResponse.statusCode)")
-            throw ElevenLabsUsageError.apiError("HTTP \(httpResponse.statusCode)")
+            Self.log.error("ElevenLabs API returned \(response.statusCode)")
+            throw ElevenLabsUsageError.apiError("HTTP \(response.statusCode)")
         }
     }
 

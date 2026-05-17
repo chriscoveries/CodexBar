@@ -54,45 +54,45 @@ public enum GrokWebBillingFetcher {
 
     public static func fetch(
         credentials: GrokCredentials,
-        session: any ProviderHTTPTransport = ProviderHTTPClient.shared,
+        session transport: any ProviderHTTPTransport = ProviderHTTPClient.shared,
         endpoint: URL = Self.defaultEndpoint) async throws -> GrokWebBillingSnapshot
     {
         try await self.fetch(
             authorizationHeader: "Bearer \(credentials.accessToken)",
             cookieHeader: nil,
-            session: session,
+            transport: transport,
             endpoint: endpoint)
     }
 
     public static func fetch(
         cookieHeader: String,
-        session: any ProviderHTTPTransport = ProviderHTTPClient.shared,
+        session transport: any ProviderHTTPTransport = ProviderHTTPClient.shared,
         endpoint: URL = Self.defaultEndpoint) async throws -> GrokWebBillingSnapshot
     {
         try await self.fetch(
             authorizationHeader: nil,
             cookieHeader: cookieHeader,
-            session: session,
+            transport: transport,
             endpoint: endpoint)
     }
 
     private static func fetch(
         authorizationHeader: String?,
         cookieHeader: String?,
-        session: any ProviderHTTPTransport,
+        transport: any ProviderHTTPTransport,
         endpoint: URL) async throws -> GrokWebBillingSnapshot
     {
         do {
             return try await self.fetchOnce(
                 authorizationHeader: authorizationHeader,
                 cookieHeader: cookieHeader,
-                session: session,
+                transport: transport,
                 endpoint: endpoint)
         } catch where self.shouldRetry(error) {
             return try await self.fetchOnce(
                 authorizationHeader: authorizationHeader,
                 cookieHeader: cookieHeader,
-                session: session,
+                transport: transport,
                 endpoint: endpoint)
         }
     }
@@ -100,7 +100,7 @@ public enum GrokWebBillingFetcher {
     private static func fetchOnce(
         authorizationHeader: String?,
         cookieHeader: String?,
-        session: any ProviderHTTPTransport,
+        transport: any ProviderHTTPTransport,
         endpoint: URL) async throws -> GrokWebBillingSnapshot
     {
         var request = URLRequest(url: endpoint)
@@ -121,18 +121,22 @@ public enum GrokWebBillingFetcher {
         request.setValue("connect-es/2.1.1", forHTTPHeaderField: "x-user-agent")
         request.setValue("CodexBar", forHTTPHeaderField: "User-Agent")
 
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
+        let response: ProviderHTTPResponse
+        do {
+            response = try await transport.response(for: request)
+        } catch let error as URLError where error.code == .badServerResponse {
             throw GrokWebBillingError.invalidResponse
+        } catch {
+            throw error
         }
-        guard http.statusCode == 200 else {
-            let body = String(data: data.prefix(400), encoding: .utf8) ?? ""
-            throw GrokWebBillingError.requestFailed(http.statusCode, body)
+        guard response.statusCode == 200 else {
+            let body = String(data: response.data.prefix(400), encoding: .utf8) ?? ""
+            throw GrokWebBillingError.requestFailed(response.statusCode, body)
         }
-        try Self.validateGRPCStatusFields(Self.grpcHeaderFields(from: http.allHeaderFields))
-        try Self.validateGRPCWebTrailers(data)
+        try Self.validateGRPCStatusFields(Self.grpcHeaderFields(from: response.response.allHeaderFields))
+        try Self.validateGRPCWebTrailers(response.data)
 
-        return try Self.parseGRPCWebResponse(data)
+        return try Self.parseGRPCWebResponse(response.data)
     }
 
     private static func shouldRetry(_ error: Error) -> Bool {

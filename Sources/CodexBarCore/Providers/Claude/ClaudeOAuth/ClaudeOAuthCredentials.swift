@@ -1011,22 +1011,18 @@ public enum ClaudeOAuthCredentialsStore {
             ]
             request.httpBody = (components.percentEncodedQuery ?? "").data(using: .utf8)
 
-            let (data, response) = try await ProviderHTTPClient.shared.data(for: request)
-
-            guard let http = response as? HTTPURLResponse else {
-                throw ClaudeOAuthCredentialsError.refreshFailed("Invalid response")
-            }
-
-            guard http.statusCode == 200 else {
+            let response = try await ProviderHTTPClient.shared.response(for: request)
+            let data = response.data
+            guard response.statusCode == 200 else {
                 if let disposition = ClaudeOAuthCredentialsStore.refreshFailureDisposition(
-                    statusCode: http.statusCode,
+                    statusCode: response.statusCode,
                     data: data)
                 {
                     let oauthError = ClaudeOAuthCredentialsStore.extractOAuthErrorCode(from: data)
                     ClaudeOAuthCredentialsStore.log.info(
                         "Claude OAuth refresh rejected",
                         metadata: [
-                            "httpStatus": "\(http.statusCode)",
+                            "httpStatus": "\(response.statusCode)",
                             "oauthError": oauthError ?? "nil",
                             "disposition": disposition.rawValue,
                         ])
@@ -1035,15 +1031,17 @@ public enum ClaudeOAuthCredentialsStore {
                     case .terminalInvalidGrant:
                         ClaudeOAuthRefreshFailureGate.recordTerminalAuthFailure()
                         Repository(context: self.context).invalidateCache()
+                        let message = "HTTP \(response.statusCode) invalid_grant. " +
+                            ClaudeOAuthCredentialsStore.reauthenticateHint
                         throw ClaudeOAuthCredentialsError.refreshFailed(
-                            "HTTP \(http.statusCode) invalid_grant. \(ClaudeOAuthCredentialsStore.reauthenticateHint)")
+                            message)
                     case .transientBackoff:
                         ClaudeOAuthRefreshFailureGate.recordTransientFailure()
                         let suffix = oauthError.map { " (\($0))" } ?? ""
-                        throw ClaudeOAuthCredentialsError.refreshFailed("HTTP \(http.statusCode)\(suffix)")
+                        throw ClaudeOAuthCredentialsError.refreshFailed("HTTP \(response.statusCode)\(suffix)")
                     }
                 }
-                throw ClaudeOAuthCredentialsError.refreshFailed("HTTP \(http.statusCode)")
+                throw ClaudeOAuthCredentialsError.refreshFailed("HTTP \(response.statusCode)")
             }
 
             let tokenResponse = try JSONDecoder().decode(TokenRefreshResponse.self, from: data)

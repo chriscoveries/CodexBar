@@ -49,21 +49,17 @@ public struct CopilotUsageFetcher: Sendable {
         request.setValue("token \(self.token)", forHTTPHeaderField: "Authorization")
         self.addCommonHeaders(to: &request)
 
-        let (data, response) = try await ProviderHTTPClient.shared.data(for: request)
+        let response = try await ProviderHTTPClient.shared.response(for: request)
 
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw URLError(.badServerResponse)
-        }
-
-        if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+        if response.statusCode == 401 || response.statusCode == 403 {
             throw URLError(.userAuthenticationRequired)
         }
 
-        guard httpResponse.statusCode == 200 else {
+        guard response.statusCode == 200 else {
             throw URLError(.badServerResponse)
         }
 
-        let usage = try JSONDecoder().decode(CopilotUsageResponse.self, from: data)
+        let usage = try JSONDecoder().decode(CopilotUsageResponse.self, from: response.data)
         let premium = Self.makeRateWindow(from: usage.quotaSnapshots.premiumInteractions)
         let chat = Self.makeRateWindow(from: usage.quotaSnapshots.chat)
 
@@ -111,18 +107,15 @@ public struct CopilotUsageFetcher: Sendable {
         request.setValue("token \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
-        let (data, response) = try await transport.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw URLError(.badServerResponse)
-        }
-        if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+        let response = try await transport.response(for: request)
+        switch response.statusCode {
+        case 200:
+            return try JSONDecoder().decode(GitHubUserIdentity.self, from: response.data)
+        case 401, 403:
             throw URLError(.userAuthenticationRequired)
-        }
-        guard httpResponse.statusCode == 200 else {
+        default:
             throw URLError(.badServerResponse)
         }
-
-        return try JSONDecoder().decode(GitHubUserIdentity.self, from: data)
     }
 
     private func addCommonHeaders(to request: inout URLRequest) {

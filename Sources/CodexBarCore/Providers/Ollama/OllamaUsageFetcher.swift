@@ -518,13 +518,10 @@ public struct OllamaUsageFetcher: Sendable {
         request.setValue(Self.settingsURL.absoluteString, forHTTPHeaderField: "referer")
 
         let session = self.makeURLSession(diagnostics)
-        let (data, response) = try await session.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw OllamaUsageError.networkError("Invalid response")
-        }
+        let httpResponse = try await session.response(for: request)
         let responseInfo = ResponseInfo(
             statusCode: httpResponse.statusCode,
-            url: httpResponse.url?.absoluteString ?? "unknown")
+            url: httpResponse.response.url?.absoluteString ?? "unknown")
 
         guard httpResponse.statusCode == 200 else {
             if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
@@ -533,7 +530,7 @@ public struct OllamaUsageFetcher: Sendable {
             throw OllamaUsageError.networkError("HTTP \(httpResponse.statusCode)")
         }
 
-        let html = String(data: data, encoding: .utf8) ?? ""
+        let html = String(data: httpResponse.data, encoding: .utf8) ?? ""
         return (html, responseInfo)
     }
 
