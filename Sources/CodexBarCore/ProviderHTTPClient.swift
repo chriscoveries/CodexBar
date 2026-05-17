@@ -7,7 +7,9 @@ public protocol ProviderHTTPTransport: Sendable {
     func data(for request: URLRequest) async throws -> (Data, URLResponse)
 }
 
+#if !os(Linux)
 extension URLSession: ProviderHTTPTransport {}
+#endif
 
 public struct ProviderHTTPResponse: Sendable {
     public let data: Data

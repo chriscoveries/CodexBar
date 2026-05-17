@@ -55,6 +55,18 @@ public enum SubprocessRunner {
         }
     }
 
+    private final class TimeoutTimer: @unchecked Sendable {
+        private let timer: any DispatchSourceTimer
+
+        init(timer: any DispatchSourceTimer) {
+            self.timer = timer
+        }
+
+        func cancel() {
+            self.timer.cancel()
+        }
+    }
+
     private static func timeoutInterval(_ timeout: TimeInterval) -> DispatchTimeInterval {
         guard timeout.isFinite else {
             return .seconds(Int.max)
@@ -208,6 +220,7 @@ public enum SubprocessRunner {
             self.terminateProcess(process, processGroup: processGroup)
         }
         timeoutTimer.resume()
+        let timeoutTimerBox = TimeoutTimer(timer: timeoutTimer)
 
         do {
             let exitCode = try await withTaskCancellationHandler {
@@ -216,10 +229,10 @@ public enum SubprocessRunner {
                 try Task.checkCancellation()
                 return code
             } onCancel: {
-                timeoutTimer.cancel()
+                timeoutTimerBox.cancel()
                 self.terminateProcess(process, processGroup: processGroup)
             }
-            timeoutTimer.cancel()
+            timeoutTimerBox.cancel()
 
             let duration = Date().timeIntervalSince(start)
             // Race guard: the timeout timer may kill the process just before the
