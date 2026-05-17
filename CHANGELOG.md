@@ -3,6 +3,7 @@
 ## 0.27.0 — Unreleased
 
 ### Added
+- MiniMax: add web-session billing-history summaries with 30-day token charts and top model/method breakdowns (#1007).
 - Providers: route app-owned provider HTTP calls through a shared transport seam for cleaner proxy and test support (#892). Thanks @serezha93!
 - Deepgram: add API-key usage tracking with project discovery and speech/agent usage breakdowns (#1003, fixes #994). Thanks @czjzpz!
 - OpenCode Go: show the optional Zen pay-as-you-go balance from the workspace dashboard alongside subscription windows (#1006).

@@ -42,6 +42,16 @@ extension UsageMenuCardView.Model {
             return usage.displayLines
         }
 
+        if input.provider == .minimax,
+           input.showOptionalCreditsAndExtraUsage,
+           let billing = input.snapshot?.minimaxUsage?.billingSummary
+        {
+            return [
+                "Today: \(UsageFormatter.tokenCountString(billing.todayTokens)) tokens",
+                "Last 30 days: \(UsageFormatter.tokenCountString(billing.last30DaysTokens)) tokens",
+            ]
+        }
+
         return nil
     }
 
@@ -90,6 +100,13 @@ extension UsageMenuCardView.Model {
            let modelUsage = input.snapshot?.zaiUsage?.modelUsage
         {
             return Self.zaiInlineDashboard(modelUsage: modelUsage, now: input.now)
+        }
+        if input.provider == .minimax,
+           input.showOptionalCreditsAndExtraUsage,
+           let billing = input.snapshot?.minimaxUsage?.billingSummary,
+           !billing.daily.isEmpty
+        {
+            return Self.minimaxInlineDashboard(billing)
         }
         if [.codex, .claude, .vertexai, .bedrock].contains(input.provider),
            input.tokenCostUsageEnabled,
@@ -339,6 +356,49 @@ extension UsageMenuCardView.Model {
             detailLines: topModel.map { ["Top model: \(Self.shortModelName($0))"] } ?? [])
     }
 
+    private static func minimaxInlineDashboard(_ billing: MiniMaxBillingSummary) -> InlineUsageDashboardModel {
+        let points = billing.daily.suffix(30).map {
+            InlineUsageDashboardModel.Point(
+                id: $0.day,
+                label: Self.shortDayLabel($0.day),
+                value: Double($0.tokens),
+                accessibilityValue: "\($0.day): \(UsageFormatter.tokenCountString($0.tokens)) tokens")
+        }
+        var details = ["30d billing history from MiniMax web session"]
+        if let topModel = billing.topModels.first {
+            details.append("Top model: \(Self.shortModelName(topModel.name))")
+        }
+        if let topMethod = billing.topMethods.first {
+            details.append("Top method: \(Self.shortModelName(topMethod.name))")
+        }
+        if let cash = billing.last30DaysCash {
+            details.append("30d cash: \(Self.minimaxCashString(cash))")
+        }
+        return InlineUsageDashboardModel(
+            accessibilityLabel: "MiniMax 30 day token usage trend",
+            valueStyle: .tokens,
+            kpis: [
+                .init(
+                    title: "Today",
+                    value: UsageFormatter.tokenCountString(billing.todayTokens),
+                    emphasis: true),
+                .init(
+                    title: "30d tokens",
+                    value: UsageFormatter.tokenCountString(billing.last30DaysTokens),
+                    emphasis: false),
+                .init(
+                    title: "Today cash",
+                    value: billing.todayCash.map(Self.minimaxCashString) ?? "—",
+                    emphasis: false),
+                .init(
+                    title: "Models",
+                    value: "\(billing.topModels.count)",
+                    emphasis: false),
+            ],
+            points: points,
+            detailLines: details)
+    }
+
     private static func topCostModel(from entries: [CostUsageDailyReport.Entry]) -> String? {
         var scores: [String: (cost: Double, tokens: Int)] = [:]
         for entry in entries {
@@ -387,6 +447,10 @@ extension UsageMenuCardView.Model {
 
     private static func openRouterCurrencyString(_ value: Double) -> String {
         String(format: "$%.2f", value)
+    }
+
+    private static func minimaxCashString(_ value: Double) -> String {
+        String(format: "%.2f", max(0, value))
     }
 
     private static func shortDayLabel(_ day: String) -> String {
