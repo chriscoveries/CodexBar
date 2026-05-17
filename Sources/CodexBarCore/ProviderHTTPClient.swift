@@ -46,7 +46,7 @@ extension ProviderHTTPTransport {
 }
 
 public final class ProviderHTTPClient: ProviderHTTPTransport, @unchecked Sendable {
-    public static let shared = ProviderHTTPClient()
+    public static let shared = ProviderHTTPClient(session: ProviderHTTPClient.sharedSession())
 
     private let session: URLSession
 
@@ -62,6 +62,25 @@ public final class ProviderHTTPClient: ProviderHTTPTransport, @unchecked Sendabl
         configuration.waitsForConnectivity = false
         #endif
         return configuration
+    }
+
+    private static func sharedSession() -> URLSession {
+        if self.isRunningTests {
+            // XCTest URLProtocol.registerClass stubs only intercept URLSession.shared on macOS.
+            return .shared
+        }
+        return URLSession(configuration: self.defaultConfiguration())
+    }
+
+    private static var isRunningTests: Bool {
+        let environment = ProcessInfo.processInfo.environment
+        if environment["XCTestConfigurationFilePath"] != nil || environment["XCTestBundlePath"] != nil {
+            return true
+        }
+        if ProcessInfo.processInfo.processName.lowercased().contains("xctest") {
+            return true
+        }
+        return CommandLine.arguments.contains { $0.lowercased().contains(".xctest") }
     }
 
     public func data(for request: URLRequest) async throws -> (Data, URLResponse) {
