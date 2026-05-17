@@ -17,6 +17,7 @@
 - Quota warnings: include the triggering account in notification copy when personal info is visible (#973). Thanks @raflyazf!
 
 ### Fixed
+- Menu bar: avoid re-reading provider credentials, Codex account state, and Claude terminal probe text on every loading-animation frame, reducing idle CPU while providers are still loading.
 - Claude: de-duplicate copied fork/resume transcript history by provider response identity so local cost estimates do not overcount repeated rows (#1002). Thanks @Neverdie-2!
 - CLI: use explicit provider HTTP timeouts so blocked network connections fail instead of leaving usage commands stuck for days (#1005, fixes #1004). Thanks @msmolkin!
 - Localization: fall back to English when a bundled localized string is blank instead of rendering empty menu/settings text (#952). Thanks @xiaoqianWX!

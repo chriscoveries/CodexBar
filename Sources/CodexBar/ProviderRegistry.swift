@@ -141,12 +141,13 @@ struct ProviderRegistry {
         // Mac's Codex sessions, not as account-owned remote state. If we later want
         // account-scoped token history in the UI, that needs an explicit product decision and
         // presentation change so the two concepts are not conflated.
-        let codexActiveSource = codexActiveSourceOverride ?? settings.codexResolvedActiveSource
-        if provider == .codex,
-           case .managedAccount = codexActiveSource,
-           let managedHomePath = settings.managedCodexRemoteHomePath(forActiveSource: codexActiveSource)
-        {
-            env = CodexHomeScope.scopedEnvironment(base: env, codexHome: managedHomePath)
+        if provider == .codex {
+            let codexActiveSource = codexActiveSourceOverride ?? settings.codexResolvedActiveSource
+            if case .managedAccount = codexActiveSource,
+               let managedHomePath = settings.managedCodexRemoteHomePath(forActiveSource: codexActiveSource)
+            {
+                env = CodexHomeScope.scopedEnvironment(base: env, codexHome: managedHomePath)
+            }
         }
         return env
     }

@@ -79,6 +79,7 @@ extension UsageStore {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.observeSettingsChanges()
+                self.invalidateProviderAvailabilityCache()
                 self.probeLogs = [:]
                 guard self.startupBehavior.automaticallyStartsBackgroundWork else { return }
                 self.startTimer()
@@ -98,6 +99,16 @@ extension UsageStore {
 @MainActor
 @Observable
 final class UsageStore {
+    private struct ProviderAvailabilityCacheEntry {
+        let available: Bool
+        let configRevision: Int
+        let expiresAt: Date
+
+        func isValid(now: Date, configRevision: Int) -> Bool {
+            self.configRevision == configRevision && self.expiresAt > now
+        }
+    }
+
     enum CodexCreditsSource {
         case none
         case api
@@ -204,6 +215,7 @@ final class UsageStore {
     @ObservationIgnored var providerSpecs: [UsageProvider: ProviderSpec] = [:]
     @ObservationIgnored let providerMetadata: [UsageProvider: ProviderMetadata]
     @ObservationIgnored var providerRuntimes: [UsageProvider: any ProviderRuntime] = [:]
+    @ObservationIgnored private var providerAvailabilityCache: [UsageProvider: ProviderAvailabilityCacheEntry] = [:]
     @ObservationIgnored private var timerTask: Task<Void, Never>?
     @ObservationIgnored private var tokenTimerTask: Task<Void, Never>?
     @ObservationIgnored private var tokenRefreshSequenceTask: Task<Void, Never>?
@@ -228,6 +240,7 @@ final class UsageStore {
     @ObservationIgnored var planUtilizationHistory: [UsageProvider: PlanUtilizationHistoryBuckets] = [:]
     @ObservationIgnored var weeklyLimitResetDetectorStates: [String: WeeklyLimitResetDetectorState] = [:]
     @ObservationIgnored private var hasCompletedInitialRefresh: Bool = false
+    @ObservationIgnored private let providerAvailabilityCacheTTL: TimeInterval = 1
     @ObservationIgnored private let tokenFetchTTL: TimeInterval = 60 * 60
     @ObservationIgnored private let tokenFetchTimeout: TimeInterval = 10 * 60
     @ObservationIgnored private let startupBehavior: StartupBehavior
@@ -363,7 +376,8 @@ final class UsageStore {
     func enabledProviders() -> [UsageProvider] {
         // Use cached enablement to avoid repeated UserDefaults lookups in animation ticks.
         let enabled = self.settings.enabledProvidersOrdered(metadataByProvider: self.providerMetadata)
-        return enabled.filter { self.isProviderAvailable($0) }
+        let now = Date()
+        return enabled.filter { self.isProviderAvailable($0, now: now) }
     }
 
     /// Enabled providers without availability filtering. Used for display (switcher, merge-icons).
@@ -442,6 +456,19 @@ final class UsageStore {
     }
 
     func isProviderAvailable(_ provider: UsageProvider) -> Bool {
+        self.isProviderAvailable(provider, now: Date())
+    }
+
+    private func isProviderAvailable(_ provider: UsageProvider, now: Date) -> Bool {
+        guard provider != .codex else { return true }
+
+        let configRevision = self.settings.configRevision
+        if let cached = self.providerAvailabilityCache[provider],
+           cached.isValid(now: now, configRevision: configRevision)
+        {
+            return cached.available
+        }
+
         // Availability should mirror the effective fetch environment, including token-account overrides.
         // Otherwise providers (notably token-account-backed API providers) can fetch successfully but be
         // hidden from the menu because their credentials are not in ProcessInfo's environment.
@@ -454,9 +481,18 @@ final class UsageStore {
             provider: provider,
             settings: self.settings,
             environment: environment)
-        return ProviderCatalog.implementation(for: provider)?
+        let available = ProviderCatalog.implementation(for: provider)?
             .isAvailable(context: context)
             ?? true
+        self.providerAvailabilityCache[provider] = ProviderAvailabilityCacheEntry(
+            available: available,
+            configRevision: configRevision,
+            expiresAt: now.addingTimeInterval(self.providerAvailabilityCacheTTL))
+        return available
+    }
+
+    private func invalidateProviderAvailabilityCache() {
+        self.providerAvailabilityCache.removeAll(keepingCapacity: true)
     }
 
     func performRuntimeAction(_ action: ProviderRuntimeAction, for provider: UsageProvider) async {
