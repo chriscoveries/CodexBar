@@ -280,6 +280,24 @@ public enum ProviderTokenResolver {
         self.resolveEnv(ElevenLabsSettingsReader.apiKey(environment: environment))
     }
 
+    public enum DeepgramCredentialKind: Sendable {
+        case apiKey
+        case projectID
+    }
+
+    public static func deepgramResolution(
+        type: DeepgramCredentialKind,
+        environment: [String: String] = ProcessInfo.processInfo.environment) -> String?
+    {
+        switch type {
+        case .apiKey:
+            self.resolveEnv(DeepgramSettingsReader.apiKey(environment: environment))?.token
+
+        case .projectID:
+            self.resolveEnv(DeepgramSettingsReader.projectID(environment: environment))?.token
+        }
+    }
+
     public static func codebuffResolution(
         environment: [String: String] = ProcessInfo.processInfo.environment,
         authFileURL: URL? = nil) -> ProviderTokenResolution?

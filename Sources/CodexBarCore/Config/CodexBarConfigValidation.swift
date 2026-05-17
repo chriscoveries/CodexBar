@@ -131,15 +131,14 @@ public enum CodexBarConfigValidator {
 
         if let workspaceID = entry.workspaceID,
            !workspaceID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-           provider != .opencode,
-           provider != .opencodego
+           !self.providerSupportsWorkspaceID(provider)
         {
             issues.append(CodexBarConfigIssue(
                 severity: .warning,
                 provider: provider,
                 field: "workspaceID",
                 code: "workspace_unused",
-                message: "workspaceID is set but only opencode and opencodego support workspaceID."))
+                message: "workspaceID is set but only opencode, opencodego, and deepgram support workspaceID."))
         }
 
         if let enterpriseHost = entry.enterpriseHost,
@@ -180,6 +179,15 @@ public enum CodexBarConfigValidator {
             field: "secretKey",
             code: "secret_key_unused",
             message: "secretKey is set but only bedrock uses secretKey."))
+    }
+
+    private static func providerSupportsWorkspaceID(_ provider: UsageProvider) -> Bool {
+        switch provider {
+        case .opencode, .opencodego, .deepgram:
+            true
+        default:
+            false
+        }
     }
 
     private static func validateRegion(_ entry: ProviderConfig, issues: inout [CodexBarConfigIssue]) {

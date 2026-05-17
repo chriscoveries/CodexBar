@@ -393,7 +393,7 @@
 "remove_account_message" = "Remove %@ from CodexBar? Its managed Codex home will be deleted.";
 "version_format" = "Version %@";
 "vertex_ai_login_instructions" = "To track Vertex AI usage, authenticate with Google Cloud.\n\n1. Open Terminal\n2. Run: gcloud auth application-default login\n3. Follow the browser prompts to sign in\n4. Set your project: gcloud config set project PROJECT_ID\n\nOpen Terminal now?";
-"workspaceID is set but only opencode and opencodego support workspaceID." = "workspaceID is set but only opencode and opencodego support workspaceID.";
+"workspaceID is set but only opencode, opencodego, and deepgram support workspaceID." = "workspaceID is set but only opencode, opencodego, and deepgram support workspaceID.";
 "© 2026 Peter Steinberger. MIT License." = "© 2026 Peter Steinberger. MIT License.";
 
 /* General Pane */

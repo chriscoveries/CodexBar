@@ -9,6 +9,9 @@ public enum ProviderConfigEnvironment {
         if provider == .bedrock {
             return self.applyBedrockOverrides(base: base, config: config)
         }
+        if provider == .deepgram {
+            return self.applyDeepgramOverrides(base: base, config: config)
+        }
         guard let apiKey = config?.sanitizedAPIKey, !apiKey.isEmpty else { return base }
         var env = base
         if let key = self.directAPIKeyEnvironmentKey(for: provider) {
@@ -84,6 +87,8 @@ public enum ProviderConfigEnvironment {
             MoonshotSettingsReader.apiKeyEnvironmentKeys.first
         case .venice:
             VeniceSettingsReader.apiKeyEnvironmentKey
+        case .deepgram:
+            DeepgramSettingsReader.apiKeyEnvironmentKey
         default:
             nil
         }
@@ -105,5 +110,32 @@ public enum ProviderConfigEnvironment {
             env[BedrockSettingsReader.regionKeys[0]] = region
         }
         return env
+    }
+
+    private static func applyDeepgramOverrides(
+        base: [String: String],
+        config: ProviderConfig?) -> [String: String]
+    {
+        guard let config else { return base }
+
+        var env = base
+
+        if let apiKey = config.sanitizedAPIKey {
+            env[DeepgramSettingsReader.apiKeyEnvironmentKey] = apiKey
+        }
+
+        if let projectID = config.sanitizedWorkspaceID {
+            env[DeepgramSettingsReader.projectIDEnvironmentKey] = projectID
+        }
+
+        return env
+    }
+
+    public static func applyProviderConfigOverrides(
+        base: [String: String],
+        provider: UsageProvider,
+        config: ProviderConfig?) -> [String: String]
+    {
+        self.applyAPIKeyOverride(base: base, provider: provider, config: config)
     }
 }

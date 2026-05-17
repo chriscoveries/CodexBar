@@ -29,6 +29,22 @@ struct InlineUsageDashboardModel: Equatable {
 }
 
 extension UsageMenuCardView.Model {
+    static func apiProviderUsageNotes(input: Input) -> [String]? {
+        if input.provider == .openai,
+           let usage = input.snapshot?.openAIAPIUsage
+        {
+            return self.openAIAPIUsageNotes(usage)
+        }
+
+        if input.provider == .deepgram,
+           let usage = input.snapshot?.deepgramUsage
+        {
+            return usage.displayLines
+        }
+
+        return nil
+    }
+
     static func openAIAPIUsageNotes(_ usage: OpenAIAPIUsageSnapshot) -> [String] {
         let today = usage.latestDay
         let seven = usage.last7Days

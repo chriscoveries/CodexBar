@@ -400,7 +400,7 @@
 4. 设置项目：gcloud config set project PROJECT_ID
 
 是否现在打开终端？";
-"workspaceID is set but only opencode and opencodego support workspaceID." = "";
+"workspaceID is set but only opencode, opencodego, and deepgram support workspaceID." = "";
 "© 2026 Peter Steinberger. MIT License." = "";
 
 /* General Pane */

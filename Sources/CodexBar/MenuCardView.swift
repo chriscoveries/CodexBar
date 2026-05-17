@@ -847,10 +847,8 @@ extension UsageMenuCardView.Model {
             ]
         }
 
-        if input.provider == .openai,
-           let usage = input.snapshot?.openAIAPIUsage
-        {
-            return self.openAIAPIUsageNotes(usage)
+        if let notes = apiProviderUsageNotes(input: input) {
+            return notes
         }
 
         guard input.provider == .openrouter,

@@ -198,6 +198,43 @@ struct ProviderConfigEnvironmentTests {
     }
 
     @Test
+    func `applies API key override for deepgram`() {
+        let config = ProviderConfig(id: .deepgram, apiKey: "dg-token")
+        let env = ProviderConfigEnvironment.applyAPIKeyOverride(
+            base: [:],
+            provider: .deepgram,
+            config: config)
+
+        #expect(env[DeepgramSettingsReader.apiKeyEnvironmentKey] == "dg-token")
+        #expect(ProviderTokenResolver.deepgramResolution(
+            type: .apiKey,
+            environment: env)
+            == "dg-token")
+    }
+
+    @Test
+    func `applies Deepgram project ID override from provider config`() {
+        let config = ProviderConfig(id: .deepgram, workspaceID: "proj-123")
+        let env = ProviderConfigEnvironment.applyProviderConfigOverrides(
+            base: [:],
+            provider: .deepgram,
+            config: config)
+
+        #expect(env[DeepgramSettingsReader.projectIDEnvironmentKey] == "proj-123")
+    }
+
+    @Test
+    func `Deepgram project ID config overrides environment`() {
+        let config = ProviderConfig(id: .deepgram, workspaceID: "config-project")
+        let env = ProviderConfigEnvironment.applyProviderConfigOverrides(
+            base: [DeepgramSettingsReader.projectIDEnvironmentKey: "env-project"],
+            provider: .deepgram,
+            config: config)
+
+        #expect(env[DeepgramSettingsReader.projectIDEnvironmentKey] == "config-project")
+    }
+
+    @Test
     func `codebuff config override leaves environment token alone`() {
         let config = ProviderConfig(id: .codebuff, apiKey: "config-token")
         let env = ProviderConfigEnvironment.applyAPIKeyOverride(
