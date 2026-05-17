@@ -5,6 +5,17 @@ import Testing
 @Suite(.serialized)
 struct ProviderHTTPClientTests {
     @Test
+    func `default client configuration fails blocked connections promptly`() {
+        let configuration = ProviderHTTPClient.defaultConfiguration()
+
+        #expect(configuration.timeoutIntervalForRequest == 30)
+        #expect(configuration.timeoutIntervalForResource == 90)
+        #if !os(Linux)
+        #expect(configuration.waitsForConnectivity == false)
+        #endif
+    }
+
+    @Test
     func `client loads requests through an injected session`() async throws {
         StubURLProtocol.requests = []
         StubURLProtocol.handler = { request in

@@ -17,6 +17,7 @@
 
 ### Fixed
 - Claude: de-duplicate copied fork/resume transcript history by provider response identity so local cost estimates do not overcount repeated rows (#1002). Thanks @Neverdie-2!
+- CLI: use explicit provider HTTP timeouts so blocked network connections fail instead of leaving usage commands stuck for days (#1005, fixes #1004). Thanks @msmolkin!
 - OpenAI: accept numeric-string Admin API cost amounts so usage does not fail when `/v1/organization/costs` returns `"amount": { "value": "12.50" }` (#999, #1000). Thanks @SergeyLavrentev!
 - Menu: keep the persistent Refresh row at a fixed height while highlighted or pressed so nearby items no longer jump (#1001).
 - Grok: retry transient web billing timeouts once and allow slower billing RPCs to finish before showing an error.

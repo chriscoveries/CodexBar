@@ -50,8 +50,18 @@ public final class ProviderHTTPClient: ProviderHTTPTransport, @unchecked Sendabl
 
     private let session: URLSession
 
-    public init(session: URLSession = .shared) {
-        self.session = session
+    public init(session: URLSession? = nil) {
+        self.session = session ?? URLSession(configuration: Self.defaultConfiguration())
+    }
+
+    static func defaultConfiguration() -> URLSessionConfiguration {
+        let configuration = URLSessionConfiguration.default
+        configuration.timeoutIntervalForRequest = 30
+        configuration.timeoutIntervalForResource = 90
+        #if !os(Linux)
+        configuration.waitsForConnectivity = false
+        #endif
+        return configuration
     }
 
     public func data(for request: URLRequest) async throws -> (Data, URLResponse) {
