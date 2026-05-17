@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.27.0 — Unreleased
+## 0.27.0 — 2026-05-17
 
 ### Added
 - Deepgram: add API-key usage tracking with project discovery and speech/agent usage breakdowns (#1003, fixes #994). Thanks @czjzpz!
