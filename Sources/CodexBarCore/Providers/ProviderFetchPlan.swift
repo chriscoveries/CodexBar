@@ -23,6 +23,7 @@ public struct ProviderFetchContext: Sendable {
     public let runtime: ProviderRuntime
     public let sourceMode: ProviderSourceMode
     public let includeCredits: Bool
+    public let includeOptionalUsage: Bool
     public let webTimeout: TimeInterval
     public let webDebugDumpHTML: Bool
     public let verbose: Bool
@@ -38,6 +39,7 @@ public struct ProviderFetchContext: Sendable {
         runtime: ProviderRuntime,
         sourceMode: ProviderSourceMode,
         includeCredits: Bool,
+        includeOptionalUsage: Bool = true,
         webTimeout: TimeInterval,
         webDebugDumpHTML: Bool,
         verbose: Bool,
@@ -52,6 +54,7 @@ public struct ProviderFetchContext: Sendable {
         self.runtime = runtime
         self.sourceMode = sourceMode
         self.includeCredits = includeCredits
+        self.includeOptionalUsage = includeOptionalUsage
         self.webTimeout = webTimeout
         self.webDebugDumpHTML = webDebugDumpHTML
         self.verbose = verbose

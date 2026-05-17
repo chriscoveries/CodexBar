@@ -286,6 +286,7 @@ extension UsageStore {
             runtime: .app,
             sourceMode: sourceMode,
             includeCredits: false,
+            includeOptionalUsage: self.settings.showOptionalCreditsAndExtraUsage,
             webTimeout: 60,
             webDebugDumpHTML: false,
             verbose: verbose,

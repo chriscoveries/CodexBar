@@ -107,6 +107,7 @@ public struct OpenCodeGoUsageFetcher: Sendable {
         timeout: TimeInterval,
         now: Date = Date(),
         workspaceIDOverride: String? = nil,
+        includeZenBalance: Bool = true,
         session: URLSession? = nil) async throws -> OpenCodeGoUsageSnapshot
     {
         let session = session ?? self.redirectGuardSession
@@ -121,12 +122,29 @@ public struct OpenCodeGoUsageFetcher: Sendable {
                 timeout: timeout,
                 session: session)
         }
-        let subscriptionText = try await self.fetchUsagePage(
-            workspaceID: workspaceID,
-            cookieHeader: requestCookieHeader,
-            timeout: timeout,
-            session: session)
-        return try self.parseSubscription(text: subscriptionText, now: now)
+        let subscriptionText: String
+        do {
+            subscriptionText = try await self.fetchUsagePage(
+                workspaceID: workspaceID,
+                cookieHeader: requestCookieHeader,
+                timeout: timeout,
+                session: session)
+        } catch {
+            throw error
+        }
+        let snapshot = try self.parseSubscription(text: subscriptionText, now: now)
+        let zenBalanceTask = includeZenBalance ? Task {
+            try await self.fetchOptionalZenBalance(
+                workspaceID: workspaceID,
+                cookieHeader: requestCookieHeader,
+                timeout: min(timeout, self.optionalZenBalanceTimeout),
+                session: session)
+        } : nil
+        guard let zenBalanceTask else {
+            return snapshot
+        }
+        let zenBalance = try await self.completedOptionalZenBalance(from: zenBalanceTask)
+        return snapshot.withZenBalanceUSD(zenBalance)
     }
 
     static func allowsRedirect(from sourceURL: URL?, to destinationURL: URL?) -> Bool {
@@ -194,7 +212,7 @@ public struct OpenCodeGoUsageFetcher: Sendable {
         return ids[0]
     }
 
-    private static func normalizeWorkspaceID(_ raw: String?) -> String? {
+    static func normalizeWorkspaceID(_ raw: String?) -> String? {
         guard let raw else { return nil }
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.hasPrefix("wrk_"), trimmed.count > 4 {
@@ -668,7 +686,7 @@ public struct OpenCodeGoUsageFetcher: Sendable {
         return text
     }
 
-    private static func fetchPageText(
+    static func fetchPageText(
         url: URL,
         cookieHeader: String,
         timeout: TimeInterval,
@@ -717,7 +735,7 @@ public struct OpenCodeGoUsageFetcher: Sendable {
         return components?.url ?? self.serverURL
     }
 
-    private static func looksSignedOut(text: String) -> Bool {
+    static func looksSignedOut(text: String) -> Bool {
         let lower = text.lowercased()
         return lower.contains("login") ||
             lower.contains("sign in") ||

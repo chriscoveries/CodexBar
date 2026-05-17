@@ -139,6 +139,15 @@ extension UsageMenuCardView.Model {
                 percentLine: nil)
         }
 
+        if provider == .opencodego, cost.period == "Zen balance" {
+            let balance = UsageFormatter.currencyString(cost.used, currencyCode: cost.currencyCode)
+            return ProviderCostSection(
+                title: "Zen balance",
+                percentUsed: nil,
+                spendLine: "Balance: \(balance)",
+                percentLine: nil)
+        }
+
         if provider == .openai || provider == .claude, cost.limit <= 0 {
             let spend = UsageFormatter.currencyString(cost.used, currencyCode: cost.currencyCode)
             let periodLabel = cost.period ?? "Last 30 days"

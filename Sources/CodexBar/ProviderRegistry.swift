@@ -56,6 +56,7 @@ struct ProviderRegistry {
                         runtime: .app,
                         sourceMode: sourceMode,
                         includeCredits: false,
+                        includeOptionalUsage: settings.showOptionalCreditsAndExtraUsage,
                         webTimeout: 60,
                         webDebugDumpHTML: false,
                         verbose: verbose,
