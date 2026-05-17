@@ -18,6 +18,7 @@
 - Quota warnings: include the triggering account in notification copy when personal info is visible (#973). Thanks @raflyazf!
 
 ### Fixed
+- Codex: improve multi-account switching with quota-aware ordering, workspace grouping, persisted per-account snapshots, health labels, and auth fingerprint matching.
 - Overview: expose provider chart and storage detail submenus from overview rows instead of requiring a provider-tab switch first.
 - Menu bar: avoid re-reading provider credentials, Codex account state, Claude terminal probe text, and storage footprints on hot menu paths, reducing idle CPU while providers are still loading.
 - Claude: de-duplicate copied fork/resume transcript history by provider response identity so local cost estimates do not overcount repeated rows (#1002). Thanks @Neverdie-2!
