@@ -9,6 +9,7 @@
 - Permissions: notify when a provider probe detects a macOS/browser permission prompt waiting for user action (#456).
 
 ### Fixed
+- Codex: make local cost-history scans faster and more stable for large session archives while preserving fork attribution, priority pricing, and cached history windows.
 - Codex: collapse near-duplicate session and weekly plan-utilization history windows so charts no longer show repeated tabs (#1027). Thanks @ngutman!
 - Multi-account menus: fetch stacked Codex/token-account usage concurrently so account switchers stay responsive with many accounts (#1011).
 

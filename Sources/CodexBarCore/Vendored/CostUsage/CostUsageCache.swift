@@ -48,7 +48,11 @@ enum CostUsageCacheIO {
         let data = (try? JSONEncoder().encode(cache)) ?? Data()
         do {
             try data.write(to: tmp, options: [.atomic])
-            _ = try FileManager.default.replaceItemAt(url, withItemAt: tmp)
+            if FileManager.default.fileExists(atPath: url.path) {
+                _ = try FileManager.default.replaceItemAt(url, withItemAt: tmp)
+            } else {
+                try FileManager.default.moveItem(at: tmp, to: url)
+            }
         } catch {
             try? FileManager.default.removeItem(at: tmp)
         }
@@ -60,6 +64,10 @@ struct CostUsageCache: Codable {
     var lastScanUnixMs: Int64 = 0
     var scanSinceKey: String?
     var scanUntilKey: String?
+    var codexPricingKey: String?
+    var codexPriorityMetadataKey: String?
+    var codexPriorityTurnKeys: [String: String]?
+    var codexPriorityTurnIDsByDay: [String: [String]]?
 
     /// filePath -> file usage
     var files: [String: CostUsageFileUsage] = [:]
@@ -78,9 +86,15 @@ struct CostUsageFileUsage: Codable {
     var parsedBytes: Int64?
     var lastModel: String?
     var lastTotals: CostUsageCodexTotals?
+    var lastCountedTotals: CostUsageCodexTotals?
+    var lastRawTotalsBaseline: CostUsageCodexTotals?
+    var hasDivergentTotals: Bool?
     var lastCodexTurnID: String?
     var sessionId: String?
     var forkedFromId: String?
+    var codexCostNanos: [String: [String: Int64]]?
+    var codexPrioritySurchargeNanos: [String: [String: Int64]]?
+    var codexTurnIDs: [String]?
     var codexRows: [CostUsageScanner.CodexUsageRow]?
     var claudeRows: [CostUsageScanner.ClaudeUsageRow]?
 }
