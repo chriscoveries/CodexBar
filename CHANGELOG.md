@@ -29,6 +29,7 @@
 - OpenAI: shorten the provider label to "OpenAI" so the menu tab no longer clips.
 - OpenAI: accept numeric-string Admin API cost amounts so usage does not fail when `/v1/organization/costs` returns `"amount": { "value": "12.50" }` (#999, #1000). Thanks @SergeyLavrentev!
 - Menu: keep provider switcher buttons centered by moving quota indicators out of the button layout.
+- Menu: rebuild the selected provider content after switching tabs while an overview chart submenu is open.
 - Menu: keep the persistent Refresh row at a fixed height while highlighted or pressed so nearby items no longer jump (#1001).
 - Menu bar: avoid re-reading provider credentials, Codex account state, Claude terminal probe text, and storage footprints on hot menu paths, reducing idle CPU while providers are still loading.
 - Menu bar: skip unchanged split-provider icon redraws and avoid an extra animation-state scan during blink ticks.
