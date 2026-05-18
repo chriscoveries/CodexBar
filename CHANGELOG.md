@@ -2,6 +2,9 @@
 
 ## 0.27.1 — Unreleased
 
+### Fixed
+- Release: update Homebrew automation so CodexBar releases publish both the CLI formula and app cask from the same workflow.
+
 ## 0.27.0 — 2026-05-18
 
 ### Added
