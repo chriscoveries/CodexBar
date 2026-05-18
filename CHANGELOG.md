@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.27.0 — Unreleased
+## 0.27.0 — 2026-05-18
 
 ### Added
 - Usage charts: reuse the OpenAI API inline dashboard for local Codex/Claude/Vertex/Bedrock cost history, OpenRouter day/week/month spend, z.ai hourly tokens, and Mistral daily spend.
