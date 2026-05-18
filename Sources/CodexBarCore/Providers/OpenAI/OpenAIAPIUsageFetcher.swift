@@ -37,15 +37,16 @@ public enum OpenAIAPIUsageFetcher {
     public static let organizationCompletionsUsageURL =
         URL(string: "https://api.openai.com/v1/organization/usage/completions")!
 
+    private static let maxDailyBucketLimit = 31
     private static let timeoutSeconds: TimeInterval = 20
-    private static let maxDailyBuckets = 31
 
     public static func fetchUsage(
         apiKey: String,
         costsURL: URL = Self.organizationCostsURL,
         completionsURL: URL = Self.organizationCompletionsUsageURL,
         session transport: any ProviderHTTPTransport = ProviderHTTPClient.shared,
-        now: Date = Date()) async throws -> OpenAIAPIUsageSnapshot
+        now: Date = Date(),
+        historyDays: Int = 30) async throws -> OpenAIAPIUsageSnapshot
     {
         let trimmed = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
@@ -53,66 +54,82 @@ public enum OpenAIAPIUsageFetcher {
         }
 
         let calendar = Self.utcCalendar
-        let range = Self.dailyRange(now: now, calendar: calendar)
+        let clampedHistoryDays = max(1, min(365, historyDays))
+        let ranges = Self.dailyRanges(now: now, calendar: calendar, historyDays: clampedHistoryDays)
         let costs = try await Self.fetchCosts(
             apiKey: trimmed,
             baseURL: costsURL,
-            range: range,
+            ranges: ranges,
             transport: transport)
         let completions = try await Self.fetchCompletions(
             apiKey: trimmed,
             baseURL: completionsURL,
-            range: range,
+            ranges: ranges,
             transport: transport)
 
         return Self.makeSnapshot(
             costs: costs,
             completions: completions,
             now: now,
-            calendar: calendar)
+            calendar: calendar,
+            historyDays: clampedHistoryDays)
     }
 
     static func _parseSnapshotForTesting(
         costs: Data,
         completions: Data,
         now: Date,
-        calendar: Calendar = Self.utcCalendar) throws -> OpenAIAPIUsageSnapshot
+        calendar: Calendar = Self.utcCalendar,
+        historyDays: Int = 30) throws -> OpenAIAPIUsageSnapshot
     {
         let costs = try Self.decodeCosts(costs)
         let completions = try Self.decodeCompletions(completions)
-        return Self.makeSnapshot(costs: costs, completions: completions, now: now, calendar: calendar)
+        return Self.makeSnapshot(
+            costs: costs,
+            completions: completions,
+            now: now,
+            calendar: calendar,
+            historyDays: historyDays)
     }
 
     private static func fetchCosts(
         apiKey: String,
         baseURL: URL,
-        range: DateRange,
+        ranges: [DateRange],
         transport: any ProviderHTTPTransport) async throws -> CostsResponse
     {
-        let url = Self.url(
-            baseURL: baseURL,
-            range: range,
-            queryItems: [
-                URLQueryItem(name: "group_by", value: "line_item"),
-            ])
-        let data = try await Self.fetchData(url: url, apiKey: apiKey, endpoint: "costs", transport: transport)
-        return try Self.decodeCosts(data)
+        var buckets: [CostBucket] = []
+        for range in ranges {
+            let url = Self.url(
+                baseURL: baseURL,
+                range: range,
+                queryItems: [
+                    URLQueryItem(name: "group_by", value: "line_item"),
+                ])
+            let data = try await Self.fetchData(url: url, apiKey: apiKey, endpoint: "costs", transport: transport)
+            try buckets.append(contentsOf: Self.decodeCosts(data).data)
+        }
+        return CostsResponse(data: buckets)
     }
 
     private static func fetchCompletions(
         apiKey: String,
         baseURL: URL,
-        range: DateRange,
+        ranges: [DateRange],
         transport: any ProviderHTTPTransport) async throws -> CompletionsUsageResponse
     {
-        let url = Self.url(
-            baseURL: baseURL,
-            range: range,
-            queryItems: [
-                URLQueryItem(name: "group_by", value: "model"),
-            ])
-        let data = try await Self.fetchData(url: url, apiKey: apiKey, endpoint: "completions", transport: transport)
-        return try Self.decodeCompletions(data)
+        var buckets: [CompletionsUsageBucket] = []
+        for range in ranges {
+            let url = Self.url(
+                baseURL: baseURL,
+                range: range,
+                queryItems: [
+                    URLQueryItem(name: "group_by", value: "model"),
+                ])
+            let data = try await Self.fetchData(url: url, apiKey: apiKey, endpoint: "completions", transport: transport)
+            try buckets.append(contentsOf: Self.decodeCompletions(data).data)
+        }
+        return CompletionsUsageResponse(data: buckets)
     }
 
     private static func fetchData(
@@ -160,7 +177,8 @@ public enum OpenAIAPIUsageFetcher {
         costs: CostsResponse,
         completions: CompletionsUsageResponse,
         now: Date,
-        calendar: Calendar) -> OpenAIAPIUsageSnapshot
+        calendar: Calendar,
+        historyDays: Int) -> OpenAIAPIUsageSnapshot
     {
         var accumulators: [Int: DailyAccumulator] = [:]
 
@@ -209,7 +227,7 @@ public enum OpenAIAPIUsageFetcher {
             .filter { $0.startDate <= now }
             .sorted { $0.startTime < $1.startTime }
             .map { $0.makeBucket(calendar: calendar) }
-        return OpenAIAPIUsageSnapshot(daily: daily, updatedAt: now)
+        return OpenAIAPIUsageSnapshot(daily: daily, updatedAt: now, historyDays: historyDays)
     }
 
     private static func displayName(_ raw: String?, fallback: String) -> String {
@@ -225,16 +243,30 @@ public enum OpenAIAPIUsageFetcher {
             URLQueryItem(name: "start_time", value: String(range.startTime)),
             URLQueryItem(name: "end_time", value: String(range.endTime)),
             URLQueryItem(name: "bucket_width", value: "1d"),
-            URLQueryItem(name: "limit", value: String(Self.maxDailyBuckets)),
+            URLQueryItem(name: "limit", value: String(range.limit)),
         ] + extraItems
         return components.url!
     }
 
-    private static func dailyRange(now: Date, calendar: Calendar) -> DateRange {
+    private static func dailyRanges(now: Date, calendar: Calendar, historyDays: Int) -> [DateRange] {
         let today = calendar.startOfDay(for: now)
-        let start = calendar.date(byAdding: .day, value: -(Self.maxDailyBuckets - 1), to: today) ?? today
-        let end = calendar.date(byAdding: .day, value: 1, to: today) ?? now
-        return DateRange(startTime: Int(start.timeIntervalSince1970), endTime: Int(end.timeIntervalSince1970))
+        let clampedHistoryDays = max(1, min(365, historyDays))
+        var cursor = calendar.date(byAdding: .day, value: -(clampedHistoryDays - 1), to: today) ?? today
+        var remainingDays = clampedHistoryDays
+        var ranges: [DateRange] = []
+        ranges.reserveCapacity(Int(ceil(Double(clampedHistoryDays) / Double(Self.maxDailyBucketLimit))))
+
+        while remainingDays > 0 {
+            let chunkDays = min(Self.maxDailyBucketLimit, remainingDays)
+            let end = calendar.date(byAdding: .day, value: chunkDays, to: cursor) ?? cursor
+            ranges.append(DateRange(
+                startTime: Int(cursor.timeIntervalSince1970),
+                endTime: Int(end.timeIntervalSince1970),
+                limit: chunkDays))
+            cursor = end
+            remainingDays -= chunkDays
+        }
+        return ranges
     }
 
     private static var utcCalendar: Calendar {
@@ -248,6 +280,7 @@ public enum OpenAIAPIUsageFetcher {
 private struct DateRange {
     let startTime: Int
     let endTime: Int
+    let limit: Int
 }
 
 private struct DailyAccumulator {

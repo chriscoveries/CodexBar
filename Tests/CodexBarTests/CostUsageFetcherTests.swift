@@ -74,6 +74,53 @@ struct CostUsageFetcherTests {
     }
 
     @Test
+    func `fetcher refreshes codex cache when history window expands`() async throws {
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+
+        let oldDay = try env.makeLocalNoon(year: 2026, month: 4, day: 2)
+        let newDay = try env.makeLocalNoon(year: 2026, month: 4, day: 8)
+        try Self.writeCodexSessionFile(
+            homeRoot: env.codexHomeRoot,
+            env: env,
+            day: oldDay,
+            filename: "old.jsonl",
+            tokens: 15)
+        try Self.writeCodexSessionFile(
+            homeRoot: env.codexHomeRoot,
+            env: env,
+            day: newDay,
+            filename: "new.jsonl",
+            tokens: 30)
+
+        var options = CostUsageScanner.Options(cacheRoot: env.cacheRoot)
+        options.refreshMinIntervalSeconds = 3600
+
+        let narrow = try await CostUsageFetcher.loadTokenSnapshot(
+            provider: .codex,
+            now: newDay,
+            codexHomePath: env.codexHomeRoot.path,
+            historyDays: 1,
+            scannerOptions: options)
+        #expect(narrow.daily.map(\.date) == ["2026-04-08"])
+        #expect(narrow.last30DaysTokens == 30)
+
+        var legacyCache = CostUsageCacheIO.load(provider: .codex, cacheRoot: env.cacheRoot)
+        legacyCache.scanSinceKey = nil
+        legacyCache.scanUntilKey = nil
+        CostUsageCacheIO.save(provider: .codex, cache: legacyCache, cacheRoot: env.cacheRoot)
+
+        let expanded = try await CostUsageFetcher.loadTokenSnapshot(
+            provider: .codex,
+            now: newDay.addingTimeInterval(1),
+            codexHomePath: env.codexHomeRoot.path,
+            historyDays: 7,
+            scannerOptions: options)
+        #expect(expanded.daily.map(\.date) == ["2026-04-02", "2026-04-08"])
+        #expect(expanded.last30DaysTokens == 45)
+    }
+
+    @Test
     func `fetcher merges native and pi codex history with normalized model names`() async throws {
         let env = try CostUsageTestEnvironment()
         defer { env.cleanup() }

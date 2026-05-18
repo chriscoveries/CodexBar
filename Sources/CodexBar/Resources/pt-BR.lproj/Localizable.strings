@@ -249,7 +249,7 @@
 "Providers" = "Provedores";
 "Quit CodexBar" = "Encerrar CodexBar";
 "Random (default)" = "Aleatório (padrão)";
-"Reads local usage logs. Shows today + last 30 days cost in the menu." = "Lê logs de uso locais. Mostra o custo de hoje + últimos 30 dias no menu.";
+"Reads local usage logs. Shows today + last 30 days cost in the menu." = "Lê logs de uso locais. Mostra o custo de hoje + a janela de histórico selecionada no menu.";
 "Refresh" = "Atualizar";
 "Refresh cadence" = "Cadência de atualização";
 "Remote" = "Remoto";
@@ -327,7 +327,7 @@
 "Updates unavailable in this build." = "Atualizações indisponíveis nesta build.";
 "Usage" = "Uso";
 "Usage breakdown" = "Detalhamento de uso";
-"Usage history (30 days)" = "Histórico de uso (30 dias)";
+"Usage history (30 days)" = "Histórico de uso";
 "Usage source" = "Fonte de uso";
 "Use BigModel for the China mainland endpoints (open.bigmodel.cn)." = "Usa BigModel para endpoints da China continental (open.bigmodel.cn).";
 "Use a single menu bar icon with a provider switcher." = "Usa um único ícone na barra de menus com alternador de provedores.";
@@ -367,7 +367,7 @@
 "cost_status_fetching" = "%1$@: buscando… %2$@";
 "cost_status_last_attempt" = "%1$@: última tentativa %2$@";
 "cost_status_no_data" = "%@: ainda sem dados";
-"cost_status_snapshot" = "%1$@: %2$@ · 30d %3$@";
+"cost_status_snapshot" = "%1$@: %2$@ · %3$@ %4$@";
 "cost_status_unsupported" = "%@: não suportado";
 "credits_remaining" = "Créditos: %@";
 "cursor_on_demand" = "Sob demanda: %@";
@@ -409,7 +409,8 @@
 "start_at_login_title" = "Iniciar ao fazer login";
 "start_at_login_subtitle" = "Abre o CodexBar automaticamente ao iniciar o Mac.";
 "show_cost_summary" = "Mostrar resumo de custos";
-"show_cost_summary_subtitle" = "Lê logs de uso locais. Mostra o custo de hoje + últimos 30 dias no menu.";
+"show_cost_summary_subtitle" = "Lê logs de uso locais. Mostra o custo de hoje + janela selecionada no menu.";
+"cost_history_days_title" = "Janela do histórico: %d dias";
 "cost_auto_refresh_info" = "Atualização automática: a cada hora · Timeout: 10 min";
 "refresh_cadence_title" = "Cadência de atualização";
 "refresh_cadence_subtitle" = "Frequência com que o CodexBar consulta provedores em segundo plano.";

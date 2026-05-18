@@ -8,7 +8,7 @@ read_when:
 
 # Providers
 
-CodexBar currently registers 43 provider IDs. Some companies expose multiple surfaces, such as Codex vs OpenAI API or
+CodexBar currently registers 45 provider IDs. Some companies expose multiple surfaces, such as Codex vs OpenAI API or
 OpenCode vs OpenCode Go, because the auth source and quota shape differ.
 
 ## Fetch strategies (current)
@@ -63,6 +63,8 @@ headers, source selection, provider ordering, and token accounts are stored in `
 | StepFun | Username/password login or manual Oasis token (`web`). |
 | AWS Bedrock | AWS credentials → Cost Explorer usage and budget tracking (`api`). |
 | Grok | `grok agent stdio` JSON-RPC `x.ai/billing` (`cli`) → grok.com billing gRPC-web via Chrome session cookies (`web`); local `~/.grok/sessions` signals as fallback. |
+| GroqCloud | API key → Prometheus metrics API for request/token/cache-hit rates (`api`). |
+| LLM Proxy | API key + base URL → `/v1/quota-stats` aggregate proxy usage (`api`). |
 | Deepgram | API key → project discovery and usage breakdown API (`api`). |
 
 ## Codex
@@ -71,13 +73,13 @@ headers, source selection, provider ordering, and token accounts are stored in `
 - Battery saver toggle (currently off by default): reduces routine OpenAI web refreshes but still allows explicit manual refreshes.
 - CLI RPC default: `codex ... app-server` JSON-RPC (`account/read`, `account/rateLimits/read`).
 - CLI PTY: manual diagnostics/parser coverage only; automatic refresh does not launch bare Codex TUI.
-- Local cost usage: scans `CODEX_HOME` (or `~/.codex`) `sessions` and sibling `archived_sessions` JSONL files (last 30 days).
+- Local cost usage: scans `CODEX_HOME` (or `~/.codex`) `sessions` and sibling `archived_sessions` JSONL files for the configured history window.
 - Status: Statuspage.io (OpenAI).
 - Details: `docs/codex.md`.
 
 ## OpenAI
 - API key from `~/.codexbar/config.json`, `OPENAI_ADMIN_KEY`, or `OPENAI_API_KEY`.
-- Admin API keys are preferred and fetch organization costs plus completion usage for inline Today/7d/30d dashboards.
+- Admin API keys are preferred and fetch organization costs plus completion usage for inline Today/7d/configured-window dashboards.
 - Normal API keys fall back to the legacy credit-grants balance endpoint when organization usage is unavailable.
 - Details: `docs/openai.md`.
 
@@ -86,7 +88,7 @@ headers, source selection, provider ordering, and token accounts are stored in `
 - Admin API shows organization spend/messages summaries with the same inline dashboard pattern as OpenAI API.
 - App Auto: OAuth API (`oauth`) → CLI PTY (`claude`) → Web API (`web`).
 - CLI Auto: Web API (`web`) → CLI PTY (`claude`).
-- Local cost usage: scans `CLAUDE_CONFIG_DIR` when set, otherwise `~/.config/claude/projects` and `~/.claude/projects` JSONL files (last 30 days).
+- Local cost usage: scans `CLAUDE_CONFIG_DIR` when set, otherwise `~/.config/claude/projects` and `~/.claude/projects` JSONL files for the configured history window.
 - Status: Statuspage.io (Anthropic).
 - Details: `docs/claude.md`.
 

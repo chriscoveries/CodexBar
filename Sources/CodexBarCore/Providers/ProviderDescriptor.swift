@@ -95,6 +95,8 @@ public enum ProviderDescriptorRegistry {
         .stepfun: StepFunProviderDescriptor.descriptor,
         .bedrock: BedrockProviderDescriptor.descriptor,
         .grok: GrokProviderDescriptor.descriptor,
+        .groq: GroqProviderDescriptor.descriptor,
+        .llmproxy: LLMProxyProviderDescriptor.descriptor,
         .deepgram: DeepgramProviderDescriptor.descriptor,
     ]
     private static let bootstrap: Void = {

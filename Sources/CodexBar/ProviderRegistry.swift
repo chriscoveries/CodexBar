@@ -73,7 +73,8 @@ struct ProviderRegistry {
                                     accountID: accountID,
                                     token: token)
                             }
-                        })
+                        },
+                        costUsageHistoryDays: settings.costUsageHistoryDays)
                 })
             specs[provider] = spec
         }

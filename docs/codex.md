@@ -124,7 +124,7 @@ Usage source picker:
 - Cache:
   - Native + merged provider cache: `~/Library/Caches/CodexBar/cost-usage/codex-v2.json`
   - pi session cache: `~/Library/Caches/CodexBar/cost-usage/pi-sessions-v1.json`
-- Window: last 30 days (rolling), with a 60s minimum refresh interval.
+- Window: configurable 1-365 day rolling history, with a 60s minimum refresh interval.
 
 ## Key files
 - Web: `Sources/CodexBarCore/OpenAIWeb/*`

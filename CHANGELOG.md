@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.27.1 — Unreleased
+
+### Added
+- GroqCloud: add API-key usage tracking for Enterprise Prometheus metrics with request, token, and cache-hit rate summaries (#993).
+- LLM Proxy: add API-key quota-stats support for aggregate proxy usage, key health, spend, provider breakdowns, and reset windows (#264).
+- Usage history: let OpenAI Admin API charts and local cost-history scans use a configurable 1–365 day window instead of a fixed 30 days (#83).
+- Permissions: notify when a provider probe detects a macOS/browser permission prompt waiting for user action (#456).
+
+### Fixed
+- Multi-account menus: fetch stacked Codex/token-account usage concurrently so account switchers stay responsive with many accounts (#1011).
+
 ## 0.27.0 — 2026-05-17
 
 ### Added

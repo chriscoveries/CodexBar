@@ -270,6 +270,7 @@ extension UsageStore {
     }
 
     private func handleProviderFetchFailure(provider: UsageProvider, error: Error) async {
+        let shouldNotifyPermissionPrompt = Self.isPermissionPromptWaiting(error)
         await MainActor.run {
             let hadPriorData = self.snapshots[provider] != nil
             let preservesPriorData = Self.shouldPreservePriorSnapshot(
@@ -296,6 +297,9 @@ extension UsageStore {
                 }
             } else {
                 self.errors[provider] = nil
+            }
+            if shouldNotifyPermissionPrompt {
+                self.postPermissionPromptNotificationIfNeeded(provider: provider, error: error)
             }
         }
         if let runtime = self.providerRuntimes[provider] {
@@ -333,5 +337,28 @@ extension UsageStore {
     private static func isClaudeUsageProbeTimeout(_ error: Error) -> Bool {
         if case ClaudeStatusProbeError.timedOut = error { return true }
         return error.localizedDescription == ClaudeStatusProbeError.timedOut.localizedDescription
+    }
+
+    nonisolated static func isPermissionPromptWaiting(_ error: Error) -> Bool {
+        let message = error.localizedDescription.lowercased()
+        return (message.contains("prompt") && message.contains("waiting")) ||
+            message.contains("permission prompt") ||
+            message.contains("folder trust prompt")
+    }
+
+    private func postPermissionPromptNotificationIfNeeded(provider: UsageProvider, error: Error) {
+        let now = Date()
+        if let last = self.lastPermissionPromptNotificationAt[provider],
+           now.timeIntervalSince(last) < 10 * 60
+        {
+            return
+        }
+        self.lastPermissionPromptNotificationAt[provider] = now
+        let providerName = ProviderDescriptorRegistry.descriptor(for: provider).metadata.displayName
+        AppNotifications.shared.post(
+            idPrefix: "permission-prompt-\(provider.rawValue)",
+            title: "\(providerName) is waiting for permission",
+            body: error.localizedDescription,
+            soundEnabled: false)
     }
 }

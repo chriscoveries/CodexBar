@@ -59,11 +59,12 @@ extension UsageMenuCardView.Model {
         let today = usage.latestDay
         let seven = usage.last7Days
         let thirty = usage.last30Days
+        let historyLabel = usage.historyWindowLabel
         let todayNote = "Today: \(UsageFormatter.usdString(today.costUSD)) · " +
             "\(UsageFormatter.tokenCountString(today.totalTokens)) tokens"
         let sevenDayNote = "7d: \(UsageFormatter.usdString(seven.costUSD)) · " +
             "\(UsageFormatter.tokenCountString(seven.requests)) requests"
-        let thirtyDayNote = "30d: \(UsageFormatter.tokenCountString(thirty.totalTokens)) tokens · " +
+        let thirtyDayNote = "\(historyLabel): \(UsageFormatter.tokenCountString(thirty.totalTokens)) tokens · " +
             "\(UsageFormatter.tokenCountString(thirty.requests)) requests"
         var notes: [String] = [
             todayNote,
@@ -122,7 +123,8 @@ extension UsageMenuCardView.Model {
         let today = usage.latestDay
         let last7 = usage.last7Days
         let last30 = usage.last30Days
-        let points = usage.daily.suffix(30).map {
+        let historyLabel = usage.historyWindowLabel
+        let points = usage.daily.suffix(usage.historyDays).map {
             InlineUsageDashboardModel.Point(
                 id: $0.day,
                 label: Self.shortDayLabel($0.day),
@@ -130,19 +132,22 @@ extension UsageMenuCardView.Model {
                 accessibilityValue: "\($0.day): \(UsageFormatter.usdString($0.costUSD))")
         }
         var details = [
-            "30d: \(UsageFormatter.tokenCountString(last30.totalTokens)) tokens · " +
+            "\(historyLabel): \(UsageFormatter.tokenCountString(last30.totalTokens)) tokens · " +
                 "\(UsageFormatter.tokenCountString(last30.requests)) requests",
         ]
         if let topModel = usage.topModels.first {
             details.append("Top model: \(Self.shortModelName(topModel.name))")
         }
         return InlineUsageDashboardModel(
-            accessibilityLabel: "OpenAI API 30 day spend trend",
+            accessibilityLabel: "OpenAI API \(usage.historyDays) day spend trend",
             valueStyle: .currencyUSD,
             kpis: [
                 .init(title: "Today", value: UsageFormatter.usdString(today.costUSD), emphasis: true),
                 .init(title: "7d spend", value: UsageFormatter.usdString(last7.costUSD), emphasis: false),
-                .init(title: "30d spend", value: UsageFormatter.usdString(last30.costUSD), emphasis: false),
+                .init(
+                    title: "\(historyLabel) spend",
+                    value: UsageFormatter.usdString(last30.costUSD),
+                    emphasis: false),
                 .init(title: "Today req", value: UsageFormatter.tokenCountString(today.requests), emphasis: false),
             ],
             points: points,
@@ -192,7 +197,10 @@ extension UsageMenuCardView.Model {
         provider: UsageProvider,
         snapshot: CostUsageTokenSnapshot) -> InlineUsageDashboardModel
     {
-        let points = snapshot.daily.suffix(30).compactMap { entry -> InlineUsageDashboardModel.Point? in
+        let historyDays = max(1, min(365, snapshot.historyDays))
+        let historyLabel = historyDays == 1 ? "Today" : "\(historyDays)d"
+        let periodLabel = historyDays == 1 ? "today" : "\(historyDays) day"
+        let points = snapshot.daily.suffix(historyDays).compactMap { entry -> InlineUsageDashboardModel.Point? in
             guard let cost = entry.costUSD else { return nil }
             return InlineUsageDashboardModel.Point(
                 id: entry.date,
@@ -212,7 +220,7 @@ extension UsageMenuCardView.Model {
         }
         let providerName = ProviderDefaults.metadata[provider]?.displayName ?? provider.rawValue
         return InlineUsageDashboardModel(
-            accessibilityLabel: "\(providerName) 30 day cost trend",
+            accessibilityLabel: "\(providerName) \(periodLabel) cost trend",
             valueStyle: .currencyUSD,
             kpis: [
                 .init(
@@ -220,11 +228,11 @@ extension UsageMenuCardView.Model {
                     value: latest?.costUSD.map(UsageFormatter.usdString) ?? "—",
                     emphasis: true),
                 .init(
-                    title: "30d cost",
+                    title: "\(historyLabel) cost",
                     value: snapshot.last30DaysCostUSD.map(UsageFormatter.usdString) ?? "—",
                     emphasis: false),
                 .init(
-                    title: "30d tokens",
+                    title: "\(historyLabel) tokens",
                     value: snapshot.last30DaysTokens.map(UsageFormatter.tokenCountString) ?? "—",
                     emphasis: false),
                 .init(

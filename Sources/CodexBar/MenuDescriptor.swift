@@ -287,6 +287,7 @@ struct MenuDescriptor {
         let today = usage.latestDay
         let last7 = usage.last7Days
         let last30 = usage.last30Days
+        let historyLabel = usage.historyWindowLabel
 
         entries.append(.text(
             "Today: \(UsageFormatter.usdString(today.costUSD)) · " +
@@ -297,7 +298,7 @@ struct MenuDescriptor {
                 "\(UsageFormatter.tokenCountString(last7.requests)) requests",
             .secondary))
         entries.append(.text(
-            "30d: \(UsageFormatter.usdString(last30.costUSD)) · " +
+            "\(historyLabel): \(UsageFormatter.usdString(last30.costUSD)) · " +
                 "\(UsageFormatter.tokenCountString(last30.requests)) requests",
             .secondary))
         if let topModel = usage.topModels.first?.name {

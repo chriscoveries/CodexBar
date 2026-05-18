@@ -45,6 +45,8 @@ public enum UsageProvider: String, CaseIterable, Sendable, Codable {
     case stepfun
     case bedrock
     case grok
+    case groq
+    case llmproxy
     case deepgram
 }
 
@@ -93,6 +95,8 @@ public enum IconStyle: Sendable, CaseIterable {
     case stepfun
     case bedrock
     case grok
+    case groq
+    case llmproxy
     case deepgram
     case combined
 }

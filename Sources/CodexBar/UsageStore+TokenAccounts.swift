@@ -33,6 +33,18 @@ struct CodexAccountUsageSnapshot: Identifiable {
     }
 }
 
+private struct TokenAccountFetchResult: Sendable {
+    let index: Int
+    let account: ProviderTokenAccount
+    let outcome: ProviderFetchOutcome
+}
+
+private struct CodexAccountFetchResult: Sendable {
+    let index: Int
+    let account: CodexVisibleAccount
+    let outcome: ProviderFetchOutcome
+}
+
 extension UsageStore {
     static let tokenAccountMenuSnapshotLimit = 6
 
@@ -73,11 +85,10 @@ extension UsageStore {
         var selectedSourceLabel: String?
         var sawAnyNonCancellationOutcome = false
 
-        for account in accounts {
-            let outcome = await self.fetchOutcome(
-                provider: .codex,
-                override: nil,
-                codexActiveSourceOverride: account.selectionSource)
+        let results = await self.fetchCodexVisibleAccountOutcomes(accounts)
+        for result in results {
+            let account = result.account
+            let outcome = result.outcome
             let isCancellation = Self.outcomeIsCancellation(outcome)
             if !isCancellation {
                 sawAnyNonCancellationOutcome = true
@@ -144,9 +155,10 @@ extension UsageStore {
         var selectedSnapshot: UsageSnapshot?
         var sawAnyNonCancellationOutcome = false
 
-        for account in limitedAccounts {
-            let override = TokenAccountOverride(provider: provider, account: account)
-            let outcome = await self.fetchOutcome(provider: provider, override: override)
+        let results = await self.fetchTokenAccountOutcomes(provider: provider, accounts: limitedAccounts)
+        for result in results {
+            let account = result.account
+            let outcome = result.outcome
             let isCancellation = Self.outcomeIsCancellation(outcome)
             if !isCancellation {
                 sawAnyNonCancellationOutcome = true
@@ -259,12 +271,93 @@ extension UsageStore {
         override: TokenAccountOverride?,
         codexActiveSourceOverride: CodexActiveSource? = nil) async -> ProviderFetchOutcome
     {
-        let descriptor = ProviderDescriptorRegistry.descriptor(for: provider)
+        let descriptor = self.providerSpecs[provider]?.descriptor ?? ProviderDescriptorRegistry
+            .descriptor(for: provider)
         let context = self.makeFetchContext(
             provider: provider,
             override: override,
             codexActiveSourceOverride: codexActiveSourceOverride)
         return await descriptor.fetchOutcome(context: context)
+    }
+
+    private func fetchTokenAccountOutcomes(
+        provider: UsageProvider,
+        accounts: [ProviderTokenAccount]) async -> [TokenAccountFetchResult]
+    {
+        let requests: [(
+            index: Int,
+            account: ProviderTokenAccount,
+            descriptor: ProviderDescriptor,
+            context: ProviderFetchContext)] =
+            accounts.enumerated().map { index, account in
+                let override = TokenAccountOverride(provider: provider, account: account)
+                let descriptor = self.providerSpecs[provider]?.descriptor ?? ProviderDescriptorRegistry
+                    .descriptor(for: provider)
+                let context = self.makeFetchContext(provider: provider, override: override)
+                return (index, account, descriptor, context)
+            }
+
+        return await withTaskGroup(
+            of: TokenAccountFetchResult.self,
+            returning: [TokenAccountFetchResult].self)
+        { group in
+            for request in requests {
+                group.addTask {
+                    let outcome = await request.descriptor.fetchOutcome(context: request.context)
+                    return TokenAccountFetchResult(
+                        index: request.index,
+                        account: request.account,
+                        outcome: outcome)
+                }
+            }
+
+            var results: [TokenAccountFetchResult] = []
+            results.reserveCapacity(requests.count)
+            for await result in group {
+                results.append(result)
+            }
+            return results.sorted { $0.index < $1.index }
+        }
+    }
+
+    private func fetchCodexVisibleAccountOutcomes(_ accounts: [CodexVisibleAccount]) async
+    -> [CodexAccountFetchResult] {
+        let requests: [(
+            index: Int,
+            account: CodexVisibleAccount,
+            descriptor: ProviderDescriptor,
+            context: ProviderFetchContext)] =
+            accounts.enumerated().map { index, account in
+                let descriptor = self.providerSpecs[.codex]?.descriptor ?? ProviderDescriptorRegistry
+                    .descriptor(for: .codex)
+                let context = self.makeFetchContext(
+                    provider: .codex,
+                    override: nil,
+                    codexActiveSourceOverride: account.selectionSource)
+                return (index, account, descriptor, context)
+            }
+
+        return await withTaskGroup(
+            of: CodexAccountFetchResult.self,
+            returning: [CodexAccountFetchResult].self)
+        { group in
+            for request in requests {
+                group.addTask {
+                    let outcome = await request.descriptor.fetchOutcome(context: request.context)
+                    return CodexAccountFetchResult(
+                        index: request.index,
+                        account: request.account,
+                        outcome: outcome)
+                }
+            }
+
+            var results: [CodexAccountFetchResult] = []
+            results.reserveCapacity(requests.count)
+            for await result in group {
+                results.append(result)
+            }
+            return results.sorted { $0.index < $1.index }
+        }
     }
 
     func makeFetchContext(
@@ -310,7 +403,8 @@ extension UsageStore {
                         accountID: accountID,
                         token: token)
                 }
-            })
+            },
+            costUsageHistoryDays: self.settings.costUsageHistoryDays)
     }
 
     func sourceMode(for provider: UsageProvider) -> ProviderSourceMode {

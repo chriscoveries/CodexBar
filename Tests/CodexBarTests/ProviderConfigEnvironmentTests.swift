@@ -78,6 +78,34 @@ struct ProviderConfigEnvironmentTests {
     }
 
     @Test
+    func `applies API key override for groq`() {
+        let config = ProviderConfig(id: .groq, apiKey: "gsk-token")
+        let env = ProviderConfigEnvironment.applyAPIKeyOverride(
+            base: [:],
+            provider: .groq,
+            config: config)
+
+        #expect(env[GroqSettingsReader.apiKeyEnvironmentKey] == "gsk-token")
+        #expect(ProviderTokenResolver.groqToken(environment: env) == "gsk-token")
+    }
+
+    @Test
+    func `applies LLM Proxy config overrides`() {
+        let config = ProviderConfig(
+            id: .llmproxy,
+            apiKey: "proxy-token",
+            enterpriseHost: "https://proxy.example.com")
+        let env = ProviderConfigEnvironment.applyProviderConfigOverrides(
+            base: [:],
+            provider: .llmproxy,
+            config: config)
+
+        #expect(env[LLMProxySettingsReader.apiKeyEnvironmentKey] == "proxy-token")
+        #expect(env[LLMProxySettingsReader.baseURLEnvironmentKey] == "https://proxy.example.com")
+        #expect(ProviderTokenResolver.llmProxyToken(environment: env) == "proxy-token")
+    }
+
+    @Test
     func `openai config override uses preferred admin key environment`() {
         let config = ProviderConfig(id: .openai, apiKey: "config-openai-token")
         let env = ProviderConfigEnvironment.applyAPIKeyOverride(

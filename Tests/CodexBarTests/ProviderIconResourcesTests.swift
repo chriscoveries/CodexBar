@@ -27,6 +27,8 @@ struct ProviderIconResourcesTests {
             "kimi",
             "bedrock",
             "elevenlabs",
+            "groq",
+            "llmproxy",
             "deepgram",
         ]
         for slug in slugs {

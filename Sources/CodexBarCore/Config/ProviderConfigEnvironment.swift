@@ -12,6 +12,9 @@ public enum ProviderConfigEnvironment {
         if provider == .deepgram {
             return self.applyDeepgramOverrides(base: base, config: config)
         }
+        if provider == .llmproxy {
+            return self.applyLLMProxyOverrides(base: base, config: config)
+        }
         guard let apiKey = config?.sanitizedAPIKey, !apiKey.isEmpty else { return base }
         var env = base
         if let key = self.directAPIKeyEnvironmentKey(for: provider) {
@@ -89,6 +92,10 @@ public enum ProviderConfigEnvironment {
             VeniceSettingsReader.apiKeyEnvironmentKey
         case .deepgram:
             DeepgramSettingsReader.apiKeyEnvironmentKey
+        case .groq:
+            GroqSettingsReader.apiKeyEnvironmentKey
+        case .llmproxy:
+            LLMProxySettingsReader.apiKeyEnvironmentKey
         default:
             nil
         }
@@ -128,6 +135,20 @@ public enum ProviderConfigEnvironment {
             env[DeepgramSettingsReader.projectIDEnvironmentKey] = projectID
         }
 
+        return env
+    }
+
+    private static func applyLLMProxyOverrides(
+        base: [String: String],
+        config: ProviderConfig?) -> [String: String]
+    {
+        var env = base
+        if let apiKey = config?.sanitizedAPIKey {
+            env[LLMProxySettingsReader.apiKeyEnvironmentKey] = apiKey
+        }
+        if let baseURL = config?.sanitizedEnterpriseHost {
+            env[LLMProxySettingsReader.baseURLEnvironmentKey] = baseURL
+        }
         return env
     }
 

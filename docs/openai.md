@@ -31,9 +31,9 @@ fallback.
 
 ## Menu display
 
-- Admin API data renders inline Today/7d/30d KPIs plus a compact 30-day spend chart.
+- Admin API data renders inline Today/7d/configured-window KPIs plus a compact spend chart.
 - The inline usage card opens a hosted chart submenu with daily spend, token, and request trends plus selected-day detail.
-- Top model and top spend labels come from the 30-day completion/cost buckets when the Admin API returns them.
+- Top model and top spend labels come from the configured completion/cost buckets when the Admin API returns them.
 - Legacy balance data keeps the older available/used credit summary and does not show organization graphs.
 
 ## Notes

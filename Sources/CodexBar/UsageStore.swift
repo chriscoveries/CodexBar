@@ -62,6 +62,7 @@ extension UsageStore {
             _ = self.settings.quotaWarningSoundEnabled
             _ = self.settings.usageBarsShowUsed
             _ = self.settings.costUsageEnabled
+            _ = self.settings.costUsageHistoryDays
             _ = self.settings.randomBlinkEnabled
             _ = self.settings.configRevision
             for implementation in ProviderCatalog.all {
@@ -236,6 +237,7 @@ final class UsageStore {
     @ObservationIgnored var lastKnownSessionRemaining: [UsageProvider: Double] = [:]
     @ObservationIgnored var lastKnownSessionWindowSource: [UsageProvider: SessionQuotaWindowSource] = [:]
     @ObservationIgnored var quotaWarningState: [QuotaWarningStateKey: QuotaWarningState] = [:]
+    @ObservationIgnored var lastPermissionPromptNotificationAt: [UsageProvider: Date] = [:]
     @ObservationIgnored var lastTokenFetchAt: [UsageProvider: Date] = [:]
     @ObservationIgnored var lastTokenFetchScope: [UsageProvider: String] = [:]
     @ObservationIgnored var planUtilizationHistory: [UsageProvider: PlanUtilizationHistoryBuckets] = [:]
@@ -972,6 +974,8 @@ extension UsageStore {
                 .stepfun: "StepFun debug log not yet implemented",
                 .bedrock: "Bedrock debug log not yet implemented",
                 .grok: "Grok debug log not yet implemented",
+                .groq: "Groq debug log not yet implemented",
+                .llmproxy: "LLM Proxy debug log not yet implemented",
                 .deepgram: "Deepgram debug log not yet implemented",
             ]
             let buildText = {
@@ -1047,7 +1051,7 @@ extension UsageStore {
                         hasTokenAccount: deepSeekHasTokenAccount)
                 case .gemini, .antigravity, .opencode, .opencodego, .factory, .copilot, .vertexai, .kilo, .kiro, .kimi,
                      .kimik2, .moonshot, .jetbrains, .perplexity, .mimo, .doubao, .abacus, .mistral, .codebuff, .crof,
-                     .windsurf, .venice, .manus, .commandcode, .stepfun, .bedrock, .grok, .deepgram:
+                     .windsurf, .venice, .manus, .commandcode, .stepfun, .bedrock, .grok, .groq, .llmproxy, .deepgram:
                     return unimplementedDebugLogMessages[provider] ?? "Debug log not yet implemented"
                 }
             }
@@ -1454,16 +1458,18 @@ extension UsageStore {
         guard !self.tokenRefreshInFlight.contains(provider) else { return }
 
         let now = Date()
+        let historyDays = self.settings.costUsageHistoryDays
         let costScope = self.tokenCostScope(for: provider)
+        let costScopeSignature = "\(costScope.signature)|historyDays=\(historyDays)"
         if !force,
            let last = self.lastTokenFetchAt[provider],
-           self.lastTokenFetchScope[provider] == costScope.signature,
+           self.lastTokenFetchScope[provider] == costScopeSignature,
            now.timeIntervalSince(last) < self.tokenFetchTTL
         {
             return
         }
         self.lastTokenFetchAt[provider] = now
-        self.lastTokenFetchScope[provider] = costScope.signature
+        self.lastTokenFetchScope[provider] = costScopeSignature
         self.tokenRefreshInFlight.insert(provider)
         defer { self.tokenRefreshInFlight.remove(provider) }
 
@@ -1495,7 +1501,8 @@ extension UsageStore {
                         now: now,
                         forceRefresh: force,
                         allowVertexClaudeFallback: !self.isEnabled(.claude),
-                        codexHomePath: costScope.codexHomePath)
+                        codexHomePath: costScope.codexHomePath,
+                        historyDays: historyDays)
                 }
                 group.addTask {
                     try await Task.sleep(nanoseconds: UInt64(timeoutSeconds * 1_000_000_000))
@@ -1520,7 +1527,7 @@ extension UsageStore {
                 "cost usage success provider=\(providerText) " +
                 "duration=\(durationText)s " +
                 "today=\(sessionCost) " +
-                "30d=\(monthCost)"
+                "historyDays=\(historyDays) windowCost=\(monthCost)"
             self.tokenCostLogger.info(message)
             self.tokenSnapshots[provider] = snapshot
             self.tokenErrors[provider] = nil

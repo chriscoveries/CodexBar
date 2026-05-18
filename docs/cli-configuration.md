@@ -53,6 +53,8 @@ Useful examples:
 printf '%s' "$OPENAI_ADMIN_KEY" | codexbar config set-api-key --provider openai --stdin
 printf '%s' "$ANTHROPIC_ADMIN_KEY" | codexbar config set-api-key --provider claude --stdin
 printf '%s' "$DEEPGRAM_API_KEY" | codexbar config set-api-key --provider deepgram --stdin
+printf '%s' "$GROQ_API_KEY" | codexbar config set-api-key --provider groq --stdin
+printf '%s' "$LLM_PROXY_API_KEY" | codexbar config set-api-key --provider llmproxy --stdin
 printf '%s' "$Z_AI_API_KEY" | codexbar config set-api-key --provider zai --stdin
 ```
 
@@ -60,6 +62,9 @@ Only providers that consume config-backed API keys accept this command. Admin AP
 organization/usage permissions, not a normal inference key. Browser/OAuth providers such as Grok use their own provider
 sessions instead of an xAI API key for CodexBar's billing view, so enable them with
 `codexbar config enable --provider grok`.
+
+LLM Proxy also needs a base URL. Use `LLM_PROXY_BASE_URL` for CLI runs, or add `"enterpriseHost"` to the provider entry
+in `~/.codexbar/config.json`.
 
 ## Isolated config files
 
@@ -72,6 +77,17 @@ codexbar config providers --json --pretty
 ```
 
 The override applies to both reads and writes for the current process environment.
+
+## Cost history window
+
+The app setting controls the menu's local cost-history window. For one-off CLI reports, pass `--days`:
+
+```bash
+codexbar cost --provider codex --days 90
+codexbar cost --provider claude --days 180 --format json --pretty
+```
+
+The accepted range is 1...365 days.
 
 ## Validation
 

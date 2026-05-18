@@ -87,6 +87,14 @@ public enum ProviderTokenResolver {
         self.elevenLabsResolution(environment: environment)?.token
     }
 
+    public static func groqToken(environment: [String: String] = ProcessInfo.processInfo.environment) -> String? {
+        self.groqResolution(environment: environment)?.token
+    }
+
+    public static func llmProxyToken(environment: [String: String] = ProcessInfo.processInfo.environment) -> String? {
+        self.llmProxyResolution(environment: environment)?.token
+    }
+
     public static func perplexitySessionToken(
         environment: [String: String] = ProcessInfo.processInfo.environment) -> String?
     {
@@ -278,6 +286,18 @@ public enum ProviderTokenResolver {
         environment: [String: String] = ProcessInfo.processInfo.environment) -> ProviderTokenResolution?
     {
         self.resolveEnv(ElevenLabsSettingsReader.apiKey(environment: environment))
+    }
+
+    public static func groqResolution(
+        environment: [String: String] = ProcessInfo.processInfo.environment) -> ProviderTokenResolution?
+    {
+        self.resolveEnv(GroqSettingsReader.apiKey(environment: environment))
+    }
+
+    public static func llmProxyResolution(
+        environment: [String: String] = ProcessInfo.processInfo.environment) -> ProviderTokenResolution?
+    {
+        self.resolveEnv(LLMProxySettingsReader.apiKey(environment: environment))
     }
 
     public enum DeepgramCredentialKind: Sendable {

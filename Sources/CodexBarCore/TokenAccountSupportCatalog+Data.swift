@@ -128,6 +128,20 @@ extension TokenAccountSupportCatalog {
             injection: .environment(key: ElevenLabsSettingsReader.apiKeyEnvironmentKey),
             requiresManualCookieSource: false,
             cookieName: nil),
+        .groq: TokenAccountSupport(
+            title: "API keys",
+            subtitle: "Store multiple Groq API keys.",
+            placeholder: "Paste Groq API key…",
+            injection: .environment(key: GroqSettingsReader.apiKeyEnvironmentKey),
+            requiresManualCookieSource: false,
+            cookieName: nil),
+        .llmproxy: TokenAccountSupport(
+            title: "API keys",
+            subtitle: "Store multiple LLM Proxy API keys.",
+            placeholder: "Paste proxy API key…",
+            injection: .environment(key: LLMProxySettingsReader.apiKeyEnvironmentKey),
+            requiresManualCookieSource: false,
+            cookieName: nil),
         .stepfun: TokenAccountSupport(
             title: "Session tokens",
             subtitle: "Store multiple StepFun Oasis-Token values.",

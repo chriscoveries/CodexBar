@@ -58,6 +58,8 @@ enum CostUsageCacheIO {
 struct CostUsageCache: Codable {
     var version: Int = 1
     var lastScanUnixMs: Int64 = 0
+    var scanSinceKey: String?
+    var scanUntilKey: String?
 
     /// filePath -> file usage
     var files: [String: CostUsageFileUsage] = [:]

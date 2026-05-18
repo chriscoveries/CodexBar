@@ -119,6 +119,12 @@ enum CostUsageScanner {
         let inheritedResolver: CodexInheritedTotalsResolver
     }
 
+    private struct CodexFileScanContext {
+        let range: CostUsageDayRange
+        let forceFullScan: Bool
+        let resources: CodexScanResources
+    }
+
     private final class CodexSessionFileIndex {
         private let files: [URL]
         private let roots: [URL]
@@ -297,7 +303,8 @@ enum CostUsageScanner {
         case .openai, .zai, .gemini, .antigravity, .cursor, .opencode, .opencodego, .alibaba, .factory, .copilot,
              .minimax, .manus, .kilo, .kiro, .kimi, .kimik2, .moonshot, .augment, .jetbrains, .amp, .ollama,
              .synthetic, .openrouter, .elevenlabs, .warp, .perplexity, .mimo, .doubao, .abacus, .mistral,
-             .deepseek, .codebuff, .crof, .windsurf, .venice, .commandcode, .stepfun, .bedrock, .grok, .deepgram:
+             .deepseek, .codebuff, .crof, .windsurf, .venice, .commandcode, .stepfun, .bedrock, .grok, .groq,
+             .llmproxy, .deepgram:
             return emptyReport
         }
     }
@@ -1037,10 +1044,9 @@ enum CostUsageScanner {
 
     private static func scanCodexFile(
         fileURL: URL,
-        range: CostUsageDayRange,
+        context: CodexFileScanContext,
         cache: inout CostUsageCache,
-        state: inout CodexScanState,
-        resources: CodexScanResources)
+        state: inout CodexScanState)
     {
         let path = fileURL.path
         let attrs = (try? FileManager.default.attributesOfItem(atPath: path)) ?? [:]
@@ -1071,7 +1077,8 @@ enum CostUsageScanner {
         if let cached,
            cached.mtimeUnixMs == mtimeMs,
            cached.size == size,
-           !needsSessionId
+           !needsSessionId,
+           !context.forceFullScan
         {
             if let cachedSessionId = cached.sessionId {
                 state.seenSessionIds.insert(cachedSessionId)
@@ -1082,7 +1089,7 @@ enum CostUsageScanner {
             return
         }
 
-        if let cached, cached.sessionId != nil {
+        if let cached, cached.sessionId != nil, !context.forceFullScan {
             let startOffset = cached.parsedBytes ?? cached.size
             let canIncremental = size > cached.size && startOffset > 0 && startOffset <= size
                 && cached.lastTotals != nil
@@ -1090,7 +1097,7 @@ enum CostUsageScanner {
             if canIncremental {
                 let delta = Self.parseCodexFile(
                     fileURL: fileURL,
-                    range: range,
+                    range: context.range,
                     startOffset: startOffset,
                     initialModel: cached.lastModel,
                     initialTotals: cached.lastTotals,
@@ -1120,7 +1127,7 @@ enum CostUsageScanner {
                     codexRows: (cached.codexRows ?? []) + delta.rows)
                 if let sessionId {
                     state.seenSessionIds.insert(sessionId)
-                    resources.fileIndex.remember(fileURL: fileURL, sessionId: sessionId)
+                    context.resources.fileIndex.remember(fileURL: fileURL, sessionId: sessionId)
                 }
                 if let fileId {
                     state.seenFileIds.insert(fileId)
@@ -1135,8 +1142,8 @@ enum CostUsageScanner {
 
         let parsed = Self.parseCodexFile(
             fileURL: fileURL,
-            range: range,
-            inheritedTotalsResolver: resources.inheritedResolver.inheritedTotals(for:atOrBefore:))
+            range: context.range,
+            inheritedTotalsResolver: context.resources.inheritedResolver.inheritedTotals(for:atOrBefore:))
         let sessionId = parsed.sessionId ?? cached?.sessionId
         if let sessionId, state.seenSessionIds.contains(sessionId) {
             cache.files.removeValue(forKey: path)
@@ -1158,7 +1165,7 @@ enum CostUsageScanner {
         Self.applyFileDays(cache: &cache, fileDays: usage.days, sign: 1)
         if let sessionId {
             state.seenSessionIds.insert(sessionId)
-            resources.fileIndex.remember(fileURL: fileURL, sessionId: sessionId)
+            context.resources.fileIndex.remember(fileURL: fileURL, sessionId: sessionId)
         }
         if let fileId {
             state.seenFileIds.insert(fileId)
@@ -1173,7 +1180,9 @@ enum CostUsageScanner {
         let roots = self.codexSessionsRoots(options: options)
         let rootsFingerprint = Self.codexRootsFingerprint(roots)
         let rootsChanged = cache.roots != rootsFingerprint
+        let windowExpanded = Self.requestedWindowExpandsCache(range: range, cache: cache)
         let shouldRefresh = options.forceRescan
+            || windowExpanded
             || rootsChanged
             || refreshMs == 0
             || cache.lastScanUnixMs == 0
@@ -1236,10 +1245,12 @@ enum CostUsageScanner {
             for fileURL in files {
                 Self.scanCodexFile(
                     fileURL: fileURL,
-                    range: range,
+                    context: CodexFileScanContext(
+                        range: range,
+                        forceFullScan: options.forceRescan || windowExpanded,
+                        resources: resources),
                     cache: &cache,
-                    state: &scanState,
-                    resources: resources)
+                    state: &scanState)
             }
 
             for key in cache.files.keys where !filePathsInScan.contains(key) {
@@ -1251,6 +1262,8 @@ enum CostUsageScanner {
 
             Self.pruneDays(cache: &cache, sinceKey: range.scanSinceKey, untilKey: range.scanUntilKey)
             cache.roots = rootsFingerprint
+            cache.scanSinceKey = range.scanSinceKey
+            cache.scanUntilKey = range.scanUntilKey
             cache.lastScanUnixMs = nowMs
             CostUsageCacheIO.save(provider: .codex, cache: cache, cacheRoot: options.cacheRoot)
         }
@@ -1519,6 +1532,15 @@ enum CostUsageScanner {
         for key in cache.days.keys where !CostUsageDayRange.isInRange(dayKey: key, since: sinceKey, until: untilKey) {
             cache.days.removeValue(forKey: key)
         }
+    }
+
+    static func requestedWindowExpandsCache(range: CostUsageDayRange, cache: CostUsageCache) -> Bool {
+        guard let cachedSince = cache.scanSinceKey,
+              let cachedUntil = cache.scanUntilKey
+        else {
+            return cache.lastScanUnixMs != 0 || !cache.files.isEmpty || !cache.days.isEmpty
+        }
+        return range.scanSinceKey < cachedSince || range.scanUntilKey > cachedUntil
     }
 
     static func addPacked(a: [Int], b: [Int], sign: Int) -> [Int] {

@@ -10,7 +10,7 @@
 
 <a href="https://codexbar.app"><img src="docs/social.png" alt="CodexBar — every AI coding limit in your menu bar. 40+ providers." width="100%" /></a>
 
-Tiny macOS 14+ menu bar app that keeps **AI coding-provider limits visible** and shows when each window resets. Codex, OpenAI, Claude, Cursor, Gemini, Copilot, Grok, ElevenLabs, Deepgram, z.ai, MiniMax, Kiro, Vertex AI, Augment, OpenRouter, Codebuff, Command Code, AWS Bedrock, and many newer coding providers. One status item per provider, or Merge Icons mode with a provider switcher. No Dock icon, minimal UI, dynamic bar icons.
+Tiny macOS 14+ menu bar app that keeps **AI coding-provider limits visible** and shows when each window resets. Codex, OpenAI, Claude, Cursor, Gemini, Copilot, Grok, GroqCloud, ElevenLabs, Deepgram, z.ai, MiniMax, Kiro, Vertex AI, Augment, OpenRouter, LLM Proxy, Codebuff, Command Code, AWS Bedrock, and many newer coding providers. One status item per provider, or Merge Icons mode with a provider switcher. No Dock icon, minimal UI, dynamic bar icons.
 
 <img src="codexbar.png" alt="CodexBar menu popover with provider tiles, usage bars, and reset countdowns" width="520" />
 
@@ -109,6 +109,8 @@ See [CLI configuration](docs/cli-configuration.md) for the full flow.
 - [StepFun](docs/stepfun.md) — Username + password login for Step Plan rate limits (5‑hour + weekly windows) and subscription plan name.
 - [AWS Bedrock](docs/bedrock.md) — AWS credentials for Cost Explorer usage and monthly budget tracking.
 - [Grok](docs/grok.md) — Grok CLI billing RPC plus grok.com browser-session fallback.
+- [GroqCloud](docs/groqcloud.md) — API key for Enterprise Prometheus request/token/cache-hit metrics.
+- [LLM Proxy](docs/llm-proxy.md) — API key + base URL for aggregate proxy quota stats and provider breakdowns.
 - [Deepgram](docs/deepgram.md) — API key usage summaries across speech, agent, token, and TTS metrics.
 - Open to new providers: [provider authoring guide](docs/provider.md).
 
@@ -121,7 +123,7 @@ show an incident indicator.
 - Provider-specific usage meters with reset countdowns.
 - Optional Codex web dashboard enrichments (code review remaining, usage breakdown, credits history).
 - Inline spend and usage charts for API-backed providers such as OpenAI, Claude Admin API, OpenRouter, z.ai, MiniMax, Mistral, and AWS Bedrock.
-- Local cost-usage scan for Codex + Claude (last 30 days), plus reused chart UI for supported provider histories.
+- Configurable cost-usage scans for Codex + Claude, plus reused chart UI for supported provider histories.
 - Provider status polling with incident badges in the menu and icon overlay.
 - Merge Icons mode to combine providers into one status item + switcher.
 - Display controls for provider icons, labels, bars, reset-time style, and highest-usage auto-selection.

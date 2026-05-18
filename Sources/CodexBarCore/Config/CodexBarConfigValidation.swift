@@ -143,14 +143,14 @@ public enum CodexBarConfigValidator {
 
         if let enterpriseHost = entry.enterpriseHost,
            !enterpriseHost.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-           provider != .copilot
+           !self.providerSupportsEnterpriseHost(provider)
         {
             issues.append(CodexBarConfigIssue(
                 severity: .warning,
                 provider: provider,
                 field: "enterpriseHost",
                 code: "enterprise_host_unused",
-                message: "enterpriseHost is set but only copilot supports enterpriseHost."))
+                message: "enterpriseHost is set but only copilot and llmproxy support enterpriseHost."))
         }
 
         if let tokenAccounts = entry.tokenAccounts, !tokenAccounts.accounts.isEmpty,
@@ -184,6 +184,15 @@ public enum CodexBarConfigValidator {
     private static func providerSupportsWorkspaceID(_ provider: UsageProvider) -> Bool {
         switch provider {
         case .opencode, .opencodego, .deepgram:
+            true
+        default:
+            false
+        }
+    }
+
+    private static func providerSupportsEnterpriseHost(_ provider: UsageProvider) -> Bool {
+        switch provider {
+        case .copilot, .llmproxy:
             true
         default:
             false

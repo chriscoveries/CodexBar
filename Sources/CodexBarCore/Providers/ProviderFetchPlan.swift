@@ -34,6 +34,7 @@ public struct ProviderFetchContext: Sendable {
     public let browserDetection: BrowserDetection
     public let selectedTokenAccountID: UUID?
     public let tokenAccountTokenUpdater: TokenAccountTokenUpdater?
+    public let costUsageHistoryDays: Int
 
     public init(
         runtime: ProviderRuntime,
@@ -49,7 +50,8 @@ public struct ProviderFetchContext: Sendable {
         claudeFetcher: any ClaudeUsageFetching,
         browserDetection: BrowserDetection,
         selectedTokenAccountID: UUID? = nil,
-        tokenAccountTokenUpdater: TokenAccountTokenUpdater? = nil)
+        tokenAccountTokenUpdater: TokenAccountTokenUpdater? = nil,
+        costUsageHistoryDays: Int = 30)
     {
         self.runtime = runtime
         self.sourceMode = sourceMode
@@ -65,6 +67,7 @@ public struct ProviderFetchContext: Sendable {
         self.browserDetection = browserDetection
         self.selectedTokenAccountID = selectedTokenAccountID
         self.tokenAccountTokenUpdater = tokenAccountTokenUpdater
+        self.costUsageHistoryDays = max(1, min(365, costUsageHistoryDays))
     }
 }
 

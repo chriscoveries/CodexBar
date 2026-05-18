@@ -93,6 +93,8 @@ enum ProviderChoice: String, AppEnum {
         case .stepfun: return nil // StepFun not yet supported in widgets
         case .bedrock: return nil // Bedrock not yet supported in widgets
         case .grok: return nil // Grok not yet supported in widgets
+        case .groq: return nil // Groq not yet supported in widgets
+        case .llmproxy: return nil // LLM Proxy not yet supported in widgets
         case .deepgram: return nil // Deepgram not yet supported in widgets
         }
     }

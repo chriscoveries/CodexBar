@@ -116,7 +116,8 @@ codexbar --provider claude        # force Claude
 codexbar --provider all           # query all registered providers
 codexbar --format json --pretty   # machine output
 codexbar --format json --provider both
-codexbar cost                     # local cost usage (last 30 days + today)
+codexbar cost                     # local cost usage (default 30-day window + today)
+codexbar cost --days 90           # choose a 1...365 day cost window
 codexbar cost --provider claude --format json --pretty
 codexbar serve --port 8080        # localhost HTTP JSON server
 COPILOT_API_TOKEN=... codexbar --provider copilot --format json --pretty
