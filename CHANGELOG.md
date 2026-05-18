@@ -14,6 +14,7 @@
 - Quota warnings: include the triggering account in notification copy when personal info is visible (#973). Thanks @raflyazf!
 - CLI: add `codexbar config set-api-key` for safely storing provider API keys from stdin.
 - CLI: add `codexbar config providers`, `enable`, and `disable` for scripting the same provider toggles used by Settings.
+- CLI: let `--all-accounts` and `codexbar serve` export every visible Codex account instead of only the selected account (#1019).
 - Website: replace provider-letter tiles with brand logos, add light/dark landing-page themes, and collapse OpenCode/OpenCode Go into one company entry (#989). Thanks @pasangimhana!
 - Providers: route app-owned provider HTTP calls through a shared transport seam for cleaner proxy and test support (#892). Thanks @serezha93!
 

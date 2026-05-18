@@ -27,7 +27,8 @@ extension CodexBarCLI {
           - Kilo: app.kilo.ai API.
             Auto falls back to Kilo CLI when API credentials are missing or unauthorized.
           Token accounts are loaded from ~/.codexbar/config.json.
-          Use --account or --account-index to select a specific token account, or --all-accounts to fetch all.
+          Use --account or --account-index to select a specific token account.
+          Use --all-accounts to fetch every token account, or every visible Codex account for Codex.
           Account selection requires a single provider.
 
         Global flags:

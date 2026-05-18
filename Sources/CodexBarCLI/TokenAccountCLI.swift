@@ -85,7 +85,11 @@ struct TokenAccountCLIContext {
         return [data.accounts[clamped]]
     }
 
-    func settingsSnapshot(for provider: UsageProvider, account: ProviderTokenAccount?) -> ProviderSettingsSnapshot? {
+    func settingsSnapshot(
+        for provider: UsageProvider,
+        account: ProviderTokenAccount?,
+        codexActiveSourceOverride: CodexActiveSource? = nil) -> ProviderSettingsSnapshot?
+    {
         let config = self.providerConfig(for: provider)
         if let snapshot = self.makeCookieBackedSnapshot(provider: provider, account: account, config: config) {
             return snapshot
@@ -93,7 +97,9 @@ struct TokenAccountCLIContext {
 
         switch provider {
         case .codex:
-            return self.makeSnapshot(codex: self.makeCodexSettingsSnapshot(account: account))
+            return self.makeSnapshot(codex: self.makeCodexSettingsSnapshot(
+                account: account,
+                codexActiveSourceOverride: codexActiveSourceOverride))
         case .claude:
             let routing = self.claudeCredentialRouting(account: account, config: config)
             let claudeSource: ClaudeUsageDataSource = if routing.adminAPIKey != nil {
@@ -285,11 +291,14 @@ struct TokenAccountCLIContext {
             stepfun: stepfun)
     }
 
-    private func makeCodexSettingsSnapshot(account: ProviderTokenAccount?) ->
+    private func makeCodexSettingsSnapshot(
+        account: ProviderTokenAccount?,
+        codexActiveSourceOverride: CodexActiveSource? = nil) ->
         ProviderSettingsSnapshot.CodexProviderSettings
     {
         let config = self.providerConfig(for: .codex)
-        let reconciliationSnapshot = self.codexAccountReconciler().loadSnapshot()
+        let reconciliationSnapshot = self.codexAccountReconciler(
+            activeSource: codexActiveSourceOverride).loadSnapshot()
         let resolvedActiveSource = CodexActiveSourceResolver.resolve(from: reconciliationSnapshot)
         return CodexProviderSettingsBuilder.make(input: CodexProviderSettingsBuilderInput(
             usageDataSource: .auto,
@@ -302,7 +311,8 @@ struct TokenAccountCLIContext {
     func environment(
         base: [String: String],
         provider: UsageProvider,
-        account: ProviderTokenAccount?) -> [String: String]
+        account: ProviderTokenAccount?,
+        codexActiveSourceOverride: CodexActiveSource? = nil) -> [String: String]
     {
         let providerConfig = self.providerConfig(for: provider)
         var env = ProviderConfigEnvironment.applyAPIKeyOverride(
@@ -321,7 +331,21 @@ struct TokenAccountCLIContext {
                 }
             }
         }
+        if provider == .codex,
+           let managedAccount = self.managedCodexAccount(for: codexActiveSourceOverride)
+        {
+            env = CodexHomeScope.scopedEnvironment(base: env, codexHome: managedAccount.managedHomePath)
+        }
         return env
+    }
+
+    func fetcher(base: UsageFetcher, provider: UsageProvider, env: [String: String]) -> UsageFetcher {
+        guard provider == .codex else { return base }
+        return UsageFetcher(environment: env)
+    }
+
+    func visibleCodexAccounts() -> CodexVisibleAccountProjection {
+        self.codexAccountReconciler().loadVisibleAccounts()
     }
 
     func applyAccountLabel(
@@ -338,6 +362,16 @@ struct TokenAccountCLIContext {
             providerID: provider,
             accountEmail: resolvedEmail,
             accountOrganization: existing?.accountOrganization,
+            loginMethod: existing?.loginMethod)
+        return snapshot.withIdentity(identity)
+    }
+
+    func applyCodexVisibleAccountLabel(_ snapshot: UsageSnapshot, account: CodexVisibleAccount) -> UsageSnapshot {
+        let existing = snapshot.identity(for: .codex)
+        let identity = ProviderIdentitySnapshot(
+            providerID: .codex,
+            accountEmail: account.email,
+            accountOrganization: account.workspaceLabel ?? existing?.accountOrganization,
             loginMethod: existing?.loginMethod)
         return snapshot.withIdentity(identity)
     }
@@ -386,7 +420,7 @@ struct TokenAccountCLIContext {
         self.config.providerConfig(for: provider)
     }
 
-    private func codexAccountReconciler() -> DefaultCodexAccountReconciler {
+    private func codexAccountReconciler(activeSource: CodexActiveSource? = nil) -> DefaultCodexAccountReconciler {
         let storeLoader: @Sendable () throws -> ManagedCodexAccountSet = if let managedCodexAccountStoreURL {
             {
                 try FileManagedCodexAccountStore(fileURL: managedCodexAccountStoreURL).loadAccounts()
@@ -398,11 +432,28 @@ struct TokenAccountCLIContext {
         }
         return DefaultCodexAccountReconciler(
             storeLoader: storeLoader,
-            activeSource: self.providerConfig(for: .codex)?.codexActiveSource ?? .liveSystem,
+            activeSource: activeSource ?? self.providerConfig(for: .codex)?.codexActiveSource ?? .liveSystem,
             baseEnvironment: self.baseEnvironment,
             managedEnvironmentBuilder: { environment, account in
                 CodexHomeScope.scopedEnvironment(base: environment, codexHome: account.managedHomePath)
             })
+    }
+
+    private func managedCodexAccount(for activeSourceOverride: CodexActiveSource?) -> ManagedCodexAccount? {
+        let activeSource: CodexActiveSource = if let activeSourceOverride {
+            activeSourceOverride
+        } else {
+            CodexActiveSourceResolver.resolve(from: self.codexAccountReconciler().loadSnapshot())
+                .resolvedSource
+        }
+
+        guard case let .managedAccount(id) = activeSource else { return nil }
+        let accounts: ManagedCodexAccountSet? = if let managedCodexAccountStoreURL {
+            try? FileManagedCodexAccountStore(fileURL: managedCodexAccountStoreURL).loadAccounts()
+        } else {
+            try? FileManagedCodexAccountStore().loadAccounts()
+        }
+        return accounts?.account(id: id)
     }
 
     private func manualCookieHeader(

@@ -270,6 +270,7 @@ extension CodexBarCLI {
             useColor: false,
             resetStyle: Self.resetTimeDisplayStyleFromDefaults(),
             jsonOnly: true,
+            includeAllCodexAccounts: true,
             fetcher: UsageFetcher(),
             claudeFetcher: ClaudeUsageFetcher(browserDetection: browserDetection),
             browserDetection: browserDetection)

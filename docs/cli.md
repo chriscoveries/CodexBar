@@ -49,6 +49,7 @@ See `docs/configuration.md` for the schema.
   - `--refresh-interval <seconds>` defaults to `60` and controls the in-memory response cache TTL.
   - v1 binds to `127.0.0.1` only and rejects non-loopback `Host` headers. It does not expose remote bind, auth, CORS, TLS, or daemon mode.
   - Endpoints: `GET /health`, `GET /usage`, `GET /usage?provider=<id|both|all>`, `GET /cost`, `GET /cost?provider=<id|both|all>`.
+  - Codex usage responses include every visible Codex account, matching the menu bar switcher.
 - `codexbar cache clear` clears local CodexBar caches.
   - `--cookies` removes cached browser-cookie headers from the CodexBar Keychain cache.
   - `--cookies --provider <id>` removes browser-cookie cache entries for that provider, including managed Codex account scopes.
@@ -58,7 +59,7 @@ See `docs/configuration.md` for the schema.
   - Provider IDs live in the config file (see `docs/configuration.md`).
   - With three or more providers enabled, the default stays scoped to enabled providers; use `--provider all` to query
     every registered provider.
-  - `--account <label>` / `--account-index <n>` / `--all-accounts` (token accounts from config; requires a single provider).
+  - `--account <label>` / `--account-index <n>` / `--all-accounts` (token accounts from config, or all visible Codex accounts for Codex; requires a single provider).
   - `--no-credits` (hide Codex credits in text output).
   - `--pretty` (pretty-print JSON).
   - `--status` (fetch provider status pages and include them in output).
@@ -94,6 +95,12 @@ Account selection flags require a single provider (`--provider claude`, etc.).
 For Claude, token accounts accept either `sessionKey` cookies or OAuth access tokens (`sk-ant-oat...`).
 OAuth usage requires the `user:profile` scope; inference-only tokens will return an error.
 
+### Codex accounts
+For Codex, `--all-accounts` and `codexbar serve` enumerate the same visible accounts as the app switcher:
+managed Codex accounts from `managed-codex-accounts.json` plus the live system account when present.
+Each fetch is scoped to that account's Codex home before the normal Codex web/OAuth/CLI strategy runs, and JSON
+payloads include the visible account label in `account`.
+
 ### Cost JSON payload
 `codexbar cost --format json` emits an array of payloads (one per provider).
 - `provider`, `source`, `updatedAt`
@@ -116,6 +123,7 @@ COPILOT_API_TOKEN=... codexbar --provider copilot --format json --pretty
 codexbar --status                 # include status page indicator/description
 codexbar --provider codex --source oauth --format json --pretty
 codexbar --provider codex --source web --format json --pretty
+codexbar --provider codex --all-accounts --format json --pretty
 codexbar --provider claude --account steipete@gmail.com
 codexbar --provider claude --all-accounts --format json --pretty
 codexbar --json-only --format json --pretty
