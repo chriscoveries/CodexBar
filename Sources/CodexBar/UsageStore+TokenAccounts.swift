@@ -33,13 +33,13 @@ struct CodexAccountUsageSnapshot: Identifiable {
     }
 }
 
-private struct TokenAccountFetchResult: Sendable {
+private struct TokenAccountFetchResult {
     let index: Int
     let account: ProviderTokenAccount
     let outcome: ProviderFetchOutcome
 }
 
-private struct CodexAccountFetchResult: Sendable {
+private struct CodexAccountFetchResult {
     let index: Int
     let account: CodexVisibleAccount
     let outcome: ProviderFetchOutcome
