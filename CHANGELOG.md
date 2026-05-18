@@ -35,6 +35,7 @@
 - Menu bar: skip unchanged split-provider icon redraws and avoid an extra animation-state scan during blink ticks.
 - Codex: prefer per-event token usage over divergent total counters when scanning local cost history, preventing large false cost spikes (#968). Thanks @Ifan24!
 - Codex: improve managed account login recovery guidance when macOS blocks or moves a stale `codex` CLI to Trash (#977).
+- Codex: show weekly pace reserve details in the menu even when the caller did not precompute pace data (#1009). Thanks @zhulijin1991!
 - Claude: label Extra usage denominators as the monthly cap so recharge balances are not confused with the maximum spend limit (#975).
 - Claude: wait for the CLI usage panel to finish rendering after the Current session label so slow Claude Code builds do not produce false "Missing Current session" errors (#959).
 - Claude: label five-hour session pace as "Projected empty" so it is not confused with the reset countdown (#960).
