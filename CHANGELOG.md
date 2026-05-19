@@ -3,6 +3,7 @@
 ## 0.27.1 — Unreleased
 
 ### Fixed
+- Codex: invalidate local cost-history caches from the scanner source hash so parser fixes rebuild stale cached rows automatically (#1042). Thanks @hhh2210!
 - Release: update Homebrew automation so CodexBar releases publish both the CLI formula and app cask from the same workflow.
 
 ## 0.27.0 — 2026-05-18
