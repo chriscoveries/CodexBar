@@ -3,6 +3,7 @@
 ## 0.27.1 — Unreleased
 
 ### Fixed
+- OpenAI: avoid serializing the full dashboard DOM during normal web refreshes, reducing CPU and memory churn while preserving account and plan detection (#1034, fixes #1033). Thanks @jb510!
 - Claude: prevent headless CLI usage probes from creating Claude Code URL Handler apps in Launchpad (#1047).
 - Codex: invalidate local cost-history caches from the scanner source hash so parser fixes rebuild stale cached rows automatically (#1042). Thanks @hhh2210!
 - Release: update Homebrew automation so CodexBar releases publish both the CLI formula and app cask from the same workflow.
