@@ -312,6 +312,33 @@ struct StatusProbeTests {
     }
 
     @Test
+    func `parse claude retained usage panel classifies latest loading panel`() {
+        let sample = """
+        Settings:  Status   Config   Usage  (tab to cycle)
+        Current session
+        ███████▌15%used
+        Resets 11:30pm (Asia/Calcutta)
+
+        Current week (all models)
+        █▌ 3% used
+        Resets Feb 12 at 1:30pm (Asia/Calcutta)
+
+        Settings:  Status   Config   Usage  (tab to cycle)
+        Loading usage data…
+        Esc to cancel
+        """
+
+        do {
+            _ = try ClaudeStatusProbe.parse(text: sample)
+            #expect(Bool(false), "Parsing should fail while the latest /usage panel is still loading")
+        } catch let ClaudeStatusProbeError.parseFailed(message) {
+            #expect(message.lowercased().contains("loading"))
+        } catch {
+            #expect(Bool(false), "Unexpected error: \(error)")
+        }
+    }
+
+    @Test
     func `parse claude status status only output does not fallback to zero`() {
         let sample = """
         Claude Code v2.1.32

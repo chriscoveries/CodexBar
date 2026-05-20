@@ -158,7 +158,8 @@ public struct ClaudeStatusProbe: Sendable {
             throw ClaudeStatusProbeError.parseFailed(usageError)
         }
 
-        if self.isUsageStillLoading(text: clean) {
+        let latestUsagePanel = self.trimToLatestUsagePanel(clean)
+        if self.isUsageStillLoading(text: latestUsagePanel ?? clean) {
             Self.dumpIfNeeded(
                 enabled: shouldDump,
                 reason: "usage still loading",
@@ -171,7 +172,7 @@ public struct ClaudeStatusProbe: Sendable {
         // line
         // with a "0%" context meter) before the usage panel is drawn. To keep parsing stable, trim to the last
         // Settings/Usage panel when present.
-        let usagePanelText = self.trimToLatestUsagePanel(clean) ?? clean
+        let usagePanelText = latestUsagePanel ?? clean
         let labelContext = LabelSearchContext(text: usagePanelText)
 
         var sessionPct = self.extractPercent(labelSubstring: "Current session", context: labelContext)
