@@ -195,6 +195,8 @@ final class UsageStore {
         TimeInterval) async throws -> OpenAIDashboardSnapshot)?
     @ObservationIgnored var _test_codexCreditsLoaderOverride: (@MainActor () async throws -> CreditsSnapshot)?
     @ObservationIgnored var _test_widgetSnapshotSaveOverride: (@MainActor (WidgetSnapshot) async -> Void)?
+    @ObservationIgnored var _test_providerRefreshOverride: (@MainActor (UsageProvider) async -> Void)?
+    @ObservationIgnored var _test_tokenUsageRefreshOverride: (@MainActor (UsageProvider, Bool) async -> Void)?
     @ObservationIgnored var widgetSnapshotPersistTask: Task<Void, Never>?
 
     @ObservationIgnored let codexFetcher: UsageFetcher
@@ -556,8 +558,12 @@ final class UsageStore {
                 group.addTask { await self.refreshCreditsIfNeeded(minimumSnapshotUpdatedAt: refreshStartedAt) }
             }
 
-            // Token-cost usage can be slow; run it outside the refresh group so we don't block menu updates.
-            self.scheduleTokenRefresh(force: forceTokenUsage)
+            if forceTokenUsage {
+                await self.refreshTokenUsageSequenceNow(force: true)
+            } else {
+                // Token-cost usage can be slow; run it outside regular/menu-open refreshes so we don't block UI.
+                self.scheduleTokenRefresh(force: false)
+            }
 
             // OpenAI web scrape depends on the current Codex account email (which can change after login/account
             // switch). Run this after Codex usage refresh so we don't accidentally scrape with stale credentials.
@@ -647,7 +653,6 @@ final class UsageStore {
             return
         }
 
-        let providers = self.enabledProvidersForBackgroundWork()
         self.tokenRefreshSequenceTask = Task(priority: .utility) { [weak self] in
             guard let self else { return }
             defer {
@@ -655,10 +660,24 @@ final class UsageStore {
                     self?.tokenRefreshSequenceTask = nil
                 }
             }
-            for provider in providers {
-                if Task.isCancelled { break }
-                await self.refreshTokenUsage(provider, force: force)
-            }
+            await self.refreshTokenUsageSequence(force: force)
+        }
+    }
+
+    private func refreshTokenUsageSequenceNow(force: Bool) async {
+        if force, let existing = self.tokenRefreshSequenceTask {
+            existing.cancel()
+            await existing.value
+            self.tokenRefreshSequenceTask = nil
+        }
+
+        await self.refreshTokenUsageSequence(force: force)
+    }
+
+    private func refreshTokenUsageSequence(force: Bool) async {
+        for provider in self.enabledProvidersForBackgroundWork() {
+            if Task.isCancelled { break }
+            await self.refreshTokenUsage(provider, force: force)
         }
     }
 
@@ -1434,6 +1453,11 @@ extension UsageStore {
             self.tokenFailureGates[provider]?.reset()
             self.lastTokenFetchAt.removeValue(forKey: provider)
             self.lastTokenFetchScope.removeValue(forKey: provider)
+            return
+        }
+
+        if let override = self._test_tokenUsageRefreshOverride {
+            await override(provider, force)
             return
         }
 
