@@ -7,6 +7,7 @@
 - Localizations: add Spanish and Catalan language packs and fill missing localization keys (#1041). Thanks @seifreed!
 
 ### Fixed
+- Antigravity: verify cloud model lists that report every quota as full against the user quota endpoint before showing remote OAuth usage (#1063). Thanks @devpras22!
 - Codex: avoid recounting repeated local token snapshots when total usage has not changed (#1062). Thanks @BarryYangi!
 - Antigravity: discover OAuth clients from Antigravity 2 app bundles and binary artifacts so Add Account works again (#1053). Thanks @vyctorbrzezowski!
 - Codex: honor the explicit OAuth credits source and keep automatic credits refresh falling back to CLI when OAuth usage has no credits (#1054). Thanks @soumikbhatta!
