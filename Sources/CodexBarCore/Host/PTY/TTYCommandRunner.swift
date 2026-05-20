@@ -103,6 +103,7 @@ public struct TTYCommandRunner {
         public var stopOnSubstrings: [String]
         public var settleAfterStop: TimeInterval
         public var forceCodexStatusMode: Bool
+        public var useClaudeProbeWorkingDirectory: Bool
 
         public init(
             rows: UInt16 = 50,
@@ -118,7 +119,8 @@ public struct TTYCommandRunner {
             stopOnURL: Bool = false,
             stopOnSubstrings: [String] = [],
             settleAfterStop: TimeInterval = 0.25,
-            forceCodexStatusMode: Bool = false)
+            forceCodexStatusMode: Bool = false,
+            useClaudeProbeWorkingDirectory: Bool = false)
         {
             self.rows = rows
             self.cols = cols
@@ -134,6 +136,7 @@ public struct TTYCommandRunner {
             self.stopOnSubstrings = stopOnSubstrings
             self.settleAfterStop = settleAfterStop
             self.forceCodexStatusMode = forceCodexStatusMode
+            self.useClaudeProbeWorkingDirectory = useClaudeProbeWorkingDirectory
         }
     }
 
@@ -421,9 +424,11 @@ public struct TTYCommandRunner {
             }
         }
 
+        let baseEnv = options.baseEnvironment ?? ProcessInfo.processInfo.environment
         let proc = Process()
         let resolvedURL = URL(fileURLWithPath: resolved)
-        if resolvedURL.lastPathComponent == "claude",
+        let isClaudeCLI = Self.isClaudeBinary(requested: binary, resolved: resolved, environment: baseEnv)
+        if isClaudeCLI,
            let watchdog = Self.locateBundledHelper("CodexBarClaudeWatchdog")
         {
             proc.executableURL = URL(fileURLWithPath: watchdog)
@@ -437,9 +442,12 @@ public struct TTYCommandRunner {
         proc.standardError = secondaryHandle
         // Use login-shell PATH when available, but keep the caller’s environment (HOME, LANG, etc.) so
         // the CLIs can find their auth/config files.
-        let baseEnv = options.baseEnvironment ?? ProcessInfo.processInfo.environment
         var env = Self.enrichedEnvironment(baseEnv: baseEnv, home: baseEnv["HOME"] ?? NSHomeDirectory())
-        if let workingDirectory = options.workingDirectory {
+        let workingDirectory = options.workingDirectory
+            ?? (options.useClaudeProbeWorkingDirectory && isClaudeCLI
+                ? ClaudeStatusProbe.preparedProbeWorkingDirectoryURL()
+                : nil)
+        if let workingDirectory {
             proc.currentDirectoryURL = workingDirectory
             env["PWD"] = workingDirectory.path
         }
@@ -877,6 +885,31 @@ public struct TTYCommandRunner {
         if tool == "codex", let located = BinaryLocator.resolveCodexBinary() { return located }
         if tool == "claude", let located = BinaryLocator.resolveClaudeBinary() { return located }
         return self.runWhich(tool)
+    }
+
+    private static func isClaudeBinary(requested: String, resolved: String, environment: [String: String]) -> Bool {
+        let requestedName = URL(fileURLWithPath: requested).lastPathComponent
+        let resolvedName = URL(fileURLWithPath: resolved).lastPathComponent
+        if requested == "claude" || requestedName == "claude" || resolvedName == "claude" {
+            return true
+        }
+
+        guard let override = environment["CLAUDE_CLI_PATH"], !override.isEmpty else { return false }
+        let normalizedOverride = self.normalizedExecutablePath(override)
+        return self.normalizedExecutablePath(resolved) == normalizedOverride
+            || self.normalizedExecutablePath(requested) == normalizedOverride
+    }
+
+    private static func normalizedExecutablePath(_ path: String) -> String {
+        let expanded = NSString(string: path).expandingTildeInPath
+        var buffer = [CChar](repeating: 0, count: Int(PATH_MAX))
+        if realpath(expanded, &buffer) != nil {
+            return buffer.withUnsafeBufferPointer { rawBuffer in
+                guard let baseAddress = rawBuffer.baseAddress else { return expanded }
+                return String(cString: baseAddress)
+            }
+        }
+        return URL(fileURLWithPath: expanded).standardizedFileURL.path
     }
 
     private static func runWhich(_ tool: String) -> String? {

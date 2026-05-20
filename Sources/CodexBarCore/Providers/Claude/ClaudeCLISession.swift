@@ -298,7 +298,7 @@ actor ClaudeCLISession {
         proc.standardOutput = secondaryHandle
         proc.standardError = secondaryHandle
 
-        let workingDirectory = ClaudeStatusProbe.probeWorkingDirectoryURL()
+        let workingDirectory = ClaudeStatusProbe.preparedProbeWorkingDirectoryURL()
         proc.currentDirectoryURL = workingDirectory
         var env = TTYCommandRunner.enrichedEnvironment()
         env = Self.scrubbedClaudeEnvironment(from: env)
