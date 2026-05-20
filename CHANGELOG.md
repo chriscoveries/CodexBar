@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.27.1 — Unreleased
+
+### Fixed
+- OpenAI: avoid serializing the full dashboard DOM during normal web refreshes, reducing CPU and memory churn while preserving account and plan detection (#1034, fixes #1033). Thanks @jb510!
+
 ## 0.27.0 — 2026-05-18
 
 ### Added
