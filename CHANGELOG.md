@@ -7,6 +7,11 @@
 - Localizations: add Spanish and Catalan language packs and fill missing localization keys (#1041). Thanks @seifreed!
 
 ### Fixed
+- Antigravity: discover OAuth clients from Antigravity 2 app bundles and binary artifacts so Add Account works again (#1053). Thanks @vyctorbrzezowski!
+- Codex: honor the explicit OAuth credits source and keep automatic credits refresh falling back to CLI when OAuth usage has no credits (#1054). Thanks @soumikbhatta!
+- Codex: show missing-CLI installation guidance in app and CLI errors without dropping cached-refresh context (#1030). Thanks @rohitjavvadi!
+- LLM Proxy: parse fractional-second quota reset timestamps from API responses (#1022). Thanks @rohitjavvadi!
+- ElevenLabs: keep progress text legible in light mode (#1055). Thanks @vyctorbrzezowski!
 - Claude: detect loading-only CLI usage screens and give CLI-only auto refreshes one longer retry instead of stalling or reporting a false missing-session error (#1032, fixes #1031). Thanks @rohitjavvadi!
 - OpenAI: avoid serializing the full dashboard DOM during normal web refreshes, reducing CPU and memory churn while preserving account and plan detection (#1034, fixes #1033). Thanks @jb510!
 - Codex: skip macOS-blocked Codex CLI candidates during automatic binary resolution and let CLI auto mode use OAuth before falling back to `codex app-server` (#1038, fixes #1028). Thanks @m-rokai!
