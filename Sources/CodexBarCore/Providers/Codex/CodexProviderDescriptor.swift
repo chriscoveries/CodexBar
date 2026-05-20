@@ -58,7 +58,7 @@ public enum CodexProviderDescriptor {
             case .api:
                 return []
             case .auto:
-                return [web, cli]
+                return [web, oauth, cli]
             }
         case .app:
             switch context.sourceMode {
@@ -109,8 +109,8 @@ struct CodexCLIUsageStrategy: ProviderFetchStrategy {
     let id: String = "codex.cli"
     let kind: ProviderFetchKind = .cli
 
-    func isAvailable(_: ProviderFetchContext) async -> Bool {
-        true
+    func isAvailable(_ context: ProviderFetchContext) async -> Bool {
+        Self.resolvedBinary(env: context.env) != nil
     }
 
     func fetch(_ context: ProviderFetchContext) async throws -> ProviderFetchResult {
@@ -125,6 +125,24 @@ struct CodexCLIUsageStrategy: ProviderFetchStrategy {
 
     func shouldFallback(on _: Error, context _: ProviderFetchContext) -> Bool {
         false
+    }
+
+    static func resolvedBinary(
+        env: [String: String],
+        loginPATH: [String]? = LoginShellPathCache.shared.current,
+        commandV: (String, String?, TimeInterval, FileManager) -> String? = ShellCommandLocator.commandV,
+        aliasResolver: (String, String?, TimeInterval, FileManager, String) -> String? = ShellCommandLocator
+            .resolveAlias,
+        fileManager: FileManager = .default,
+        home: String = NSHomeDirectory()) -> String?
+    {
+        BinaryLocator.resolveCodexBinary(
+            env: env,
+            loginPATH: loginPATH,
+            commandV: commandV,
+            aliasResolver: aliasResolver,
+            fileManager: fileManager,
+            home: home)
     }
 }
 

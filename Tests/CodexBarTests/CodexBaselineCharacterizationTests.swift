@@ -158,9 +158,9 @@ struct CodexBaselineCharacterizationTests {
     }
 
     @Test
-    func `CLI auto pipeline order is web then CLI`() async {
+    func `CLI auto pipeline order is web then OAuth then CLI`() async {
         let strategyIDs = await self.strategyIDs(runtime: .cli, sourceMode: .auto)
-        #expect(strategyIDs == ["codex.web.dashboard", "codex.cli"])
+        #expect(strategyIDs == ["codex.web.dashboard", "codex.oauth", "codex.cli"])
     }
 
     @Test
@@ -274,9 +274,10 @@ struct CodexBaselineCharacterizationTests {
     }
 
     @Test
-    func `CLI auto records unavailable web before successful CLI`() async throws {
+    func `CLI auto records unavailable web and OAuth before successful CLI`() async throws {
         let stubCLIPath = try self.makeStubCodexCLI()
-        let env = ["CODEX_CLI_PATH": stubCLIPath]
+        let codexHome = try self.makeEmptyCodexHome()
+        defer { try? FileManager.default.removeItem(at: codexHome) }
         let settings = ProviderSettingsSnapshot.make(
             codex: .init(
                 usageDataSource: .auto,
@@ -284,15 +285,58 @@ struct CodexBaselineCharacterizationTests {
                 manualCookieHeader: nil,
                 managedAccountStoreUnreadable: true))
 
-        let outcome = await self.fetchOutcome(runtime: .cli, sourceMode: .auto, env: env, settings: settings)
+        let outcome = await self.fetchOutcome(
+            runtime: .cli,
+            sourceMode: .auto,
+            env: [
+                "CODEX_CLI_PATH": stubCLIPath,
+                "CODEX_HOME": codexHome.path,
+            ],
+            settings: settings)
 
-        #expect(outcome.attempts.map(\.strategyID) == ["codex.web.dashboard", "codex.cli"])
-        #expect(outcome.attempts.map(\.wasAvailable) == [false, true])
+        #expect(outcome.attempts.map(\.strategyID) == ["codex.web.dashboard", "codex.oauth", "codex.cli"])
+        #expect(outcome.attempts.map(\.wasAvailable) == [false, false, true])
 
         switch outcome.result {
         case let .success(result):
             #expect(result.sourceLabel == "codex-cli")
             #expect(result.usage.accountEmail(for: .codex) == "stub@example.com")
+        case let .failure(error):
+            Issue.record("Unexpected failure: \(error)")
+        }
+    }
+
+    @Test
+    func `CLI auto tries OAuth before missing CLI fallback`() async throws {
+        let oauthHome = try self.makeUnavailableOAuthHome()
+        defer { try? FileManager.default.removeItem(at: oauthHome) }
+        let settings = ProviderSettingsSnapshot.make(
+            codex: .init(
+                usageDataSource: .auto,
+                cookieSource: .auto,
+                manualCookieHeader: nil,
+                managedAccountStoreUnreadable: true))
+
+        let outcome = await self.fetchOutcome(
+            runtime: .cli,
+            sourceMode: .auto,
+            env: [
+                "CODEX_CLI_PATH": "/missing/codex",
+                "CODEX_HOME": oauthHome.path,
+            ],
+            settings: settings)
+
+        #expect(outcome.attempts.map(\.strategyID) == ["codex.web.dashboard", "codex.oauth"])
+        #expect(outcome.attempts.map(\.wasAvailable) == [false, true])
+
+        switch outcome.result {
+        case .success:
+            Issue.record("Expected unavailable OAuth endpoint to fail before CLI fallback")
+        case let .failure(error as CodexOAuthFetchError):
+            if case .networkError = error {
+                break
+            }
+            Issue.record("Expected network error, got \(error)")
         case let .failure(error):
             Issue.record("Unexpected failure: \(error)")
         }
