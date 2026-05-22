@@ -5,6 +5,9 @@
 ### Added
 - OpenCode: show workspace renewal dates for OpenCode and OpenCode Go usage windows (#1099). Thanks @Yuxin-Qiao!
 
+### Fixed
+- Menu bar: keep retrying display-change recovery when macOS leaves status items detached from the current screen (#1077, #1088).
+
 ## 0.28.0 — 2026-05-22
 
 ### Added
