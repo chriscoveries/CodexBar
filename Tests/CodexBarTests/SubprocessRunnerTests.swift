@@ -62,7 +62,7 @@ struct SubprocessRunnerTests {
                     do {
                         _ = try await SubprocessRunner.run(
                             binary: "/bin/sleep",
-                            arguments: ["5"],
+                            arguments: ["10"],
                             environment: ProcessInfo.processInfo.environment,
                             timeout: 2,
                             label: "concurrent-hung-\(i)")
@@ -80,10 +80,10 @@ struct SubprocessRunnerTests {
         }
 
         let elapsed = Date().timeIntervalSince(start)
-        // All 8 should time out in ~2s (parallel), not wait for the 5s sleep.
-        // Use a generous 4s bound for slow CI.
+        // All 8 should time out in ~2s (parallel), not wait for the 10s sleep.
+        // Use a generous bound for slow parallel test runs while still catching natural exits.
         #expect(
-            elapsed < 4,
+            elapsed < 6,
             "All \(count) concurrent timeouts should fire in ~2s, took \(elapsed)s")
     }
 
