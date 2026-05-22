@@ -7,6 +7,7 @@
 
 ### Fixed
 - Menu bar: keep retrying display-change recovery when macOS leaves status items detached from the current screen (#1077, #1088).
+- Codex: preserve last successful per-account quota snapshots when a later network refresh fails (#1097).
 
 ## 0.28.0 — 2026-05-22
 
