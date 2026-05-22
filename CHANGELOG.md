@@ -2,6 +2,9 @@
 
 ## 0.28.1 — Unreleased
 
+### Added
+- OpenCode: show workspace renewal dates for OpenCode and OpenCode Go usage windows (#1099). Thanks @Yuxin-Qiao!
+
 ## 0.28.0 — 2026-05-22
 
 ### Added
