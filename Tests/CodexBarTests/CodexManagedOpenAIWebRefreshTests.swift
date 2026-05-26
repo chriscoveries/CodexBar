@@ -55,10 +55,9 @@ struct CodexManagedOpenAIWebRefreshTests {
             await completion.markCompleted()
         }
 
-        try? await Task.sleep(for: .milliseconds(200))
-
+        #expect(await blocker.waitUntilStartedWithin(count: 1) == true)
         #expect(await blocker.startedCount() == 1)
-        #expect(await completion.isCompleted == true)
+        #expect(await completion.waitUntilCompleted() == true)
 
         await blocker.resumeNext(with: .success(OpenAIDashboardSnapshot(
             signedInEmail: managedAccount.email,
@@ -643,6 +642,17 @@ actor RefreshCompletionProbe {
     func markCompleted() {
         self.isCompleted = true
     }
+
+    func waitUntilCompleted(timeout: Duration = .seconds(5)) async -> Bool {
+        let startedAt = ContinuousClock.now
+        while !self.isCompleted {
+            if startedAt.duration(to: .now) >= timeout {
+                return false
+            }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        return true
+    }
 }
 
 actor BlockingManagedOpenAIDashboardLoader {
@@ -664,6 +674,17 @@ actor BlockingManagedOpenAIDashboardLoader {
         await withCheckedContinuation { continuation in
             self.startWaiters.append((count: count, continuation: continuation))
         }
+    }
+
+    func waitUntilStartedWithin(count: Int = 1, timeout: Duration = .seconds(5)) async -> Bool {
+        let startedAt = ContinuousClock.now
+        while self.started < count {
+            if startedAt.duration(to: .now) >= timeout {
+                return false
+            }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        return true
     }
 
     func startedCount() -> Int {
