@@ -49,15 +49,37 @@ struct CodexManagedOpenAIWebRefreshTests {
             try await blocker.awaitResult()
         }
         defer { store._test_openAIDashboardLoaderOverride = nil }
+        store._test_openAIDashboardCookieImportOverride = { targetEmail, _, _, _, _ in
+            OpenAIDashboardBrowserCookieImporter.ImportResult(
+                sourceLabel: "Chrome",
+                cookieCount: 2,
+                signedInEmail: targetEmail,
+                matchesCodexEmail: true)
+        }
+        defer { store._test_openAIDashboardCookieImportOverride = nil }
 
         let refreshTask = Task {
             await store.refresh(forceTokenUsage: false)
             await completion.markCompleted()
         }
 
-        #expect(await blocker.waitUntilStartedWithin(count: 1) == true)
+        let completed = await completion.waitUntilCompleted(timeout: .seconds(30))
+        #expect(completed == true)
+        if !completed {
+            refreshTask.cancel()
+            await blocker.resumeNext(with: .failure(ManagedDashboardTestError.networkTimeout))
+            return
+        }
+        await refreshTask.value
+
+        let backgroundTask = try #require(store.openAIDashboardBackgroundRefreshTask)
+        let didStart = await blocker.waitUntilStartedWithin(count: 1, timeout: .seconds(30))
+        #expect(didStart == true)
+        if !didStart {
+            backgroundTask.cancel()
+            return
+        }
         #expect(await blocker.startedCount() == 1)
-        #expect(await completion.waitUntilCompleted() == true)
 
         await blocker.resumeNext(with: .success(OpenAIDashboardSnapshot(
             signedInEmail: managedAccount.email,
@@ -70,7 +92,7 @@ struct CodexManagedOpenAIWebRefreshTests {
             accountPlan: "Pro",
             updatedAt: Date())))
 
-        await refreshTask.value
+        await backgroundTask.value
     }
 
     @Test
