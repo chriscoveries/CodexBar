@@ -1,6 +1,10 @@
 import CodexBarCore
 import Foundation
 
+enum CodexBarLocalizationOverride {
+    @TaskLocal static var appLanguage: String?
+}
+
 private func appLanguageDefaults() -> UserDefaults {
     if Bundle.main.bundleIdentifier != nil {
         return .standard
@@ -37,7 +41,7 @@ func codexBarLocalizationResourceBundle(
 
 private func localizedBundle() -> Bundle {
     let resourceBundle = codexBarLocalizationResourceBundle()
-    let language = appLanguageDefaults().string(forKey: "appLanguage") ?? ""
+    let language = CodexBarLocalizationOverride.appLanguage ?? appLanguageDefaults().string(forKey: "appLanguage") ?? ""
     if !language.isEmpty {
         if let bundle = lprojBundle(named: language, in: resourceBundle) {
             return bundle
