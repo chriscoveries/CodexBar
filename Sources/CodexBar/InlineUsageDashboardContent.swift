@@ -52,6 +52,18 @@ extension UsageMenuCardView.Model {
             ]
         }
 
+        if input.provider == .deepseek,
+           input.showOptionalCreditsAndExtraUsage,
+           let usage = input.snapshot?.deepseekUsage
+        {
+            let symbol = usage.currency == "CNY" ? "¥" : "$"
+            let todayCostStr = usage.todayCost.map { "\(symbol)\(String(format: "%.4f", max(0, $0)))" } ?? "—"
+            return [
+                "Today: \(todayCostStr) · \(UsageFormatter.tokenCountString(usage.todayTokens)) tokens",
+                "This month: \(UsageFormatter.tokenCountString(usage.currentMonthTokens)) tokens",
+            ]
+        }
+
         if input.provider == .ollama,
            input.snapshot?.identity?.loginMethod == "API key"
         {
@@ -111,6 +123,13 @@ extension UsageMenuCardView.Model {
            !billing.daily.isEmpty
         {
             return Self.minimaxInlineDashboard(billing)
+        }
+        if input.provider == .deepseek,
+           input.showOptionalCreditsAndExtraUsage,
+           let usage = input.snapshot?.deepseekUsage,
+           !usage.daily.isEmpty
+        {
+            return Self.deepseekInlineDashboard(usage)
         }
         if [.codex, .claude, .vertexai, .bedrock].contains(input.provider),
            input.tokenCostUsageEnabled,
@@ -397,6 +416,72 @@ extension UsageMenuCardView.Model {
             ],
             points: points,
             detailLines: details)
+    }
+
+    private static func deepseekInlineDashboard(_ usage: DeepSeekUsageSummary) -> InlineUsageDashboardModel {
+        let symbol = usage.currency == "CNY" ? "¥" : "$"
+        let points = usage.daily.suffix(30).map {
+            InlineUsageDashboardModel.Point(
+                id: $0.date,
+                label: Self.shortDayLabel($0.date),
+                value: Double($0.totalTokens),
+                accessibilityValue: "\($0.date): \(UsageFormatter.tokenCountString($0.totalTokens)) tokens")
+        }
+        var details: [String] = []
+        if let topModel = usage.topModel {
+            details.append("Top model: \(Self.shortModelName(topModel))")
+        }
+        if let cacheHit = usage.categoryBreakdown.first(where: { $0.category == .promptCacheHitToken }) {
+            details.append("cache-hit input: \(UsageFormatter.tokenCountString(cacheHit.tokens))")
+        }
+        if let cacheMiss = usage.categoryBreakdown.first(where: { $0.category == .promptCacheMissToken }) {
+            details.append("cache-miss input: \(UsageFormatter.tokenCountString(cacheMiss.tokens))")
+        }
+        if let output = usage.categoryBreakdown.first(where: { $0.category == .responseToken }) {
+            details.append("output: \(UsageFormatter.tokenCountString(output.tokens))")
+        }
+        details.append("requests: \(usage.currentMonthRequestCount)")
+
+        let todayCostStr = usage.todayCost.map { "\(symbol)\(String(format: "%.4f", max(0, $0)))" } ?? "—"
+        let monthCostStr = usage.currentMonthCost.map { "\(symbol)\(String(format: "%.4f", max(0, $0)))" } ?? "—"
+        let monthTokensStr = UsageFormatter.tokenCountString(usage.currentMonthTokens)
+
+        return InlineUsageDashboardModel(
+            accessibilityLabel: "DeepSeek 30 day token usage trend",
+            valueStyle: .tokens,
+            kpis: [
+                .init(
+                    title: "Today",
+                    value: "\(todayCostStr) · \(UsageFormatter.tokenCountString(usage.todayTokens))",
+                    emphasis: true),
+                .init(
+                    title: "This month",
+                    value: "\(monthCostStr) · \(monthTokensStr)",
+                    emphasis: false),
+                .init(
+                    title: "Models",
+                    value: usage.topModel.map { Self.shortModelName($0) } ?? "—",
+                    emphasis: false),
+                .init(
+                    title: "Requests",
+                    value: "\(usage.currentMonthRequestCount)",
+                    emphasis: false),
+            ],
+            points: points,
+            detailLines: details)
+    }
+
+    private static func topMistralModel(from entries: [MistralDailyUsageBucket]) -> String? {
+        var tokens: [String: Int] = [:]
+        for entry in entries {
+            for model in entry.models {
+                tokens[model.name, default: 0] += model.totalTokens
+            }
+        }
+        return tokens.max {
+            if $0.value == $1.value { return $0.key > $1.key }
+            return $0.value < $1.value
+        }?.key
     }
 
     private static func topZaiModel(from bars: [ZaiHourlyBar]) -> String? {
