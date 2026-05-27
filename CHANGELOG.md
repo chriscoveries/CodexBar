@@ -3,6 +3,7 @@
 ## 0.29.2 — Unreleased
 
 ### Added
+- Widget: show tertiary usage rows for providers that expose a third quota lane (#1160). Thanks @LeoLin990405!
 - DeepSeek: show optional web-session usage and cost summaries alongside the balance card (#1166). Thanks @Yuxin-Qiao!
 
 ### Fixed
