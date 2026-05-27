@@ -2,6 +2,9 @@
 
 ## 0.30.1 — Unreleased
 
+### Changed
+- CLI: make `codexbar diagnose` use a generic safe provider diagnostic export for all providers, with MiniMax details attached only as provider-specific metadata.
+
 ## 0.30.0 — 2026-05-27
 
 ### Added
