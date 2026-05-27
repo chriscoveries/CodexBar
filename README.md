@@ -32,7 +32,7 @@ Download: <https://github.com/steipete/CodexBar/releases>
 
 ### Homebrew
 ```bash
-brew install --cask steipete/tap/codexbar
+brew install --cask codexbar
 ```
 
 ### CLI Tarballs (macOS/Linux)
