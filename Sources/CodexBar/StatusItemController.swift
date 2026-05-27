@@ -303,11 +303,18 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
         self.lastSwitcherShowsIcons = settings.switcherShowsIcons
         self.lastObservedUsageBarsShowUsed = settings.usageBarsShowUsed
         self.lastSwitcherUsageBarsShowUsed = settings.usageBarsShowUsed
+        let repairedStatusItemVisibilityKeys = MenuBarStatusItemDefaultsRepair
+            .repairHiddenVisibilityDefaultsIfNeeded(defaults: settings.userDefaults)
         self.statusBar = statusBar
         self.statusItem = Self.makeStatusItem(statusBar: statusBar, identity: .merged)
         self.lastKnownScreenCount = NSScreen.screens.count
         // Status items for individual providers are now created lazily in updateVisibility()
         super.init()
+        if !repairedStatusItemVisibilityKeys.isEmpty {
+            self.menuLogger.info(
+                "Repaired hidden macOS status-item visibility defaults",
+                metadata: ["keys": repairedStatusItemVisibilityKeys.joined(separator: ",")])
+        }
         self.wireBindings()
         self.updateVisibility()
         self.updateIcons()

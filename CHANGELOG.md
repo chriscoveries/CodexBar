@@ -6,6 +6,7 @@
 - DeepSeek: show optional web-session usage and cost summaries alongside the balance card (#1166). Thanks @Yuxin-Qiao!
 
 ### Fixed
+- Menu bar: clear stale hidden macOS status-item visibility defaults once before creating CodexBar items (#1169).
 - StepFun: refresh expired Oasis tokens and persist recovered manual sessions. Thanks @LeoLin990405!
 - Release: prevent manual CLI artifact builds from publishing or clobbering release assets (#1154). Thanks @jskoiz!
 - Cost history: route OpenAI and Mistral API spend through the shared cost-history cards, including OpenAI request counts (#1163). Thanks @LeoLin990405!

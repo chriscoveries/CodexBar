@@ -117,6 +117,38 @@ struct StatusItemControllerSplitLifecycleTests {
     }
 
     @Test
+    func `status item defaults repair removes stale hidden Control Center keys once`() throws {
+        let suite = "StatusItemControllerSplitLifecycleTests-repair-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        defaults.set(false, forKey: "NSStatusItem VisibleCC Item-0")
+        defaults.set(0, forKey: "NSStatusItem VisibleCC Item-12")
+        defaults.set(false, forKey: "NSStatusItem VisibleCC codexbar-merged")
+        defaults.set(true, forKey: "NSStatusItem VisibleCC Item-1")
+        defaults.set(false, forKey: "NSStatusItem VisibleCC com.apple.clock")
+        defer {
+            defaults.removePersistentDomain(forName: suite)
+        }
+
+        let repairedKeys = MenuBarStatusItemDefaultsRepair.repairHiddenVisibilityDefaultsIfNeeded(defaults: defaults)
+
+        #expect(repairedKeys == [
+            "NSStatusItem VisibleCC Item-0",
+            "NSStatusItem VisibleCC Item-12",
+            "NSStatusItem VisibleCC codexbar-merged",
+        ])
+        #expect(defaults.object(forKey: "NSStatusItem VisibleCC Item-0") == nil)
+        #expect(defaults.object(forKey: "NSStatusItem VisibleCC Item-12") == nil)
+        #expect(defaults.object(forKey: "NSStatusItem VisibleCC codexbar-merged") == nil)
+        #expect(defaults.bool(forKey: "NSStatusItem VisibleCC Item-1"))
+        #expect(defaults.object(forKey: "NSStatusItem VisibleCC com.apple.clock") != nil)
+
+        defaults.set(false, forKey: "NSStatusItem VisibleCC Item-2")
+        #expect(MenuBarStatusItemDefaultsRepair.repairHiddenVisibilityDefaultsIfNeeded(defaults: defaults).isEmpty)
+        #expect(defaults.object(forKey: "NSStatusItem VisibleCC Item-2") != nil)
+    }
+
+    @Test
     func `non destructive visibility refresh preserves split provider status items`() throws {
         let (_, controller) = try self.makeSplitController()
         defer { controller.releaseStatusItemsForTesting() }
