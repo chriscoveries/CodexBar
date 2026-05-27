@@ -8,6 +8,7 @@
 - DeepSeek: show optional web-session usage and cost summaries alongside the balance card (#1166). Thanks @Yuxin-Qiao!
 
 ### Fixed
+- Menu: render quota-warning markers as subtle inset ticks instead of full-height bars (#1149).
 - Codex: show sign-in guidance when the Codex CLI is logged out instead of reporting a temporary usage outage (#1171, fixes #1170). Thanks @jskoiz!
 - Menu bar: clear stale hidden macOS status-item visibility defaults once before creating CodexBar items (#1169).
 - StepFun: refresh expired Oasis tokens and persist recovered manual sessions. Thanks @LeoLin990405!

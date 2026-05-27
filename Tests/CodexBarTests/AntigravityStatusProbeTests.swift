@@ -801,7 +801,9 @@ struct AntigravityStatusProbeTests {
         #expect(usage.tertiary?.remainingPercent.rounded() == 100)
         #expect(usage.identity?.accountEmail == "user@example.com")
     }
+}
 
+extension AntigravityStatusProbeTests {
     @Test
     func `extra rate windows preserve all model quotas in stable label order`() throws {
         let resetTime = Date(timeIntervalSince1970: 1_775_000_000)
