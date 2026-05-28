@@ -5,7 +5,7 @@ import Foundation
 /// Uses `aws configure export-credentials`, which transparently resolves static
 /// credentials, SSO sessions, assume-role chains, and `credential_process` profiles.
 /// The runner is injected so tests never invoke a real `aws` binary.
-struct BedrockProfileCredentialProvider: Sendable {
+struct BedrockProfileCredentialProvider {
     typealias Runner = @Sendable (
         _ arguments: [String],
         _ environment: [String: String]) async throws -> SubprocessResult
