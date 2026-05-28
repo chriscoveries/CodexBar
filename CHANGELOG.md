@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.30.2 — Unreleased
+## 0.31.0 — 2026-05-28
 
 ### Changed
 - Docs: update the Homebrew install command to use the official `codexbar` cask now that it supports Intel Macs (#1189). Thanks @SSakutaro!
