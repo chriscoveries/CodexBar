@@ -2,6 +2,9 @@
 
 ## 0.30.2 — Unreleased
 
+### Fixed
+- Menu bar: coalesce visible-menu rebuilds and reduce hover highlight work so the dropdown stays responsive on macOS 26.5 (#1196).
+
 ## 0.30.1 — 2026-05-28
 
 ### Changed
