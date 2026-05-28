@@ -18,8 +18,8 @@ struct UsageMenuCardView: View {
 
             var accessibilityLabel: String {
                 switch self {
-                case .left: "Usage remaining"
-                case .used: "Usage used"
+                case .left: L("Usage remaining")
+                case .used: L("Usage used")
                 }
             }
         }
@@ -121,7 +121,7 @@ struct UsageMenuCardView: View {
 
     static func popupMetricTitle(provider: UsageProvider, metric: Model.Metric) -> String {
         if provider == .openrouter, metric.id == "primary" {
-            return "API key limit"
+            return L("API key limit")
         }
         return metric.title
     }
@@ -323,7 +323,7 @@ private struct CopyIconButton: View {
                 .frame(width: 18, height: 18)
         }
         .buttonStyle(CopyIconButtonStyle(isHighlighted: self.isHighlighted))
-        .accessibilityLabel(self.didCopy ? "Copied" : "Copy error")
+        .accessibilityLabel(self.didCopy ? L("Copied") : L("Copy error"))
     }
 
     private func copyToPasteboard() {
@@ -347,7 +347,7 @@ private struct ProviderCostContent: View {
                 UsageProgressBar(
                     percent: percentUsed,
                     tint: self.progressColor,
-                    accessibilityLabel: "Extra usage spent")
+                    accessibilityLabel: L("Extra usage spent"))
             }
             HStack(alignment: .firstTextBaseline) {
                 Text(self.section.spendLine)
@@ -561,19 +561,19 @@ private struct CreditsBarContent: View {
 
     private var scaleText: String {
         let scale = UsageFormatter.tokenCountString(Int(Self.fullScaleTokens))
-        return "\(scale) tokens"
+        return "\(scale) \(L("tokens"))"
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Credits")
+            Text(L("Credits"))
                 .font(.body)
                 .fontWeight(.medium)
             if let percentLeft {
                 UsageProgressBar(
                     percent: percentLeft,
                     tint: self.progressColor,
-                    accessibilityLabel: "Credits remaining")
+                    accessibilityLabel: L("Credits remaining"))
                 HStack(alignment: .firstTextBaseline) {
                     Text(self.creditsText)
                         .font(.caption)
@@ -832,15 +832,15 @@ extension UsageMenuCardView.Model {
                resolvedSource == "cli",
                !notes.contains(where: { $0.caseInsensitiveCompare("Using CLI fallback") == .orderedSame })
             {
-                notes.append("Using CLI fallback")
+                notes.append(L("Using CLI fallback"))
             }
             return notes
         }
 
         if input.provider == .mimo, input.snapshot != nil {
             return [
-                "Balance updates in near-real time (up to 5 min lag)",
-                "Daily billing data finalizes at 07:00 UTC",
+                L("Balance updates in near-real time (up to 5 min lag)"),
+                L("Daily billing data finalizes at 07:00 UTC"),
             ]
         }
 
@@ -983,7 +983,7 @@ extension UsageMenuCardView.Model {
             return (UsageFormatter.updatedString(from: updated, now: now), .info)
         }
 
-        return ("Not fetched yet", .info)
+        return (L("Not fetched yet"), .info)
     }
 
     private struct RedactedText {
@@ -1123,7 +1123,7 @@ extension UsageMenuCardView.Model {
             }
             metrics.append(Metric(
                 id: "code-review",
-                title: "Code review",
+                title: L("Code review"),
                 percent: Self.clamped(percent),
                 percentStyle: percentStyle,
                 resetText: resetText,
@@ -1141,7 +1141,7 @@ extension UsageMenuCardView.Model {
         snapshot: UsageSnapshot) -> (primary: String, secondary: String, tertiary: String, showsTertiary: Bool)
     {
         if input.provider == .factory, snapshot.tertiary != nil {
-            return ("5-hour", L("Weekly"), "Monthly", true)
+            return ("5-hour", L("Weekly"), L("Monthly"), true)
         }
         let primaryLabel = input.provider == .grok
             ? GrokProviderDescriptor.primaryLabel(window: snapshot.primary) ?? input.metadata.sessionLabel
@@ -1149,7 +1149,7 @@ extension UsageMenuCardView.Model {
         return (
             L(primaryLabel),
             L(input.metadata.weeklyLabel),
-            input.metadata.opusLabel ?? "Sonnet",
+            input.metadata.opusLabel.map(L) ?? L("Sonnet"),
             input.metadata.supportsOpus)
     }
 
@@ -1194,7 +1194,7 @@ extension UsageMenuCardView.Model {
         {
             let remaining = UsageFormatter.kiroCreditNumber(kiroUsage.creditsRemaining)
             let total = UsageFormatter.kiroCreditNumber(kiroUsage.creditsTotal)
-            primaryDetailLeft = "\(remaining) of \(total) credits left"
+            primaryDetailLeft = String(format: L("%@ of %@ credits left"), remaining, total)
         }
         if input.provider == .alibaba || input.provider == .alibabatokenplan || input.provider == .mistral || input
             .provider == .manus,
@@ -1316,7 +1316,7 @@ extension UsageMenuCardView.Model {
             let remainingText = UsageFormatter.kiroCreditNumber(remaining)
             let totalText = UsageFormatter.kiroCreditNumber(total)
             paceDetail = PaceDetail(
-                leftLabel: "\(remainingText) of \(totalText) bonus credits left",
+                leftLabel: String(format: L("%@ of %@ bonus credits left"), remainingText, totalText),
                 rightLabel: nil,
                 pacePercent: nil,
                 paceOnTop: true)

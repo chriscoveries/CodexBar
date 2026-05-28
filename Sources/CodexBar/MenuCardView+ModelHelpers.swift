@@ -48,11 +48,11 @@ extension UsageMenuCardView.Model {
 
     static func placeholder(input: Input) -> String? {
         if self.shouldShowRateLimitsUnavailablePlaceholder(input: input) {
-            return "Limits not available"
+            return L("Limits not available")
         }
 
         if input.snapshot == nil, !input.isRefreshing, input.lastError == nil {
-            return "No usage yet"
+            return L("No usage yet")
         }
 
         return nil
@@ -150,7 +150,7 @@ extension UsageMenuCardView.Model {
                 percentStyle: percentStyle),
             Self.antigravityMetric(
                 id: "tertiary",
-                title: input.metadata.opusLabel ?? "Gemini Flash",
+                title: input.metadata.opusLabel.map(L) ?? L("Gemini Flash"),
                 window: snapshot.tertiary,
                 input: input,
                 percentStyle: percentStyle),
@@ -241,7 +241,7 @@ extension UsageMenuCardView.Model {
             let currentStr = UsageFormatter.tokenCountString(currentValue)
             let usageStr = UsageFormatter.tokenCountString(usage)
             let remainingStr = UsageFormatter.tokenCountString(remaining)
-            return "\(currentStr) / \(usageStr) (\(remainingStr) remaining)"
+            return String(format: L("%@ / %@ (%@ remaining)"), currentStr, usageStr, remainingStr)
         }
 
         return nil
@@ -259,7 +259,7 @@ extension UsageMenuCardView.Model {
 
         let remaining = UsageFormatter.usdString(keyRemaining)
         let limit = UsageFormatter.usdString(keyLimit)
-        return "\(remaining)/\(limit) left"
+        return String(format: L("%@/%@ left"), remaining, limit)
     }
 
     static func syntheticRegenDetail(
@@ -276,20 +276,20 @@ extension UsageMenuCardView.Model {
         else { return nil }
 
         let countdown = UsageFormatter.resetCountdownDescription(from: resetsAt, now: now)
-        let resetText = "Regenerates \(countdown)"
+        let resetText = String(format: L("Regenerates %@"), countdown)
 
         let nextRegenPercent = (nextRegenAmount / cost.limit) * 100
         let afterNextRegenRemaining = min(100, weekly.remainingPercent + nextRegenPercent)
         let afterNextRegen = showUsed ? max(0, 100 - afterNextRegenRemaining) : afterNextRegenRemaining
-        let suffix = showUsed ? "used after next regen" : "after next regen"
+        let suffix = showUsed ? L("used after next regen") : L("after next regen")
         let ticksToFull = max(0, cost.used) / nextRegenAmount
         let left = String(format: "%.0f%% %@", afterNextRegen, suffix)
         let right = if ticksToFull <= 0.1 {
-            "Near full"
+            L("Near full")
         } else if ticksToFull < 1.5 {
-            "Full in ~1 regen"
+            L("Full in ~1 regen")
         } else {
-            String(format: "Full in ~%.0f regens", ceil(ticksToFull))
+            String(format: L("Full in ~%.0f regens"), ceil(ticksToFull))
         }
         return (resetText, PaceDetail(leftLabel: left, rightLabel: right, pacePercent: nil, paceOnTop: true))
     }
@@ -305,21 +305,21 @@ extension UsageMenuCardView.Model {
         else { return nil }
 
         let countdown = UsageFormatter.resetCountdownDescription(from: resetsAt, now: now)
-        let resetText = "Regenerates \(countdown)"
+        let resetText = String(format: L("Regenerates %@"), countdown)
 
         let afterNextRegenRemaining = min(100, window.remainingPercent + nextRegenPercent)
         let afterNextRegen = showUsed ? max(0, 100 - afterNextRegenRemaining) : afterNextRegenRemaining
-        let suffix = showUsed ? "used after next regen" : "after next regen"
+        let suffix = showUsed ? L("used after next regen") : L("after next regen")
         let left = String(format: "%.0f%% %@", afterNextRegen, suffix)
 
         let missingPercent = max(0, window.usedPercent)
         let ticksToFull = missingPercent / nextRegenPercent
         let right = if ticksToFull <= 0.1 {
-            "Near full"
+            L("Near full")
         } else if ticksToFull < 1.5 {
-            "Full in ~1 regen"
+            L("Full in ~1 regen")
         } else {
-            String(format: "Full in ~%.0f regens", ceil(ticksToFull))
+            String(format: L("Full in ~%.0f regens"), ceil(ticksToFull))
         }
 
         return (resetText, PaceDetail(leftLabel: left, rightLabel: right, pacePercent: nil, paceOnTop: true))
