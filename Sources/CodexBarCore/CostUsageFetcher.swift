@@ -98,12 +98,18 @@ public struct CostUsageFetcher: Sendable {
         if forceRefresh {
             options.refreshMinIntervalSeconds = 0
         }
-        var daily = CostUsageScanner.loadDailyReport(
+        let checkCancellation: CostUsageScanner.CancellationCheck = {
+            try Task.checkCancellation()
+        }
+        try Task.checkCancellation()
+        var daily = try CostUsageScanner.loadDailyReportCancellable(
             provider: provider,
             since: since,
             until: until,
             now: now,
-            options: options)
+            options: options,
+            checkCancellation: checkCancellation)
+        try Task.checkCancellation()
 
         if provider == .vertexai,
            !allowVertexClaudeFallback,
@@ -112,12 +118,14 @@ public struct CostUsageFetcher: Sendable {
         {
             var fallback = options
             fallback.claudeLogProviderFilter = .all
-            daily = CostUsageScanner.loadDailyReport(
+            daily = try CostUsageScanner.loadDailyReportCancellable(
                 provider: provider,
                 since: since,
                 until: until,
                 now: now,
-                options: fallback)
+                options: fallback,
+                checkCancellation: checkCancellation)
+            try Task.checkCancellation()
         }
 
         if provider == .codex || provider == .claude {
@@ -128,12 +136,14 @@ public struct CostUsageFetcher: Sendable {
             if forceRefresh {
                 piOptions.refreshMinIntervalSeconds = 0
             }
-            let piReport = PiSessionCostScanner.loadDailyReport(
+            let piReport = try PiSessionCostScanner.loadDailyReportCancellable(
                 provider: provider,
                 since: since,
                 until: until,
                 now: now,
-                options: piOptions)
+                options: piOptions,
+                checkCancellation: checkCancellation)
+            try Task.checkCancellation()
             daily = CostUsageDailyReport.merged([daily, piReport])
         }
 
