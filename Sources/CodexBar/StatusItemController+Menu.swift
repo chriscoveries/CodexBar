@@ -140,6 +140,12 @@ extension StatusItemController {
 
         self.openMenus.removeValue(forKey: key)
         self.menuRefreshTasks.removeValue(forKey: key)?.cancel()
+        self.openMenuRebuildTasks.removeValue(forKey: key)?.cancel()
+        self.openMenuRebuildTokens.removeValue(forKey: key)
+        self.openMenuRebuildsClosingHostedSubviewMenus.remove(key)
+        if let highlightedView = self.highlightedMenuItems.removeValue(forKey: key)?.view {
+            (highlightedView as? MenuCardHighlighting)?.setHighlighted(false)
+        }
 
         let isPersistentMenu = menu === self.mergedMenu ||
             menu === self.fallbackMenu ||
@@ -148,15 +154,22 @@ extension StatusItemController {
             self.menuProviders.removeValue(forKey: key)
             self.menuVersions.removeValue(forKey: key)
         }
-        for menuItem in menu.items {
-            (menuItem.view as? MenuCardHighlighting)?.setHighlighted(false)
-        }
     }
 
     func menu(_ menu: NSMenu, willHighlight item: NSMenuItem?) {
-        for menuItem in menu.items {
-            let highlighted = menuItem == item && menuItem.isEnabled
-            (menuItem.view as? MenuCardHighlighting)?.setHighlighted(highlighted)
+        let key = ObjectIdentifier(menu)
+        let previous = self.highlightedMenuItems[key]
+        guard previous !== item else { return }
+
+        if let previous {
+            (previous.view as? MenuCardHighlighting)?.setHighlighted(false)
+        }
+
+        if let item, item.isEnabled {
+            self.highlightedMenuItems[key] = item
+            (item.view as? MenuCardHighlighting)?.setHighlighted(true)
+        } else {
+            self.highlightedMenuItems.removeValue(forKey: key)
         }
     }
 
@@ -204,6 +217,7 @@ extension StatusItemController {
         let switcherUsageBarsShowUsedMatch = self.settings.usageBarsShowUsed == self.lastSwitcherUsageBarsShowUsed
         let switcherSelectionMatches = switcherSelection == self.lastMergedSwitcherSelection
         let switcherOverviewAvailabilityMatches = includesOverview == self.lastSwitcherIncludesOverview
+        let menuLocalizationMatches = self.menuLocalizationSignature() == self.lastMenuLocalizationSignature
         let tokenSwitcherCompatible = tokenAccountDisplay == self.lastTokenAccountMenuDisplay &&
             ((tokenAccountDisplay?.showSwitcher == true && hasTokenSwitcher) ||
                 (tokenAccountDisplay?.showSwitcher != true && !hasTokenSwitcher))
@@ -224,6 +238,7 @@ extension StatusItemController {
             switcherUsageBarsShowUsedMatch &&
             switcherSelectionMatches &&
             switcherOverviewAvailabilityMatches &&
+            menuLocalizationMatches &&
             tokenSwitcherCompatible &&
             codexSwitcherCompatible &&
             reusableRowWidthsMatch &&
@@ -261,6 +276,7 @@ extension StatusItemController {
             switcherProvidersMatch &&
             switcherUsageBarsShowUsedMatch &&
             switcherOverviewAvailabilityMatches &&
+            menuLocalizationMatches &&
             providerSwitcherWidthMatches &&
             !menu.items.isEmpty &&
             menu.items.first?.view is ProviderSwitcherView
@@ -355,11 +371,8 @@ extension StatusItemController {
                 menu.removeItem(at: contentStartIndex)
             }
 
-            self.lastMergedSwitcherSelection = context.switcherSelection
             let enabledProviders = self.store.enabledProvidersForDisplay()
-            self.lastSwitcherProviders = enabledProviders
-            self.lastSwitcherUsageBarsShowUsed = self.settings.usageBarsShowUsed
-            self.lastSwitcherIncludesOverview = self.includesOverviewTab(enabledProviders: enabledProviders)
+            self.rememberMergedSwitcherState(enabledProviders, context.switcherSelection)
             self.addCodexAccountSwitcherIfNeeded(
                 to: menu,
                 display: context.codexAccountDisplay,
@@ -407,10 +420,10 @@ extension StatusItemController {
                 width: context.menuWidth)
             // Track which providers the switcher was built with for smart update detection
             if self.shouldMergeIcons, context.enabledProviders.count > 1 {
-                self.lastSwitcherProviders = context.enabledProviders
-                self.lastSwitcherUsageBarsShowUsed = self.settings.usageBarsShowUsed
-                self.lastMergedSwitcherSelection = context.switcherSelection
-                self.lastSwitcherIncludesOverview = context.includesOverview
+                self.rememberMergedSwitcherState(
+                    context.enabledProviders,
+                    context.switcherSelection,
+                    context.includesOverview)
             }
             self.addCodexAccountSwitcherIfNeeded(
                 to: menu,
@@ -1084,20 +1097,7 @@ extension StatusItemController {
     }
 
     func refreshOpenMenuIfStillVisible(_ menu: NSMenu, provider: UsageProvider?) {
-        self.rebuildOpenMenuIfStillVisible(menu, provider: provider)
-        Task { @MainActor [weak self, weak menu] in
-            guard let self, let menu else { return }
-            #if DEBUG
-            if let override = self._test_openMenuRefreshYieldOverride {
-                await override()
-            } else {
-                await Task.yield()
-            }
-            #else
-            await Task.yield()
-            #endif
-            self.rebuildOpenMenuIfStillVisible(menu, provider: provider)
-        }
+        self.scheduleOpenMenuRebuildIfStillVisible(menu, provider: provider)
     }
 
     func rebuildOpenMenuIfStillVisible(_ menu: NSMenu, provider: UsageProvider?) {
@@ -1464,7 +1464,7 @@ extension StatusItemController {
         guard let submenu = self.makeCostHistorySubmenu(provider: provider, width: self.renderedMenuWidth(for: menu))
         else { return false }
         let days = self.store.settings.costUsageHistoryDays
-        let title = days == 1 ? "Usage history (today)" : "Usage history (\(days) days)"
+        let title = days == 1 ? L("Usage history (today)") : String(format: L("Usage history (%d days)"), days)
         let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
         item.isEnabled = true
         item.submenu = submenu

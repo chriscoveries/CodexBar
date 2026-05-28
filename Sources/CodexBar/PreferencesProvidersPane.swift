@@ -488,7 +488,7 @@ struct ProvidersPane: View {
             ]
         } else if SettingsStore.isBalanceOnlyProvider(provider) {
             options = [
-                ProviderSettingsPickerOption(id: MenuBarMetricPreference.automatic.rawValue, title: "Automatic"),
+                ProviderSettingsPickerOption(id: MenuBarMetricPreference.automatic.rawValue, title: L("Automatic")),
             ]
         } else if provider == .abacus {
             let metadata = self.store.metadata(for: provider)
@@ -668,17 +668,7 @@ struct ProvidersPane: View {
         }
 
         if let error = error as? ManagedCodexAccountServiceError {
-            let message = switch error {
-            case .loginFailed:
-                L("managed_login_failed")
-            case .missingEmail:
-                L("managed_login_missing_email")
-            case .workspaceSelectionCancelled:
-                L("workspace_selection_cancelled")
-            case let .unsafeManagedHome(path):
-                String(format: L("unsafe_managed_home"), path)
-            }
-            return CodexAccountsSectionNotice(text: message, tone: .warning)
+            return CodexAccountsSectionNotice(text: error.userFacingMessage, tone: .warning)
         }
 
         return CodexAccountsSectionNotice(
@@ -688,8 +678,8 @@ struct ProvidersPane: View {
 
     private func presentLoginAlert(title: String, message: String) {
         let alert = NSAlert()
-        alert.messageText = title
-        alert.informativeText = message
+        alert.messageText = L(title)
+        alert.informativeText = L(message)
         alert.alertStyle = .warning
         alert.runModal()
     }
@@ -754,9 +744,9 @@ struct ProviderSettingsConfirmationState: Identifiable {
     }
 
     init(confirmation: ProviderSettingsConfirmation) {
-        self.title = confirmation.title
-        self.message = confirmation.message
-        self.confirmTitle = confirmation.confirmTitle
+        self.title = L(confirmation.title)
+        self.message = L(confirmation.message)
+        self.confirmTitle = L(confirmation.confirmTitle)
         self.onConfirm = confirmation.onConfirm
     }
 }

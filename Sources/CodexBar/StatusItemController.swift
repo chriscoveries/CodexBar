@@ -107,6 +107,11 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
     var fallbackMenu: NSMenu?
     var openMenus: [ObjectIdentifier: NSMenu] = [:]
     var menuRefreshTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
+    var openMenuRebuildTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
+    var openMenuRebuildTokens: [ObjectIdentifier: Int] = [:]
+    var openMenuRebuildTokenCounter = 0
+    var openMenuRebuildsClosingHostedSubviewMenus: Set<ObjectIdentifier> = []
+    var highlightedMenuItems: [ObjectIdentifier: NSMenuItem] = [:]
     var providerSwitcherShortcutEventMonitor: ProviderSwitcherShortcutEventMonitor?
     var providerSwitcherShortcutMenuID: ObjectIdentifier?
     var hasPreparedForAppShutdown = false
@@ -164,6 +169,9 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
     /// Tracks whether the merged-menu switcher was built with the Overview tab visible.
     /// Used to force switcher rebuilds when Overview availability toggles.
     var lastSwitcherIncludesOverview: Bool = false
+    /// Tracks localization-sensitive labels used by the merged menu.
+    /// Used to force menu rebuilds when app language changes.
+    var lastMenuLocalizationSignature: String = ""
     /// Tracks which providers the merged menu's switcher was built with, to detect when it needs full rebuild.
     var lastSwitcherProviders: [UsageProvider] = []
     /// Tracks which switcher tab state was used for the current merged-menu switcher instance.
@@ -609,6 +617,9 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
             self.lastObservedUsageBarsShowUsed = usageBarsShowUsed
             shouldRefresh = true
         }
+        if self.menuLocalizationSignature() != self.lastMenuLocalizationSignature {
+            shouldRefresh = true
+        }
         return shouldRefresh
     }
 
@@ -812,6 +823,10 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
             self.menuVersions.removeValue(forKey: menuID)
             self.openMenus.removeValue(forKey: menuID)
             self.menuRefreshTasks.removeValue(forKey: menuID)?.cancel()
+            self.openMenuRebuildTasks.removeValue(forKey: menuID)?.cancel()
+            self.openMenuRebuildTokens.removeValue(forKey: menuID)
+            self.openMenuRebuildsClosingHostedSubviewMenus.remove(menuID)
+            self.highlightedMenuItems.removeValue(forKey: menuID)
         }
 
         guard let item = self.statusItems.removeValue(forKey: provider) else { return }

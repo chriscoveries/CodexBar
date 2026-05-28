@@ -74,16 +74,16 @@ struct CostHistoryChartMenuView: View {
                 Chart {
                     ForEach(model.points) { point in
                         BarMark(
-                            x: .value("Day", point.date, unit: .day),
-                            y: .value("Cost", point.costUSD))
+                            x: .value(L("Day"), point.date, unit: .day),
+                            y: .value(L("Cost"), point.costUSD))
                             .foregroundStyle(model.barColor)
                     }
                     if let peak = Self.peakPoint(model: model) {
                         let capStart = max(peak.costUSD - Self.capHeight(maxValue: model.maxCostUSD), 0)
                         BarMark(
-                            x: .value("Day", peak.date, unit: .day),
-                            yStart: .value("Cap start", capStart),
-                            yEnd: .value("Cap end", peak.costUSD))
+                            x: .value(L("Day"), peak.date, unit: .day),
+                            yStart: .value(L("Cap start"), capStart),
+                            yEnd: .value(L("Cap end"), peak.costUSD))
                             .foregroundStyle(Color(nsColor: .systemYellow))
                     }
                 }
@@ -99,8 +99,11 @@ struct CostHistoryChartMenuView: View {
                 }
                 .chartLegend(.hidden)
                 .frame(height: 130)
-                .accessibilityLabel("Cost history chart")
-                .accessibilityValue(model.points.isEmpty ? "No data" : "\(model.points.count) days of cost data")
+                .accessibilityLabel(L("Cost history chart"))
+                .accessibilityValue(
+                    model.points.isEmpty
+                        ? L("No data")
+                        : String(format: L("%d days of cost data"), model.points.count))
                 .chartOverlay { proxy in
                     GeometryReader { geo in
                         ZStack(alignment: .topLeading) {
