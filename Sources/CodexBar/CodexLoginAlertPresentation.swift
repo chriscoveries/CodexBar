@@ -27,6 +27,12 @@ enum CodexLoginAlertPresentation {
         }
     }
 
+    static func managedLoginFailureMessage(for result: CodexLoginRunner.Result) -> String {
+        let baseMessage = L("managed_login_failed")
+        guard let info = self.alertInfo(for: result) else { return baseMessage }
+        return "\(baseMessage)\n\n\(L("codex_login_output"))\n\(info.message)"
+    }
+
     private static func trimmedOutput(_ text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let limit = 600

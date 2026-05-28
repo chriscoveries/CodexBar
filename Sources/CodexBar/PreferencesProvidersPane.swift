@@ -668,17 +668,7 @@ struct ProvidersPane: View {
         }
 
         if let error = error as? ManagedCodexAccountServiceError {
-            let message = switch error {
-            case .loginFailed:
-                L("managed_login_failed")
-            case .missingEmail:
-                L("managed_login_missing_email")
-            case .workspaceSelectionCancelled:
-                L("workspace_selection_cancelled")
-            case let .unsafeManagedHome(path):
-                String(format: L("unsafe_managed_home"), path)
-            }
-            return CodexAccountsSectionNotice(text: message, tone: .warning)
+            return CodexAccountsSectionNotice(text: error.userFacingMessage, tone: .warning)
         }
 
         return CodexAccountsSectionNotice(

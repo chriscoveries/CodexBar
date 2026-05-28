@@ -3,8 +3,8 @@ import Darwin
 import Foundation
 
 struct CodexLoginRunner {
-    struct Result {
-        enum Outcome {
+    struct Result: Equatable {
+        enum Outcome: Equatable {
             case success
             case timedOut
             case failed(status: Int32)

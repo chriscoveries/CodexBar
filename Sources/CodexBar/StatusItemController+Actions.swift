@@ -382,27 +382,16 @@ extension StatusItemController: StatusItemMenuPersistentActionDelegate {
     }
 
     private func presentManagedCodexAccountError(_ error: Error) {
-        let info: LoginAlertInfo
-        if let error = error as? ManagedCodexAccountCoordinatorError,
-           error == .authenticationInProgress
+        let info = if let error = error as? ManagedCodexAccountCoordinatorError,
+                      error == .authenticationInProgress
         {
-            info = LoginAlertInfo(
+            LoginAlertInfo(
                 title: L("Codex account login already running"),
                 message: L("Wait for the current managed Codex login to finish before adding another account."))
         } else if let error = error as? ManagedCodexAccountServiceError {
-            let message = switch error {
-            case .loginFailed:
-                L("managed_login_failed")
-            case .missingEmail:
-                L("managed_login_missing_email")
-            case .workspaceSelectionCancelled:
-                L("workspace_selection_cancelled")
-            case let .unsafeManagedHome(path):
-                String(format: L("unsafe_managed_home"), path)
-            }
-            info = LoginAlertInfo(title: L("Could not add Codex account"), message: message)
+            LoginAlertInfo(title: L("Could not add Codex account"), message: error.userFacingMessage)
         } else {
-            info = LoginAlertInfo(title: L("Could not add Codex account"), message: error.localizedDescription)
+            LoginAlertInfo(title: L("Could not add Codex account"), message: error.localizedDescription)
         }
 
         self.presentLoginAlert(title: info.title, message: info.message)

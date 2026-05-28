@@ -452,6 +452,7 @@
 "remove" = "Elimina";
 "managed_login_already_running" = "Ja hi ha un inici de sessió gestionat de Codex en curs. Espera que acabi abans d'afegir o reautenticar un altre compte.";
 "managed_login_failed" = "L'inici de sessió gestionat de Codex no s'ha completat. Comprova que `codex --version` funciona al Terminal. Si macOS ha bloquejat o ha mogut `codex` a la Paperera, elimina les instal·lacions duplicades obsoletes, executa `npm install -g --include=optional @openai/codex@latest` i torna-ho a provar.";
+"codex_login_output" = "Sortida de codex login:";
 "managed_login_missing_email" = "L'inici de sessió de Codex s'ha completat, però no hi havia cap correu de compte disponible. Torna-ho a provar després de confirmar que el compte té la sessió totalment iniciada.";
 "workspace_selection_cancelled" = "El CodexBar ha trobat diversos espais de treball, però no se n'ha seleccionat cap.";
 "unsafe_managed_home" = "El CodexBar s'ha negat a modificar un camí de directori gestionat inesperat: %@";
