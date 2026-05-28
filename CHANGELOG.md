@@ -15,6 +15,7 @@
 
 ### Fixed
 - Cost history: make token-cost JSONL scans cancellation-aware so quitting, forced refreshes, and account switches can stop stale scans sooner.
+- Codex: show Spark 5-hour and weekly usage as separate quota lanes in Codex breakdowns (#1201).
 - Codex: show captured `codex login` output when managed Add Account fails so users can recover from account-selection or OAuth failures (#1199). Thanks @chapati23!
 - Claude: hide the obsolete Design quota lane now that Claude Design shares the main Claude usage limit (#1197).
 - Menu bar: coalesce visible-menu rebuilds and reduce hover highlight work so the dropdown stays responsive on macOS 26.5 (#1196).

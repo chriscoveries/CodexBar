@@ -33,7 +33,12 @@ struct CodexAdditionalRateLimitsTests {
                   "limit_window_seconds": 18000,
                   "reset_after_seconds": 12345
                 },
-                "secondary_window": null
+                "secondary_window": {
+                  "used_percent": 100,
+                  "reset_at": 1767407914,
+                  "limit_window_seconds": 604800,
+                  "reset_after_seconds": 56789
+                }
               }
             }
           ]
@@ -50,15 +55,21 @@ struct CodexAdditionalRateLimitsTests {
         // Primary/weekly behavior is unchanged.
         #expect(snapshot.primary?.usedPercent == 22)
         #expect(snapshot.secondary?.usedPercent == 43)
-        // Spark surfaces as a single named extra window with a stable id/title.
+        // Spark surfaces as distinct 5-hour and weekly extra windows.
         let extras = try #require(snapshot.extraRateWindows)
-        #expect(extras.count == 1)
+        #expect(extras.count == 2)
         let spark = try #require(extras.first)
         #expect(spark.id == "codex-spark")
-        #expect(spark.title == "Codex Spark")
+        #expect(spark.title == "Codex Spark 5-hour")
         #expect(spark.window.usedPercent == 30)
         #expect(spark.window.windowMinutes == 300)
         #expect(spark.window.resetsAt != nil)
+        let weekly = try #require(extras.last)
+        #expect(weekly.id == "codex-spark-weekly")
+        #expect(weekly.title == "Codex Spark Weekly")
+        #expect(weekly.window.usedPercent == 100)
+        #expect(weekly.window.windowMinutes == 10080)
+        #expect(weekly.window.resetsAt != nil)
     }
 
     @Test
@@ -242,5 +253,59 @@ struct CodexAdditionalRateLimitsTests {
         #expect(window.id == "codex-gpt-5-3-codex-mini")
         #expect(window.title == "GPT-5.3-Codex-Mini")
         #expect(window.window.usedPercent == 12)
+    }
+
+    @Test
+    func `dedupes split spark entries by window kind`() throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let json = """
+        [
+          {
+            "limit_name": "GPT-5.3-Codex-Spark",
+            "metered_feature": "gpt_5_3_codex_spark",
+            "rate_limit": {
+              "allowed": true,
+              "limit_reached": false,
+              "primary_window": {
+                "used_percent": 20,
+                "reset_at": 1766948068,
+                "limit_window_seconds": 18000
+              }
+            }
+          },
+          {
+            "limit_name": "GPT-5.3-Codex-Spark Weekly",
+            "metered_feature": "gpt_5_3_codex_spark",
+            "rate_limit": {
+              "allowed": true,
+              "limit_reached": false,
+              "primary_window": {
+                "used_percent": 80,
+                "reset_at": 1767407914,
+                "limit_window_seconds": 604800
+              }
+            }
+          },
+          {
+            "limit_name": "GPT-5.3-Codex-Spark Duplicate",
+            "metered_feature": "gpt_5_3_codex_spark",
+            "rate_limit": {
+              "allowed": true,
+              "limit_reached": false,
+              "primary_window": {
+                "used_percent": 99,
+                "reset_at": 1766948068,
+                "limit_window_seconds": 18000
+              }
+            }
+          }
+        ]
+        """
+        let entries = try JSONDecoder().decode([CodexUsageResponse.AdditionalRateLimit].self, from: Data(json.utf8))
+        let windows = CodexAdditionalRateLimitMapper.extraRateWindows(from: entries, now: now)
+
+        #expect(windows.map(\.id) == ["codex-spark", "codex-spark-weekly"])
+        #expect(windows.first?.window.usedPercent == 20)
+        #expect(windows.last?.window.usedPercent == 80)
     }
 }

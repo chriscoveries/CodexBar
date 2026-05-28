@@ -26,7 +26,8 @@ struct OpenAIDashboardSparkTests {
               "limit_name": "GPT-5.3-Codex-Spark",
               "metered_feature": "gpt_5_3_codex_spark",
               "rate_limit": {
-                "primary_window": { "used_percent": 30, "reset_at": 1766948068, "limit_window_seconds": 18000 }
+                "primary_window": { "used_percent": 30, "reset_at": 1766948068, "limit_window_seconds": 18000 },
+                "secondary_window": { "used_percent": 100, "reset_at": 1767407914, "limit_window_seconds": 604800 }
               }
             }
           ]
@@ -38,14 +39,20 @@ struct OpenAIDashboardSparkTests {
         #expect(apiData.primaryLimit?.usedPercent == 22)
         #expect(apiData.secondaryLimit?.usedPercent == 43)
         #expect(apiData.accountPlan == "pro")
-        // Spark surfaces with a stable id/title and the additional limit's window percent.
-        #expect(apiData.extraRateWindows.count == 1)
+        // Spark surfaces with stable ids/titles for the additional 5-hour and weekly windows.
+        #expect(apiData.extraRateWindows.count == 2)
         let spark = try #require(apiData.extraRateWindows.first)
         #expect(spark.id == "codex-spark")
-        #expect(spark.title == "Codex Spark")
+        #expect(spark.title == "Codex Spark 5-hour")
         #expect(spark.window.usedPercent == 30)
         #expect(spark.window.windowMinutes == 300)
         #expect(spark.window.resetsAt != nil)
+        let weekly = try #require(apiData.extraRateWindows.last)
+        #expect(weekly.id == "codex-spark-weekly")
+        #expect(weekly.title == "Codex Spark Weekly")
+        #expect(weekly.window.usedPercent == 100)
+        #expect(weekly.window.windowMinutes == 10080)
+        #expect(weekly.window.resetsAt != nil)
     }
 
     @Test
@@ -132,11 +139,19 @@ struct OpenAIDashboardSparkTests {
             extraRateWindows: [
                 NamedRateWindow(
                     id: "codex-spark",
-                    title: "Codex Spark",
+                    title: "Codex Spark 5-hour",
                     window: RateWindow(
                         usedPercent: 30,
                         windowMinutes: 300,
                         resetsAt: now.addingTimeInterval(60 * 60),
+                        resetDescription: nil)),
+                NamedRateWindow(
+                    id: "codex-spark-weekly",
+                    title: "Codex Spark Weekly",
+                    window: RateWindow(
+                        usedPercent: 100,
+                        windowMinutes: 10080,
+                        resetsAt: now.addingTimeInterval(6 * 24 * 60 * 60),
                         resetDescription: nil)),
             ],
             updatedAt: now)
@@ -147,8 +162,9 @@ struct OpenAIDashboardSparkTests {
         #expect(usage.secondary?.usedPercent == 43)
         // Spark surfaces through UsageSnapshot.extraRateWindows for dashboard-source users.
         let extras = try #require(usage.extraRateWindows)
-        #expect(extras.map(\.id) == ["codex-spark"])
+        #expect(extras.map(\.id) == ["codex-spark", "codex-spark-weekly"])
         #expect(extras.first?.window.usedPercent == 30)
+        #expect(extras.last?.window.usedPercent == 100)
     }
 
     @Test
@@ -164,11 +180,19 @@ struct OpenAIDashboardSparkTests {
             extraRateWindows: [
                 NamedRateWindow(
                     id: "codex-spark",
-                    title: "Codex Spark",
+                    title: "Codex Spark 5-hour",
                     window: RateWindow(
                         usedPercent: 30,
                         windowMinutes: 300,
                         resetsAt: now.addingTimeInterval(60 * 60),
+                        resetDescription: nil)),
+                NamedRateWindow(
+                    id: "codex-spark-weekly",
+                    title: "Codex Spark Weekly",
+                    window: RateWindow(
+                        usedPercent: 100,
+                        windowMinutes: 10080,
+                        resetsAt: now.addingTimeInterval(6 * 24 * 60 * 60),
                         resetDescription: nil)),
             ],
             updatedAt: now)
@@ -180,8 +204,9 @@ struct OpenAIDashboardSparkTests {
 
         let data = try encoder.encode(snapshot)
         let decoded = try decoder.decode(OpenAIDashboardSnapshot.self, from: data)
-        #expect(decoded.extraRateWindows?.map(\.id) == ["codex-spark"])
+        #expect(decoded.extraRateWindows?.map(\.id) == ["codex-spark", "codex-spark-weekly"])
         #expect(decoded.extraRateWindows?.first?.window.usedPercent == 30)
+        #expect(decoded.extraRateWindows?.last?.window.usedPercent == 100)
     }
 
     @Test

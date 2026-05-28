@@ -630,11 +630,19 @@ struct MenuCardModelCodexProjectionTests {
             extraRateWindows: [
                 NamedRateWindow(
                     id: "codex-spark",
-                    title: "Codex Spark",
+                    title: "Codex Spark 5-hour",
                     window: RateWindow(
                         usedPercent: 30,
                         windowMinutes: 300,
                         resetsAt: now.addingTimeInterval(60 * 60),
+                        resetDescription: nil)),
+                NamedRateWindow(
+                    id: "codex-spark-weekly",
+                    title: "Codex Spark Weekly",
+                    window: RateWindow(
+                        usedPercent: 100,
+                        windowMinutes: 10080,
+                        resetsAt: now.addingTimeInterval(6 * 24 * 60 * 60),
                         resetDescription: nil)),
             ],
             updatedAt: now,
@@ -674,14 +682,21 @@ struct MenuCardModelCodexProjectionTests {
             now: now))
 
         let spark = try #require(model.metrics.first { $0.id == "codex-spark" })
-        #expect(spark.title == "Codex Spark")
+        #expect(spark.title == "Codex Spark 5-hour")
         #expect(spark.percent == 70)
         #expect(spark.percentLabel == "70% left")
         #expect(spark.resetText != nil)
+        let sparkWeekly = try #require(model.metrics.first { $0.id == "codex-spark-weekly" })
+        #expect(sparkWeekly.title == "Codex Spark Weekly")
+        #expect(sparkWeekly.percent == 0)
+        #expect(sparkWeekly.percentLabel == "0% left")
+        #expect(sparkWeekly.resetText != nil)
         // Spark trails the core session/weekly lanes rather than replacing them.
         let sparkIndex = try #require(model.metrics.firstIndex { $0.id == "codex-spark" })
+        let sparkWeeklyIndex = try #require(model.metrics.firstIndex { $0.id == "codex-spark-weekly" })
         let sessionIndex = try #require(model.metrics.firstIndex { $0.id == "primary" })
         #expect(sparkIndex > sessionIndex)
+        #expect(sparkWeeklyIndex > sparkIndex)
     }
 
     @Test
@@ -760,11 +775,19 @@ struct MenuCardModelCodexProjectionTests {
             extraRateWindows: [
                 NamedRateWindow(
                     id: "codex-spark",
-                    title: "Codex Spark",
+                    title: "Codex Spark 5-hour",
                     window: RateWindow(
                         usedPercent: 30,
                         windowMinutes: 300,
                         resetsAt: now.addingTimeInterval(60 * 60),
+                        resetDescription: nil)),
+                NamedRateWindow(
+                    id: "codex-spark-weekly",
+                    title: "Codex Spark Weekly",
+                    window: RateWindow(
+                        usedPercent: 100,
+                        windowMinutes: 10080,
+                        resetsAt: now.addingTimeInterval(6 * 24 * 60 * 60),
                         resetDescription: nil)),
             ],
             updatedAt: now,
@@ -804,6 +827,7 @@ struct MenuCardModelCodexProjectionTests {
             now: now))
 
         #expect(!model.metrics.contains { $0.id == "codex-spark" })
+        #expect(!model.metrics.contains { $0.id == "codex-spark-weekly" })
         #expect(model.metrics.contains { $0.id == "primary" })
         #expect(model.metrics.contains { $0.id == "secondary" })
     }
