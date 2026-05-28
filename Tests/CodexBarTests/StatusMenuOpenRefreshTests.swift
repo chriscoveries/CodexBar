@@ -88,14 +88,20 @@ extension StatusMenuTests {
         defer { StatusItemController.resetMenuRefreshEnabledForTesting() }
 
         let openedVersion = controller.menuVersions[key]
+        var rebuildCount = 0
+        controller._test_openMenuRebuildObserver = { _ in
+            rebuildCount += 1
+        }
+        defer { controller._test_openMenuRebuildObserver = nil }
 
         controller.refreshOpenMenusAfterExplicitStoreAction()
-        for _ in 0..<20 where controller.menuVersions[key] != controller.menuContentVersion {
+        for _ in 0..<20 where rebuildCount == 0 {
             await Task.yield()
         }
 
         #expect(controller.menuContentVersion != openedVersion)
-        #expect(controller.menuVersions[key] == controller.menuContentVersion)
+        #expect(rebuildCount == 1)
+        #expect(controller.menuVersions[key] != openedVersion)
     }
 
     @Test
