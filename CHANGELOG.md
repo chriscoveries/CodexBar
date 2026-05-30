@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.31.1 — Unreleased
+## 0.32.0 — 2026-05-31
 
 ### Added
 - Settings: add search to the Providers pane so large provider lists can be filtered by name or id (#1184). Thanks @046081-dotcom!
