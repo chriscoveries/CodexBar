@@ -127,7 +127,7 @@ enum CLILocalHTTPRequestParseError: Error, Equatable {
     case disallowedHost
 }
 
-enum CLIHTTPStatus: Sendable {
+enum CLIHTTPStatus {
     case ok
     case badRequest
     case forbidden
@@ -160,7 +160,7 @@ enum CLIHTTPStatus: Sendable {
     }
 }
 
-struct CLILocalHTTPResponse: Sendable {
+struct CLILocalHTTPResponse {
     let status: CLIHTTPStatus
     let body: Data
     let contentType: String
