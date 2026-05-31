@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.32.1 — Unreleased
+## 0.32.1 — 2026-05-31
 
 ### Fixed
 - Claude: keep Claude CLI-owned OAuth refresh tokens delegated to Claude Code when CLI storage is present, preventing CodexBar from consuming rotating refresh tokens and forcing re-login (#1161, #1239). Thanks @RajvardhanPatil07!
