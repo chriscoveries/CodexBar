@@ -30,6 +30,10 @@ if [[ -z "$TIMEOUT_BIN" ]]; then
   echo "missing timeout command (install coreutils for gtimeout)" >&2
   exit 2
 fi
+if ! command -v node >/dev/null 2>&1; then
+  echo "missing node" >&2
+  exit 2
+fi
 
 mode="${1:-}"
 shift || true
@@ -99,7 +103,7 @@ const redact = s => String(s || "")
 run_one() {
   local name="$1"
   shift
-  local out err start end elapsed st
+  local out err start end elapsed st node_status
   out="$(mktemp)"
   err="$(mktemp)"
   start="$(date +%s)"
@@ -114,6 +118,7 @@ const [name, st, elapsed, outPath, errPath] = process.argv.slice(2);
 const raw = fs.readFileSync(outPath, "utf8").trim();
 const err = fs.readFileSync(errPath, "utf8").trim();
 let rows = [];
+let formatterFailed = false;
 try {
   const payload = raw ? JSON.parse(raw) : [];
   const arr = Array.isArray(payload) ? payload : [payload];
@@ -127,12 +132,21 @@ try {
     );
   }
 } catch (error) {
+  formatterFailed = true;
   rows.push(\`\${name}:parse-fail:error=\${redact(error.message)} stdout=\${redact(raw).slice(0, 200)} stderr=\${redact(err).slice(0, 200)}\`);
 }
-if (!rows.length) rows.push(\`\${name}:empty:stderr=\${redact(err).slice(0, 200)}\`);
+if (!rows.length) {
+  formatterFailed = true;
+  rows.push(\`\${name}:empty:stderr=\${redact(err).slice(0, 200)}\`);
+}
 console.log(\`TEST \${name} exit=\${st} elapsed=\${elapsed}s :: \${rows.join(" | ")}\`);
+if (formatterFailed) process.exit(1);
 NODE
+  node_status=$?
   rm -f "$out" "$err"
+  if [[ "$node_status" -ne 0 ]]; then
+    return 1
+  fi
   return "$st"
 }
 
