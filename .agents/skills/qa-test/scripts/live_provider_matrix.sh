@@ -17,6 +17,7 @@ Usage:
 
 Environment:
   CODEXBAR_CLI=/path/to/CodexBarCLI
+  CODEXBAR_CONFIG=/path/to/config.json
   CODEXBAR_QA_WEB_TIMEOUT=12
   CODEXBAR_QA_CASE_TIMEOUT=60
 USAGE
@@ -41,26 +42,38 @@ shift || true
 providers=()
 case "$mode" in
   --enabled)
-    if [[ ! -f "$HOME/.codexbar/config.json" ]]; then
-      echo "missing ~/.codexbar/config.json" >&2
-      exit 2
-    fi
-    if ! command -v jq >/dev/null 2>&1; then
-      echo "missing jq" >&2
-      exit 2
-    fi
+    provider_status="$(mktemp)"
+    provider_err="$(mktemp)"
     provider_list="$(mktemp)"
-    if ! jq -r '(.providers // [])[] | select(.enabled == true) | .id' "$HOME/.codexbar/config.json" >"$provider_list"; then
-      rm -f "$provider_list"
-      echo "failed to parse ~/.codexbar/config.json" >&2
+    if ! "$CLI" config providers --format json --json-only >"$provider_status" 2>"$provider_err"; then
+      rm -f "$provider_status" "$provider_err" "$provider_list"
+      echo "failed to list providers via CodexBarCLI config providers" >&2
+      exit 2
+    fi
+    if ! node - "$provider_status" >"$provider_list" <<'NODE'; then
+const fs = require("fs");
+const path = process.argv[2];
+const raw = fs.readFileSync(path, "utf8").trim();
+const payload = JSON.parse(raw);
+if (!Array.isArray(payload)) {
+  throw new Error("config providers output is not an array");
+}
+for (const item of payload) {
+  if (item && item.enabled === true && typeof item.provider === "string" && item.provider) {
+    console.log(item.provider);
+  }
+}
+NODE
+      rm -f "$provider_status" "$provider_err" "$provider_list"
+      echo "failed to parse CodexBarCLI config providers output" >&2
       exit 2
     fi
     while IFS= read -r provider; do
       [[ -n "$provider" ]] && providers+=("$provider")
     done <"$provider_list"
-    rm -f "$provider_list"
+    rm -f "$provider_status" "$provider_err" "$provider_list"
     if [[ "${#providers[@]}" -eq 0 ]]; then
-      echo "no enabled providers found in ~/.codexbar/config.json" >&2
+      echo "no enabled providers found via CodexBarCLI config providers" >&2
       exit 2
     fi
     ;;
