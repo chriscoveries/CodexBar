@@ -2,6 +2,9 @@
 
 ## 0.32.2 — Unreleased
 
+### Fixed
+- Menu bar: add breathing room to compact Codex account rows so the provider, account, status, and plan labels no longer hug the row edges.
+
 ## 0.32.1 — 2026-05-31
 
 ### Fixed
