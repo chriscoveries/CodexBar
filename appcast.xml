@@ -3,6 +3,25 @@
     <channel>
         <title>CodexBar</title>
         <item>
+            <title>0.32.1</title>
+            <pubDate>Sun, 31 May 2026 19:10:18 +0100</pubDate>
+            <link>https://raw.githubusercontent.com/steipete/CodexBar/main/appcast.xml</link>
+            <sparkle:version>76</sparkle:version>
+            <sparkle:shortVersionString>0.32.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[<h2>CodexBar 0.32.1</h2>
+<h3>Fixed</h3>
+<ul>
+<li>Claude: keep Claude CLI-owned OAuth refresh tokens delegated to Claude Code when CLI storage is present, preventing CodexBar from consuming rotating refresh tokens and forcing re-login (#1161, #1239). Thanks @RajvardhanPatil07!</li>
+<li>Menu bar: reuse short-lived Codex account reconciliation snapshots so repeated menu rebuilds do not reread local auth state on every open.</li>
+<li>Menu bar: defer automatic provider refreshes until after AppKit menu tracking ends so opening the dropdown no longer starts work that can freeze focus and keyboard input.</li>
+<li>Menu bar: suppress background keychain and OpenAI dashboard work during startup/menu tracking so the dropdown stays clickable without macOS keychain prompts or WebKit memory spikes.</li>
+</ul>
+<p><a href="https://github.com/steipete/CodexBar/blob/main/CHANGELOG.md">View full changelog</a></p>
+]]></description>
+            <enclosure url="https://github.com/steipete/CodexBar/releases/download/v0.32.1/CodexBar-macos-universal-0.32.1.zip" length="44948463" type="application/octet-stream" sparkle:edSignature="BK/FXuVPVzQn3kOykuPdpyU5AcRZs45z/iSWYx5k3sLuAu2FyFigVQn8ZDA4eXN9KASAvQXkFZJSKfOANI4oDA=="/>
+        </item>
+        <item>
             <title>0.32.0</title>
             <pubDate>Sun, 31 May 2026 01:50:25 +0100</pubDate>
             <link>https://raw.githubusercontent.com/steipete/CodexBar/main/appcast.xml</link>
@@ -64,28 +83,6 @@
 <p><a href="https://github.com/steipete/CodexBar/blob/main/CHANGELOG.md">View full changelog</a></p>
 ]]></description>
             <enclosure url="https://github.com/steipete/CodexBar/releases/download/v0.31.0/CodexBar-macos-universal-0.31.0.zip" length="44654410" type="application/octet-stream" sparkle:edSignature="5QrkHnDb0Rc90o8qybk6S0p7TseVZiQ1zDaoLCmEQyUfODN/oqRfnDvPVKcYOLHa9P5NzMM5alxnkrMp9dbEBQ=="/>
-        </item>
-        <item>
-            <title>0.30.1</title>
-            <pubDate>Thu, 28 May 2026 07:56:49 +0100</pubDate>
-            <link>https://raw.githubusercontent.com/steipete/CodexBar/main/appcast.xml</link>
-            <sparkle:version>72</sparkle:version>
-            <sparkle:shortVersionString>0.30.1</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <description><![CDATA[<h2>CodexBar 0.30.1</h2>
-<h3>Changed</h3>
-<ul>
-<li>CLI: make <code>codexbar diagnose</code> use a generic safe provider diagnostic export for all providers, with MiniMax details attached only as provider-specific metadata.</li>
-</ul>
-<h3>Fixed</h3>
-<ul>
-<li>Settings: add trailing breathing room to provider-sidebar controls (#1183). Thanks @Yuxin-Qiao!</li>
-<li>Claude: treat OAuth usage HTTP 429s as rate limits, preserve cached credentials, and back off background retries while still allowing manual refresh (#1179). Thanks @LeoLin990405!</li>
-<li>Menu bar: stop repeated display-change status-item recreation from corrupting Control Center or confusing menu bar managers (#1176, fixes #1175). Thanks @diazdesandi!</li>
-</ul>
-<p><a href="https://github.com/steipete/CodexBar/blob/main/CHANGELOG.md">View full changelog</a></p>
-]]></description>
-            <enclosure url="https://github.com/steipete/CodexBar/releases/download/v0.30.1/CodexBar-macos-universal-0.30.1.zip" length="44308521" type="application/octet-stream" sparkle:edSignature="cfxg8FT6uZzaLb/BVogBkANw6pBeja7Ib6sTd6VcYFqTq9FpmvJ0loeVbfkbSXanIuL7lFs2GEJeWPLQRqjJCQ=="/>
         </item>
         <item>
             <title>0.14.0</title>
