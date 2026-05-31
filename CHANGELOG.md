@@ -2,6 +2,9 @@
 
 ## 0.32.2 — Unreleased
 
+### Added
+- QA: document the live CodexBar e2e flow and add a redacted provider-matrix helper for packaged CLI smoke tests.
+
 ### Fixed
 - Menu bar: add breathing room to compact Codex account rows so the provider, account, status, and plan labels no longer hug the row edges.
 
