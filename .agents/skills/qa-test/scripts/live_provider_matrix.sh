@@ -41,15 +41,40 @@ case "$mode" in
       echo "missing ~/.codexbar/config.json" >&2
       exit 2
     fi
-    mapfile -t providers < <(jq -r '.providers[] | select(.enabled == true) | .id' "$HOME/.codexbar/config.json")
+    if ! command -v jq >/dev/null 2>&1; then
+      echo "missing jq" >&2
+      exit 2
+    fi
+    provider_list="$(mktemp)"
+    if ! jq -r '(.providers // [])[] | select(.enabled == true) | .id' "$HOME/.codexbar/config.json" >"$provider_list"; then
+      rm -f "$provider_list"
+      echo "failed to parse ~/.codexbar/config.json" >&2
+      exit 2
+    fi
+    while IFS= read -r provider; do
+      [[ -n "$provider" ]] && providers+=("$provider")
+    done <"$provider_list"
+    rm -f "$provider_list"
+    if [[ "${#providers[@]}" -eq 0 ]]; then
+      echo "no enabled providers found in ~/.codexbar/config.json" >&2
+      exit 2
+    fi
     ;;
   --default)
     providers=("__default__")
     ;;
   --provider)
+    if [[ -z "${1:-}" ]]; then
+      echo "missing provider" >&2
+      exit 2
+    fi
     providers=("${1:-}")
     ;;
   --providers)
+    if [[ -z "${1:-}" ]]; then
+      echo "missing providers" >&2
+      exit 2
+    fi
     IFS=',' read -r -a providers <<< "${1:-}"
     ;;
   -h|--help|"")
@@ -112,8 +137,10 @@ NODE
 }
 
 overall=0
+ran=0
 for provider in "${providers[@]}"; do
   [[ -z "$provider" ]] && continue
+  ran=$((ran + 1))
   if [[ "$provider" == "__default__" ]]; then
     run_one default || overall=1
   elif [[ "$provider" == "all" ]]; then
@@ -122,4 +149,8 @@ for provider in "${providers[@]}"; do
     run_one "$provider" --provider "$provider" || overall=1
   fi
 done
+if [[ "$ran" -eq 0 ]]; then
+  echo "no provider cases ran" >&2
+  exit 2
+fi
 exit "$overall"

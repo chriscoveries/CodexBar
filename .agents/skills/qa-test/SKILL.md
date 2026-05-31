@@ -55,6 +55,7 @@ Redact config shape:
 jq '(.providers // []) |= map(.apiKey = (if .apiKey then "<redacted>" else .apiKey end) |
   .secretKey = (if .secretKey then "<redacted>" else .secretKey end) |
   .cookieHeader = (if .cookieHeader then "<redacted>" else .cookieHeader end) |
+  (if .id == "stepfun" and has("region") then .region = "<redacted>" else . end) |
   .tokenAccounts = (if .tokenAccounts then (.tokenAccounts | .accounts = (.accounts | map(.token = "<redacted>"))) else .tokenAccounts end))' \
   "$HOME/.codexbar/config.json"
 ```
