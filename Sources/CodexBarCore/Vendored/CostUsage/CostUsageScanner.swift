@@ -24,6 +24,7 @@ enum CostUsageScanner {
         var claudeProjectsRoots: [URL]?
         var cacheRoot: URL?
         var codexTraceDatabaseURL: URL?
+        var codexRefreshScanByteLimit: Int64?
         var refreshMinIntervalSeconds: TimeInterval = 60
         var claudeLogProviderFilter: ClaudeLogProviderFilter = .all
         /// Force a full rescan, ignoring per-file cache and incremental offsets.
@@ -34,6 +35,7 @@ enum CostUsageScanner {
             claudeProjectsRoots: [URL]? = nil,
             cacheRoot: URL? = nil,
             codexTraceDatabaseURL: URL? = nil,
+            codexRefreshScanByteLimit: Int64? = nil,
             claudeLogProviderFilter: ClaudeLogProviderFilter = .all,
             forceRescan: Bool = false)
         {
@@ -41,8 +43,23 @@ enum CostUsageScanner {
             self.claudeProjectsRoots = claudeProjectsRoots
             self.cacheRoot = cacheRoot
             self.codexTraceDatabaseURL = codexTraceDatabaseURL
+            self.codexRefreshScanByteLimit = codexRefreshScanByteLimit
             self.claudeLogProviderFilter = claudeLogProviderFilter
             self.forceRescan = forceRescan
+        }
+    }
+
+    struct CodexScanBudgetExceeded: LocalizedError, Equatable {
+        let bytes: Int64
+        let limit: Int64
+
+        var errorDescription: String? {
+            "Codex token cost refresh skipped because \(Self.byteText(self.bytes)) of session logs exceeds the " +
+                "\(Self.byteText(self.limit)) automatic scan limit. Use manual refresh to scan it."
+        }
+
+        private static func byteText(_ bytes: Int64) -> String {
+            ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
         }
     }
 
@@ -1728,6 +1745,81 @@ enum CostUsageScanner {
             shouldRefresh: shouldRefresh)
     }
 
+    private static func shouldEnforceCodexScanBudget(
+        cache: CostUsageCache,
+        plan: CodexRefreshPlan,
+        options: Options) -> Bool
+    {
+        options.forceRescan ||
+            cache.files.isEmpty ||
+            plan.rootsChanged ||
+            plan.windowExpanded ||
+            plan.pricingChanged ||
+            plan.priorityMetadataChanged ||
+            plan.needsTurnIDCacheMigration
+    }
+
+    private static func totalCodexScanBytes(
+        files: [URL],
+        roots: [URL],
+        checkCancellation: CancellationCheck?) throws -> Int64
+    {
+        var total: Int64 = 0
+        var countedPaths = Set<String>()
+
+        func countFile(_ fileURL: URL) throws {
+            try checkCancellation?()
+            guard countedPaths.insert(fileURL.path).inserted else { return }
+            let values = try? fileURL.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+            guard values?.isRegularFile != false else { return }
+            let size = Int64(values?.fileSize ?? 0)
+            let sum = total.addingReportingOverflow(size)
+            total = sum.overflow ? Int64.max : sum.partialValue
+        }
+
+        for fileURL in files {
+            try countFile(fileURL)
+        }
+
+        for root in roots {
+            try checkCancellation?()
+            guard let enumerator = FileManager.default.enumerator(
+                at: root,
+                includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
+                options: [.skipsHiddenFiles, .skipsPackageDescendants])
+            else { continue }
+
+            while let fileURL = enumerator.nextObject() as? URL {
+                try checkCancellation?()
+                guard fileURL.pathExtension.lowercased() == "jsonl" else { continue }
+                try countFile(fileURL)
+            }
+        }
+
+        return total
+    }
+
+    private static func enforceCodexScanBudgetIfNeeded(
+        files: [URL],
+        cache: CostUsageCache,
+        plan: CodexRefreshPlan,
+        options: Options,
+        checkCancellation: CancellationCheck?) throws
+    {
+        guard let scanByteLimit = options.codexRefreshScanByteLimit,
+              scanByteLimit > 0,
+              shouldEnforceCodexScanBudget(cache: cache, plan: plan, options: options)
+        else { return }
+
+        let scanBytes = try Self.totalCodexScanBytes(
+            files: files,
+            roots: plan.roots,
+            checkCancellation: checkCancellation)
+        if scanBytes > scanByteLimit {
+            throw CodexScanBudgetExceeded(bytes: scanBytes, limit: scanByteLimit)
+        }
+    }
+
     private static func loadCodexDaily(
         range: CostUsageDayRange,
         now: Date,
@@ -1786,6 +1878,12 @@ enum CostUsageScanner {
             }
 
             let filePathsInScan = Set(files.map(\.path))
+            try Self.enforceCodexScanBudgetIfNeeded(
+                files: files,
+                cache: cache,
+                plan: plan,
+                options: options,
+                checkCancellation: checkCancellation)
 
             var scanState = CodexScanState()
             let fileIndex = CodexSessionFileIndex(

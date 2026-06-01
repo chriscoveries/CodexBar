@@ -7,6 +7,7 @@
 
 ### Fixed
 - Menu bar: add breathing room to compact Codex account rows so the provider, account, status, and plan labels no longer hug the row edges.
+- Performance: skip automatic cold Codex token-cost scans when the local session corpus exceeds 1 GB, while keeping manual refresh available for full scans.
 
 ## 0.32.1 — 2026-05-31
 

@@ -48,7 +48,8 @@ public struct CostUsageFetcher: Sendable {
         allowVertexClaudeFallback: Bool = false,
         codexHomePath: String? = nil,
         historyDays: Int = 30,
-        refreshPricingInBackground: Bool = true) async throws -> CostUsageTokenSnapshot
+        refreshPricingInBackground: Bool = true,
+        automaticCodexScanByteLimit: Int64? = nil) async throws -> CostUsageTokenSnapshot
     {
         try await Self.loadTokenSnapshot(
             provider: provider,
@@ -59,6 +60,7 @@ public struct CostUsageFetcher: Sendable {
             codexHomePath: codexHomePath,
             historyDays: historyDays,
             refreshPricingInBackground: refreshPricingInBackground,
+            automaticCodexScanByteLimit: automaticCodexScanByteLimit,
             scannerOptions: self.scannerOptionsOverride())
     }
 
@@ -75,6 +77,7 @@ public struct CostUsageFetcher: Sendable {
         codexHomePath: String? = nil,
         historyDays: Int = 30,
         refreshPricingInBackground: Bool = true,
+        automaticCodexScanByteLimit: Int64? = nil,
         scannerOptions overrideScannerOptions: CostUsageScanner.Options? = nil,
         piScannerOptions overridePiScannerOptions: PiSessionCostScanner
             .Options? = nil) async throws -> CostUsageTokenSnapshot
@@ -122,6 +125,9 @@ public struct CostUsageFetcher: Sendable {
         }
         if forceRefresh {
             options.refreshMinIntervalSeconds = 0
+            options.codexRefreshScanByteLimit = nil
+        } else if provider == .codex, let automaticCodexScanByteLimit {
+            options.codexRefreshScanByteLimit = automaticCodexScanByteLimit
         }
         let checkCancellation: CostUsageScanner.CancellationCheck = {
             try Task.checkCancellation()
