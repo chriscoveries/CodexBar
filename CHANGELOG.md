@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.32.2 — Unreleased
+## 0.32.2 — 2026-06-01
 
 ### Added
 - QA: document the live CodexBar e2e flow and add a redacted provider-matrix helper for packaged CLI smoke tests.
