@@ -306,6 +306,21 @@ struct AlibabaTokenPlanUsageParsingTests {
     }
 
     @Test
+    func `failed forbidden payload maps to invalid credentials`() {
+        let json = """
+        {
+          "successResponse": false,
+          "statusCode": 403,
+          "message": "Forbidden"
+        }
+        """
+
+        #expect(throws: AlibabaTokenPlanUsageError.invalidCredentials) {
+            try AlibabaTokenPlanUsageFetcher.parseUsageSnapshot(from: Data(json.utf8))
+        }
+    }
+
+    @Test
     func `html login payload maps to login required`() {
         let html = """
         <html>

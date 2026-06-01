@@ -467,6 +467,11 @@ public struct AlibabaTokenPlanUsageFetcher: Sendable {
 
     private static func throwIfErrorPayload(_ dictionary: [String: Any]) throws {
         if self.parseBool(dictionary["successResponse"]) == false {
+            if let statusCode = self.findFirstInt(forKeys: ["statusCode", "status_code", "code"], in: dictionary),
+               statusCode == 401 || statusCode == 403
+            {
+                throw AlibabaTokenPlanUsageError.invalidCredentials
+            }
             let code = self.findFirstString(forKeys: ["code", "status", "statusCode"], in: dictionary)
             let message = self.findFirstString(forKeys: ["message", "msg", "statusMessage"], in: dictionary) ??
                 code ??
