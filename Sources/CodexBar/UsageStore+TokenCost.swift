@@ -2,8 +2,6 @@ import CodexBarCore
 import Foundation
 
 extension UsageStore {
-    nonisolated static let automaticCodexTokenScanByteLimit: Int64 = 1_000_000_000
-
     func tokenSnapshot(for provider: UsageProvider) -> CostUsageTokenSnapshot? {
         self.tokenSnapshots[provider]
     }

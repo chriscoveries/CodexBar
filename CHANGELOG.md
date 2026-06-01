@@ -7,7 +7,7 @@
 
 ### Fixed
 - Menu bar: add breathing room to compact Codex account rows so the provider, account, status, and plan labels no longer hug the row edges.
-- Performance: skip automatic Codex token-cost scans when the local session corpus exceeds 1 GB, while keeping manual refresh available for full scans.
+- Performance: make Codex token-cost scanning faster and more memory-efficient on large local session corpora.
 
 ## 0.32.1 — 2026-05-31
 

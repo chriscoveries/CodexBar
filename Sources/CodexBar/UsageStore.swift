@@ -1571,10 +1571,7 @@ extension UsageStore {
                         forceRefresh: force,
                         allowVertexClaudeFallback: !self.isEnabled(.claude),
                         codexHomePath: costScope.codexHomePath,
-                        historyDays: historyDays,
-                        automaticCodexScanByteLimit: provider == .codex && !force
-                            ? Self.automaticCodexTokenScanByteLimit
-                            : nil)
+                        historyDays: historyDays)
                 }
                 group.addTask {
                     try await Task.sleep(nanoseconds: UInt64(timeoutSeconds * 1_000_000_000))

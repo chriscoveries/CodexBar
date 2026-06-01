@@ -48,8 +48,7 @@ public struct CostUsageFetcher: Sendable {
         allowVertexClaudeFallback: Bool = false,
         codexHomePath: String? = nil,
         historyDays: Int = 30,
-        refreshPricingInBackground: Bool = true,
-        automaticCodexScanByteLimit: Int64? = nil) async throws -> CostUsageTokenSnapshot
+        refreshPricingInBackground: Bool = true) async throws -> CostUsageTokenSnapshot
     {
         try await Self.loadTokenSnapshot(
             provider: provider,
@@ -60,8 +59,30 @@ public struct CostUsageFetcher: Sendable {
             codexHomePath: codexHomePath,
             historyDays: historyDays,
             refreshPricingInBackground: refreshPricingInBackground,
-            automaticCodexScanByteLimit: automaticCodexScanByteLimit,
             scannerOptions: self.scannerOptionsOverride())
+    }
+
+    @available(*, deprecated, message: "Codex token-cost scans are uncapped; this limit is ignored.")
+    public func loadTokenSnapshot(
+        provider: UsageProvider,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        now: Date = Date(),
+        forceRefresh: Bool = false,
+        allowVertexClaudeFallback: Bool = false,
+        codexHomePath: String? = nil,
+        historyDays: Int = 30,
+        refreshPricingInBackground: Bool = true,
+        automaticCodexScanByteLimit _: Int64?) async throws -> CostUsageTokenSnapshot
+    {
+        try await self.loadTokenSnapshot(
+            provider: provider,
+            environment: environment,
+            now: now,
+            forceRefresh: forceRefresh,
+            allowVertexClaudeFallback: allowVertexClaudeFallback,
+            codexHomePath: codexHomePath,
+            historyDays: historyDays,
+            refreshPricingInBackground: refreshPricingInBackground)
     }
 
     private func scannerOptionsOverride() -> CostUsageScanner.Options? {
@@ -77,7 +98,6 @@ public struct CostUsageFetcher: Sendable {
         codexHomePath: String? = nil,
         historyDays: Int = 30,
         refreshPricingInBackground: Bool = true,
-        automaticCodexScanByteLimit: Int64? = nil,
         scannerOptions overrideScannerOptions: CostUsageScanner.Options? = nil,
         piScannerOptions overridePiScannerOptions: PiSessionCostScanner
             .Options? = nil) async throws -> CostUsageTokenSnapshot
@@ -125,9 +145,6 @@ public struct CostUsageFetcher: Sendable {
         }
         if forceRefresh {
             options.refreshMinIntervalSeconds = 0
-            options.codexRefreshScanByteLimit = nil
-        } else if provider == .codex, let automaticCodexScanByteLimit {
-            options.codexRefreshScanByteLimit = automaticCodexScanByteLimit
         }
         let checkCancellation: CostUsageScanner.CancellationCheck = {
             try Task.checkCancellation()
