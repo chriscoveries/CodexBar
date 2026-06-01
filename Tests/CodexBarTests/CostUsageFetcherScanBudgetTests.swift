@@ -81,13 +81,44 @@ struct CostUsageFetcherScanBudgetTests {
         #expect(forced.sessionTokens == 30)
     }
 
+    @Test
+    func `automatic codex scan budget skips oversized incremental refresh`() async throws {
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+
+        let day = try env.makeLocalNoon(year: 2026, month: 4, day: 8)
+        let initialURL = try self.writeCodexSessionFile(env: env, day: day, filename: "initial.jsonl", tokens: 100)
+        var options = CostUsageScanner.Options(cacheRoot: env.cacheRoot)
+        options.refreshMinIntervalSeconds = 0
+
+        let initial = try await CostUsageFetcher.loadTokenSnapshot(
+            provider: .codex,
+            now: day,
+            codexHomePath: env.codexHomeRoot.path,
+            scannerOptions: options)
+        #expect(initial.sessionTokens == 100)
+
+        let initialBytes = try Int64(initialURL.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0)
+        _ = try self.writeCodexSessionFile(env: env, day: day, filename: "new.jsonl", tokens: 50)
+
+        await #expect(throws: CostUsageScanner.CodexScanBudgetExceeded.self) {
+            _ = try await CostUsageFetcher.loadTokenSnapshot(
+                provider: .codex,
+                now: day.addingTimeInterval(90),
+                codexHomePath: env.codexHomeRoot.path,
+                automaticCodexScanByteLimit: initialBytes,
+                scannerOptions: options)
+        }
+    }
+
     private func writeCodexSessionFile(
         env: CostUsageTestEnvironment,
         day: Date,
+        filename: String = "large-enough.jsonl",
         tokens: Int) throws
         -> URL
     {
-        try env.writeCodexSessionFile(day: day, filename: "large-enough.jsonl", contents: env.jsonl([
+        try env.writeCodexSessionFile(day: day, filename: filename, contents: env.jsonl([
             [
                 "type": "turn_context",
                 "timestamp": env.isoString(for: day),

@@ -1745,20 +1745,6 @@ enum CostUsageScanner {
             shouldRefresh: shouldRefresh)
     }
 
-    private static func shouldEnforceCodexScanBudget(
-        cache: CostUsageCache,
-        plan: CodexRefreshPlan,
-        options: Options) -> Bool
-    {
-        options.forceRescan ||
-            cache.files.isEmpty ||
-            plan.rootsChanged ||
-            plan.windowExpanded ||
-            plan.pricingChanged ||
-            plan.priorityMetadataChanged ||
-            plan.needsTurnIDCacheMigration
-    }
-
     private static func totalCodexScanBytes(
         files: [URL],
         roots: [URL],
@@ -1807,8 +1793,7 @@ enum CostUsageScanner {
         checkCancellation: CancellationCheck?) throws
     {
         guard let scanByteLimit = options.codexRefreshScanByteLimit,
-              scanByteLimit > 0,
-              shouldEnforceCodexScanBudget(cache: cache, plan: plan, options: options)
+              scanByteLimit > 0
         else { return }
 
         let scanBytes = try Self.totalCodexScanBytes(
