@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.32.4 — Unreleased
+## 0.32.4 — 2026-06-02
 
 ### Fixed
 - Menu bar: avoid queuing redundant provider refreshes when opening a fresh merged-menu dropdown, while still retrying missing or stale provider data after menu tracking ends (#1235, #1277). Thanks @hhh2210!
