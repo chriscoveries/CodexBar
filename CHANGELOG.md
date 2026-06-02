@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.32.3 — Unreleased
+## 0.32.3 — 2026-06-02
 
 ### Fixed
 - Menu bar: stop forcing a private preferred-position value for fresh status items; suspicious stored positions are now cleared so AppKit can place CodexBar normally on macOS 26 / 5K displays (#1267). Thanks @AdrianSimionov, @kirocop, and @Yuxin-Qiao!
