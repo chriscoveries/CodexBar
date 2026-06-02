@@ -56,16 +56,6 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
     }
 
     #if DEBUG
-    static func setMenuRefreshEnabledForTesting(_ enabled: Bool) {
-        self.menuRefreshEnabled = enabled
-    }
-
-    static func resetMenuRefreshEnabledForTesting() {
-        self.menuRefreshEnabled = self.defaultMenuRefreshEnabled
-    }
-    #endif
-
-    #if DEBUG
     var menuRefreshEnabledOverrideForTesting: Bool?
     #endif
 
@@ -125,6 +115,7 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
     var lastMenuProvider: UsageProvider?
     var menuProviders: [ObjectIdentifier: UsageProvider] = [:]
     var menuContentVersion: Int = 0
+    var latestRequiredMenuRebuildVersion: Int = 0
     var menuVersions: [ObjectIdentifier: Int] = [:]
     var lastMenuAdjunctReadinessSignature = ""
     var mergedMenu: NSMenu?
@@ -132,6 +123,9 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
     var fallbackMenu: NSMenu?
     var openMenus: [ObjectIdentifier: NSMenu] = [:]
     var menuRefreshTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
+    var closedMenuRebuildTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
+    var closedMenuRebuildTokens: [ObjectIdentifier: Int] = [:]
+    var closedMenuRebuildTokenCounter = 0
     var openMenuRebuildTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
     var openMenuRebuildTokens: [ObjectIdentifier: Int] = [:]
     var openMenuRebuildTokenCounter = 0
@@ -150,6 +144,7 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
     var onDeferredMenuInteractionRefreshForTesting: (() -> Void)?
     var onOpenMenuInvalidationRetryForTesting: (() -> Void)?
     var isReleasedForTesting = false
+    var lastLoggedClosedMenuRebuildVersion: Int?
     var _test_openMenuRefreshYieldOverride: (@MainActor () async -> Void)?
     var _test_openMenuRebuildObserver: (@MainActor (NSMenu) -> Void)?
     var _test_codexAmbientLoginRunnerOverride:
@@ -448,7 +443,8 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
                 self.observeStoreChanges()
                 self.invalidateMenus(
                     refreshOpenMenus: self.didMenuAdjunctReadinessChange(),
-                    deferOpenParentMenuRebuild: true)
+                    deferOpenParentMenuRebuild: true,
+                    allowStaleContentDuringDataRefresh: true)
             }
         }
     }
@@ -797,6 +793,7 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
         if self.statusItem.menu !== self.mergedMenu {
             self.statusItem.menu = self.mergedMenu
         }
+        self.prepareAttachedClosedMenusIfNeeded()
     }
 
     private func attachMenus(fallback: UsageProvider? = nil) {
@@ -827,6 +824,7 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
                 item.menu = nil
             }
         }
+        self.prepareAttachedClosedMenusIfNeeded()
     }
 
     private func rebuildProviderStatusItems() {
@@ -901,6 +899,18 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
         NotificationCenter.default.removeObserver(self)
     }
 }
+
+#if DEBUG
+extension StatusItemController {
+    static func setMenuRefreshEnabledForTesting(_ enabled: Bool) {
+        self.menuRefreshEnabled = enabled
+    }
+
+    static func resetMenuRefreshEnabledForTesting() {
+        self.menuRefreshEnabled = self.defaultMenuRefreshEnabled
+    }
+}
+#endif
 
 extension StatusItemController {
     private func legacyDefaultItemIndex(forNewProvider provider: UsageProvider) -> Int? {
