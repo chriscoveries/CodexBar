@@ -3,6 +3,26 @@
     <channel>
         <title>CodexBar</title>
         <item>
+            <title>0.32.3</title>
+            <pubDate>Tue, 02 Jun 2026 12:30:56 +0100</pubDate>
+            <link>https://raw.githubusercontent.com/steipete/CodexBar/main/appcast.xml</link>
+            <sparkle:version>78</sparkle:version>
+            <sparkle:shortVersionString>0.32.3</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[<h2>CodexBar 0.32.3</h2>
+<h3>Fixed</h3>
+<ul>
+<li>Menu bar: stop forcing a private preferred-position value for fresh status items; suspicious stored positions are now cleared so AppKit can place CodexBar normally on macOS 26 / 5K displays (#1267). Thanks @AdrianSimionov, @kirocop, and @Yuxin-Qiao!</li>
+<li>Menu bar: cache provider brand icons so merged-icon status updates no longer repeatedly parse SVG assets on the main thread during hover/open animations (#1235, #1274). Thanks @andradebruno, @xingpz2008, and @Yuxin-Qiao!</li>
+<li>Copilot: treat GitHub Copilot Business token-billing zero-entitlement quotas as unavailable instead of showing misleading 0% used usage (#1258, #1270). Thanks @devYRPauli!</li>
+<li>Menu bar: prepare closed menus after refresh and only reuse stale dropdown content for data-refresh invalidations so merged menu opens stay responsive without bypassing privacy or structure changes (#1261). Thanks @ProspectOre!</li>
+<li>OpenAI Web: stop reloading away from login and Cloudflare blocking states so the dashboard WebView does not loop on route corrections (#1259). Thanks @ProspectOre!</li>
+</ul>
+<p><a href="https://github.com/steipete/CodexBar/blob/main/CHANGELOG.md">View full changelog</a></p>
+]]></description>
+            <enclosure url="https://github.com/steipete/CodexBar/releases/download/v0.32.3/CodexBar-macos-universal-0.32.3.zip" length="45040320" type="application/octet-stream" sparkle:edSignature="ksjUSEuIpJ1LJH7JvPwU+5aKTj3NiUXiqIRIcWJUmKm/RJZFZXojCAZ/BSXGg+G9gbbNk/nR3MZHW7jy7FTEDg=="/>
+        </item>
+        <item>
             <title>0.32.2</title>
             <pubDate>Mon, 01 Jun 2026 04:43:41 +0100</pubDate>
             <link>https://raw.githubusercontent.com/steipete/CodexBar/main/appcast.xml</link>
@@ -41,36 +61,6 @@
 <p><a href="https://github.com/steipete/CodexBar/blob/main/CHANGELOG.md">View full changelog</a></p>
 ]]></description>
             <enclosure url="https://github.com/steipete/CodexBar/releases/download/v0.32.1/CodexBar-macos-universal-0.32.1.zip" length="44948463" type="application/octet-stream" sparkle:edSignature="BK/FXuVPVzQn3kOykuPdpyU5AcRZs45z/iSWYx5k3sLuAu2FyFigVQn8ZDA4eXN9KASAvQXkFZJSKfOANI4oDA=="/>
-        </item>
-        <item>
-            <title>0.32.0</title>
-            <pubDate>Sun, 31 May 2026 01:50:25 +0100</pubDate>
-            <link>https://raw.githubusercontent.com/steipete/CodexBar/main/appcast.xml</link>
-            <sparkle:version>75</sparkle:version>
-            <sparkle:shortVersionString>0.32.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <description><![CDATA[<h2>CodexBar 0.32.0</h2>
-<h3>Added</h3>
-<ul>
-<li>Settings: add search to the Providers pane so large provider lists can be filtered by name or id (#1184). Thanks @046081-dotcom!</li>
-</ul>
-<h3>Fixed</h3>
-<ul>
-<li>Augment: parse the updated <code>auggie account status</code> output format, fall back to browser cookies when CLI parsing fails, and restore session cookie detection (#1224). Thanks @bcharleson!</li>
-<li>Amp/Ollama: require HTTPS before reattaching imported browser cookies on provider redirects to avoid cleartext cookie exposure (#1226). Thanks @Hinotoi-agent!</li>
-<li>Antigravity: filter noisy remote OAuth per-model quota rows, keep consumed noisy rows detail-only, and prevent image/lite/autocomplete/internal rows from driving summary bars (#1209). Thanks @guhyun9454!</li>
-<li>Claude: preserve the last good Claude Web usage snapshot across transient Unauthorized refresh failures while still surfacing repeated auth failures (#1220). Thanks @LeoLin990405!</li>
-<li>CLI: avoid executing a same-user mutable temporary installer script across the macOS administrator privilege boundary (#1222). Thanks @Hinotoi-agent!</li>
-<li>Codex: cancel OpenAI WebKit dashboard refreshes promptly and avoid an immediate second background WebView retry after timeouts, reducing launch-time Web Content CPU spikes (#1217).</li>
-<li>Menu: refresh open Codex menu adjuncts as dashboard, credits, token-cost, and plan-history data become ready after cold start (#1150). Thanks @AmrMohamad!</li>
-<li>Menu bar: defer background parent-menu rebuilds until AppKit menu tracking ends so late-arriving usage data cannot stall dropdown hover on macOS 26.5 (#1227).</li>
-<li>Menu bar: give CodexBar status items stable placement identities while preserving existing upgrade placement state (#1216). Thanks @pdurlej!</li>
-<li>Release: isolate notarization API keys and upload ZIPs in a private per-run temporary directory instead of predictable shared /tmp paths (#1228). Thanks @Hinotoi-agent!</li>
-<li>Status: retry startup refreshes a few times after transient offline/network failures so provider status can recover after macOS brings the network online (#1211).</li>
-</ul>
-<p><a href="https://github.com/steipete/CodexBar/blob/main/CHANGELOG.md">View full changelog</a></p>
-]]></description>
-            <enclosure url="https://github.com/steipete/CodexBar/releases/download/v0.32.0/CodexBar-macos-universal-0.32.0.zip" length="44910982" type="application/octet-stream" sparkle:edSignature="rEI6szOvF41zAFko3JdaU7aDcXnHjUNQWfRZLxJMeZJISsCHXnma4JdBdpDQF8FHiLybwb6YKGqzzQiDuy6/Bw=="/>
         </item>
         <item>
             <title>0.14.0</title>
