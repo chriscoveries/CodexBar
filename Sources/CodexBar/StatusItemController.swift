@@ -117,6 +117,7 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
     var menuContentVersion: Int = 0
     var latestRequiredMenuRebuildVersion: Int = 0
     var menuVersions: [ObjectIdentifier: Int] = [:]
+    var menuCardHeightCache: [MenuCardHeightCacheKey: CGFloat] = [:]
     var lastMenuAdjunctReadinessSignature = ""
     var mergedMenu: NSMenu?
     var providerMenus: [UsageProvider: NSMenu] = [:]
@@ -126,6 +127,7 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
     var closedMenuRebuildTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
     var closedMenuRebuildTokens: [ObjectIdentifier: Int] = [:]
     var closedMenuRebuildTokenCounter = 0
+    var closedMenusDeferredUntilNextOpen: Set<ObjectIdentifier> = []
     var openMenuRebuildTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
     var openMenuRebuildTokens: [ObjectIdentifier: Int] = [:]
     var openMenuRebuildTokenCounter = 0
@@ -147,6 +149,7 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
     var lastLoggedClosedMenuRebuildVersion: Int?
     var _test_openMenuRefreshYieldOverride: (@MainActor () async -> Void)?
     var _test_openMenuRebuildObserver: (@MainActor (NSMenu) -> Void)?
+    var _test_providerSwitcherMenuRebuildDebounceNanoseconds: UInt64?
     var _test_codexAmbientLoginRunnerOverride:
         (@MainActor (TimeInterval) async -> CodexLoginRunner.Result)?
     #endif

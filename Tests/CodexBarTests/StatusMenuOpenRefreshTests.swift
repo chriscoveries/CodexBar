@@ -346,6 +346,50 @@ extension StatusMenuTests {
     }
 
     @Test
+    func `merged menu close defers stale rebuild until next open`() async {
+        self.disableMenuCardsForTesting()
+        let settings = self.makeSettings()
+        settings.statusChecksEnabled = false
+        settings.refreshFrequency = .manual
+        settings.mergeIcons = true
+        self.enableOnlyCodex(settings)
+
+        let store = self.makeCodexStore(settings: settings, dashboardAuthorized: false)
+        let controller = StatusItemController(
+            store: store,
+            settings: settings,
+            account: UsageFetcher().loadAccountInfo(),
+            updater: DisabledUpdaterController(),
+            preferencesSelection: PreferencesSelection(),
+            statusBar: self.makeStatusBarForTesting())
+        defer { controller.releaseStatusItemsForTesting() }
+        StatusItemController.setClosedMenuPreparationDelayForTesting(.zero)
+        defer { StatusItemController.resetClosedMenuPreparationDelayForTesting() }
+
+        controller.menuRefreshEnabledOverrideForTesting = true
+        let menu = controller.makeMenu()
+        controller.mergedMenu = menu
+        controller.statusItem.menu = menu
+        controller.populateMenu(menu, provider: nil)
+        controller.markMenuFresh(menu)
+        controller.menuWillOpen(menu)
+
+        let key = ObjectIdentifier(menu)
+        let openedVersion = controller.menuVersions[key]
+        controller.invalidateMenus(refreshOpenMenus: false)
+        #expect(controller.menuNeedsRefresh(menu))
+
+        controller.menuDidClose(menu)
+        await self.waitUntilClosedMenuRebuildRemainsDeferred(controller, key: key, openedVersion: openedVersion)
+
+        #expect(controller.closedMenuRebuildTasks[key] == nil)
+        #expect(controller.menuVersions[key] == openedVersion)
+
+        controller.menuWillOpen(menu)
+        #expect(controller.menuVersions[key] == controller.menuContentVersion)
+    }
+
+    @Test
     func `menu open keeps stale nonempty content while store refresh is active`() {
         self.disableMenuCardsForTesting()
         let settings = self.makeSettings()
@@ -652,6 +696,55 @@ extension StatusMenuTests {
         #expect(controller.openMenus[submenuKey] == nil)
         #expect(rebuildCount == 1)
         #expect(controller.menuVersions[menuKey] == controller.menuContentVersion)
+    }
+
+    @Test
+    func `rapid switcher rebuild requests coalesce before populating open menu`() async {
+        self.disableMenuCardsForTesting()
+        let settings = self.makeSettings()
+        settings.statusChecksEnabled = false
+        settings.refreshFrequency = .manual
+        settings.mergeIcons = false
+
+        let store = self.makeCodexStore(settings: settings, dashboardAuthorized: false)
+        let controller = StatusItemController(
+            store: store,
+            settings: settings,
+            account: UsageFetcher().loadAccountInfo(),
+            updater: DisabledUpdaterController(),
+            preferencesSelection: PreferencesSelection(),
+            statusBar: self.makeStatusBarForTesting())
+        defer { controller.releaseStatusItemsForTesting() }
+
+        let menu = controller.makeMenu()
+        controller.menuWillOpen(menu)
+        let menuKey = ObjectIdentifier(menu)
+        controller.openMenus[menuKey] = menu
+        controller.menuRefreshEnabledOverrideForTesting = true
+        controller._test_providerSwitcherMenuRebuildDebounceNanoseconds = 50_000_000
+        defer { controller._test_providerSwitcherMenuRebuildDebounceNanoseconds = nil }
+
+        var rebuildCount = 0
+        controller._test_openMenuRebuildObserver = { _ in
+            rebuildCount += 1
+        }
+        defer { controller._test_openMenuRebuildObserver = nil }
+
+        controller.deferSwitcherMenuRebuildIfStillVisible(menu, provider: .codex)
+        try? await Task.sleep(nanoseconds: 10_000_000)
+        controller.deferSwitcherMenuRebuildIfStillVisible(menu, provider: .codex)
+
+        try? await Task.sleep(nanoseconds: 25_000_000)
+        #expect(rebuildCount == 0)
+
+        for _ in 0..<20 where rebuildCount == 0 {
+            await Task.yield()
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+
+        #expect(rebuildCount == 1)
+        try? await Task.sleep(nanoseconds: 75_000_000)
+        #expect(rebuildCount == 1)
     }
 
     @Test
@@ -1387,6 +1480,19 @@ extension StatusMenuTests {
             await Task.yield()
         }
         #expect(controller.menuVersions[key] == controller.menuContentVersion)
+    }
+
+    private func waitUntilClosedMenuRebuildRemainsDeferred(
+        _ controller: StatusItemController,
+        key: ObjectIdentifier,
+        openedVersion: Int?) async
+    {
+        for _ in 0..<40
+            where controller.closedMenuRebuildTasks[key] != nil ||
+            controller.menuVersions[key] != openedVersion
+        {
+            await Task.yield()
+        }
     }
 
     private func makeOpenAIDashboard(

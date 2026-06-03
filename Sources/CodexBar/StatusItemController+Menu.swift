@@ -163,10 +163,9 @@ extension StatusItemController {
             menu === self.fallbackMenu ||
             self.providerMenus.values.contains { $0 === menu }
         if !isPersistentMenu {
-            self.menuProviders.removeValue(forKey: key)
-            self.menuVersions.removeValue(forKey: key)
+            self.clearTransientMenuTrackingState(key)
         } else if self.menuNeedsRefresh(menu) {
-            self.rebuildClosedMenuIfNeeded(menu)
+            self.handleClosedPersistentMenuNeedingRefresh(menu)
         }
         self.parentMenuRebuildsDeferredDuringTracking.remove(key)
         self.scheduleDeferredMenuInteractionRefreshIfNeeded()
@@ -292,7 +291,8 @@ extension StatusItemController {
                     menuWidth: menuWidth,
                     codexAccountDisplay: codexAccountDisplay,
                     tokenAccountDisplay: tokenAccountDisplay,
-                    openAIContext: openAIContext))
+                    openAIContext: openAIContext,
+                    descriptor: descriptor))
             return
         }
 
@@ -324,7 +324,8 @@ extension StatusItemController {
                     menuWidth: menuWidth,
                     codexAccountDisplay: codexAccountDisplay,
                     tokenAccountDisplay: tokenAccountDisplay,
-                    openAIContext: openAIContext))
+                    openAIContext: openAIContext,
+                    descriptor: descriptor))
             return
         }
 
@@ -379,6 +380,7 @@ extension StatusItemController {
         let codexAccountDisplay: CodexAccountMenuDisplay?
         let tokenAccountDisplay: TokenAccountMenuDisplay?
         let openAIContext: OpenAIWebContext
+        let descriptor: MenuDescriptor
     }
 
     /// Smart update: rebuild everything below the provider switcher while keeping the switcher view intact.
@@ -409,16 +411,6 @@ extension StatusItemController {
                 width: context.menuWidth)
             self.lastTokenAccountMenuDisplay = context.tokenAccountDisplay
 
-            let descriptor = MenuDescriptor.build(
-                provider: context.provider,
-                store: self.store,
-                settings: self.settings,
-                account: self.account,
-                managedCodexAccountCoordinator: self.managedCodexAccountCoordinator,
-                codexAccountPromotionCoordinator: self.codexAccountPromotionCoordinator,
-                updateReady: self.updater.updateStatus.isUpdateReady,
-                includeContextualActions: context.switcherSelection != .overview)
-
             let menuContext = MenuCardContext(
                 currentProvider: context.currentProvider,
                 selectedProvider: context.provider,
@@ -427,7 +419,7 @@ extension StatusItemController {
                 tokenAccountDisplay: context.tokenAccountDisplay,
                 openAIContext: context.openAIContext)
             self.addPrimaryMenuContent(to: menu, context: menuContext, switcherSelection: context.switcherSelection)
-            self.addActionableSections(descriptor.sections, to: menu, width: context.menuWidth)
+            self.addActionableSections(context.descriptor.sections, to: menu, width: context.menuWidth)
         }
     }
 
@@ -557,6 +549,7 @@ extension StatusItemController {
                 OverviewMenuCardRowView(model: row.model, storageText: storageText, width: menuWidth),
                 id: identifier,
                 width: menuWidth,
+                heightCacheScope: row.provider.rawValue,
                 submenu: submenu,
                 onClick: { [weak self, weak menu] in
                     guard let self, let menu else { return }
@@ -639,7 +632,8 @@ extension StatusItemController {
         menu.addItem(self.makeMenuCardItem(
             UsageMenuCardView(model: model, width: context.menuWidth),
             id: "menuCard",
-            width: context.menuWidth))
+            width: context.menuWidth,
+            heightCacheScope: context.currentProvider.rawValue))
         if self.addStorageMenuCardSection(to: menu, provider: context.currentProvider, width: context.menuWidth) {
             menu.addItem(.separator())
         }
@@ -659,14 +653,16 @@ extension StatusItemController {
             menu.addItem(self.makeMenuCardItem(
                 UsageMenuCardView(model: model, width: context.menuWidth),
                 id: "menuCard",
-                width: context.menuWidth))
+                width: context.menuWidth,
+                heightCacheScope: context.currentProvider.rawValue))
             menu.addItem(.separator())
         } else {
             for (index, model) in cards.enumerated() {
                 menu.addItem(self.makeMenuCardItem(
                     UsageMenuCardView(model: model, width: context.menuWidth),
                     id: "menuCard-\(index)",
-                    width: context.menuWidth))
+                    width: context.menuWidth,
+                    heightCacheScope: "\(context.currentProvider.rawValue)-\(index)"))
                 if index < cards.count - 1 {
                     menu.addItem(.separator())
                 }
@@ -1169,86 +1165,6 @@ extension StatusItemController {
         return enabledProviders
     }
 
-    private func refreshMenuCardHeights(in menu: NSMenu) {
-        // Re-measure the menu card height right before display to avoid stale/incorrect sizing when content
-        // changes (e.g. dashboard error lines causing wrapping).
-        let cardItems = menu.items.filter { item in
-            (item.representedObject as? String)?.hasPrefix("menuCard") == true
-        }
-        for item in cardItems {
-            guard let view = item.view else { continue }
-            let width = self.renderedMenuWidth(for: menu)
-            let height = self.menuCardHeight(for: view, width: width)
-            view.frame = NSRect(
-                origin: .zero,
-                size: NSSize(width: width, height: height))
-        }
-    }
-
-    func makeMenuCardItem(
-        _ view: some View,
-        id: String,
-        width: CGFloat,
-        submenu: NSMenu? = nil,
-        submenuIndicatorAlignment: Alignment = .topTrailing,
-        submenuIndicatorTopPadding: CGFloat = 8,
-        onClick: (() -> Void)? = nil) -> NSMenuItem
-    {
-        if !Self.menuCardRenderingEnabled {
-            let item = NSMenuItem()
-            item.isEnabled = true
-            item.representedObject = id
-            item.submenu = submenu
-            if submenu != nil {
-                item.target = self
-                item.action = #selector(self.menuCardNoOp(_:))
-            }
-            return item
-        }
-
-        let highlightState = MenuCardHighlightState()
-        let wrapped = MenuCardSectionContainerView(
-            highlightState: highlightState,
-            showsSubmenuIndicator: submenu != nil,
-            submenuIndicatorAlignment: submenuIndicatorAlignment,
-            submenuIndicatorTopPadding: submenuIndicatorTopPadding)
-        {
-            view
-        }
-        let hosting = MenuCardItemHostingView(rootView: wrapped, highlightState: highlightState, onClick: onClick)
-        // Set frame with target width immediately
-        let height = self.menuCardHeight(for: hosting, width: width)
-        hosting.frame = NSRect(origin: .zero, size: NSSize(width: width, height: height))
-        let item = NSMenuItem()
-        item.view = hosting
-        item.isEnabled = true
-        item.representedObject = id
-        item.submenu = submenu
-        if submenu != nil {
-            item.target = self
-            item.action = #selector(self.menuCardNoOp(_:))
-        }
-        return item
-    }
-
-    private func menuCardHeight(for view: NSView, width: CGFloat) -> CGFloat {
-        let basePadding: CGFloat = 6
-        let descenderSafety: CGFloat = 1
-
-        // Fast path: use protocol-based measurement when available (avoids layout passes)
-        if let measured = view as? MenuCardMeasuring {
-            return max(1, ceil(measured.measuredHeight(width: width) + basePadding + descenderSafety))
-        }
-
-        // Set frame with target width before measuring.
-        view.frame = NSRect(origin: .zero, size: NSSize(width: width, height: 1))
-
-        // Use fittingSize directly - SwiftUI hosting views respect the frame width for wrapping
-        let fitted = view.fittingSize
-
-        return max(1, ceil(fitted.height + basePadding + descenderSafety))
-    }
-
     private func addMenuCardSections(
         to menu: NSMenu,
         model: UsageMenuCardView.Model,
@@ -1280,13 +1196,18 @@ extension StatusItemController {
                 usageView,
                 id: "menuCardUsage",
                 width: width,
+                heightCacheScope: provider.rawValue,
                 submenu: usageSubmenu))
         } else {
             let headerView = UsageMenuCardHeaderSectionView(
                 model: model,
                 showDivider: false,
                 width: width)
-            menu.addItem(self.makeMenuCardItem(headerView, id: "menuCardHeader", width: width))
+            menu.addItem(self.makeMenuCardItem(
+                headerView,
+                id: "menuCardHeader",
+                width: width,
+                heightCacheScope: provider.rawValue))
         }
 
         if hasStorage || hasCredits || hasExtraUsage || hasCost {
@@ -1314,6 +1235,7 @@ extension StatusItemController {
                 creditsView,
                 id: "menuCardCredits",
                 width: width,
+                heightCacheScope: provider.rawValue,
                 submenu: creditsSubmenu))
             if webItems.canShowBuyCredits {
                 menu.addItem(self.makeBuyCreditsItem())
@@ -1333,6 +1255,7 @@ extension StatusItemController {
                 extraUsageView,
                 id: "menuCardExtraUsage",
                 width: width,
+                heightCacheScope: provider.rawValue,
                 submenu: extraUsageSubmenu))
         }
         if hasCost {
@@ -1358,6 +1281,7 @@ extension StatusItemController {
             storageView,
             id: "menuCardStorage",
             width: width,
+            heightCacheScope: provider.rawValue,
             submenu: storageSubmenu))
         return true
     }
@@ -1611,7 +1535,7 @@ extension StatusItemController {
         }
     }
 
-    @objc private func menuCardNoOp(_ sender: NSMenuItem) {
+    @objc func menuCardNoOp(_ sender: NSMenuItem) {
         _ = sender
     }
 
