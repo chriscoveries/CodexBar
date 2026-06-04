@@ -340,7 +340,7 @@ public struct CursorUserInfo: Codable, Sendable {
 
 // MARK: - Cursor App Auth + Dashboard API Models
 
-struct CursorAppAuthSession: Equatable, Sendable {
+struct CursorAppAuthSession: Equatable {
     let accessToken: String
     let membershipType: String?
     let subscriptionStatus: String?
@@ -870,7 +870,7 @@ public struct CursorStatusProbe: Sendable {
     func fetchWithAppAuthSession(_ session: CursorAppAuthSession) async throws -> CursorStatusSnapshot {
         let usage = try await self.fetchDashboardCurrentPeriodUsage(bearerToken: session.accessToken)
         let account = try? await self.fetchDashboardMe(bearerToken: session.accessToken)
-        return self.parseDashboardCurrentPeriodUsage(
+        return try self.parseDashboardCurrentPeriodUsage(
             usage,
             appSession: session,
             account: account)
@@ -1112,6 +1112,7 @@ public struct CursorStatusProbe: Sendable {
         request.timeoutInterval = self.timeout
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("1", forHTTPHeaderField: "Connect-Protocol-Version")
         request.setValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
         request.httpBody = Data("{}".utf8)
 
@@ -1277,8 +1278,12 @@ public struct CursorStatusProbe: Sendable {
     func parseDashboardCurrentPeriodUsage(
         _ usage: CursorDashboardCurrentPeriodUsage,
         appSession: CursorAppAuthSession,
-        account: CursorDashboardMe?) -> CursorStatusSnapshot
+        account: CursorDashboardMe?) throws -> CursorStatusSnapshot
     {
+        guard let plan = usage.planUsage else {
+            throw CursorStatusProbeError.parseFailed("DashboardService GetCurrentPeriodUsage missing planUsage")
+        }
+
         func normPct(_ value: Double?) -> Double? {
             guard let value else { return nil }
             if value < 0 { return 0 }
@@ -1286,10 +1291,9 @@ public struct CursorStatusProbe: Sendable {
             return value
         }
 
-        let plan = usage.planUsage
-        let autoPercent = normPct(plan?.autoPercentUsed)
-        let apiPercent = normPct(plan?.apiPercentUsed)
-        let planPercentUsed: Double = if let totalPercent = normPct(plan?.totalPercentUsed) {
+        let autoPercent = normPct(plan.autoPercentUsed)
+        let apiPercent = normPct(plan.apiPercentUsed)
+        let planPercentUsed: Double = if let totalPercent = normPct(plan.totalPercentUsed) {
             totalPercent
         } else if let autoPercent, let apiPercent {
             max(0, min(100, (autoPercent + apiPercent) / 2))
@@ -1313,8 +1317,8 @@ public struct CursorStatusProbe: Sendable {
             planPercentUsed: planPercentUsed,
             autoPercentUsed: autoPercent,
             apiPercentUsed: apiPercent,
-            planUsedUSD: (plan?.totalSpend ?? 0) / 100.0,
-            planLimitUSD: (plan?.limit ?? 0) / 100.0,
+            planUsedUSD: (plan.totalSpend ?? 0) / 100.0,
+            planLimitUSD: (plan.limit ?? 0) / 100.0,
             onDemandUsedUSD: 0,
             onDemandLimitUSD: nil,
             teamOnDemandUsedUSD: nil,

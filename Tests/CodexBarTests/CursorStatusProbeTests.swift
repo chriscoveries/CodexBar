@@ -1039,6 +1039,7 @@ extension CursorStatusProbeTests {
         CursorStatusProbeStubURLProtocol.setHandler { request in
             let requestURL = try #require(request.url)
             #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer app-token")
+            #expect(request.value(forHTTPHeaderField: "Connect-Protocol-Version") == "1")
             #expect(request.httpMethod == "POST")
 
             switch requestURL.path {
@@ -1108,6 +1109,65 @@ extension CursorStatusProbeTests {
             "/aiserver.v1.DashboardService/GetCurrentPeriodUsage",
             "/aiserver.v1.DashboardService/GetMe",
         ])
+    }
+
+    @Test
+    func `fetch with Cursor app auth rejects dashboard payload without plan usage`() async throws {
+        defer {
+            CursorStatusProbeStubURLProtocol.reset()
+        }
+        CursorStatusProbeStubURLProtocol.reset()
+
+        CursorStatusProbeStubURLProtocol.setHandler { request in
+            let requestURL = try #require(request.url)
+            #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer app-token")
+            #expect(request.value(forHTTPHeaderField: "Connect-Protocol-Version") == "1")
+            #expect(request.httpMethod == "POST")
+
+            switch requestURL.path {
+            case "/aiserver.v1.DashboardService/GetCurrentPeriodUsage":
+                return makeCursorStatusProbeResponse(
+                    url: requestURL,
+                    body: """
+                    {
+                      "billingCycleStart": "1779536824000",
+                      "billingCycleEnd": "1782215224000",
+                      "enabled": true
+                    }
+                    """,
+                    statusCode: 200)
+            case "/aiserver.v1.DashboardService/GetMe":
+                return makeCursorStatusProbeResponse(
+                    url: requestURL,
+                    body: #"{"email":"user@example.com"}"#,
+                    statusCode: 200)
+            default:
+                throw URLError(.badURL)
+            }
+        }
+
+        let dashboardBaseURL = try #require(URL(string: "https://cursor-api.test"))
+        let probe = CursorStatusProbe(
+            dashboardBaseURL: dashboardBaseURL,
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            urlSession: makeCursorStatusProbeSession())
+
+        do {
+            _ = try await probe.fetchWithAppAuthSession(CursorAppAuthSession(
+                accessToken: "app-token",
+                membershipType: "enterprise",
+                subscriptionStatus: "active",
+                cachedEmail: "cached@example.com"))
+            Issue.record("Expected missing Dashboard planUsage to fail instead of returning a zero snapshot")
+        } catch let error as CursorStatusProbeError {
+            guard case let .parseFailed(message) = error else {
+                Issue.record("Expected parseFailed for missing Dashboard planUsage, got: \(error)")
+                return
+            }
+            #expect(message == "DashboardService GetCurrentPeriodUsage missing planUsage")
+        } catch {
+            Issue.record("Expected CursorStatusProbeError, got: \(error)")
+        }
     }
 }
 
