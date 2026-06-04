@@ -3,6 +3,9 @@ import Foundation
 import FoundationNetworking
 #endif
 import SweetCookieKit
+#if canImport(SQLite3)
+import SQLite3
+#endif
 
 #if os(macOS)
 
@@ -332,6 +335,140 @@ public struct CursorUserInfo: Codable, Sendable {
         case createdAt = "created_at"
         case updatedAt = "updated_at"
         case picture
+    }
+}
+
+// MARK: - Cursor App Auth + Dashboard API Models
+
+struct CursorAppAuthSession: Equatable, Sendable {
+    let accessToken: String
+    let membershipType: String?
+    let subscriptionStatus: String?
+    let cachedEmail: String?
+
+    var isUsable: Bool {
+        !self.accessToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}
+
+protocol CursorAppAuthSessionProviding: Sendable {
+    func loadSession() throws -> CursorAppAuthSession?
+}
+
+struct CursorAppAuthStore: CursorAppAuthSessionProviding {
+    private static let defaultDBPath: String = {
+        let home = NSHomeDirectory()
+        return "\(home)/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
+    }()
+
+    private let dbPath: String
+
+    init(dbPath: String? = nil) {
+        self.dbPath = dbPath ?? Self.defaultDBPath
+    }
+
+    func loadSession() throws -> CursorAppAuthSession? {
+        guard FileManager.default.fileExists(atPath: self.dbPath) else { return nil }
+
+        guard let accessToken = try self.value(for: "cursorAuth/accessToken"),
+              !accessToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            return nil
+        }
+
+        return try CursorAppAuthSession(
+            accessToken: accessToken,
+            membershipType: self.value(for: "cursorAuth/stripeMembershipType") ?? self
+                .value(for: "cursorAuth/membershipType"),
+            subscriptionStatus: self.value(for: "cursorAuth/stripeSubscriptionStatus"),
+            cachedEmail: self.value(for: "cursorAuth/cachedEmail"))
+    }
+
+    private func value(for key: String) throws -> String? {
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(self.dbPath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
+            let message = db.flatMap { String(cString: sqlite3_errmsg($0)) } ?? "unknown error"
+            sqlite3_close(db)
+            throw CursorStatusProbeError.networkError("SQLite error reading Cursor app auth: \(message)")
+        }
+        defer { sqlite3_close(db) }
+        sqlite3_busy_timeout(db, 250)
+
+        let query = "SELECT value FROM ItemTable WHERE key = ? LIMIT 1;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, query, -1, &stmt, nil) == SQLITE_OK else {
+            let message = db.flatMap { String(cString: sqlite3_errmsg($0)) } ?? "unknown error"
+            throw CursorStatusProbeError.networkError("SQLite error preparing Cursor app auth read: \(message)")
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        sqlite3_bind_text(stmt, 1, key, -1, SQLITE_TRANSIENT)
+        let stepResult = sqlite3_step(stmt)
+        guard stepResult == SQLITE_ROW else {
+            if stepResult == SQLITE_DONE { return nil }
+            let message = db.flatMap { String(cString: sqlite3_errmsg($0)) } ?? "unknown error"
+            throw CursorStatusProbeError.networkError("SQLite error reading Cursor app auth: \(message)")
+        }
+
+        return Self.decodeSQLiteValue(stmt: stmt, index: 0)
+    }
+
+    private static func decodeSQLiteValue(stmt: OpaquePointer?, index: Int32) -> String? {
+        switch sqlite3_column_type(stmt, index) {
+        case SQLITE_TEXT:
+            guard let c = sqlite3_column_text(stmt, index) else { return nil }
+            return String(cString: c)
+        case SQLITE_BLOB:
+            guard let bytes = sqlite3_column_blob(stmt, index) else { return nil }
+            let data = Data(bytes: bytes, count: Int(sqlite3_column_bytes(stmt, index)))
+            return String(data: data, encoding: .utf8)
+                ?? String(data: data, encoding: .utf16LittleEndian)
+        default:
+            return nil
+        }
+    }
+}
+
+private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+
+public struct CursorDashboardCurrentPeriodUsage: Codable, Sendable {
+    public let billingCycleStart: String?
+    public let billingCycleEnd: String?
+    public let planUsage: CursorDashboardPlanUsage?
+    public let enabled: Bool?
+    public let displayMessage: String?
+    public let autoModelSelectedDisplayMessage: String?
+    public let namedModelSelectedDisplayMessage: String?
+}
+
+public struct CursorDashboardPlanUsage: Codable, Sendable {
+    public let totalSpend: Double?
+    public let includedSpend: Double?
+    public let bonusSpend: Double?
+    public let limit: Double?
+    public let autoPercentUsed: Double?
+    public let apiPercentUsed: Double?
+    public let totalPercentUsed: Double?
+}
+
+public struct CursorDashboardMe: Codable, Sendable {
+    public let email: String?
+    public let firstName: String?
+    public let lastName: String?
+    public let isEnterpriseUser: Bool?
+
+    public var displayName: String? {
+        [self.firstName, self.lastName]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+            .nilIfEmpty
+    }
+}
+
+extension String {
+    fileprivate var nilIfEmpty: String? {
+        self.isEmpty ? nil : self
     }
 }
 
@@ -691,20 +828,52 @@ public actor CursorSessionStore {
 
 public struct CursorStatusProbe: Sendable {
     public let baseURL: URL
+    public let dashboardBaseURL: URL
     public var timeout: TimeInterval = 15.0
     private let browserDetection: BrowserDetection
     private let urlSession: any ProviderHTTPTransport
+    private let appAuthStore: any CursorAppAuthSessionProviding
 
     public init(
         baseURL: URL = URL(string: "https://cursor.com")!,
+        dashboardBaseURL: URL = URL(string: "https://api2.cursor.sh")!,
         timeout: TimeInterval = 15.0,
         browserDetection: BrowserDetection,
         urlSession: any ProviderHTTPTransport = ProviderHTTPClient.shared)
     {
+        self.init(
+            baseURL: baseURL,
+            dashboardBaseURL: dashboardBaseURL,
+            timeout: timeout,
+            browserDetection: browserDetection,
+            urlSession: urlSession,
+            appAuthStore: CursorAppAuthStore())
+    }
+
+    init(
+        baseURL: URL = URL(string: "https://cursor.com")!,
+        dashboardBaseURL: URL = URL(string: "https://api2.cursor.sh")!,
+        timeout: TimeInterval = 15.0,
+        browserDetection: BrowserDetection,
+        urlSession: any ProviderHTTPTransport = ProviderHTTPClient.shared,
+        appAuthStore: any CursorAppAuthSessionProviding)
+    {
         self.baseURL = baseURL
+        self.dashboardBaseURL = dashboardBaseURL
         self.timeout = timeout
         self.browserDetection = browserDetection
         self.urlSession = urlSession
+        self.appAuthStore = appAuthStore
+    }
+
+    /// Fetch Cursor usage using the access token already stored by Cursor.app.
+    func fetchWithAppAuthSession(_ session: CursorAppAuthSession) async throws -> CursorStatusSnapshot {
+        let usage = try await self.fetchDashboardCurrentPeriodUsage(bearerToken: session.accessToken)
+        let account = try? await self.fetchDashboardMe(bearerToken: session.accessToken)
+        return self.parseDashboardCurrentPeriodUsage(
+            usage,
+            appSession: session,
+            account: account)
     }
 
     /// Fetch Cursor usage with manual cookie header (for debugging).
@@ -742,6 +911,24 @@ public struct CursorStatusProbe: Sendable {
                 }
             } catch {
                 throw error
+            }
+        }
+
+        // Cursor.app keeps a first-party bearer token in its VS Code-style global state DB.
+        // The browser login page can report an already-signed-in state without minting a cursor.com cookie,
+        // so use the local app session before falling back to browser-cookie scraping.
+        if let appSession = try? self.appAuthStore.loadSession(), appSession.isUsable {
+            log("Using Cursor.app local auth")
+            do {
+                return try await self.fetchWithAppAuthSession(appSession)
+            } catch let error as CursorStatusProbeError {
+                if case .notLoggedIn = error {
+                    log("Cursor.app local auth was rejected; falling back to browser cookies")
+                } else {
+                    firstRecoverableError = firstRecoverableError ?? error
+                }
+            } catch {
+                firstRecoverableError = firstRecoverableError ?? .networkError(error.localizedDescription)
             }
         }
 
@@ -898,6 +1085,58 @@ public struct CursorStatusProbe: Sendable {
         }
     }
 
+    private func fetchDashboardCurrentPeriodUsage(bearerToken: String) async throws
+    -> CursorDashboardCurrentPeriodUsage {
+        try await self.fetchDashboard(
+            method: "GetCurrentPeriodUsage",
+            bearerToken: bearerToken,
+            as: CursorDashboardCurrentPeriodUsage.self)
+    }
+
+    private func fetchDashboardMe(bearerToken: String) async throws -> CursorDashboardMe {
+        try await self.fetchDashboard(
+            method: "GetMe",
+            bearerToken: bearerToken,
+            as: CursorDashboardMe.self)
+    }
+
+    private func fetchDashboard<T: Decodable>(
+        method: String,
+        bearerToken: String,
+        as type: T.Type) async throws -> T
+    {
+        let url = self.dashboardBaseURL
+            .appendingPathComponent("/aiserver.v1.DashboardService/\(method)")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = self.timeout
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
+        request.httpBody = Data("{}".utf8)
+
+        let (data, response) = try await self.urlSession.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw CursorStatusProbeError.networkError("Invalid DashboardService response")
+        }
+        if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+            throw CursorStatusProbeError.notLoggedIn
+        }
+        guard httpResponse.statusCode == 200 else {
+            throw CursorStatusProbeError.networkError("DashboardService \(method) HTTP \(httpResponse.statusCode)")
+        }
+
+        do {
+            return try JSONDecoder().decode(type, from: data)
+        } catch {
+            let rawJSON = String(data: data, encoding: .utf8) ?? "<binary>"
+            let snippet = rawJSON.prefix(200)
+            throw CursorStatusProbeError
+                .parseFailed(
+                    "DashboardService \(method) JSON decode failed: \(error.localizedDescription). Raw: \(snippet)")
+        }
+    }
+
     private func fetchWithCookieHeader(_ cookieHeader: String) async throws -> CursorStatusSnapshot {
         enum FetchPart: Sendable {
             case usageSummary((CursorUsageSummary, String))
@@ -1033,6 +1272,65 @@ public struct CursorStatusProbe: Sendable {
         let decoder = JSONDecoder()
         let usage = try decoder.decode(CursorUsageResponse.self, from: data)
         return (usage, rawJSON)
+    }
+
+    func parseDashboardCurrentPeriodUsage(
+        _ usage: CursorDashboardCurrentPeriodUsage,
+        appSession: CursorAppAuthSession,
+        account: CursorDashboardMe?) -> CursorStatusSnapshot
+    {
+        func normPct(_ value: Double?) -> Double? {
+            guard let value else { return nil }
+            if value < 0 { return 0 }
+            if value > 100 { return 100 }
+            return value
+        }
+
+        let plan = usage.planUsage
+        let autoPercent = normPct(plan?.autoPercentUsed)
+        let apiPercent = normPct(plan?.apiPercentUsed)
+        let planPercentUsed: Double = if let totalPercent = normPct(plan?.totalPercentUsed) {
+            totalPercent
+        } else if let autoPercent, let apiPercent {
+            max(0, min(100, (autoPercent + apiPercent) / 2))
+        } else if let autoPercent {
+            autoPercent
+        } else if let apiPercent {
+            apiPercent
+        } else {
+            0
+        }
+
+        let billingCycleEnd = Self.parseEpochMillisDate(usage.billingCycleEnd)
+        let rawJSON: String? = {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            guard let data = try? encoder.encode(usage) else { return nil }
+            return String(data: data, encoding: .utf8)
+        }()
+
+        return CursorStatusSnapshot(
+            planPercentUsed: planPercentUsed,
+            autoPercentUsed: autoPercent,
+            apiPercentUsed: apiPercent,
+            planUsedUSD: (plan?.totalSpend ?? 0) / 100.0,
+            planLimitUSD: (plan?.limit ?? 0) / 100.0,
+            onDemandUsedUSD: 0,
+            onDemandLimitUSD: nil,
+            teamOnDemandUsedUSD: nil,
+            teamOnDemandLimitUSD: nil,
+            billingCycleEnd: billingCycleEnd,
+            membershipType: appSession.membershipType,
+            accountEmail: account?.email ?? appSession.cachedEmail,
+            accountName: account?.displayName,
+            rawJSON: rawJSON)
+    }
+
+    private static func parseEpochMillisDate(_ value: String?) -> Date? {
+        guard let value,
+              let milliseconds = Double(value)
+        else { return nil }
+        return Date(timeIntervalSince1970: milliseconds / 1000.0)
     }
 
     func parseUsageSummary(

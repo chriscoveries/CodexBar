@@ -1028,6 +1028,95 @@ extension CursorStatusProbeTests {
             Issue.record("Expected CursorStatusProbeError, got: \(error)")
         }
     }
+
+    @Test
+    func `fetch uses Cursor app local auth when browser cookies are unavailable`() async throws {
+        defer {
+            CursorStatusProbeStubURLProtocol.reset()
+        }
+        CursorStatusProbeStubURLProtocol.reset()
+
+        CursorStatusProbeStubURLProtocol.setHandler { request in
+            let requestURL = try #require(request.url)
+            #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer app-token")
+            #expect(request.httpMethod == "POST")
+
+            switch requestURL.path {
+            case "/aiserver.v1.DashboardService/GetCurrentPeriodUsage":
+                return makeCursorStatusProbeResponse(
+                    url: requestURL,
+                    body: """
+                    {
+                      "billingCycleStart": "1779536824000",
+                      "billingCycleEnd": "1782215224000",
+                      "planUsage": {
+                        "totalSpend": 3783,
+                        "includedSpend": 2000,
+                        "bonusSpend": 1783,
+                        "limit": 2000,
+                        "autoPercentUsed": 25.013333333333332,
+                        "apiPercentUsed": 0.6888888888888889,
+                        "totalPercentUsed": 19.4
+                      },
+                      "enabled": true,
+                      "displayMessage": "You've hit your usage limit",
+                      "autoModelSelectedDisplayMessage": "You've used 19% of your included total usage",
+                      "namedModelSelectedDisplayMessage": "You've used 1% of your included API usage"
+                    }
+                    """,
+                    statusCode: 200)
+            case "/aiserver.v1.DashboardService/GetMe":
+                return makeCursorStatusProbeResponse(
+                    url: requestURL,
+                    body: """
+                    {
+                      "email": "user@example.com",
+                      "firstName": "Test",
+                      "lastName": "User",
+                      "isEnterpriseUser": false
+                    }
+                    """,
+                    statusCode: 200)
+            default:
+                throw URLError(.badURL)
+            }
+        }
+
+        let baseURL = try #require(URL(string: "https://cursor-web.test"))
+        let dashboardBaseURL = try #require(URL(string: "https://cursor-api.test"))
+        let snapshot = try await CursorStatusProbe(
+            baseURL: baseURL,
+            dashboardBaseURL: dashboardBaseURL,
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            urlSession: makeCursorStatusProbeSession(),
+            appAuthStore: CursorAppAuthSessionProviderStub(session: CursorAppAuthSession(
+                accessToken: "app-token",
+                membershipType: "pro",
+                subscriptionStatus: "active",
+                cachedEmail: "cached@example.com"))).fetch(allowCachedSessions: false)
+
+        #expect(snapshot.planPercentUsed == 19.4)
+        #expect(snapshot.autoPercentUsed == 25.013333333333332)
+        #expect(snapshot.apiPercentUsed == 0.6888888888888889)
+        #expect(snapshot.planUsedUSD == 37.83)
+        #expect(snapshot.planLimitUSD == 20.0)
+        #expect(snapshot.billingCycleEnd == Date(timeIntervalSince1970: 1_782_215_224_000 / 1000.0))
+        #expect(snapshot.membershipType == "pro")
+        #expect(snapshot.accountEmail == "user@example.com")
+        #expect(snapshot.accountName == "Test User")
+        #expect(CursorStatusProbeStubURLProtocol.requestPaths.sorted() == [
+            "/aiserver.v1.DashboardService/GetCurrentPeriodUsage",
+            "/aiserver.v1.DashboardService/GetMe",
+        ])
+    }
+}
+
+private struct CursorAppAuthSessionProviderStub: CursorAppAuthSessionProviding {
+    let session: CursorAppAuthSession?
+
+    func loadSession() throws -> CursorAppAuthSession? {
+        self.session
+    }
 }
 
 final class CursorStatusProbeStubURLProtocol: URLProtocol {
