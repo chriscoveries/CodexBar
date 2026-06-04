@@ -1089,6 +1089,7 @@ extension CursorStatusProbeTests {
             baseURL: baseURL,
             dashboardBaseURL: dashboardBaseURL,
             browserDetection: BrowserDetection(cacheTTL: 0),
+            browserCookieImportOrder: [],
             urlSession: makeCursorStatusProbeSession(),
             appAuthStore: CursorAppAuthSessionProviderStub(session: CursorAppAuthSession(
                 accessToken: "app-token",
@@ -1108,6 +1109,83 @@ extension CursorStatusProbeTests {
         #expect(CursorStatusProbeStubURLProtocol.requestPaths.sorted() == [
             "/aiserver.v1.DashboardService/GetCurrentPeriodUsage",
             "/aiserver.v1.DashboardService/GetMe",
+        ])
+    }
+
+    @Test
+    func `fetch prefers stored session cookies before Cursor app auth fallback`() async throws {
+        let store = CursorSessionStore.shared
+        await store.clearCookies()
+        defer {
+            CursorStatusProbeStubURLProtocol.reset()
+            Task { await store.clearCookies() }
+        }
+        CursorStatusProbeStubURLProtocol.reset()
+
+        guard let cookie = HTTPCookie(properties: [
+            .name: "WorkosCursorSessionToken",
+            .value: "stored-session",
+            .domain: "cursor.com",
+            .path: "/",
+            .secure: true,
+        ]) else {
+            Issue.record("Failed to create stored Cursor session cookie")
+            return
+        }
+        await store.setCookies([cookie])
+
+        CursorStatusProbeStubURLProtocol.setHandler { request in
+            let requestURL = try #require(request.url)
+            #expect(request.value(forHTTPHeaderField: "Authorization") == nil)
+            #expect(request.value(forHTTPHeaderField: "Cookie") == "WorkosCursorSessionToken=stored-session")
+
+            switch requestURL.path {
+            case "/api/usage-summary":
+                return makeCursorStatusProbeResponse(
+                    url: requestURL,
+                    body: """
+                    {
+                      "membershipType": "pro",
+                      "individualUsage": {
+                        "plan": {
+                          "used": 1500,
+                          "limit": 5000,
+                          "totalPercentUsed": 30.0
+                        }
+                      }
+                    }
+                    """,
+                    statusCode: 200)
+            case "/api/auth/me":
+                return makeCursorStatusProbeResponse(
+                    url: requestURL,
+                    body: #"{"email":"stored@example.com","name":"Stored User"}"#,
+                    statusCode: 200)
+            default:
+                Issue.record("Stored-session precedence test unexpectedly requested \(requestURL.path)")
+                throw URLError(.badURL)
+            }
+        }
+
+        let baseURL = try #require(URL(string: "https://cursor.test"))
+        let dashboardBaseURL = try #require(URL(string: "https://cursor-api.test"))
+        let snapshot = try await CursorStatusProbe(
+            baseURL: baseURL,
+            dashboardBaseURL: dashboardBaseURL,
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            browserCookieImportOrder: [],
+            urlSession: makeCursorStatusProbeSession(),
+            appAuthStore: CursorAppAuthSessionProviderStub(session: CursorAppAuthSession(
+                accessToken: "app-token",
+                membershipType: "enterprise",
+                subscriptionStatus: "active",
+                cachedEmail: "cached@example.com"))).fetch()
+
+        #expect(snapshot.planPercentUsed == 30.0)
+        #expect(snapshot.accountEmail == "stored@example.com")
+        #expect(CursorStatusProbeStubURLProtocol.requestPaths.sorted() == [
+            "/api/auth/me",
+            "/api/usage-summary",
         ])
     }
 

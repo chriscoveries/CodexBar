@@ -831,6 +831,7 @@ public struct CursorStatusProbe: Sendable {
     public let dashboardBaseURL: URL
     public var timeout: TimeInterval = 15.0
     private let browserDetection: BrowserDetection
+    private let browserCookieImportOrder: BrowserCookieImportOrder
     private let urlSession: any ProviderHTTPTransport
     private let appAuthStore: any CursorAppAuthSessionProviding
 
@@ -846,6 +847,7 @@ public struct CursorStatusProbe: Sendable {
             dashboardBaseURL: dashboardBaseURL,
             timeout: timeout,
             browserDetection: browserDetection,
+            browserCookieImportOrder: cursorCookieImportOrder,
             urlSession: urlSession,
             appAuthStore: CursorAppAuthStore())
     }
@@ -855,6 +857,7 @@ public struct CursorStatusProbe: Sendable {
         dashboardBaseURL: URL = URL(string: "https://api2.cursor.sh")!,
         timeout: TimeInterval = 15.0,
         browserDetection: BrowserDetection,
+        browserCookieImportOrder: BrowserCookieImportOrder = cursorCookieImportOrder,
         urlSession: any ProviderHTTPTransport = ProviderHTTPClient.shared,
         appAuthStore: any CursorAppAuthSessionProviding)
     {
@@ -862,6 +865,7 @@ public struct CursorStatusProbe: Sendable {
         self.dashboardBaseURL = dashboardBaseURL
         self.timeout = timeout
         self.browserDetection = browserDetection
+        self.browserCookieImportOrder = browserCookieImportOrder
         self.urlSession = urlSession
         self.appAuthStore = appAuthStore
     }
@@ -914,27 +918,9 @@ public struct CursorStatusProbe: Sendable {
             }
         }
 
-        // Cursor.app keeps a first-party bearer token in its VS Code-style global state DB.
-        // The browser login page can report an already-signed-in state without minting a cursor.com cookie,
-        // so use the local app session before falling back to browser-cookie scraping.
-        if let appSession = try? self.appAuthStore.loadSession(), appSession.isUsable {
-            log("Using Cursor.app local auth")
-            do {
-                return try await self.fetchWithAppAuthSession(appSession)
-            } catch let error as CursorStatusProbeError {
-                if case .notLoggedIn = error {
-                    log("Cursor.app local auth was rejected; falling back to browser cookies")
-                } else {
-                    firstRecoverableError = firstRecoverableError ?? error
-                }
-            } catch {
-                firstRecoverableError = firstRecoverableError ?? .networkError(error.localizedDescription)
-            }
-        }
-
         // Try each browser in order. The first browser that *has* session cookie names is not always valid
         // (e.g. stale Chrome tokens); keep trying until the API accepts a session or we run out of browsers.
-        let browserCandidates = cursorCookieImportOrder.cookieImportCandidates(using: self.browserDetection)
+        let browserCandidates = self.browserCookieImportOrder.cookieImportCandidates(using: self.browserDetection)
         switch await self.scanBrowsers(
             browserCandidates,
             importSessions: { browser in
@@ -992,6 +978,23 @@ public struct CursorStatusProbe: Sendable {
                     log("Stored session failed: \(error.localizedDescription)")
                     firstRecoverableError = firstRecoverableError ?? .networkError(error.localizedDescription)
                 }
+            }
+        }
+
+        // Last fallback: Cursor.app keeps a first-party bearer token in its VS Code-style global state DB.
+        // Use it only after the documented cookie/session sources fail so account precedence stays stable.
+        if let appSession = try? self.appAuthStore.loadSession(), appSession.isUsable {
+            log("Using Cursor.app local auth fallback")
+            do {
+                return try await self.fetchWithAppAuthSession(appSession)
+            } catch let error as CursorStatusProbeError {
+                if case .notLoggedIn = error {
+                    log("Cursor.app local auth was rejected")
+                } else {
+                    firstRecoverableError = firstRecoverableError ?? error
+                }
+            } catch {
+                firstRecoverableError = firstRecoverableError ?? .networkError(error.localizedDescription)
             }
         }
 

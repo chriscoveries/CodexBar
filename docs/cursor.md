@@ -8,7 +8,7 @@ read_when:
 
 # Cursor provider
 
-Cursor is web-only. Usage is fetched via browser cookies or a stored WebKit session.
+Cursor is primarily web-backed. Usage is fetched via browser cookies or a stored WebKit session, with Cursor.app local auth as a final fallback.
 
 ## Data sources + fallback order
 
@@ -29,6 +29,12 @@ Cursor is web-only. Usage is fetched via browser cookies or a stored WebKit sess
    - Login teardown uses `WebKitTeardown` to avoid Intel WebKit crashes.
    - Stored at: `~/Library/Application Support/CodexBar/cursor-session.json`.
 
+4) **Cursor.app local auth** (last fallback)
+   - Reads Cursor.app's VS Code-style global state DB for the local app bearer token.
+   - File: `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`.
+   - Used only after cookie/session sources fail so existing account-selection precedence stays stable.
+   - Fetches usage from Cursor DashboardService with bearer auth.
+
 Manual option:
 - Preferences → Providers → Cursor → Cookie source → Manual.
 - Paste the `Cookie:` header from a cursor.com request.
@@ -40,6 +46,11 @@ Manual option:
   - User email + name.
 - `GET https://cursor.com/api/usage?user=ID`
   - Legacy request-based plan usage (request counts + limits).
+- `POST https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage`
+  - Cursor.app local-auth fallback usage via bearer token.
+  - Headers include `Content-Type: application/json` and `Connect-Protocol-Version: 1`.
+- `POST https://api2.cursor.sh/aiserver.v1.DashboardService/GetMe`
+  - Cursor.app local-auth fallback account email + name.
 
 ## Cookie file paths
 - Safari: `~/Library/Cookies/Cookies.binarycookies`
