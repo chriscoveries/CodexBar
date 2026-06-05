@@ -94,11 +94,13 @@ struct MiniMaxAPITokenFetchTests {
             "api.minimax.io",
             "api.minimax.io",
             "api.minimaxi.com",
+            "api.minimaxi.com",
         ])
         #expect(MiniMaxAPITokenStubURLProtocol.requests.map { $0.url?.path } == [
             "/v1/token_plan/remains",
             "/v1/api/openplatform/coding_plan/remains",
             "/v1/token_plan/remains",
+            "/v1/api/openplatform/coding_plan/remains",
         ])
     }
 
