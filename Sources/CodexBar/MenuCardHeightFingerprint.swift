@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 
 extension UsageMenuCardView.Model {
@@ -9,6 +8,7 @@ extension UsageMenuCardView.Model {
         return MenuCardHeightFingerprint.join([
             "section=\(section)",
             "provider=\(self.provider.rawValue)",
+            "localization=\(codexBarLocalizationSignature())",
             MenuCardHeightFingerprint.field("name", self.providerName),
             MenuCardHeightFingerprint.field("email", self.email),
             MenuCardHeightFingerprint.field("subtitle", self.subtitleText),
@@ -34,7 +34,7 @@ extension UsageMenuCardView.Model {
 }
 
 private enum MenuCardHeightFingerprint {
-    private static let digestSalt = UUID().uuidString
+    private static let hashSalt = UUID()
 
     static func join(_ values: [String]) -> String {
         values.map { "\($0.count):\($0)" }.joined(separator: "|")
@@ -48,13 +48,18 @@ private enum MenuCardHeightFingerprint {
     }
 
     private static func stringShape(_ value: String) -> String {
-        let digestInput = "\(Self.digestSalt)\u{0}\(value)"
-        let digest = SHA256.hash(data: Data(digestInput.utf8))
-            .prefix(12)
-            .map { String(format: "%02x", $0) }
-            .joined()
-        let lineCount = value.split(separator: "\n", omittingEmptySubsequences: false).count
-        return "chars:\(value.count),utf8:\(value.utf8.count),lines:\(lineCount),sha:\(digest)"
+        var hasher = Hasher()
+        hasher.combine(Self.hashSalt)
+        hasher.combine(value)
+        let digest = String(UInt(bitPattern: hasher.finalize()), radix: 16)
+        return "chars:\(value.count),utf8:\(value.utf8.count),lines:\(Self.lineCount(value)),hash:\(digest)"
+    }
+
+    private static func lineCount(_ value: String) -> Int {
+        guard !value.isEmpty else { return 0 }
+        return value.utf8.reduce(1) { count, byte in
+            byte == 10 ? count + 1 : count
+        }
     }
 }
 
@@ -73,7 +78,8 @@ extension UsageMenuCardView.Model.Metric {
         MenuCardHeightFingerprint.join([
             self.id,
             MenuCardHeightFingerprint.field("title", self.title),
-            MenuCardHeightFingerprint.field("percent", self.percentLabel),
+            "percent=\(Int(self.percent.rounded()))",
+            "percentStyle=\(self.percentStyle.rawValue)",
             MenuCardHeightFingerprint.field("status", self.statusText),
             MenuCardHeightFingerprint.field("reset", self.resetText),
             MenuCardHeightFingerprint.field("detail", self.detailText),
