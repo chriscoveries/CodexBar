@@ -732,7 +732,7 @@ struct MiniMaxMenuCardModelTests {
         #expect(model.metrics[1].cardStyle == false)
         #expect(model.providerCost?.title == "Credits")
         #expect(model.providerCost?.spendLine == "Balance: 14000")
-        #expect(model.usageNotes.count == 1 && model.usageNotes[0].hasPrefix("Renews: "))
+        #expect(model.usageNotes == ["Renews: May 18, 2027"])
     }
 }
 

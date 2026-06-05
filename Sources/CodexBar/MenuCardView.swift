@@ -845,7 +845,7 @@ extension UsageMenuCardView.Model {
     }
 
     private static func usageNotes(input: Input) -> [String] {
-        let subscriptionNotes = self.subscriptionMetadataNotes(snapshot: input.snapshot)
+        let subscriptionNotes = self.subscriptionMetadataNotes(snapshot: input.snapshot, provider: input.provider)
 
         if input.provider == .kiro {
             return kiroUsageNotes(input: input) + subscriptionNotes
@@ -894,23 +894,32 @@ extension UsageMenuCardView.Model {
         return notes + subscriptionNotes
     }
 
-    private static func subscriptionMetadataNotes(snapshot: UsageSnapshot?) -> [String] {
+    private static func subscriptionMetadataNotes(snapshot: UsageSnapshot?, provider: UsageProvider) -> [String] {
         guard let snapshot else { return [] }
         if let renewsAt = snapshot.subscriptionRenewsAt {
-            return [String(format: L("Renews: %@"), self.subscriptionDateString(renewsAt))]
+            return [String(format: L("Renews: %@"), self.subscriptionDateString(renewsAt, provider: provider))]
         }
         if let expiresAt = snapshot.subscriptionExpiresAt {
-            return [String(format: L("Plan expires: %@"), self.subscriptionDateString(expiresAt))]
+            return [String(format: L("Plan expires: %@"), self.subscriptionDateString(expiresAt, provider: provider))]
         }
         return []
     }
 
-    private static func subscriptionDateString(_ date: Date) -> String {
+    private static func subscriptionDateString(_ date: Date, provider: UsageProvider) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale.current
-        formatter.timeZone = .current
+        formatter.timeZone = self.subscriptionDateTimeZone(provider: provider)
         formatter.setLocalizedDateFormatFromTemplate("MMM d, yyyy")
         return formatter.string(from: date)
+    }
+
+    private static func subscriptionDateTimeZone(provider: UsageProvider) -> TimeZone {
+        switch provider {
+        case .minimax:
+            TimeZone(identifier: "Asia/Shanghai") ?? .current
+        default:
+            .current
+        }
     }
 
     private static func openRouterSpendNotes(_ usage: OpenRouterUsageSnapshot) -> [String] {
