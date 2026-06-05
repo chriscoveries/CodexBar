@@ -172,7 +172,14 @@ public struct MiniMaxUsageFetcher: Sendable {
             throw MiniMaxUsageError.apiError("HTTP \(response.statusCode)")
         }
 
-        let snapshot = try MiniMaxUsageParser.parseCodingPlanRemains(data: response.data, now: now)
+        let snapshot: MiniMaxUsageSnapshot
+        do {
+            snapshot = try MiniMaxUsageParser.parseCodingPlanRemains(data: response.data, now: now)
+        } catch let error as MiniMaxUsageError {
+            throw error
+        } catch {
+            throw MiniMaxUsageError.parseFailed(error.localizedDescription)
+        }
         if let services = snapshot.services, !services.isEmpty {
             Self.log.debug("MiniMax multi-service response detected: \(services.count) services")
         }

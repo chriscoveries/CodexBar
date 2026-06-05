@@ -974,8 +974,8 @@ extension TokenAccountEnvironmentPrecedenceTests {
                 rateLimit: nil,
                 updatedAt: now),
             cursorRequests: CursorRequestUsage(used: 7, limit: 70),
-            subscriptionExpiresAt: reset.addingTimeInterval(86_400),
-            subscriptionRenewsAt: reset.addingTimeInterval(43_200),
+            subscriptionExpiresAt: reset.addingTimeInterval(86400),
+            subscriptionRenewsAt: reset.addingTimeInterval(43200),
             updatedAt: now,
             identity: identity)
     }
