@@ -5,6 +5,7 @@
 ### Fixed
 - Menu bar: defer merged-menu close rebuilds and cache repeated menu-card height measurements so dismissing or rapidly switching the merged dropdown avoids rebuilding SwiftUI-backed cards on the main thread (#1274, #1286, #1314). Thanks @hhh2210!
 - Menu bar: observe a compact icon-state signature so merged status icons no longer redraw for provider snapshot changes that cannot affect the visible icon (#1297). Thanks @hhh2210!
+- Menu bar: keep provider-switcher quota bars from replacing Auto Layout constraints when the visible ratio is unchanged, making tab switches responsive with many providers enabled (#1303, #1315). Thanks @juanjoseluisgarcia!
 
 ## 0.32.4 — 2026-06-02
 
