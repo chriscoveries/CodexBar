@@ -87,6 +87,11 @@ public struct MiniMaxServiceUsage: Sendable {
         }
     }
 
+    public var isPrimaryTextQuotaLane: Bool {
+        let normalized = self.serviceType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized == "general" || self.displayName == "Text Generation"
+    }
+
     /// Creates a new MiniMaxServiceUsage instance.
     ///
     /// - Parameters:

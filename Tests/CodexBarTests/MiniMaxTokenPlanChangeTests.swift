@@ -73,6 +73,49 @@ struct MiniMaxTokenPlanChangeTests {
     }
 
     @Test
+    func `video first token plan still uses general quota as primary and weekly secondary`() throws {
+        let now = Date(timeIntervalSince1970: 1_780_282_340)
+        let json = """
+        {
+          "base_resp": { "status_code": "0" },
+          "model_remains": [
+            {
+              "model_name": "video",
+              "current_interval_total_count": 100,
+              "current_interval_usage_count": 70,
+              "current_interval_remaining_percent": 30,
+              "start_time": 1780243200000,
+              "end_time": 1780329600000
+            },
+            {
+              "model_name": "general",
+              "current_interval_total_count": 0,
+              "current_interval_usage_count": 0,
+              "current_interval_remaining_percent": 96,
+              "start_time": 1780279200000,
+              "end_time": 1780297200000,
+              "current_weekly_total_count": 0,
+              "current_weekly_usage_count": 0,
+              "current_weekly_remaining_percent": 99,
+              "weekly_start_time": 1780243200000,
+              "weekly_end_time": 1780848000000
+            }
+          ]
+        }
+        """
+
+        let snapshot = try MiniMaxUsageParser.parseCodingPlanRemains(data: Data(json.utf8), now: now)
+        let usage = snapshot.toUsageSnapshot()
+
+        #expect(snapshot.services?.map(\.serviceType) == ["video", "general", "general"])
+        #expect(usage.primary?.usedPercent == 4)
+        #expect(usage.primary?.windowMinutes == 300)
+        #expect(usage.secondary?.usedPercent == 1)
+        #expect(usage.secondary?.windowMinutes == 10080)
+        #expect(usage.tertiary?.usedPercent == 70)
+    }
+
+    @Test
     func `plus token plan omits unavailable video quota lane`() throws {
         let now = Date(timeIntervalSince1970: 1_780_282_340)
         let json = """
@@ -236,6 +279,42 @@ struct MiniMaxTokenPlanChangeTests {
     }
 
     @Test
+    func `web usage fetch falls back to www remains host after platform transport failure`() async throws {
+        let now = Date(timeIntervalSince1970: 1_780_282_340)
+        let transport = ProviderHTTPTransportStub { request in
+            let url = try #require(request.url)
+            if url.path.contains("coding-plan") {
+                return Self.httpResponse(
+                    url: url,
+                    body: "<html><main>Coding Plan</main></html>",
+                    contentType: "text/html")
+            }
+            if url.host == "platform.minimaxi.com", url.path.contains("coding_plan/remains") {
+                throw URLError(.timedOut)
+            }
+            #expect(url.host == "www.minimaxi.com")
+            #expect(url.path == "/v1/api/openplatform/coding_plan/remains")
+            return Self.httpResponse(url: url, body: Self.percentBasedRemainsJSON, contentType: "application/json")
+        }
+
+        let snapshot = try await MiniMaxUsageFetcher.fetchUsage(
+            cookieHeader: "HERTZ-SESSION=abc",
+            region: .chinaMainland,
+            environment: [:],
+            includeBillingHistory: false,
+            session: transport,
+            now: now)
+        let requests = await transport.requests()
+
+        #expect(snapshot.toUsageSnapshot().primary?.usedPercent == 4)
+        #expect(requests.map { $0.url?.host } == [
+            "platform.minimaxi.com",
+            "platform.minimaxi.com",
+            "www.minimaxi.com",
+        ])
+    }
+
+    @Test
     func `web usage fetch preserves coding plan json auth failure`() async throws {
         let transport = ProviderHTTPTransportStub { request in
             let url = try #require(request.url)
@@ -347,6 +426,34 @@ struct MiniMaxTokenPlanChangeTests {
             #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer sk-standard-test")
             if url.path == "/v1/token_plan/remains" {
                 return Self.httpResponse(url: url, body: "{}", contentType: "application/json")
+            }
+            #expect(url.path == "/v1/api/openplatform/coding_plan/remains")
+            return Self.httpResponse(url: url, body: Self.percentBasedRemainsJSON, contentType: "application/json")
+        }
+
+        let snapshot = try await MiniMaxUsageFetcher.fetchUsage(
+            apiToken: "sk-standard-test",
+            region: .chinaMainland,
+            now: now,
+            session: transport)
+        let requests = await transport.requests()
+
+        #expect(snapshot.toUsageSnapshot().primary?.usedPercent == 4)
+        #expect(requests.map { $0.url?.path } == [
+            "/v1/token_plan/remains",
+            "/v1/api/openplatform/coding_plan/remains",
+        ])
+    }
+
+    @Test
+    func `api token fetch falls back to legacy coding plan endpoint after official transport failure`() async throws {
+        let now = Date(timeIntervalSince1970: 1_780_282_340)
+        let transport = ProviderHTTPTransportStub { request in
+            let url = try #require(request.url)
+            #expect(url.host == "api.minimaxi.com")
+            #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer sk-standard-test")
+            if url.path == "/v1/token_plan/remains" {
+                throw URLError(.timedOut)
             }
             #expect(url.path == "/v1/api/openplatform/coding_plan/remains")
             return Self.httpResponse(url: url, body: Self.percentBasedRemainsJSON, contentType: "application/json")

@@ -157,10 +157,8 @@ public struct MiniMaxUsageFetcher: Sendable {
         let response: ProviderHTTPResponse
         do {
             response = try await transport.response(for: request)
-        } catch let error as URLError where error.code == .badServerResponse {
-            throw MiniMaxUsageError.networkError("Invalid response")
         } catch {
-            throw error
+            throw self.normalizedTransportError(error)
         }
 
         guard response.statusCode == 200 else {
@@ -224,10 +222,8 @@ public struct MiniMaxUsageFetcher: Sendable {
         let response: ProviderHTTPResponse
         do {
             response = try await context.transport.response(for: request)
-        } catch let error as URLError where error.code == .badServerResponse {
-            throw MiniMaxUsageError.networkError("Invalid response")
         } catch {
-            throw error
+            throw self.normalizedTransportError(error)
         }
 
         guard response.statusCode == 200 else {
@@ -319,10 +315,8 @@ public struct MiniMaxUsageFetcher: Sendable {
         let response: ProviderHTTPResponse
         do {
             response = try await context.transport.response(for: request)
-        } catch let error as URLError where error.code == .badServerResponse {
-            throw MiniMaxUsageError.networkError("Invalid response")
         } catch {
-            throw error
+            throw self.normalizedTransportError(error)
         }
 
         guard response.statusCode == 200 else {
@@ -367,6 +361,22 @@ public struct MiniMaxUsageFetcher: Sendable {
         case .networkError, .parseFailed:
             true
         }
+    }
+
+    private static func normalizedTransportError(_ error: Error) -> Error {
+        if error is MiniMaxUsageError || error is CancellationError {
+            return error
+        }
+        if let urlError = error as? URLError {
+            if urlError.code == .cancelled {
+                return error
+            }
+            if urlError.code == .badServerResponse {
+                return MiniMaxUsageError.networkError("Invalid response")
+            }
+            return MiniMaxUsageError.networkError(urlError.localizedDescription)
+        }
+        return error
     }
 
     private static func attachingBillingIfAvailable(

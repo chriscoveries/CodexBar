@@ -16,36 +16,52 @@ public struct MiniMaxUsageSnapshot: Sendable {
     public let subscriptionRenewsAt: Date?
 
     public var primaryService: MiniMaxServiceUsage? {
-        // Priority: "Text Generation" > first service
-        if let services = self.services, !services.isEmpty {
-            if let textGenService = services.first(where: { $0.displayName == "Text Generation" }) {
-                return textGenService
-            }
-            return services.first
-        }
-        return nil
+        self.orderedQuotaServices.first
     }
 
     public var secondaryService: MiniMaxServiceUsage? {
-        // Return second service for RateWindow.secondary if exists
-        guard let services = self.services, services.count >= 2 else { return nil }
-        // If we have Text Generation as primary, get the next non-Text Generation service
-        if let textGenIndex = services.firstIndex(where: { $0.displayName == "Text Generation" }) {
-            // If Text Generation is first, secondary is second
-            if textGenIndex == 0 {
-                return services[1]
-            }
-            // If Text Generation is not first, secondary could be first or second depending on count
-            return services[0]
-        }
-        // No Text Generation found, just return second service
+        let services = self.orderedQuotaServices
+        guard services.count >= 2 else { return nil }
         return services[1]
     }
 
     public var tertiaryService: MiniMaxServiceUsage? {
-        // Return third service for RateWindow.tertiary if exists
-        guard let services = self.services, services.count >= 3 else { return nil }
+        let services = self.orderedQuotaServices
+        guard services.count >= 3 else { return nil }
         return services[2]
+    }
+
+    private var orderedQuotaServices: [MiniMaxServiceUsage] {
+        guard let services, !services.isEmpty else { return [] }
+        return services.enumerated().sorted { lhs, rhs in
+            let lhsRank = self.quotaServiceRank(lhs.element, originalIndex: lhs.offset)
+            let rhsRank = self.quotaServiceRank(rhs.element, originalIndex: rhs.offset)
+            if lhsRank.primary != rhsRank.primary {
+                return lhsRank.primary < rhsRank.primary
+            }
+            if lhsRank.window != rhsRank.window {
+                return lhsRank.window < rhsRank.window
+            }
+            return lhsRank.originalIndex < rhsRank.originalIndex
+        }.map(\.element)
+    }
+
+    private func quotaServiceRank(
+        _ service: MiniMaxServiceUsage,
+        originalIndex: Int) -> (primary: Int, window: Int, originalIndex: Int)
+    {
+        (
+            primary: service.isPrimaryTextQuotaLane ? 0 : 1,
+            window: self.quotaWindowRank(service),
+            originalIndex: originalIndex)
+    }
+
+    private func quotaWindowRank(_ service: MiniMaxServiceUsage) -> Int {
+        let window = service.windowType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if window == "weekly" {
+            return 1
+        }
+        return 0
     }
 
     public init(
