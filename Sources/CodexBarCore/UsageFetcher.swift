@@ -322,6 +322,8 @@ public struct UsageSnapshot: Codable, Sendable {
             mistralUsage: self.mistralUsage,
             deepgramUsage: self.deepgramUsage,
             cursorRequests: self.cursorRequests,
+            subscriptionExpiresAt: self.subscriptionExpiresAt,
+            subscriptionRenewsAt: self.subscriptionRenewsAt,
             updatedAt: self.updatedAt,
             identity: identity)
     }
@@ -347,6 +349,7 @@ public struct UsageSnapshot: Codable, Sendable {
             secondary: secondary,
             tertiary: tertiary,
             extraRateWindows: self.extraRateWindows,
+            kiroUsage: self.kiroUsage,
             providerCost: self.providerCost,
             zaiUsage: self.zaiUsage,
             minimaxUsage: self.minimaxUsage,
@@ -357,6 +360,8 @@ public struct UsageSnapshot: Codable, Sendable {
             mistralUsage: self.mistralUsage,
             deepgramUsage: self.deepgramUsage,
             cursorRequests: self.cursorRequests,
+            subscriptionExpiresAt: self.subscriptionExpiresAt,
+            subscriptionRenewsAt: self.subscriptionRenewsAt,
             updatedAt: self.updatedAt,
             identity: self.identity)
     }
