@@ -1105,7 +1105,8 @@ extension UsageMenuCardView.Model {
         }
         if input.provider == .minimax {
             if let minimaxUsage = snapshot.minimaxUsage {
-                if let services = minimaxUsage.services, !services.isEmpty {
+                let services = minimaxUsage.orderedQuotaServices
+                if !services.isEmpty {
                     return Self.minimaxMetrics(services: services, input: input)
                 }
             }

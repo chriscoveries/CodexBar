@@ -31,7 +31,7 @@ public struct MiniMaxUsageSnapshot: Sendable {
         return services[2]
     }
 
-    private var orderedQuotaServices: [MiniMaxServiceUsage] {
+    public var orderedQuotaServices: [MiniMaxServiceUsage] {
         guard let services, !services.isEmpty else { return [] }
         return services.enumerated().sorted { lhs, rhs in
             let lhsRank = self.quotaServiceRank(lhs.element, originalIndex: lhs.offset)
