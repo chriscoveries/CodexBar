@@ -80,6 +80,8 @@ struct UsageStoreCoverageTests {
 
         try Self.writeCodexAuthFile(homeURL: home, email: "first@example.com", plan: "plus")
         let env = ["CODEX_HOME": home.path]
+        settings._test_codexReconciliationEnvironment = env
+        defer { settings._test_codexReconciliationEnvironment = nil }
         let store = UsageStore(
             fetcher: UsageFetcher(environment: env),
             browserDetection: BrowserDetection(cacheTTL: 0),
