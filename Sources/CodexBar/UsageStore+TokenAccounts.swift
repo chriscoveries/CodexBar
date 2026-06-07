@@ -80,6 +80,9 @@ extension UsageStore {
         let originalSelectionSource = originalVisibleAccountID.flatMap {
             projection.source(forVisibleAccountID: $0)
         }
+        let originalVisibleAccount = originalVisibleAccountID.flatMap { id in
+            accounts.first { $0.id == id }
+        }
         let priorByAccountID = Dictionary(uniqueKeysWithValues: self.codexAccountSnapshots.map { ($0.id, $0) })
         var snapshots: [CodexAccountUsageSnapshot] = []
         var selectedOutcome: ProviderFetchOutcome?
@@ -115,35 +118,161 @@ extension UsageStore {
             }
         }
 
+        let currentProjection = self.freshCodexVisibleAccountProjectionForStaleResultGuard()
+        let currentSnapshots = snapshots.compactMap { snapshot -> CodexAccountUsageSnapshot? in
+            guard let currentAccount = Self.currentCodexVisibleAccount(
+                matching: snapshot.account,
+                projection: currentProjection)
+            else {
+                return nil
+            }
+            guard currentAccount != snapshot.account else { return snapshot }
+            return CodexAccountUsageSnapshot(
+                account: currentAccount,
+                snapshot: Self.codexVisibleAccountSnapshotRelabeledForCurrentProjection(
+                    snapshot.snapshot,
+                    account: currentAccount),
+                error: snapshot.error,
+                sourceLabel: snapshot.sourceLabel)
+        }
         let shouldPreservePriorState = !sawAnyNonCancellationOutcome &&
-            snapshots.allSatisfy { $0.snapshot == nil }
+            currentSnapshots.allSatisfy { $0.snapshot == nil }
         if !shouldPreservePriorState {
-            self.codexAccountSnapshots = snapshots
-            self.codexAccountUsageSnapshotStore?.store(snapshots)
+            self.codexAccountSnapshots = currentSnapshots
+            self.codexAccountUsageSnapshotStore?.store(currentSnapshots)
         }
 
         let selectionStillMatches = self.codexVisibleSelectionStillMatches(
             originalVisibleAccountID: originalVisibleAccountID,
-            originalSelectionSource: originalSelectionSource)
-        if let selectedOutcome, let selectedAccount, selectionStillMatches {
-            await self.applySelectedCodexVisibleAccountOutcome(
+            originalSelectionSource: originalSelectionSource,
+            originalAccount: originalVisibleAccount,
+            currentProjection: currentProjection)
+        guard let selectedOutcome, let selectedAccount else { return }
+        guard selectionStillMatches else {
+            _ = self.prepareCodexAccountScopedRefreshIfNeeded()
+            return
+        }
+
+        let currentSelectedAccount = Self.currentCodexVisibleAccount(
+            matching: selectedAccount,
+            projection: currentProjection)
+        if let currentSelectedAccount {
+            let currentSelectedSnapshot = Self.codexVisibleAccountSnapshotRelabeledForCurrentProjection(
+                selectedSnapshot,
+                account: currentSelectedAccount)
+            if self.shouldApplySelectedCodexVisibleAccountOutcome(
                 selectedOutcome,
-                account: selectedAccount,
-                snapshot: selectedSnapshot,
-                sourceLabel: selectedSourceLabel)
+                snapshot: currentSelectedSnapshot)
+            {
+                await self.applySelectedCodexVisibleAccountOutcome(
+                    selectedOutcome,
+                    account: currentSelectedAccount,
+                    snapshot: currentSelectedSnapshot,
+                    sourceLabel: selectedSourceLabel)
+            }
+        } else {
+            _ = self.prepareCodexAccountScopedRefreshIfNeeded()
         }
     }
 
     func codexVisibleSelectionStillMatches(
         originalVisibleAccountID: String?,
-        originalSelectionSource: CodexActiveSource?) -> Bool
+        originalSelectionSource: CodexActiveSource?,
+        originalAccount: CodexVisibleAccount? = nil,
+        currentProjection: CodexVisibleAccountProjection? = nil) -> Bool
     {
-        let currentProjection = self.settings.codexVisibleAccountProjection
-        let currentSelectionSource = originalVisibleAccountID.flatMap {
-            currentProjection.source(forVisibleAccountID: $0)
+        let currentProjection = currentProjection ?? self.settings.codexVisibleAccountProjection
+        let currentActiveAccount = currentProjection.activeVisibleAccountID.flatMap { id in
+            currentProjection.visibleAccounts.first { $0.id == id }
         }
-        return currentProjection.activeVisibleAccountID == originalVisibleAccountID &&
-            currentSelectionSource == originalSelectionSource
+        let currentSelectionSource = currentActiveAccount?.selectionSource
+        if currentProjection.activeVisibleAccountID == originalVisibleAccountID,
+           currentSelectionSource == originalSelectionSource
+        {
+            return true
+        }
+        guard let originalAccount, let currentActiveAccount, currentSelectionSource == originalSelectionSource else {
+            return false
+        }
+        return Self.codexVisibleAccountMatchesCurrentProjection(originalAccount, account: currentActiveAccount)
+    }
+
+    private func freshCodexVisibleAccountProjectionForStaleResultGuard() -> CodexVisibleAccountProjection {
+        // Auth files can change while account fetches are in flight, so stale-result guards must bypass the
+        // short-lived reconciliation cache used for normal menu rendering.
+        self.settings.invalidateCodexAccountReconciliationSnapshotCache()
+        return self.settings.codexVisibleAccountProjection
+    }
+
+    private static func currentCodexVisibleAccount(
+        matching account: CodexVisibleAccount,
+        projection: CodexVisibleAccountProjection) -> CodexVisibleAccount?
+    {
+        if let currentAccount = projection.visibleAccounts.first(where: { $0.id == account.id }),
+           self.codexVisibleAccountMatchesCurrentProjection(account, account: currentAccount)
+        {
+            return currentAccount
+        }
+        return projection.visibleAccounts.first {
+            self.codexVisibleAccountMatchesCurrentProjection(account, account: $0)
+        }
+    }
+
+    private static func codexVisibleAccountSnapshotRelabeledForCurrentProjection(
+        _ snapshot: UsageSnapshot?,
+        account: CodexVisibleAccount) -> UsageSnapshot?
+    {
+        guard let snapshot else { return nil }
+        let existing = snapshot.identity(for: .codex)
+        return snapshot.withIdentity(ProviderIdentitySnapshot(
+            providerID: .codex,
+            accountEmail: account.email,
+            accountOrganization: existing?.accountOrganization,
+            loginMethod: existing?.loginMethod ?? account.workspaceLabel))
+    }
+
+    private static func codexVisibleAccountMatchesCurrentProjection(
+        _ prior: CodexVisibleAccount,
+        account: CodexVisibleAccount) -> Bool
+    {
+        guard prior.selectionSource == account.selectionSource else { return false }
+
+        let priorEmail = CodexIdentityResolver.normalizeEmail(prior.email)
+        let accountEmail = CodexIdentityResolver.normalizeEmail(account.email)
+
+        let priorWorkspaceID = self.normalizedCodexVisibleAccountText(prior.workspaceAccountID)
+            .map(CodexOpenAIWorkspaceIdentity.normalizeWorkspaceAccountID)
+        let accountWorkspaceID = self.normalizedCodexVisibleAccountText(account.workspaceAccountID)
+            .map(CodexOpenAIWorkspaceIdentity.normalizeWorkspaceAccountID)
+        if priorWorkspaceID != nil || accountWorkspaceID != nil {
+            guard priorWorkspaceID == accountWorkspaceID else { return false }
+            switch account.selectionSource {
+            case .managedAccount:
+                return true
+            case .liveSystem:
+                return priorEmail != nil && priorEmail == accountEmail
+            }
+        }
+
+        let priorAuthFingerprint = CodexAuthFingerprint.normalize(prior.authFingerprint)
+        let accountAuthFingerprint = CodexAuthFingerprint.normalize(account.authFingerprint)
+        if priorAuthFingerprint != nil || accountAuthFingerprint != nil {
+            guard priorAuthFingerprint == accountAuthFingerprint else { return false }
+        }
+
+        return priorEmail != nil && priorEmail == accountEmail
+    }
+
+    func shouldApplySelectedCodexVisibleAccountOutcome(
+        _ outcome: ProviderFetchOutcome,
+        snapshot: UsageSnapshot?) -> Bool
+    {
+        switch outcome.result {
+        case .success:
+            snapshot != nil
+        case .failure:
+            true
+        }
     }
 
     func refreshTokenAccounts(provider: UsageProvider, accounts: [ProviderTokenAccount]) async {
@@ -909,7 +1038,7 @@ extension UsageStore {
             self.errors[.codex] = nil
             self.failureGates[.codex]?.recordSuccess()
             self.rememberLiveSystemCodexEmailIfNeeded(snapshot.accountEmail(for: .codex))
-            self.seedCodexAccountScopedRefreshGuard(accountEmail: snapshot.accountEmail(for: .codex))
+            self.seedCodexAccountScopedRefreshGuard(accountEmail: account.email)
             await self.recordPlanUtilizationHistorySample(provider: .codex, snapshot: snapshot)
             self.recordCodexHistoricalSampleIfNeeded(snapshot: snapshot)
         case let .failure(error):
