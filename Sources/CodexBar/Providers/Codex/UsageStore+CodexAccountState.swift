@@ -316,7 +316,7 @@ extension UsageStore {
         if self.codexGuardAuthFingerprintMatches(lhs, rhs) {
             return true
         }
-        guard rhs.identity != .unresolved else { return false }
+        guard case .providerAccount = rhs.identity else { return false }
         return lhs.identity == rhs.identity
     }
 
