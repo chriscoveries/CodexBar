@@ -1171,6 +1171,25 @@ extension CodexAccountScopedRefreshTests {
         #expect(store.freshCodexAccountScopedRefreshGuard().authFingerprint == newFingerprint)
         #expect(!store.shouldApplyCodexScopedFailure(expectedGuard: expectedGuard))
         #expect(!store.shouldApplyCodexScopedNonUsageFailure(expectedGuard: expectedGuard))
+
+        try FileManager.default.removeItem(at: managedHome)
+        #expect(store.freshCodexAccountScopedRefreshGuard().authFingerprint == nil)
+        let staleUsage = UsageSnapshot(
+            primary: RateWindow(
+                usedPercent: 41,
+                windowMinutes: 300,
+                resetsAt: nil,
+                resetDescription: nil),
+            secondary: nil,
+            updatedAt: Date(),
+            identity: ProviderIdentitySnapshot(
+                providerID: .codex,
+                accountEmail: "managed-auth@example.com",
+                accountOrganization: nil,
+                loginMethod: "Managed Auth"))
+        #expect(!store.shouldApplyCodexUsageResult(expectedGuard: expectedGuard, usage: staleUsage))
+        #expect(!store.shouldApplyCodexScopedFailure(expectedGuard: expectedGuard))
+        #expect(!store.shouldApplyCodexScopedNonUsageFailure(expectedGuard: expectedGuard))
     }
 
     @Test

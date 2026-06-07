@@ -383,6 +383,9 @@ extension UsageStore {
         if self.codexGuardAuthFingerprintMatches(lhs, rhs) {
             return true
         }
+        let lhsFingerprint = CodexAuthFingerprint.normalize(lhs.authFingerprint)
+        let rhsFingerprint = CodexAuthFingerprint.normalize(rhs.authFingerprint)
+        guard lhsFingerprint != nil, rhsFingerprint != nil else { return false }
         guard case .providerAccount = rhs.identity, lhs.identity == rhs.identity else { return false }
         guard case .liveSystem = lhs.source else { return true }
         return lhs.accountKey != nil && lhs.accountKey == rhs.accountKey
@@ -423,8 +426,7 @@ extension UsageStore {
             return CodexAuthFingerprint.normalize(snapshot.liveSystemAccount?.authFingerprint)
         case let .managedAccount(id):
             guard let account = snapshot.storedAccounts.first(where: { $0.id == id }) else { return nil }
-            return CodexAuthFingerprint.fingerprint(homePath: account.managedHomePath) ??
-                CodexAuthFingerprint.normalize(account.authFingerprint)
+            return CodexAuthFingerprint.fingerprint(homePath: account.managedHomePath)
         }
     }
 
