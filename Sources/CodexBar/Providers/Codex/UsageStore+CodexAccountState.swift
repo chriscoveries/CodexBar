@@ -189,6 +189,7 @@ extension UsageStore {
         let resultAccountKey = Self.normalizeCodexAccountScopedKey(usage.accountEmail(for: .codex))
         let resultMatchesCurrentAccountKey = Self.codexUsageResultAccountKeyMatchesCurrentGuard(
             resultAccountKey,
+            expectedGuard: expectedGuard,
             currentGuard: currentGuard)
 
         if expectedGuard.identity != .unresolved {
@@ -404,9 +405,14 @@ extension UsageStore {
 
     private nonisolated static func codexUsageResultAccountKeyMatchesCurrentGuard(
         _ resultAccountKey: String?,
+        expectedGuard: CodexAccountScopedRefreshGuard,
         currentGuard: CodexAccountScopedRefreshGuard) -> Bool
     {
         guard let currentAccountKey = currentGuard.accountKey else { return true }
+        guard let resultAccountKey else {
+            guard let expectedAccountKey = expectedGuard.accountKey else { return true }
+            return expectedAccountKey == currentAccountKey
+        }
         return resultAccountKey == currentAccountKey
     }
 
@@ -417,7 +423,8 @@ extension UsageStore {
             return CodexAuthFingerprint.normalize(snapshot.liveSystemAccount?.authFingerprint)
         case let .managedAccount(id):
             guard let account = snapshot.storedAccounts.first(where: { $0.id == id }) else { return nil }
-            return CodexAuthFingerprint.fingerprint(homePath: account.managedHomePath)
+            return CodexAuthFingerprint.fingerprint(homePath: account.managedHomePath) ??
+                CodexAuthFingerprint.normalize(account.authFingerprint)
         }
     }
 

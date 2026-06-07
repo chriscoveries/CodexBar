@@ -232,15 +232,20 @@ extension UsageStore {
                 case .emailOnly, .unresolved:
                     nil
                 }
+                let authFingerprint = CodexAuthFingerprint.fingerprint(homePath: account.managedHomePath)
                 return (account.id, CodexManagedVisibleAccountRuntimeState(
-                    authFingerprint: CodexAuthFingerprint.fingerprint(homePath: account.managedHomePath),
-                    workspaceAccountID: workspaceAccountID))
+                    authFingerprint: authFingerprint ?? account.authFingerprint,
+                    workspaceAccountID: authFingerprint == nil ? account.workspaceAccountID : workspaceAccountID))
             })
         let visibleAccounts = projection.visibleAccounts.map { account in
             guard case let .managedAccount(id) = account.selectionSource else { return account }
+            let accountWorkspaceAccountID = account.workspaceAccountID
+                .map(CodexOpenAIWorkspaceIdentity.normalizeWorkspaceAccountID)
+            let runtimeWorkspaceAccountID = managedRuntimeStates[id]?.workspaceAccountID
+                .map(CodexOpenAIWorkspaceIdentity.normalizeWorkspaceAccountID)
             guard let runtimeState = managedRuntimeStates[id],
-                  let authFingerprint = runtimeState.authFingerprint,
-                  authFingerprint != account.authFingerprint
+                  runtimeState.authFingerprint != account.authFingerprint ||
+                  runtimeWorkspaceAccountID != accountWorkspaceAccountID
             else {
                 return account
             }
@@ -249,7 +254,7 @@ extension UsageStore {
                 email: account.email,
                 workspaceLabel: account.workspaceLabel,
                 workspaceAccountID: runtimeState.workspaceAccountID,
-                authFingerprint: authFingerprint,
+                authFingerprint: runtimeState.authFingerprint,
                 storedAccountID: account.storedAccountID,
                 selectionSource: account.selectionSource,
                 isActive: account.isActive,
