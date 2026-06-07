@@ -878,7 +878,8 @@ extension UsageStore {
         let source = String(describing: expectedGuard?.source ?? self.settings.codexResolvedActiveSource)
         let identityKey = Self.codexIdentityGuardKey(expectedGuard?.identity ?? .unresolved) ?? "unresolved"
         let accountKey = Self.normalizeCodexAccountScopedKey(targetEmail) ?? "unknown"
-        return "\(source)|\(identityKey)|\(accountKey)"
+        let authFingerprint = CodexAuthFingerprint.normalize(expectedGuard?.authFingerprint) ?? "nil"
+        return "\(source)|\(identityKey)|\(accountKey)|auth:\(authFingerprint)"
     }
 
     private func actionableOpenAIDashboardImportFailure(targetEmail: String?) -> String? {

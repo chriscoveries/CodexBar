@@ -238,7 +238,7 @@ extension UsageStore {
         let normalizedRoutingTargetEmail = CodexIdentityResolver.normalizeEmail(routingTargetEmail)
         let currentGuard = self.freshCodexOpenAIWebRefreshGuard()
         guard currentGuard.source == expectedGuard.source else { return false }
-        guard Self.codexGuardAuthFingerprintMatches(currentGuard, expectedGuard) else { return false }
+        guard Self.codexGuardAuthFingerprintAllowsUsageApply(currentGuard, expectedGuard) else { return false }
 
         if expectedGuard.identity != .unresolved {
             return currentGuard.identity == expectedGuard.identity
@@ -256,9 +256,21 @@ extension UsageStore {
         expectedGuard: CodexAccountScopedRefreshGuard,
         routingTargetEmail: String?) -> Bool
     {
-        self.shouldApplyOpenAIDashboardRefreshGuard(
-            expectedGuard: expectedGuard,
-            routingTargetEmail: routingTargetEmail)
+        let normalizedRoutingTargetEmail = CodexIdentityResolver.normalizeEmail(routingTargetEmail)
+        let currentGuard = self.freshCodexOpenAIWebRefreshGuard()
+        guard currentGuard.source == expectedGuard.source else { return false }
+        guard Self.codexGuardAuthFingerprintMatches(currentGuard, expectedGuard) else { return false }
+
+        if expectedGuard.identity != .unresolved {
+            return currentGuard.identity == expectedGuard.identity
+        }
+
+        guard case .liveSystem = expectedGuard.source else { return false }
+        guard currentGuard.identity == .unresolved else { return false }
+        return CodexIdentityResolver.normalizeEmail(
+            self.currentCodexOpenAIWebTargetEmail(
+                allowCurrentSnapshotFallback: true,
+                allowLastKnownLiveFallback: false)) == normalizedRoutingTargetEmail
     }
 
     func codexDashboardKnownOwnerCandidates() -> [CodexDashboardKnownOwnerCandidate] {

@@ -71,6 +71,7 @@ extension UsageStore {
             sourceKey,
             identityKey,
             expectedGuard.accountKey ?? "account:nil",
+            "auth:\(expectedGuard.authFingerprint ?? "nil")",
         ].joined(separator: "|")
     }
 
@@ -92,7 +93,8 @@ extension UsageStore {
         do {
             let credits = try await self.loadLatestCodexCredits()
             guard !Task.isCancelled else { return }
-            guard let applyGuard = self.codexScopedNonUsageSuccessApplyGuard(expectedGuard: expectedGuard) else { return }
+            guard let applyGuard = self.codexScopedNonUsageSuccessApplyGuard(
+                expectedGuard: expectedGuard) else { return }
             await MainActor.run {
                 self.credits = credits
                 self.lastCreditsError = nil

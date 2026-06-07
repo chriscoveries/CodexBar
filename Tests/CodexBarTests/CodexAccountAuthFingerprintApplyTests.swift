@@ -126,6 +126,168 @@ extension CodexAccountScopedRefreshTests {
     }
 
     @Test
+    func `credits refresh key separates same account auth fingerprints`() {
+        let settings = self.makeSettingsStore(
+            suite: "CodexAccountScopedRefreshTests-credits-key-auth-fingerprint")
+        let store = self.makeUsageStore(settings: settings)
+        let oldGuard = CodexAccountScopedRefreshGuard(
+            source: .liveSystem,
+            identity: .providerAccount(id: "acct-alpha"),
+            accountKey: "alpha@example.com",
+            authFingerprint: "old-token-material")
+        let newGuard = CodexAccountScopedRefreshGuard(
+            source: .liveSystem,
+            identity: .providerAccount(id: "acct-alpha"),
+            accountKey: "alpha@example.com",
+            authFingerprint: "new-token-material")
+
+        #expect(store.codexCreditsRefreshKey(expectedGuard: oldGuard) !=
+            store.codexCreditsRefreshKey(expectedGuard: newGuard))
+    }
+
+    @Test
+    func `same account token refresh fingerprint change keeps dashboard success`() async throws {
+        let settings = self.makeSettingsStore(
+            suite: "CodexAccountScopedRefreshTests-token-refresh-dashboard-success")
+        let codexMetadata = try #require(ProviderDescriptorRegistry.metadata[.codex])
+        settings.setProviderEnabled(provider: .codex, metadata: codexMetadata, enabled: true)
+        settings.refreshFrequency = .manual
+        settings.openAIWebAccessEnabled = true
+        settings.codexCookieSource = .auto
+        settings._test_liveSystemCodexAccount = ObservedSystemCodexAccount(
+            email: "alpha@example.com",
+            authFingerprint: "old-token-material",
+            codexHomePath: "/Users/test/.codex",
+            observedAt: Date(),
+            identity: .providerAccount(id: "acct-alpha"))
+        defer {
+            settings._test_liveSystemCodexAccount = nil
+        }
+
+        let store = self.makeUsageStore(settings: settings)
+        let expectedGuard = store.freshCodexOpenAIWebRefreshGuard()
+        store._test_openAIDashboardLoaderOverride = { _, _, _, _ in
+            settings._test_liveSystemCodexAccount = ObservedSystemCodexAccount(
+                email: "alpha@example.com",
+                authFingerprint: "new-token-material",
+                codexHomePath: "/Users/test/.codex",
+                observedAt: Date(),
+                identity: .providerAccount(id: "acct-alpha"))
+            return self.dashboard(email: "alpha@example.com", creditsRemaining: 64, usedPercent: 27)
+        }
+        defer { store._test_openAIDashboardLoaderOverride = nil }
+
+        await store.refreshOpenAIDashboardIfNeeded(force: true, expectedGuard: expectedGuard)
+
+        #expect(store.openAIDashboard?.creditsRemaining == 64)
+        #expect(store.openAIDashboard?.signedInEmail == "alpha@example.com")
+        #expect(store.lastOpenAIDashboardError == nil)
+        #expect(store.openAIDashboardRequiresLogin == false)
+    }
+
+    @Test
+    func `dashboard refresh key separates same account auth fingerprints`() async throws {
+        let settings = self.makeSettingsStore(
+            suite: "CodexAccountScopedRefreshTests-dashboard-key-auth-fingerprint")
+        let codexMetadata = try #require(ProviderDescriptorRegistry.metadata[.codex])
+        settings.setProviderEnabled(provider: .codex, metadata: codexMetadata, enabled: true)
+        settings.refreshFrequency = .manual
+        settings.openAIWebAccessEnabled = true
+        settings.codexCookieSource = .auto
+        settings._test_liveSystemCodexAccount = ObservedSystemCodexAccount(
+            email: "alpha@example.com",
+            authFingerprint: "old-token-material",
+            codexHomePath: "/Users/test/.codex",
+            observedAt: Date(),
+            identity: .providerAccount(id: "acct-alpha"))
+        defer {
+            settings._test_liveSystemCodexAccount = nil
+        }
+
+        let store = self.makeUsageStore(settings: settings)
+        let blocker = BlockingManagedOpenAIDashboardLoader()
+        store._test_openAIDashboardLoaderOverride = { _, _, _, _ in
+            try await blocker.awaitResult()
+        }
+        defer { store._test_openAIDashboardLoaderOverride = nil }
+
+        let oldGuard = store.freshCodexOpenAIWebRefreshGuard()
+        let oldRefreshTask = Task {
+            await store.refreshOpenAIDashboardIfNeeded(force: true, expectedGuard: oldGuard)
+        }
+        await blocker.waitUntilStarted(count: 1)
+
+        settings._test_liveSystemCodexAccount = ObservedSystemCodexAccount(
+            email: "alpha@example.com",
+            authFingerprint: "new-token-material",
+            codexHomePath: "/Users/test/.codex",
+            observedAt: Date(),
+            identity: .providerAccount(id: "acct-alpha"))
+        let newGuard = store.freshCodexOpenAIWebRefreshGuard()
+        let newRefreshTask = Task {
+            await store.refreshOpenAIDashboardIfNeeded(force: true, expectedGuard: newGuard)
+        }
+
+        let didStartFreshRefresh = await blocker.waitUntilStartedWithin(count: 2)
+        #expect(didStartFreshRefresh)
+        guard didStartFreshRefresh else {
+            await blocker.resumeNext(with: .failure(TestRefreshError(message: "stale dashboard failure")))
+            await oldRefreshTask.value
+            await newRefreshTask.value
+            return
+        }
+        await blocker.resumeNext(with: .failure(TestRefreshError(message: "old dashboard failure")))
+        await blocker.resumeNext(with: .success(self.dashboard(
+            email: "alpha@example.com",
+            creditsRemaining: 64,
+            usedPercent: 27)))
+        await oldRefreshTask.value
+        await newRefreshTask.value
+
+        #expect(store.openAIDashboard?.creditsRemaining == 64)
+        #expect(store.lastOpenAIDashboardError == nil)
+    }
+
+    @Test
+    func `same account token refresh fingerprint change discards dashboard failure`() async throws {
+        let settings = self.makeSettingsStore(
+            suite: "CodexAccountScopedRefreshTests-token-refresh-dashboard-failure")
+        let codexMetadata = try #require(ProviderDescriptorRegistry.metadata[.codex])
+        settings.setProviderEnabled(provider: .codex, metadata: codexMetadata, enabled: true)
+        settings.refreshFrequency = .manual
+        settings.openAIWebAccessEnabled = true
+        settings.codexCookieSource = .auto
+        settings._test_liveSystemCodexAccount = ObservedSystemCodexAccount(
+            email: "alpha@example.com",
+            authFingerprint: "old-token-material",
+            codexHomePath: "/Users/test/.codex",
+            observedAt: Date(),
+            identity: .providerAccount(id: "acct-alpha"))
+        defer {
+            settings._test_liveSystemCodexAccount = nil
+        }
+
+        let store = self.makeUsageStore(settings: settings)
+        let expectedGuard = store.freshCodexOpenAIWebRefreshGuard()
+        store._test_openAIDashboardLoaderOverride = { _, _, _, _ in
+            settings._test_liveSystemCodexAccount = ObservedSystemCodexAccount(
+                email: "alpha@example.com",
+                authFingerprint: "new-token-material",
+                codexHomePath: "/Users/test/.codex",
+                observedAt: Date(),
+                identity: .providerAccount(id: "acct-alpha"))
+            throw TestRefreshError(message: "old dashboard failure")
+        }
+        defer { store._test_openAIDashboardLoaderOverride = nil }
+
+        await store.refreshOpenAIDashboardIfNeeded(force: true, expectedGuard: expectedGuard)
+
+        #expect(store.openAIDashboard == nil)
+        #expect(store.lastOpenAIDashboardError == nil)
+        #expect(store.openAIDashboardRequiresLogin == false)
+    }
+
+    @Test
     func `stacked visible refresh discards selected failure after managed token fingerprint rotates`() async throws {
         let settings = self.makeSettingsStore(
             suite: "CodexAccountScopedRefreshTests-selected-managed-token-failure")
