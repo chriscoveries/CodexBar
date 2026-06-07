@@ -688,7 +688,7 @@ extension UsageStore {
         {
             snapshots.append(lastKnown)
         }
-        if self.codexCanUseHistoricalResetBackfill(for: account),
+        if account.id != activeVisibleAccountID || self.codexCanUseHistoricalResetBackfill(for: account),
            let history = self.codexPlanHistoryResetBackfillSnapshot(for: account)
         {
             snapshots.append(history)

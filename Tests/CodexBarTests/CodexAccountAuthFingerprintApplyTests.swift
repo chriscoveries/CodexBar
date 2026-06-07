@@ -1011,6 +1011,61 @@ extension CodexAccountScopedRefreshTests {
     }
 
     @Test
+    func `same provider account managed email change discards stale codex usage success`() async throws {
+        let settings = self.makeSettingsStore(
+            suite: "CodexAccountScopedRefreshTests-managed-provider-email-change")
+        settings.refreshFrequency = .manual
+
+        let accountID = try #require(UUID(uuidString: "DDDDDDDD-EEEE-FFFF-AAAA-161616161616"))
+        let managedHome = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-managed-provider-email-\(UUID().uuidString)", isDirectory: true)
+        try Self.writeCodexAuthFile(
+            homeURL: managedHome,
+            email: "old-managed@example.com",
+            plan: "Pro",
+            accountId: "acct-managed-shared")
+        let oldFingerprint = try #require(CodexAuthFingerprint.fingerprint(homePath: managedHome.path))
+        let managedAccount = ManagedCodexAccount(
+            id: accountID,
+            email: "old-managed@example.com",
+            providerAccountID: "acct-managed-shared",
+            workspaceLabel: "Managed Team",
+            workspaceAccountID: "acct-managed-shared",
+            authFingerprint: oldFingerprint,
+            managedHomePath: managedHome.path,
+            createdAt: 1,
+            updatedAt: 2,
+            lastAuthenticatedAt: 2)
+        let storeURL = try self.makeManagedAccountStoreURL(accounts: [managedAccount])
+        defer {
+            settings._test_managedCodexAccountStoreURL = nil
+            try? FileManager.default.removeItem(at: storeURL)
+            try? FileManager.default.removeItem(at: managedHome)
+        }
+        settings._test_managedCodexAccountStoreURL = storeURL
+        settings.codexActiveSource = .managedAccount(id: accountID)
+
+        let store = self.makeUsageStore(settings: settings)
+        let blocker = BlockingCodexFetchStrategy()
+        self.installBlockingCodexProvider(on: store, blocker: blocker)
+
+        let refreshTask = Task { await store.refreshProvider(.codex, allowDisabled: true) }
+        await blocker.waitUntilStarted()
+        try Self.writeCodexAuthFile(
+            homeURL: managedHome,
+            email: "new-managed@example.com",
+            plan: "Pro",
+            accountId: "acct-managed-shared")
+        let newFingerprint = try #require(CodexAuthFingerprint.fingerprint(homePath: managedHome.path))
+        #expect(newFingerprint != oldFingerprint)
+        await blocker.resume(with: .success(self.codexSnapshot(email: "old-managed@example.com", usedPercent: 25)))
+        await refreshTask.value
+
+        #expect(store.snapshots[.codex] == nil)
+        #expect(store.errors[.codex] == nil)
+    }
+
+    @Test
     func `same email email-only auth fingerprint switch discards stale codex usage success`() async {
         SettingsStore.codexAccountReconciliationSnapshotCacheIntervalOverrideForTesting = 60
         let settings = self.makeSettingsStore(

@@ -187,11 +187,18 @@ extension UsageStore {
         let canProveNilToCurrentAuth = expectedAuthFingerprint == nil && currentAuthFingerprint != nil
         let resultIdentity = CodexIdentityResolver.resolve(accountId: nil, email: usage.accountEmail(for: .codex))
         let resultAccountKey = Self.normalizeCodexAccountScopedKey(usage.accountEmail(for: .codex))
+        let resultMatchesCurrentAccountKey = Self.codexUsageResultAccountKeyMatchesCurrentGuard(
+            resultAccountKey,
+            currentGuard: currentGuard)
 
         if expectedGuard.identity != .unresolved {
             guard currentGuard.identity == expectedGuard.identity else { return false }
-            if fingerprintsAllowApply { return true }
+            if fingerprintsAllowApply {
+                guard case .managedAccount = currentGuard.source else { return true }
+                return resultMatchesCurrentAccountKey
+            }
             guard canProveNilToCurrentAuth else { return false }
+            guard resultMatchesCurrentAccountKey else { return false }
             return resultIdentity == currentGuard.identity ||
                 (resultAccountKey != nil && resultAccountKey == currentGuard.accountKey)
         }
@@ -393,6 +400,14 @@ extension UsageStore {
             return false
         }
         return self.codexGuardAuthFingerprintAllowsUsageApply(lhs, rhs)
+    }
+
+    private nonisolated static func codexUsageResultAccountKeyMatchesCurrentGuard(
+        _ resultAccountKey: String?,
+        currentGuard: CodexAccountScopedRefreshGuard) -> Bool
+    {
+        guard let currentAccountKey = currentGuard.accountKey else { return true }
+        return resultAccountKey == currentAccountKey
     }
 
     func currentCodexAuthFingerprint(source: CodexActiveSource) -> String? {
