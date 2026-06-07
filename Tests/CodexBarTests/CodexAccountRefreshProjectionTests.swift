@@ -154,4 +154,86 @@ extension CodexAccountScopedRefreshTests {
             $0.account.workspaceAccountID == "acct-managed-removed"
         })
     }
+
+    @Test
+    func `startup snapshot hydration refreshes managed auth fingerprint from disk`() throws {
+        let settings = self.makeSettingsStore(
+            suite: "CodexAccountScopedRefreshTests-startup-managed-auth-hydration")
+        settings.refreshFrequency = .manual
+        settings.multiAccountMenuLayout = .stacked
+
+        let accountID = try #require(UUID(uuidString: "DDDDDDDD-EEEE-FFFF-AAAA-222222222222"))
+        let managedHome = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-visible-managed-startup-\(UUID().uuidString)", isDirectory: true)
+        try Self.writeCodexAuthFile(
+            homeURL: managedHome,
+            email: "managed-startup@example.com",
+            plan: "Pro")
+        let oldFingerprint = try #require(CodexAuthFingerprint.fingerprint(homePath: managedHome.path))
+        let managedAccount = ManagedCodexAccount(
+            id: accountID,
+            email: "managed-startup@example.com",
+            authFingerprint: oldFingerprint,
+            managedHomePath: managedHome.path,
+            createdAt: 1,
+            updatedAt: 2,
+            lastAuthenticatedAt: 2)
+        let storeURL = try self.makeManagedAccountStoreURL(accounts: [managedAccount])
+        let snapshotURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-visible-managed-startup-\(UUID().uuidString).json")
+        defer {
+            settings._test_managedCodexAccountStoreURL = nil
+            try? FileManager.default.removeItem(at: storeURL)
+            try? FileManager.default.removeItem(at: snapshotURL)
+            try? FileManager.default.removeItem(at: managedHome)
+        }
+        settings._test_managedCodexAccountStoreURL = storeURL
+        settings.codexActiveSource = .managedAccount(id: accountID)
+
+        let staleAccount = try #require(settings.codexVisibleAccountProjection.visibleAccounts
+            .first { $0.storedAccountID == accountID })
+        #expect(staleAccount.authFingerprint == oldFingerprint)
+
+        try Self.writeCodexAuthFile(
+            homeURL: managedHome,
+            email: "managed-startup@example.com",
+            plan: "Team")
+        let newFingerprint = try #require(CodexAuthFingerprint.fingerprint(homePath: managedHome.path))
+        #expect(newFingerprint != oldFingerprint)
+
+        let freshAccount = CodexVisibleAccount(
+            id: staleAccount.id,
+            email: staleAccount.email,
+            workspaceLabel: staleAccount.workspaceLabel,
+            workspaceAccountID: staleAccount.workspaceAccountID,
+            authFingerprint: newFingerprint,
+            storedAccountID: staleAccount.storedAccountID,
+            selectionSource: staleAccount.selectionSource,
+            isActive: staleAccount.isActive,
+            isLive: staleAccount.isLive,
+            canReauthenticate: staleAccount.canReauthenticate,
+            canRemove: staleAccount.canRemove)
+        let snapshotStore = FileCodexAccountUsageSnapshotStore(fileURL: snapshotURL)
+        snapshotStore.store([
+            CodexAccountUsageSnapshot(
+                account: freshAccount,
+                snapshot: self.codexSnapshot(email: freshAccount.email, usedPercent: 64),
+                error: nil,
+                sourceLabel: "cached"),
+        ])
+        #expect(snapshotStore.load(for: [staleAccount]).isEmpty)
+
+        let store = UsageStore(
+            fetcher: UsageFetcher(environment: [:]),
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings,
+            codexAccountUsageSnapshotStore: snapshotStore,
+            startupBehavior: .testing)
+
+        let hydrated = try #require(store.codexAccountSnapshots.first)
+        #expect(store.codexAccountSnapshots.count == 1)
+        #expect(hydrated.id == freshAccount.id)
+        #expect(hydrated.account.authFingerprint == newFingerprint)
+        #expect(hydrated.snapshot?.primary?.usedPercent == 64)
+    }
 }

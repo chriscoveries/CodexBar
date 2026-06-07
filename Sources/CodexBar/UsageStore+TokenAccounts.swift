@@ -55,6 +55,10 @@ extension UsageStore {
     private static let codexSessionWindowMinutes = 5 * 60
     private static let codexWeeklyWindowMinutes = 7 * 24 * 60
 
+    func freshCodexVisibleAccountsForSnapshotHydration() -> [CodexVisibleAccount] {
+        self.freshCodexVisibleAccountProjectionForAccountRefresh().visibleAccounts
+    }
+
     func tokenAccounts(for provider: UsageProvider) -> [ProviderTokenAccount] {
         guard TokenAccountSupportCatalog.support(for: provider) != nil else { return [] }
         return self.settings.tokenAccounts(for: provider)

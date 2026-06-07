@@ -313,7 +313,7 @@ final class UsageStore {
         self.weeklyLimitResetDetectorStates = Self.loadWeeklyLimitResetDetectorStates(from: settings.userDefaults)
         if let codexAccountUsageSnapshotStore = self.codexAccountUsageSnapshotStore {
             self.codexAccountSnapshots = codexAccountUsageSnapshotStore.load(
-                for: settings.codexVisibleAccountProjection.visibleAccounts)
+                for: self.freshCodexVisibleAccountsForSnapshotHydration())
         }
         self.logStartupState()
         self.bindSettings()
