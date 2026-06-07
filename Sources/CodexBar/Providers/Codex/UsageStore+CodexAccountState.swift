@@ -298,6 +298,29 @@ extension UsageStore {
                 allowLastKnownLiveFallback: false)) == normalizedRoutingTargetEmail
     }
 
+    func shouldApplyOpenAIDashboardPolicyResult(
+        expectedGuard: CodexAccountScopedRefreshGuard,
+        routingTargetEmail: String?) -> Bool
+    {
+        let normalizedRoutingTargetEmail = CodexIdentityResolver.normalizeEmail(routingTargetEmail)
+        let currentGuard = self.freshCodexOpenAIWebRefreshGuard()
+        guard currentGuard.source == expectedGuard.source else { return false }
+
+        if expectedGuard.identity != .unresolved {
+            guard currentGuard.identity == expectedGuard.identity else { return false }
+            return Self.codexGuardAuthFingerprintMatches(currentGuard, expectedGuard) ||
+                Self.codexGuardAuthFingerprintAllowsSameProviderAccount(currentGuard, expectedGuard)
+        }
+
+        guard case .liveSystem = expectedGuard.source else { return false }
+        guard currentGuard.identity == .unresolved else { return false }
+        guard Self.codexGuardAuthFingerprintMatches(currentGuard, expectedGuard) else { return false }
+        return CodexIdentityResolver.normalizeEmail(
+            self.currentCodexOpenAIWebTargetEmail(
+                allowCurrentSnapshotFallback: true,
+                allowLastKnownLiveFallback: false)) == normalizedRoutingTargetEmail
+    }
+
     func codexDashboardKnownOwnerCandidates() -> [CodexDashboardKnownOwnerCandidate] {
         CodexKnownOwnerCatalog.candidates(from: self.settings.codexAccountReconciliationSnapshot)
     }
@@ -389,6 +412,17 @@ extension UsageStore {
         guard case .providerAccount = rhs.identity, lhs.identity == rhs.identity else { return false }
         guard case .liveSystem = lhs.source else { return true }
         return lhs.accountKey != nil && lhs.accountKey == rhs.accountKey
+    }
+
+    private nonisolated static func codexGuardAuthFingerprintAllowsSameProviderAccount(
+        _ lhs: CodexAccountScopedRefreshGuard,
+        _ rhs: CodexAccountScopedRefreshGuard) -> Bool
+    {
+        let lhsFingerprint = CodexAuthFingerprint.normalize(lhs.authFingerprint)
+        let rhsFingerprint = CodexAuthFingerprint.normalize(rhs.authFingerprint)
+        guard lhsFingerprint != nil, rhsFingerprint != nil else { return false }
+        guard case .providerAccount = rhs.identity else { return false }
+        return lhs.identity == rhs.identity
     }
 
     nonisolated static func codexScopedRefreshGuardsMatchAccount(

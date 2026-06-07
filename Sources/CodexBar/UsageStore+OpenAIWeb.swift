@@ -132,7 +132,7 @@ extension UsageStore {
                     expectedGuard: expectedGuard,
                     routingTargetEmail: targetEmail)
             case .displayOnly, .failClosed:
-                self.shouldApplyOpenAIDashboardRefreshGuard(
+                self.shouldApplyOpenAIDashboardPolicyResult(
                     expectedGuard: expectedGuard,
                     routingTargetEmail: targetEmail)
             }

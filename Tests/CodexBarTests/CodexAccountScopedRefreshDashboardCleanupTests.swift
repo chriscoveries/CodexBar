@@ -205,4 +205,69 @@ extension CodexAccountScopedRefreshTests {
         #expect(store.openAIDashboardRequiresLogin == true)
         #expect(store.lastOpenAIDashboardError?.contains("OpenAI dashboard signed in as other@example.com") == true)
     }
+
+    @Test
+    func `dashboard fail closed cleanup applies after same live account email changes during token rotation`() async {
+        OpenAIDashboardCacheStore.clear()
+        defer { OpenAIDashboardCacheStore.clear() }
+
+        let settings = self.makeSettingsStore(
+            suite: "CodexAccountScopedRefreshTests-dashboard-fail-closed-live-email-rotation-cleanup")
+        settings.refreshFrequency = .manual
+        settings.codexCookieSource = .auto
+        settings.codexActiveSource = .liveSystem
+        settings._test_liveSystemCodexAccount = ObservedSystemCodexAccount(
+            email: "alpha@example.com",
+            authFingerprint: "old-token-material",
+            codexHomePath: "/Users/test/.codex",
+            observedAt: Date(),
+            identity: .providerAccount(id: "acct-alpha"))
+        defer {
+            settings._test_liveSystemCodexAccount = nil
+        }
+
+        let store = self.makeUsageStore(settings: settings)
+        let expectedGuard = store.freshCodexOpenAIWebRefreshGuard()
+        #expect(expectedGuard.accountKey == "alpha@example.com")
+        #expect(expectedGuard.authFingerprint == "old-token-material")
+        store._setSnapshotForTesting(
+            self.codexSnapshot(email: "alpha@example.com", usedPercent: 20),
+            provider: .codex)
+        store.lastSourceLabels[.codex] = "openai-web"
+        let staleCredits = self.credits(remaining: 20)
+        store.credits = staleCredits
+        store.lastCreditsSnapshot = staleCredits
+        store.lastCreditsSnapshotAccountKey = "alpha@example.com"
+        store.lastCreditsSource = .dashboardWeb
+        store.openAIDashboard = self.dashboard(email: "alpha@example.com", creditsRemaining: 20, usedPercent: 20)
+        store.lastOpenAIDashboardSnapshot = store.openAIDashboard
+        OpenAIDashboardCacheStore.save(OpenAIDashboardCache(
+            accountEmail: "alpha@example.com",
+            snapshot: self.dashboard(email: "alpha@example.com", creditsRemaining: 20, usedPercent: 20)))
+
+        settings._test_liveSystemCodexAccount = ObservedSystemCodexAccount(
+            email: "beta@example.com",
+            authFingerprint: "new-token-material",
+            codexHomePath: "/Users/test/.codex",
+            observedAt: Date(),
+            identity: .providerAccount(id: "acct-alpha"))
+        let currentGuard = store.freshCodexOpenAIWebRefreshGuard()
+        #expect(currentGuard.identity == expectedGuard.identity)
+        #expect(currentGuard.accountKey == "beta@example.com")
+        #expect(currentGuard.authFingerprint == "new-token-material")
+
+        await store.applyOpenAIDashboard(
+            self.dashboard(email: "alpha@example.com", creditsRemaining: 9, usedPercent: 35),
+            targetEmail: "alpha@example.com",
+            expectedGuard: expectedGuard)
+
+        #expect(store.openAIDashboard == nil)
+        #expect(store.lastOpenAIDashboardSnapshot == nil)
+        #expect(store.snapshots[.codex] == nil)
+        #expect(store.credits == nil)
+        #expect(store.lastCreditsSource == .none)
+        #expect(OpenAIDashboardCacheStore.load() == nil)
+        #expect(store.openAIDashboardRequiresLogin == true)
+        #expect(store.lastOpenAIDashboardError?.contains("OpenAI dashboard signed in as alpha@example.com") == true)
+    }
 }
