@@ -66,8 +66,9 @@ extension UsageStore {
     }
 
     func shouldFetchAllCodexVisibleAccounts() -> Bool {
-        self.settings.multiAccountMenuLayout == .stacked &&
-            self.settings.codexVisibleAccountProjection.visibleAccounts.count > 1
+        let projection = self.freshCodexVisibleAccountProjectionForAccountRefresh()
+        return self.settings.multiAccountMenuLayout == .stacked &&
+            projection.visibleAccounts.count > 1
     }
 
     func refreshCodexVisibleAccountsForMenu() async {
