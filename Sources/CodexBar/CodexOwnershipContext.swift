@@ -68,7 +68,8 @@ extension UsageStore {
             currentWeeklyResetAt: currentWeeklyResetAt,
             hasAdjacentMultiAccountVeto: self.codexHasAdjacentMultiAccountVeto(),
             hasAdjacentEmailScopeAmbiguity: normalizedEmail.map {
-                self.codexHasAdjacentEmailScopeAmbiguity(normalizedEmail: $0)
+                self.codexHasAdjacentEmailScopeAmbiguity(normalizedEmail: $0) ||
+                    self.codexVisibleAccountsHaveAdjacentEmailScopeAmbiguity(normalizedEmail: $0)
             } ?? false)
     }
 

@@ -560,7 +560,7 @@ extension UsageStore {
             case .managedAccount:
                 return true
             case .liveSystem:
-                break
+                return prior.id == account.id
             }
         }
 

@@ -155,6 +155,168 @@ extension CodexAccountScopedRefreshTests {
     }
 
     @Test
+    func `materializes provider account email history when sibling visible account uses another email`() throws {
+        let settings = self.makeSettingsStore(
+            suite: "CodexAccountVisibleHistoryBackfillTests-different-email-materialize")
+        settings.multiAccountMenuLayout = .stacked
+        let targetID = try #require(UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-121212121212"))
+        let siblingID = try #require(UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-343434343434"))
+        let targetAccount = ManagedCodexAccount(
+            id: targetID,
+            email: "materialize-stack@example.com",
+            providerAccountID: "acct-materialize-stack",
+            workspaceLabel: "Target Team",
+            workspaceAccountID: "acct-materialize-stack",
+            managedHomePath: "/tmp/materialize-stack-target",
+            createdAt: 1,
+            updatedAt: 2,
+            lastAuthenticatedAt: 2)
+        let siblingAccount = ManagedCodexAccount(
+            id: siblingID,
+            email: "other-stack@example.com",
+            providerAccountID: "acct-materialize-other",
+            workspaceLabel: "Other Team",
+            workspaceAccountID: "acct-materialize-other",
+            managedHomePath: "/tmp/materialize-stack-other",
+            createdAt: 1,
+            updatedAt: 2,
+            lastAuthenticatedAt: 2)
+        let storeURL = try self.makeManagedAccountStoreURL(accounts: [targetAccount, siblingAccount])
+        defer {
+            settings._test_managedCodexAccountStoreURL = nil
+            try? FileManager.default.removeItem(at: storeURL)
+        }
+        settings._test_managedCodexAccountStoreURL = storeURL
+        settings.codexActiveSource = .managedAccount(id: targetID)
+        let store = self.makeUsageStore(settings: settings)
+        let visibleAccount = try #require(settings.codexVisibleAccountProjection.visibleAccounts.first {
+            $0.workspaceAccountID == "acct-materialize-stack"
+        })
+        let providerHistoryKey = try #require(CodexHistoryOwnership.canonicalKey(for: .providerAccount(
+            id: "acct-materialize-stack")))
+        let emailHistoryKey = CodexHistoryOwnership.canonicalEmailHashKey(for: "materialize-stack@example.com")
+        let legacyEmailHistoryKey = UsageStore._codexLegacyPlanUtilizationEmailHashKeyForTesting(
+            normalizedEmail: "materialize-stack@example.com")
+        let session = planSeries(name: .session, windowMinutes: 300, entries: [
+            planEntry(at: Date(timeIntervalSince1970: 1_800_000_000), usedPercent: 1),
+        ])
+        let weekly = planSeries(name: .weekly, windowMinutes: 10080, entries: [
+            planEntry(at: Date(timeIntervalSince1970: 1_800_086_400), usedPercent: 13),
+        ])
+        store.planUtilizationHistory[.codex] = PlanUtilizationHistoryBuckets(accounts: [
+            emailHistoryKey: [session],
+            legacyEmailHistoryKey: [weekly],
+        ])
+
+        let histories = store.codexPlanUtilizationHistories(forVisibleAccount: visibleAccount)
+
+        #expect(histories == [session, weekly])
+        #expect(store.planUtilizationHistory[.codex]?.accounts[providerHistoryKey] == [session, weekly])
+        #expect(store.planUtilizationHistory[.codex]?.accounts[emailHistoryKey] == nil)
+        #expect(store.planUtilizationHistory[.codex]?.accounts[legacyEmailHistoryKey] == nil)
+    }
+
+    @Test
+    func `selected codex refresh keeps ambiguous same email history out of provider account`() async throws {
+        let settings = self.makeSettingsStore(
+            suite: "CodexAccountVisibleHistoryBackfillTests-selected-ambiguous-history")
+        settings.refreshFrequency = .manual
+        settings.multiAccountMenuLayout = .stacked
+
+        let targetID = try #require(UUID(uuidString: "CCCCCCCC-DDDD-EEEE-FFFF-111111111111"))
+        let siblingID = try #require(UUID(uuidString: "CCCCCCCC-DDDD-EEEE-FFFF-222222222222"))
+        let targetHome = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-selected-history-target-\(UUID().uuidString)", isDirectory: true)
+        let siblingHome = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-selected-history-sibling-\(UUID().uuidString)", isDirectory: true)
+        try Self.writeCodexAuthFile(
+            homeURL: targetHome,
+            email: "selected-shared@example.com",
+            plan: "pro",
+            accountId: "acct-selected-target")
+        try Self.writeCodexAuthFile(
+            homeURL: siblingHome,
+            email: "selected-shared@example.com",
+            plan: "pro",
+            accountId: "acct-selected-sibling")
+        let targetAccount = ManagedCodexAccount(
+            id: targetID,
+            email: "selected-shared@example.com",
+            providerAccountID: "acct-selected-target",
+            workspaceLabel: "Target Team",
+            workspaceAccountID: "acct-selected-target",
+            managedHomePath: targetHome.path,
+            createdAt: 1,
+            updatedAt: 2,
+            lastAuthenticatedAt: 2)
+        let siblingAccount = ManagedCodexAccount(
+            id: siblingID,
+            email: "selected-shared@example.com",
+            providerAccountID: "acct-selected-sibling",
+            workspaceLabel: "Sibling Team",
+            workspaceAccountID: "acct-selected-sibling",
+            managedHomePath: siblingHome.path,
+            createdAt: 1,
+            updatedAt: 2,
+            lastAuthenticatedAt: 2)
+        let storeURL = try self.makeManagedAccountStoreURL(accounts: [targetAccount, siblingAccount])
+        defer {
+            settings._test_managedCodexAccountStoreURL = nil
+            try? FileManager.default.removeItem(at: storeURL)
+            try? FileManager.default.removeItem(at: targetHome)
+            try? FileManager.default.removeItem(at: siblingHome)
+        }
+        settings._test_managedCodexAccountStoreURL = storeURL
+        settings.codexActiveSource = .managedAccount(id: targetID)
+
+        let store = self.makeUsageStore(settings: settings)
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let providerHistoryKey = try #require(CodexHistoryOwnership.canonicalKey(for: .providerAccount(
+            id: "acct-selected-target")))
+        let emailHistoryKey = CodexHistoryOwnership.canonicalEmailHashKey(for: "selected-shared@example.com")
+        let legacyEmailHistoryKey = UsageStore._codexLegacyPlanUtilizationEmailHashKeyForTesting(
+            normalizedEmail: "selected-shared@example.com")
+        let staleSession = planSeries(name: .session, windowMinutes: 300, entries: [
+            planEntry(at: now.addingTimeInterval(-2 * 60 * 60), usedPercent: 12),
+        ])
+        let staleWeekly = planSeries(name: .weekly, windowMinutes: 10080, entries: [
+            planEntry(at: now.addingTimeInterval(-2 * 60 * 60), usedPercent: 24),
+        ])
+        store.planUtilizationHistory[.codex] = PlanUtilizationHistoryBuckets(accounts: [
+            emailHistoryKey: [staleSession],
+            legacyEmailHistoryKey: [staleWeekly],
+        ])
+        let currentSnapshot = UsageSnapshot(
+            primary: RateWindow(
+                usedPercent: 4,
+                windowMinutes: 300,
+                resetsAt: now.addingTimeInterval(3 * 60 * 60),
+                resetDescription: nil),
+            secondary: RateWindow(
+                usedPercent: 6,
+                windowMinutes: 10080,
+                resetsAt: now.addingTimeInterval(3 * 24 * 60 * 60),
+                resetDescription: nil),
+            updatedAt: now,
+            identity: ProviderIdentitySnapshot(
+                providerID: .codex,
+                accountEmail: "selected-shared@example.com",
+                accountOrganization: nil,
+                loginMethod: "Target Team"))
+
+        await store.recordPlanUtilizationHistorySample(
+            provider: .codex,
+            snapshot: currentSnapshot,
+            now: now)
+
+        let buckets = try #require(store.planUtilizationHistory[.codex])
+        let providerHistory = try #require(buckets.accounts[providerHistoryKey])
+        #expect(providerHistory.flatMap(\.entries).allSatisfy { $0.capturedAt == now })
+        #expect(buckets.accounts[emailHistoryKey] == [staleSession])
+        #expect(buckets.accounts[legacyEmailHistoryKey] == [staleWeekly])
+    }
+
+    @Test
     func `ignores active reset cache from another visible codex workspace`() async throws {
         let settings = self.makeSettingsStore(
             suite: "CodexAccountVisibleHistoryBackfillTests-stale-active-cache")
@@ -583,5 +745,91 @@ extension CodexAccountScopedRefreshTests {
         #expect(targetSnapshot.primary?.resetsAt == nil)
         #expect(targetSnapshot.secondary == nil)
         #expect(store.planUtilizationHistory[.codex]?.histories(for: emailHistoryKey).isEmpty == false)
+    }
+
+    @Test
+    func `backfills live codex row from same id prior snapshot`() async throws {
+        let settings = self.makeSettingsStore(
+            suite: "CodexAccountVisibleHistoryBackfillTests-live-prior")
+        settings.refreshFrequency = .manual
+        settings.multiAccountMenuLayout = .stacked
+
+        let managedID = try #require(UUID(uuidString: "DDDDDDDD-EEEE-FFFF-AAAA-111111111111"))
+        let liveHome = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-visible-live-prior-\(UUID().uuidString)", isDirectory: true)
+        let managedHome = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-visible-live-prior-managed-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: liveHome, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: managedHome, withIntermediateDirectories: true)
+        settings._test_liveSystemCodexAccount = ObservedSystemCodexAccount(
+            email: "live-prior@example.com",
+            codexHomePath: liveHome.path,
+            observedAt: Date(),
+            identity: .emailOnly(normalizedEmail: "live-prior@example.com"))
+        let managedAccount = ManagedCodexAccount(
+            id: managedID,
+            email: "managed-prior@example.com",
+            providerAccountID: "acct-managed-prior",
+            workspaceLabel: "Managed Team",
+            workspaceAccountID: "acct-managed-prior",
+            managedHomePath: managedHome.path,
+            createdAt: 1,
+            updatedAt: 2,
+            lastAuthenticatedAt: 2)
+        let storeURL = try self.makeManagedAccountStoreURL(accounts: [managedAccount])
+        defer {
+            settings._test_managedCodexAccountStoreURL = nil
+            settings._test_liveSystemCodexAccount = nil
+            try? FileManager.default.removeItem(at: storeURL)
+            try? FileManager.default.removeItem(at: liveHome)
+            try? FileManager.default.removeItem(at: managedHome)
+        }
+        settings._test_managedCodexAccountStoreURL = storeURL
+        settings.codexActiveSource = .managedAccount(id: managedID)
+
+        let now = Date()
+        let priorReset = now.addingTimeInterval(2 * 60 * 60)
+        let priorSnapshots = settings.codexVisibleAccountProjection.visibleAccounts.map { account in
+            CodexAccountUsageSnapshot(
+                account: account,
+                snapshot: account.selectionSource == .liveSystem
+                    ? UsageSnapshot(
+                        primary: RateWindow(
+                            usedPercent: 18,
+                            windowMinutes: 300,
+                            resetsAt: priorReset,
+                            resetDescription: nil),
+                        secondary: nil,
+                        updatedAt: now.addingTimeInterval(-60))
+                    : nil,
+                error: nil,
+                sourceLabel: "cached")
+        }
+        let snapshotStore = RecordingCodexAccountUsageSnapshotStore(initialSnapshots: priorSnapshots)
+        let store = UsageStore(
+            fetcher: UsageFetcher(environment: [:]),
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings,
+            codexAccountUsageSnapshotStore: snapshotStore,
+            startupBehavior: .testing)
+        self.installContextualCodexProvider(on: store) { _ in
+            UsageSnapshot(
+                primary: RateWindow(
+                    usedPercent: 9,
+                    windowMinutes: 0,
+                    resetsAt: nil,
+                    resetDescription: nil),
+                secondary: nil,
+                updatedAt: now)
+        }
+
+        await store.refreshCodexVisibleAccountsForMenu()
+
+        let liveSnapshot = try #require(store.codexAccountSnapshots.first {
+            $0.account.selectionSource == .liveSystem
+        }?.snapshot)
+        #expect(liveSnapshot.primary?.usedPercent == 9)
+        #expect(liveSnapshot.primary?.windowMinutes == 300)
+        #expect(liveSnapshot.primary?.resetsAt == priorReset)
     }
 }
