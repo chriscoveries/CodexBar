@@ -177,20 +177,35 @@ extension UsageStore {
     {
         let currentGuard = self.freshCodexAccountScopedRefreshGuard()
         guard currentGuard.source == expectedGuard.source else { return false }
-        guard Self.codexGuardAuthFingerprintAllowsUsageApply(currentGuard, expectedGuard) else { return false }
+        let fingerprintsAllowApply = Self.codexGuardAuthFingerprintAllowsUsageApply(
+            currentGuard,
+            expectedGuard)
+        let expectedAuthFingerprint = CodexAuthFingerprint.normalize(expectedGuard.authFingerprint)
+        let currentAuthFingerprint = CodexAuthFingerprint.normalize(currentGuard.authFingerprint)
+        let canProveNilToCurrentAuth = expectedAuthFingerprint == nil && currentAuthFingerprint != nil
+        let resultIdentity = CodexIdentityResolver.resolve(accountId: nil, email: usage.accountEmail(for: .codex))
+        let resultAccountKey = Self.normalizeCodexAccountScopedKey(usage.accountEmail(for: .codex))
 
         if expectedGuard.identity != .unresolved {
-            return currentGuard.identity == expectedGuard.identity
+            guard currentGuard.identity == expectedGuard.identity else { return false }
+            if fingerprintsAllowApply { return true }
+            guard canProveNilToCurrentAuth else { return false }
+            return resultIdentity == currentGuard.identity ||
+                (resultAccountKey != nil && resultAccountKey == currentGuard.accountKey)
         }
 
-        let resultIdentity = CodexIdentityResolver.resolve(accountId: nil, email: usage.accountEmail(for: .codex))
         if currentGuard.identity != .unresolved {
-            return resultIdentity == currentGuard.identity
+            guard resultIdentity == currentGuard.identity else { return false }
+            return fingerprintsAllowApply || canProveNilToCurrentAuth
         }
 
         switch currentGuard.source {
         case .liveSystem:
-            return resultIdentity != .unresolved
+            guard resultIdentity != .unresolved else { return false }
+            if fingerprintsAllowApply { return true }
+            guard canProveNilToCurrentAuth else { return false }
+            guard let currentAccountKey = currentGuard.accountKey else { return true }
+            return resultAccountKey == currentAccountKey
         case .managedAccount:
             return false
         }

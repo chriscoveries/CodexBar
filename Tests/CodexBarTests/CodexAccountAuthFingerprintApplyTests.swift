@@ -48,6 +48,35 @@ extension CodexAccountScopedRefreshTests {
     }
 
     @Test
+    func `usage success applies when auth fingerprint appears after refresh starts`() {
+        let settings = self.makeSettingsStore(
+            suite: "CodexAccountScopedRefreshTests-auth-fingerprint-appears")
+        defer {
+            settings._test_liveSystemCodexAccount = nil
+        }
+        settings.refreshFrequency = .manual
+        settings._test_liveSystemCodexAccount = ObservedSystemCodexAccount(
+            email: "alpha@example.com",
+            authFingerprint: nil,
+            codexHomePath: "/Users/test/.codex",
+            observedAt: Date(),
+            identity: .emailOnly(normalizedEmail: "alpha@example.com"))
+        let store = self.makeUsageStore(settings: settings)
+        let expectedGuard = store.freshCodexAccountScopedRefreshGuard()
+
+        settings._test_liveSystemCodexAccount = ObservedSystemCodexAccount(
+            email: "alpha@example.com",
+            authFingerprint: "new-token-material",
+            codexHomePath: "/Users/test/.codex",
+            observedAt: Date(),
+            identity: .emailOnly(normalizedEmail: "alpha@example.com"))
+
+        #expect(store.shouldApplyCodexUsageResult(
+            expectedGuard: expectedGuard,
+            usage: self.codexSnapshot(email: "alpha@example.com", usedPercent: 25)))
+    }
+
+    @Test
     func `same account token refresh fingerprint change discards codex usage failure`() async {
         SettingsStore.codexAccountReconciliationSnapshotCacheIntervalOverrideForTesting = 60
         let settings = self.makeSettingsStore(
@@ -281,6 +310,44 @@ extension CodexAccountScopedRefreshTests {
         defer { store._test_openAIDashboardLoaderOverride = nil }
 
         await store.refreshOpenAIDashboardIfNeeded(force: true, expectedGuard: expectedGuard)
+
+        #expect(store.openAIDashboard == nil)
+        #expect(store.lastOpenAIDashboardError == nil)
+        #expect(store.openAIDashboardRequiresLogin == false)
+    }
+
+    @Test
+    func `same account token refresh fingerprint change discards dashboard policy failure`() async throws {
+        let settings = self.makeSettingsStore(
+            suite: "CodexAccountScopedRefreshTests-token-refresh-dashboard-policy-failure")
+        let codexMetadata = try #require(ProviderDescriptorRegistry.metadata[.codex])
+        settings.setProviderEnabled(provider: .codex, metadata: codexMetadata, enabled: true)
+        settings.refreshFrequency = .manual
+        settings.openAIWebAccessEnabled = true
+        settings.codexCookieSource = .auto
+        settings._test_liveSystemCodexAccount = ObservedSystemCodexAccount(
+            email: "alpha@example.com",
+            authFingerprint: "old-token-material",
+            codexHomePath: "/Users/test/.codex",
+            observedAt: Date(),
+            identity: .providerAccount(id: "acct-alpha"))
+        defer {
+            settings._test_liveSystemCodexAccount = nil
+        }
+
+        let store = self.makeUsageStore(settings: settings)
+        let expectedGuard = store.freshCodexOpenAIWebRefreshGuard()
+        settings._test_liveSystemCodexAccount = ObservedSystemCodexAccount(
+            email: "alpha@example.com",
+            authFingerprint: "new-token-material",
+            codexHomePath: "/Users/test/.codex",
+            observedAt: Date(),
+            identity: .providerAccount(id: "acct-alpha"))
+
+        await store.applyOpenAIDashboard(
+            self.dashboard(email: "other@example.com", creditsRemaining: 64, usedPercent: 27),
+            targetEmail: "alpha@example.com",
+            expectedGuard: expectedGuard)
 
         #expect(store.openAIDashboard == nil)
         #expect(store.lastOpenAIDashboardError == nil)

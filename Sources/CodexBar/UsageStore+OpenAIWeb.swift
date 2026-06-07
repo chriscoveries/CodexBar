@@ -120,18 +120,24 @@ extension UsageStore {
         allowCodexUsageBackfill: Bool = true) async
     {
         guard self.shouldApplyOpenAIDashboardRefreshTask(token: refreshTaskToken) else { return }
-        if let expectedGuard,
-           !self.shouldApplyOpenAIDashboardRefreshGuard(
-               expectedGuard: expectedGuard,
-               routingTargetEmail: targetEmail)
-        {
-            return
-        }
-
         let authority = self.evaluateCodexDashboardAuthority(
             dashboard: dash,
             sourceKind: .liveWeb,
             routingTargetEmail: targetEmail)
+        if let expectedGuard {
+            let shouldApply = switch authority.decision.disposition {
+            case .attach:
+                self.shouldApplyOpenAIDashboardRefreshGuard(
+                    expectedGuard: expectedGuard,
+                    routingTargetEmail: targetEmail)
+            case .displayOnly, .failClosed:
+                self.shouldApplyOpenAIWebNonSuccessResult(
+                    expectedGuard: expectedGuard,
+                    routingTargetEmail: targetEmail)
+            }
+            guard shouldApply else { return }
+        }
+
         let attachedAccountEmail = self.codexDashboardAttachmentEmail(from: authority.input)
 
         await self.applyOpenAIDashboardAuthorityDecision(
