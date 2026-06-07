@@ -53,6 +53,35 @@ extension UsageStore {
         return providerBuckets.histories(for: accountKey)
     }
 
+    func codexPlanUtilizationHistories(forVisibleAccount account: CodexVisibleAccount)
+        -> [PlanUtilizationSeriesHistory]
+    {
+        var providerBuckets = self.planUtilizationHistory[.codex] ?? PlanUtilizationHistoryBuckets()
+        let originalProviderBuckets = providerBuckets
+        let ownership = self.codexOwnershipContext(forVisibleAccount: account)
+        guard let canonicalKey = ownership.canonicalKey else { return [] }
+
+        if canonicalKey == ownership.canonicalEmailHashKey,
+           ownership.hasAdjacentMultiAccountVeto
+        {
+            return []
+        }
+
+        let accountKey = self.materializeCodexPlanUtilizationHistoryIfNeeded(
+            into: canonicalKey,
+            ownership: ownership,
+            shouldAdoptUnscopedHistory: true,
+            providerBuckets: &providerBuckets)
+        self.planUtilizationHistory[.codex] = providerBuckets
+        if providerBuckets != originalProviderBuckets {
+            let snapshotToPersist = self.planUtilizationHistory
+            Task {
+                await self.planUtilizationPersistenceCoordinator.enqueue(snapshotToPersist)
+            }
+        }
+        return providerBuckets.histories(for: accountKey)
+    }
+
     func shouldShowRefreshingMenuCard(for provider: UsageProvider) -> Bool {
         let isRefreshing = self.isRefreshing || self.refreshingProviders.contains(provider)
         return isRefreshing

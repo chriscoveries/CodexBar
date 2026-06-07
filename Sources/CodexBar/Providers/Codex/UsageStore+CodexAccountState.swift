@@ -72,6 +72,7 @@ extension UsageStore {
         self.failureGates[.codex]?.reset()
         self.lastKnownSessionRemaining.removeValue(forKey: .codex)
         self.lastKnownSessionWindowSource.removeValue(forKey: .codex)
+        self.lastKnownResetSnapshots.removeValue(forKey: .codex)
 
         self.credits = nil
         self.lastCreditsError = nil

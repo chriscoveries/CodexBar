@@ -28,6 +28,22 @@ final class ResetTimeBackfillTests: XCTestCase {
         XCTAssertEqual(result.nextRegenPercent, 4)
     }
 
+    func test_backfillsZeroWindowDurationFromCachedWindow() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let reset = now.addingTimeInterval(3600)
+        let cached = RateWindow(
+            usedPercent: 50,
+            windowMinutes: 300,
+            resetsAt: reset,
+            resetDescription: nil)
+        let fresh = RateWindow(usedPercent: 62, windowMinutes: 0, resetsAt: nil, resetDescription: nil)
+
+        let result = fresh.backfillingResetTime(from: cached, now: now)
+
+        XCTAssertEqual(result.windowMinutes, 300)
+        XCTAssertEqual(result.resetsAt, reset)
+    }
+
     func test_skipsExpiredCachedReset() {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let cached = RateWindow(

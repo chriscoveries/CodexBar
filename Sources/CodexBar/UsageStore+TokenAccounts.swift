@@ -47,6 +47,8 @@ private struct CodexAccountFetchResult {
 
 extension UsageStore {
     static let tokenAccountMenuSnapshotLimit = 6
+    private static let codexSessionWindowMinutes = 5 * 60
+    private static let codexWeeklyWindowMinutes = 7 * 24 * 60
 
     func tokenAccounts(for provider: UsageProvider) -> [ProviderTokenAccount] {
         guard TokenAccountSupportCatalog.support(for: provider) != nil else { return [] }
@@ -96,7 +98,11 @@ extension UsageStore {
             let resolved = self.resolveCodexAccountOutcome(
                 outcome,
                 account: account,
-                priorSnapshot: priorByAccountID[account.id])
+                priorSnapshot: priorByAccountID[account.id],
+                resetBackfillSnapshots: self.codexResetBackfillSnapshots(
+                    for: account,
+                    priorSnapshot: priorByAccountID[account.id],
+                    activeVisibleAccountID: originalVisibleAccountID))
             if let snapshot = resolved.snapshot {
                 snapshots.append(snapshot)
             }
@@ -445,6 +451,187 @@ extension UsageStore {
         return message.isEmpty ? "Refresh failed" : message
     }
 
+    private func codexResetBackfillSnapshots(
+        for account: CodexVisibleAccount,
+        priorSnapshot: CodexAccountUsageSnapshot?,
+        activeVisibleAccountID: String?) -> [UsageSnapshot]
+    {
+        var snapshots: [UsageSnapshot] = []
+        if let prior = priorSnapshot?.snapshot {
+            snapshots.append(prior)
+        }
+        if account.id == activeVisibleAccountID,
+           let lastKnown = self.codexLastKnownResetSnapshot(for: account)
+        {
+            snapshots.append(lastKnown)
+        }
+        if let history = self.codexPlanHistoryResetBackfillSnapshot(for: account) {
+            snapshots.append(history)
+        }
+        return snapshots
+    }
+
+    private func codexPlanHistoryResetBackfillSnapshot(for account: CodexVisibleAccount) -> UsageSnapshot? {
+        let histories = self.codexPlanUtilizationHistories(forVisibleAccount: account)
+        guard !histories.isEmpty
+        else {
+            return nil
+        }
+
+        let now = Date()
+        let primary = Self.codexResetBackfillWindow(
+            from: histories,
+            name: .session,
+            windowMinutes: Self.codexSessionWindowMinutes,
+            now: now)
+        let secondary = Self.codexResetBackfillWindow(
+            from: histories,
+            name: .weekly,
+            windowMinutes: Self.codexWeeklyWindowMinutes,
+            now: now)
+        guard primary != nil || secondary != nil else { return nil }
+
+        return UsageSnapshot(
+            primary: primary,
+            secondary: secondary,
+            updatedAt: now,
+            identity: ProviderIdentitySnapshot(
+                providerID: .codex,
+                accountEmail: account.email,
+                accountOrganization: nil,
+                loginMethod: account.workspaceLabel))
+    }
+
+    private func codexLastKnownResetSnapshot(for account: CodexVisibleAccount) -> UsageSnapshot? {
+        guard let snapshot = self.lastKnownResetSnapshots[.codex],
+              Self.codexVisibleAccountEmailMatches(snapshot: snapshot, account: account),
+              Self.codexScopedGuard(self.lastCodexAccountScopedRefreshGuard, matches: account)
+        else {
+            return nil
+        }
+        return snapshot
+    }
+
+    private nonisolated static func codexVisibleAccountEmailMatches(
+        snapshot: UsageSnapshot,
+        account: CodexVisibleAccount) -> Bool
+    {
+        guard let identity = snapshot.identity(for: .codex),
+              let identityEmail = CodexIdentityResolver.normalizeEmail(identity.accountEmail),
+              let accountEmail = CodexIdentityResolver.normalizeEmail(account.email),
+              identityEmail == accountEmail
+        else {
+            return false
+        }
+        return true
+    }
+
+    private nonisolated static func codexScopedGuard(
+        _ guardValue: CodexAccountScopedRefreshGuard?,
+        matches account: CodexVisibleAccount) -> Bool
+    {
+        guard let guardValue, guardValue.source == account.selectionSource else { return false }
+        let identity = self.codexVisibleAccountIdentity(for: account)
+        if identity != .unresolved {
+            return guardValue.identity == identity
+        }
+        guard let accountKey = CodexIdentityResolver.normalizeEmail(account.email) else { return false }
+        return guardValue.accountKey == accountKey
+    }
+
+    private nonisolated static func codexVisibleAccountIdentity(for account: CodexVisibleAccount) -> CodexIdentity {
+        if let workspaceAccountID = self.normalizedCodexVisibleAccountText(account.workspaceAccountID) {
+            return .providerAccount(id: CodexOpenAIWorkspaceIdentity.normalizeWorkspaceAccountID(workspaceAccountID))
+        }
+        return CodexIdentityResolver.resolve(accountId: nil, email: account.email)
+    }
+
+    private nonisolated static func normalizedCodexVisibleAccountText(_ text: String?) -> String? {
+        guard let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else {
+            return nil
+        }
+        return trimmed
+    }
+
+    private nonisolated static func codexResetBackfillWindow(
+        from histories: [PlanUtilizationSeriesHistory],
+        name: PlanUtilizationSeriesName,
+        windowMinutes: Int,
+        now: Date) -> RateWindow?
+    {
+        let candidate = histories.lazy
+            .filter { $0.name == name && name.canonicalWindowMinutes($0.windowMinutes) == windowMinutes }
+            .flatMap { history in
+                history.entries.map { entry in
+                    (capturedAt: entry.capturedAt, usedPercent: entry.usedPercent, resetsAt: entry.resetsAt)
+                }
+            }
+            .filter { $0.resetsAt.map { $0 > now } ?? false }
+            .max { lhs, rhs in
+                if lhs.capturedAt != rhs.capturedAt {
+                    return lhs.capturedAt < rhs.capturedAt
+                }
+                return (lhs.resetsAt ?? .distantPast) < (rhs.resetsAt ?? .distantPast)
+            }
+
+        guard let candidate, let resetsAt = candidate.resetsAt else { return nil }
+        return RateWindow(
+            usedPercent: candidate.usedPercent,
+            windowMinutes: windowMinutes,
+            resetsAt: resetsAt,
+            resetDescription: nil)
+    }
+
+    private nonisolated static func codexBackfillingResetWindows(
+        _ snapshot: UsageSnapshot,
+        from cached: UsageSnapshot) -> UsageSnapshot
+    {
+        let primary = self.codexBackfillingResetWindow(snapshot.primary, from: cached.primary)
+        let secondary = self.codexBackfillingResetWindow(snapshot.secondary, from: cached.secondary)
+        guard primary != snapshot.primary || secondary != snapshot.secondary else { return snapshot }
+        return UsageSnapshot(
+            primary: primary,
+            secondary: secondary,
+            tertiary: snapshot.tertiary,
+            extraRateWindows: snapshot.extraRateWindows,
+            kiroUsage: snapshot.kiroUsage,
+            providerCost: snapshot.providerCost,
+            zaiUsage: snapshot.zaiUsage,
+            minimaxUsage: snapshot.minimaxUsage,
+            deepseekUsage: snapshot.deepseekUsage,
+            openRouterUsage: snapshot.openRouterUsage,
+            openAIAPIUsage: snapshot.openAIAPIUsage,
+            claudeAdminAPIUsage: snapshot.claudeAdminAPIUsage,
+            mistralUsage: snapshot.mistralUsage,
+            deepgramUsage: snapshot.deepgramUsage,
+            cursorRequests: snapshot.cursorRequests,
+            subscriptionExpiresAt: snapshot.subscriptionExpiresAt,
+            subscriptionRenewsAt: snapshot.subscriptionRenewsAt,
+            updatedAt: snapshot.updatedAt,
+            identity: snapshot.identity)
+    }
+
+    private nonisolated static func codexBackfillingResetWindow(
+        _ window: RateWindow?,
+        from cached: RateWindow?) -> RateWindow?
+    {
+        guard let cached,
+              let resetsAt = cached.resetsAt,
+              resetsAt > Date()
+        else {
+            return window
+        }
+        if let window {
+            return window.backfillingResetTime(from: cached)
+        }
+        guard let windowMinutes = cached.windowMinutes, windowMinutes > 0 else { return nil }
+        return RateWindow(
+            usedPercent: cached.usedPercent,
+            windowMinutes: windowMinutes,
+            resetsAt: resetsAt,
+            resetDescription: cached.resetDescription)
+    }
+
     func recordFetchedTokenAccountPlanUtilizationHistory(
         provider: UsageProvider,
         samples: [(account: ProviderTokenAccount, snapshot: UsageSnapshot)],
@@ -502,20 +689,24 @@ extension UsageStore {
     private func resolveCodexAccountOutcome(
         _ outcome: ProviderFetchOutcome,
         account: CodexVisibleAccount,
-        priorSnapshot: CodexAccountUsageSnapshot? = nil) -> ResolvedCodexAccountOutcome
+        priorSnapshot: CodexAccountUsageSnapshot? = nil,
+        resetBackfillSnapshots: [UsageSnapshot] = []) -> ResolvedCodexAccountOutcome
     {
         switch outcome.result {
         case let .success(result):
             let scoped = result.usage.scoped(to: .codex)
             let labeled = self.applyCodexVisibleAccountLabel(scoped, account: account)
+            let backfilled = resetBackfillSnapshots.reduce(labeled) { partial, cached in
+                Self.codexBackfillingResetWindows(partial, from: cached)
+            }
             let snapshot = CodexAccountUsageSnapshot(
                 account: account,
-                snapshot: labeled,
+                snapshot: backfilled,
                 error: nil,
                 sourceLabel: result.sourceLabel)
             return ResolvedCodexAccountOutcome(
                 snapshot: snapshot,
-                usage: labeled,
+                usage: backfilled,
                 sourceLabel: result.sourceLabel)
         case let .failure(error):
             if Self.errorIsCancellation(error) {
@@ -576,19 +767,18 @@ extension UsageStore {
         switch outcome.result {
         case .success:
             guard let snapshot else { return }
-            let backfilled = snapshot.backfillingResetTimes(from: self.lastKnownResetSnapshots[.codex])
-            self.handleSessionQuotaTransition(provider: .codex, snapshot: backfilled)
-            self.lastKnownResetSnapshots[.codex] = backfilled
-            self.snapshots[.codex] = backfilled
+            self.handleSessionQuotaTransition(provider: .codex, snapshot: snapshot)
+            self.lastKnownResetSnapshots[.codex] = snapshot
+            self.snapshots[.codex] = snapshot
             if let sourceLabel {
                 self.lastSourceLabels[.codex] = sourceLabel
             }
             self.errors[.codex] = nil
             self.failureGates[.codex]?.recordSuccess()
-            self.rememberLiveSystemCodexEmailIfNeeded(backfilled.accountEmail(for: .codex))
-            self.seedCodexAccountScopedRefreshGuard(accountEmail: backfilled.accountEmail(for: .codex))
-            await self.recordPlanUtilizationHistorySample(provider: .codex, snapshot: backfilled)
-            self.recordCodexHistoricalSampleIfNeeded(snapshot: backfilled)
+            self.rememberLiveSystemCodexEmailIfNeeded(snapshot.accountEmail(for: .codex))
+            self.seedCodexAccountScopedRefreshGuard(accountEmail: snapshot.accountEmail(for: .codex))
+            await self.recordPlanUtilizationHistorySample(provider: .codex, snapshot: snapshot)
+            self.recordCodexHistoricalSampleIfNeeded(snapshot: snapshot)
         case let .failure(error):
             guard let message = self.tokenAccountErrorMessage(error) else {
                 self.errors[.codex] = nil

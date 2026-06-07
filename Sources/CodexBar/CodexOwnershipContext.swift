@@ -68,6 +68,34 @@ extension UsageStore {
             hasAdjacentMultiAccountVeto: self.codexHasAdjacentMultiAccountVeto())
     }
 
+    func codexOwnershipContext(
+        forVisibleAccount account: CodexVisibleAccount,
+        currentWeeklyResetAt: Date? = nil) -> CodexOwnershipContext
+    {
+        let normalizedEmail = CodexIdentityResolver.normalizeEmail(account.email)
+        let workspaceAccountID = CodexOpenAIWorkspaceResolver.normalizeWorkspaceAccountID(account.workspaceAccountID)
+        let canonicalIdentity: CodexIdentity = if let workspaceAccountID {
+            .providerAccount(id: workspaceAccountID)
+        } else if let normalizedEmail {
+            .emailOnly(normalizedEmail: normalizedEmail)
+        } else {
+            .unresolved
+        }
+
+        return CodexOwnershipContext(
+            canonicalKey: CodexHistoryOwnership.canonicalKey(for: canonicalIdentity),
+            canonicalEmailHashKey: normalizedEmail.map { CodexHistoryOwnership.canonicalEmailHashKey(for: $0) },
+            historicalLegacyEmailHash: normalizedEmail.map {
+                CodexHistoryOwnership.legacyEmailHash(normalizedEmail: $0)
+            },
+            planUtilizationLegacyEmailHash: normalizedEmail.map {
+                Self.codexLegacyPlanUtilizationEmailHashKey(for: $0)
+            },
+            currentWeeklyResetAt: currentWeeklyResetAt,
+            hasAdjacentMultiAccountVeto: self.codexHasAdjacentMultiAccountVeto() ||
+                self.codexVisibleAccountsHaveAdjacentMultiAccountVeto())
+    }
+
     func codexHasAdjacentMultiAccountVeto() -> Bool {
         let snapshot = self.settings.codexAccountReconciliationSnapshot
         var distinctAccounts: Set<String> = []
@@ -84,6 +112,21 @@ extension UsageStore {
                 fallbackEmail: liveSystemAccount.email))
         }
 
+        return distinctAccounts.count > 1
+    }
+
+    private func codexVisibleAccountsHaveAdjacentMultiAccountVeto() -> Bool {
+        let accounts = self.settings.codexVisibleAccountProjection.visibleAccounts
+        var distinctAccounts: Set<String> = []
+        for account in accounts {
+            if let workspaceAccountID = CodexOpenAIWorkspaceResolver.normalizeWorkspaceAccountID(
+                account.workspaceAccountID)
+            {
+                distinctAccounts.insert("provider:\(workspaceAccountID)")
+            } else if let normalizedEmail = CodexIdentityResolver.normalizeEmail(account.email) {
+                distinctAccounts.insert("email:\(normalizedEmail)")
+            }
+        }
         return distinctAccounts.count > 1
     }
 

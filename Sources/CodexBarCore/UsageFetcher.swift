@@ -30,9 +30,14 @@ public struct RateWindow: Codable, Equatable, Sendable {
     public func backfillingResetTime(from cached: RateWindow?, now: Date = .init()) -> RateWindow {
         if self.resetsAt != nil { return self }
         guard let cachedReset = cached?.resetsAt, cachedReset > now else { return self }
+        let windowMinutes = if let windowMinutes = self.windowMinutes, windowMinutes > 0 {
+            windowMinutes
+        } else {
+            cached?.windowMinutes
+        }
         return RateWindow(
             usedPercent: self.usedPercent,
-            windowMinutes: self.windowMinutes ?? cached?.windowMinutes,
+            windowMinutes: windowMinutes,
             resetsAt: cachedReset,
             resetDescription: self.resetDescription ?? cached?.resetDescription,
             nextRegenPercent: self.nextRegenPercent)
