@@ -162,7 +162,7 @@ extension UsageStore {
     {
         let currentGuard = self.currentCodexAccountScopedRefreshGuard()
         guard currentGuard.source == expectedGuard.source else { return false }
-        guard Self.codexGuardAuthFingerprintMatches(currentGuard, expectedGuard) else { return false }
+        guard Self.codexGuardAuthFingerprintAllowsApply(currentGuard, expectedGuard) else { return false }
 
         if expectedGuard.identity != .unresolved {
             return currentGuard.identity == expectedGuard.identity
@@ -184,7 +184,7 @@ extension UsageStore {
     func shouldApplyCodexScopedFailure(expectedGuard: CodexAccountScopedRefreshGuard) -> Bool {
         let currentGuard = self.currentCodexAccountScopedRefreshGuard()
         guard currentGuard.source == expectedGuard.source else { return false }
-        guard Self.codexGuardAuthFingerprintMatches(currentGuard, expectedGuard) else { return false }
+        guard Self.codexGuardAuthFingerprintAllowsApply(currentGuard, expectedGuard) else { return false }
 
         if expectedGuard.identity != .unresolved {
             return currentGuard.identity == expectedGuard.identity
@@ -196,7 +196,7 @@ extension UsageStore {
     func shouldApplyCodexScopedNonUsageResult(expectedGuard: CodexAccountScopedRefreshGuard) -> Bool {
         let currentGuard = self.currentCodexAccountScopedRefreshGuard()
         guard currentGuard.source == expectedGuard.source else { return false }
-        guard Self.codexGuardAuthFingerprintMatches(currentGuard, expectedGuard) else { return false }
+        guard Self.codexGuardAuthFingerprintAllowsApply(currentGuard, expectedGuard) else { return false }
         guard expectedGuard.identity != .unresolved else { return false }
         return currentGuard.identity == expectedGuard.identity
     }
@@ -208,7 +208,7 @@ extension UsageStore {
         let normalizedRoutingTargetEmail = CodexIdentityResolver.normalizeEmail(routingTargetEmail)
         let currentGuard = self.currentCodexOpenAIWebRefreshGuard()
         guard currentGuard.source == expectedGuard.source else { return false }
-        guard Self.codexGuardAuthFingerprintMatches(currentGuard, expectedGuard) else { return false }
+        guard Self.codexGuardAuthFingerprintAllowsApply(currentGuard, expectedGuard) else { return false }
 
         if expectedGuard.identity != .unresolved {
             return currentGuard.identity == expectedGuard.identity
@@ -307,6 +307,17 @@ extension UsageStore {
             return lhsFingerprint == rhsFingerprint
         }
         return true
+    }
+
+    private static func codexGuardAuthFingerprintAllowsApply(
+        _ lhs: CodexAccountScopedRefreshGuard,
+        _ rhs: CodexAccountScopedRefreshGuard) -> Bool
+    {
+        if self.codexGuardAuthFingerprintMatches(lhs, rhs) {
+            return true
+        }
+        guard rhs.identity != .unresolved else { return false }
+        return lhs.identity == rhs.identity
     }
 
     func currentCodexAuthFingerprint(source: CodexActiveSource) -> String? {

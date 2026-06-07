@@ -127,6 +127,38 @@ struct CodexAccountScopedRefreshTests {
     }
 
     @Test
+    func `same account token refresh fingerprint change keeps codex usage success`() async {
+        let settings = self.makeSettingsStore(
+            suite: "CodexAccountScopedRefreshTests-token-refresh-fingerprint-change")
+        settings.refreshFrequency = .manual
+        settings._test_liveSystemCodexAccount = ObservedSystemCodexAccount(
+            email: "alpha@example.com",
+            authFingerprint: "old-token-material",
+            codexHomePath: "/Users/test/.codex",
+            observedAt: Date(),
+            identity: .providerAccount(id: "acct-alpha"))
+
+        let store = self.makeUsageStore(settings: settings)
+        let blocker = BlockingCodexFetchStrategy()
+        self.installBlockingCodexProvider(on: store, blocker: blocker)
+
+        let refreshTask = Task { await store.refreshProvider(.codex, allowDisabled: true) }
+        await blocker.waitUntilStarted()
+        settings._test_liveSystemCodexAccount = ObservedSystemCodexAccount(
+            email: "alpha@example.com",
+            authFingerprint: "new-token-material",
+            codexHomePath: "/Users/test/.codex",
+            observedAt: Date(),
+            identity: .providerAccount(id: "acct-alpha"))
+        await blocker.resume(with: .success(self.codexSnapshot(email: "alpha@example.com", usedPercent: 25)))
+        await refreshTask.value
+
+        #expect(store.snapshots[.codex]?.primary?.usedPercent == 25)
+        #expect(store.lastCodexAccountScopedRefreshGuard?.authFingerprint == "new-token-material")
+        #expect(store.errors[.codex] == nil)
+    }
+
+    @Test
     func `stale codex usage failure does not clear newer account snapshot`() async {
         let settings = self.makeSettingsStore(suite: "CodexAccountScopedRefreshTests-stale-failure")
         settings.refreshFrequency = .manual
