@@ -697,7 +697,8 @@ extension UsageStore {
 
     func codexLastKnownResetSnapshot(matching guardValue: CodexAccountScopedRefreshGuard?) -> UsageSnapshot? {
         guard let guardValue,
-              self.lastCodexAccountScopedRefreshGuard == guardValue
+              let lastGuard = self.lastCodexAccountScopedRefreshGuard,
+              Self.codexScopedRefreshGuardAllowsResetBackfill(lastGuard, matching: guardValue)
         else {
             return nil
         }
@@ -772,6 +773,21 @@ extension UsageStore {
         }
         guard let accountKey = CodexIdentityResolver.normalizeEmail(account.email) else { return false }
         return guardValue.accountKey == accountKey
+    }
+
+    private nonisolated static func codexScopedRefreshGuardAllowsResetBackfill(
+        _ lastGuard: CodexAccountScopedRefreshGuard,
+        matching expectedGuard: CodexAccountScopedRefreshGuard) -> Bool
+    {
+        guard lastGuard.source == expectedGuard.source else { return false }
+        if lastGuard == expectedGuard { return true }
+        guard lastGuard.identity != .unresolved,
+              lastGuard.identity == expectedGuard.identity,
+              lastGuard.accountKey == expectedGuard.accountKey
+        else {
+            return false
+        }
+        return self.codexGuardAuthFingerprintAllowsUsageApply(lastGuard, expectedGuard)
     }
 
     private nonisolated static func codexScopedRefreshGuard(for account: CodexVisibleAccount)

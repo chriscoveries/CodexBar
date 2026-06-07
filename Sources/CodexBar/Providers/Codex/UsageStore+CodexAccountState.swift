@@ -354,7 +354,7 @@ extension UsageStore {
         self.lastKnownLiveSystemCodexEmail = normalized
     }
 
-    static func codexGuardAuthFingerprintMatches(
+    nonisolated static func codexGuardAuthFingerprintMatches(
         _ lhs: CodexAccountScopedRefreshGuard,
         _ rhs: CodexAccountScopedRefreshGuard) -> Bool
     {
@@ -366,7 +366,7 @@ extension UsageStore {
         return true
     }
 
-    private static func codexGuardAuthFingerprintAllowsUsageApply(
+    nonisolated static func codexGuardAuthFingerprintAllowsUsageApply(
         _ lhs: CodexAccountScopedRefreshGuard,
         _ rhs: CodexAccountScopedRefreshGuard) -> Bool
     {

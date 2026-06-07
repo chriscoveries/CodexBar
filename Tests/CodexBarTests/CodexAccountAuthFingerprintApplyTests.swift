@@ -48,6 +48,54 @@ extension CodexAccountScopedRefreshTests {
     }
 
     @Test
+    func `same account token refresh fingerprint change keeps reset backfill`() async {
+        let settings = self.makeSettingsStore(
+            suite: "CodexAccountScopedRefreshTests-token-refresh-reset-backfill")
+        defer {
+            settings._test_liveSystemCodexAccount = nil
+        }
+        settings.refreshFrequency = .manual
+        settings._test_liveSystemCodexAccount = ObservedSystemCodexAccount(
+            email: "alpha@example.com",
+            authFingerprint: "old-token-material",
+            codexHomePath: "/Users/test/.codex",
+            observedAt: Date(),
+            identity: .providerAccount(id: "acct-alpha"))
+        let store = self.makeUsageStore(settings: settings)
+        let resetsAt = Date().addingTimeInterval(45 * 60)
+        store.lastCodexAccountScopedRefreshGuard = store.freshCodexAccountScopedRefreshGuard()
+        store.lastKnownResetSnapshots[.codex] = UsageSnapshot(
+            primary: RateWindow(
+                usedPercent: 10,
+                windowMinutes: 300,
+                resetsAt: resetsAt,
+                resetDescription: "resets soon"),
+            secondary: nil,
+            updatedAt: Date(),
+            identity: ProviderIdentitySnapshot(
+                providerID: .codex,
+                accountEmail: "alpha@example.com",
+                accountOrganization: nil,
+                loginMethod: "Pro"))
+        settings._test_liveSystemCodexAccount = ObservedSystemCodexAccount(
+            email: "alpha@example.com",
+            authFingerprint: "new-token-material",
+            codexHomePath: "/Users/test/.codex",
+            observedAt: Date(),
+            identity: .providerAccount(id: "acct-alpha"))
+        self.installImmediateCodexProvider(
+            on: store,
+            snapshot: self.codexSnapshot(email: "alpha@example.com", usedPercent: 25))
+
+        await store.refreshProvider(.codex, allowDisabled: true)
+
+        #expect(store.snapshots[.codex]?.primary?.usedPercent == 25)
+        #expect(store.snapshots[.codex]?.primary?.resetsAt == resetsAt)
+        #expect(store.lastKnownResetSnapshots[.codex]?.primary?.resetsAt == resetsAt)
+        #expect(store.lastCodexAccountScopedRefreshGuard?.authFingerprint == "new-token-material")
+    }
+
+    @Test
     func `usage success applies when auth fingerprint appears after refresh starts`() {
         let settings = self.makeSettingsStore(
             suite: "CodexAccountScopedRefreshTests-auth-fingerprint-appears")
