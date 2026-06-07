@@ -120,6 +120,7 @@ extension UsageStore {
         allowCodexUsageBackfill: Bool = true) async
     {
         guard self.shouldApplyOpenAIDashboardRefreshTask(token: refreshTaskToken) else { return }
+        self.settings.invalidateCodexAccountReconciliationSnapshotCache()
         let authority = self.evaluateCodexDashboardAuthority(
             dashboard: dash,
             sourceKind: .liveWeb,
