@@ -832,4 +832,103 @@ extension CodexAccountScopedRefreshTests {
         #expect(liveSnapshot.primary?.windowMinutes == 300)
         #expect(liveSnapshot.primary?.resetsAt == priorReset)
     }
+
+    @Test
+    func `ignores live codex prior snapshot after auth fingerprint changes`() async throws {
+        let settings = self.makeSettingsStore(
+            suite: "CodexAccountVisibleHistoryBackfillTests-live-prior-auth-change")
+        settings.refreshFrequency = .manual
+        settings.multiAccountMenuLayout = .stacked
+
+        let managedID = try #require(UUID(uuidString: "DDDDDDDD-EEEE-FFFF-AAAA-222222222222"))
+        let liveHome = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-visible-live-prior-auth-\(UUID().uuidString)", isDirectory: true)
+        let managedHome = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-visible-live-prior-auth-managed-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: liveHome, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: managedHome, withIntermediateDirectories: true)
+        settings._test_liveSystemCodexAccount = ObservedSystemCodexAccount(
+            email: "live-prior-auth@example.com",
+            authFingerprint: "current-live-auth-fingerprint",
+            codexHomePath: liveHome.path,
+            observedAt: Date(),
+            identity: .emailOnly(normalizedEmail: "live-prior-auth@example.com"))
+        let managedAccount = ManagedCodexAccount(
+            id: managedID,
+            email: "managed-prior-auth@example.com",
+            providerAccountID: "acct-managed-prior-auth",
+            workspaceLabel: "Managed Team",
+            workspaceAccountID: "acct-managed-prior-auth",
+            managedHomePath: managedHome.path,
+            createdAt: 1,
+            updatedAt: 2,
+            lastAuthenticatedAt: 2)
+        let storeURL = try self.makeManagedAccountStoreURL(accounts: [managedAccount])
+        defer {
+            settings._test_managedCodexAccountStoreURL = nil
+            settings._test_liveSystemCodexAccount = nil
+            try? FileManager.default.removeItem(at: storeURL)
+            try? FileManager.default.removeItem(at: liveHome)
+            try? FileManager.default.removeItem(at: managedHome)
+        }
+        settings._test_managedCodexAccountStoreURL = storeURL
+        settings.codexActiveSource = .managedAccount(id: managedID)
+
+        let now = Date()
+        let priorReset = now.addingTimeInterval(2 * 60 * 60)
+        let liveAccount = try #require(settings.codexVisibleAccountProjection.visibleAccounts.first {
+            $0.selectionSource == .liveSystem
+        })
+        let priorLiveAccount = CodexVisibleAccount(
+            id: liveAccount.id,
+            email: liveAccount.email,
+            workspaceLabel: liveAccount.workspaceLabel,
+            workspaceAccountID: liveAccount.workspaceAccountID,
+            authFingerprint: "stale-live-auth-fingerprint",
+            storedAccountID: liveAccount.storedAccountID,
+            selectionSource: liveAccount.selectionSource,
+            isActive: liveAccount.isActive,
+            isLive: liveAccount.isLive,
+            canReauthenticate: liveAccount.canReauthenticate,
+            canRemove: liveAccount.canRemove)
+        let snapshotStore = RecordingCodexAccountUsageSnapshotStore(initialSnapshots: [
+            CodexAccountUsageSnapshot(
+                account: priorLiveAccount,
+                snapshot: UsageSnapshot(
+                    primary: RateWindow(
+                        usedPercent: 18,
+                        windowMinutes: 300,
+                        resetsAt: priorReset,
+                        resetDescription: nil),
+                    secondary: nil,
+                    updatedAt: now.addingTimeInterval(-60)),
+                error: nil,
+                sourceLabel: "cached"),
+        ])
+        let store = UsageStore(
+            fetcher: UsageFetcher(environment: [:]),
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings,
+            codexAccountUsageSnapshotStore: snapshotStore,
+            startupBehavior: .testing)
+        self.installContextualCodexProvider(on: store) { _ in
+            UsageSnapshot(
+                primary: RateWindow(
+                    usedPercent: 9,
+                    windowMinutes: 0,
+                    resetsAt: nil,
+                    resetDescription: nil),
+                secondary: nil,
+                updatedAt: now)
+        }
+
+        await store.refreshCodexVisibleAccountsForMenu()
+
+        let liveSnapshot = try #require(store.codexAccountSnapshots.first {
+            $0.account.selectionSource == .liveSystem
+        }?.snapshot)
+        #expect(liveSnapshot.primary?.usedPercent == 9)
+        #expect(liveSnapshot.primary?.windowMinutes == 0)
+        #expect(liveSnapshot.primary?.resetsAt == nil)
+    }
 }

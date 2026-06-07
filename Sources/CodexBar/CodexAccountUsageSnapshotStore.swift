@@ -47,13 +47,13 @@ struct FileCodexAccountUsageSnapshotStore: CodexAccountUsageSnapshotStoring, @un
                 return self.workspaceAccountID == currentWorkspaceAccountID
             }
 
-            if self.storedAccountID != nil || account.storedAccountID != nil {
-                return self.storedAccountID == account.storedAccountID
-            }
-
             let currentAuthFingerprint = CodexAuthFingerprint.normalize(account.authFingerprint)
             if self.authFingerprint != nil || currentAuthFingerprint != nil {
                 return self.authFingerprint == currentAuthFingerprint
+            }
+
+            if self.storedAccountID != nil || account.storedAccountID != nil {
+                return self.storedAccountID == account.storedAccountID
             }
 
             guard let selectionSource else { return true }

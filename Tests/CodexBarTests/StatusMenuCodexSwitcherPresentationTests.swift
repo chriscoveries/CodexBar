@@ -321,6 +321,46 @@ struct StatusMenuCodexSwitcherPresentationTests {
     }
 
     @Test
+    func `codex account snapshot store rejects same stored account after auth fingerprint changes`() {
+        let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+
+        let accountID = UUID()
+        let oldAccount = CodexVisibleAccount(
+            id: "reauth@example.com",
+            email: "reauth@example.com",
+            authFingerprint: "old-auth-fingerprint",
+            storedAccountID: accountID,
+            selectionSource: .managedAccount(id: accountID),
+            isActive: false,
+            isLive: false,
+            canReauthenticate: true,
+            canRemove: true)
+        let newAccount = CodexVisibleAccount(
+            id: "reauth@example.com",
+            email: "reauth@example.com",
+            authFingerprint: "new-auth-fingerprint",
+            storedAccountID: accountID,
+            selectionSource: .managedAccount(id: accountID),
+            isActive: true,
+            isLive: false,
+            canReauthenticate: true,
+            canRemove: true)
+        let store = FileCodexAccountUsageSnapshotStore(fileURL: fileURL)
+        store.store([
+            CodexAccountUsageSnapshot(
+                account: oldAccount,
+                snapshot: self.snapshot(email: oldAccount.email, percent: 71),
+                error: nil,
+                sourceLabel: "test"),
+        ])
+
+        let hydrated = store.load(for: [newAccount])
+
+        #expect(hydrated.isEmpty)
+    }
+
+    @Test
     func `codex account snapshot store rejects legacy workspace records without identity`() throws {
         let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: fileURL) }

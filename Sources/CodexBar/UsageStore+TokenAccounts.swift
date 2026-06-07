@@ -555,6 +555,12 @@ extension UsageStore {
             return priorWorkspaceID == accountWorkspaceID
         }
 
+        let priorAuthFingerprint = CodexAuthFingerprint.normalize(prior.authFingerprint)
+        let accountAuthFingerprint = CodexAuthFingerprint.normalize(account.authFingerprint)
+        if priorAuthFingerprint != nil || accountAuthFingerprint != nil {
+            guard priorAuthFingerprint == accountAuthFingerprint else { return false }
+        }
+
         if prior.selectionSource == account.selectionSource {
             switch account.selectionSource {
             case .managedAccount:
