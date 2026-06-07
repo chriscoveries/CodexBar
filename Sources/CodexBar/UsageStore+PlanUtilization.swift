@@ -61,10 +61,9 @@ extension UsageStore {
         let ownership = self.codexOwnershipContext(forVisibleAccount: account)
         guard let canonicalKey = ownership.canonicalKey else { return [] }
 
-        if canonicalKey == ownership.canonicalEmailHashKey,
-           ownership.hasAdjacentMultiAccountVeto
-        {
-            return []
+        if ownership.hasAdjacentEmailScopeAmbiguity {
+            guard canonicalKey != ownership.canonicalEmailHashKey else { return [] }
+            return providerBuckets.histories(for: canonicalKey)
         }
 
         let accountKey = self.materializeCodexPlanUtilizationHistoryIfNeeded(
@@ -762,6 +761,7 @@ extension UsageStore {
                 targetCanonicalKey: canonicalKey,
                 canonicalEmailHashKey: ownership.canonicalEmailHashKey)
             if matchesTargetContinuity,
+               !Self.codexPlanHistoryOwnerIsAmbiguousEmailScope(owner, ownership: ownership),
                let accountHistories = providerBuckets.accounts[rawKey],
                !accountHistories.isEmpty
             {
@@ -803,6 +803,21 @@ extension UsageStore {
         let mergedHistory = Self.mergedPlanUtilizationHistories(provider: .codex, histories: historiesToMerge)
         providerBuckets.setHistories(mergedHistory, for: canonicalKey)
         return canonicalKey
+    }
+
+    private static func codexPlanHistoryOwnerIsAmbiguousEmailScope(
+        _ owner: CodexHistoryPersistedOwner,
+        ownership: CodexOwnershipContext) -> Bool
+    {
+        guard ownership.hasAdjacentEmailScopeAmbiguity else { return false }
+        return switch owner {
+        case let .canonical(key):
+            key == ownership.canonicalEmailHashKey
+        case .legacyEmailHash:
+            true
+        case .legacyOpaqueScoped, .legacyUnscoped:
+            false
+        }
     }
 
     private func materializeLegacyClaudePlanUtilizationHistoryIfNeeded(

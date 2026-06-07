@@ -438,6 +438,11 @@ extension UsageStore {
         let sourceLabel: String?
     }
 
+    private struct CodexResetBackfillWindowCandidate {
+        let window: RateWindow
+        let capturedAt: Date
+    }
+
     func tokenAccountErrorMessage(_ error: any Error) -> String? {
         guard !Self.errorIsCancellation(error) else { return nil }
         let message = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -457,7 +462,10 @@ extension UsageStore {
         activeVisibleAccountID: String?) -> [UsageSnapshot]
     {
         var snapshots: [UsageSnapshot] = []
-        if let prior = priorSnapshot?.snapshot {
+        if let priorSnapshot,
+           Self.codexPriorSnapshotAccountMatches(priorSnapshot.account, account: account),
+           let prior = priorSnapshot.snapshot
+        {
             snapshots.append(prior)
         }
         if account.id == activeVisibleAccountID,
@@ -479,22 +487,24 @@ extension UsageStore {
         }
 
         let now = Date()
-        let primary = Self.codexResetBackfillWindow(
+        let primaryCandidate = Self.codexResetBackfillWindowCandidate(
             from: histories,
             name: .session,
             windowMinutes: Self.codexSessionWindowMinutes,
             now: now)
-        let secondary = Self.codexResetBackfillWindow(
+        let secondaryCandidate = Self.codexResetBackfillWindowCandidate(
             from: histories,
             name: .weekly,
             windowMinutes: Self.codexWeeklyWindowMinutes,
             now: now)
+        let primary = primaryCandidate?.window
+        let secondary = secondaryCandidate?.window
         guard primary != nil || secondary != nil else { return nil }
 
         return UsageSnapshot(
             primary: primary,
             secondary: secondary,
-            updatedAt: now,
+            updatedAt: [primaryCandidate?.capturedAt, secondaryCandidate?.capturedAt].compactMap(\.self).max() ?? now,
             identity: ProviderIdentitySnapshot(
                 providerID: .codex,
                 accountEmail: account.email,
@@ -526,6 +536,38 @@ extension UsageStore {
         return true
     }
 
+    private nonisolated static func codexPriorSnapshotAccountMatches(
+        _ prior: CodexVisibleAccount,
+        account: CodexVisibleAccount) -> Bool
+    {
+        guard let priorEmail = CodexIdentityResolver.normalizeEmail(prior.email),
+              let accountEmail = CodexIdentityResolver.normalizeEmail(account.email),
+              priorEmail == accountEmail
+        else {
+            return false
+        }
+
+        let priorWorkspaceID = self.normalizedCodexVisibleAccountText(prior.workspaceAccountID)
+            .map(CodexOpenAIWorkspaceIdentity.normalizeWorkspaceAccountID)
+        let accountWorkspaceID = self.normalizedCodexVisibleAccountText(account.workspaceAccountID)
+            .map(CodexOpenAIWorkspaceIdentity.normalizeWorkspaceAccountID)
+        if priorWorkspaceID != nil || accountWorkspaceID != nil {
+            return priorWorkspaceID == accountWorkspaceID
+        }
+
+        if prior.selectionSource == account.selectionSource {
+            switch account.selectionSource {
+            case .managedAccount:
+                return true
+            case .liveSystem:
+                break
+            }
+        }
+
+        guard prior.id != prior.email, account.id != account.email else { return false }
+        return prior.id == account.id
+    }
+
     private nonisolated static func codexScopedGuard(
         _ guardValue: CodexAccountScopedRefreshGuard?,
         matches account: CodexVisibleAccount) -> Bool
@@ -553,11 +595,11 @@ extension UsageStore {
         return trimmed
     }
 
-    private nonisolated static func codexResetBackfillWindow(
+    private nonisolated static func codexResetBackfillWindowCandidate(
         from histories: [PlanUtilizationSeriesHistory],
         name: PlanUtilizationSeriesName,
         windowMinutes: Int,
-        now: Date) -> RateWindow?
+        now: Date) -> CodexResetBackfillWindowCandidate?
     {
         let candidate = histories.lazy
             .filter { $0.name == name && name.canonicalWindowMinutes($0.windowMinutes) == windowMinutes }
@@ -575,11 +617,13 @@ extension UsageStore {
             }
 
         guard let candidate, let resetsAt = candidate.resetsAt else { return nil }
-        return RateWindow(
-            usedPercent: candidate.usedPercent,
-            windowMinutes: windowMinutes,
-            resetsAt: resetsAt,
-            resetDescription: nil)
+        return CodexResetBackfillWindowCandidate(
+            window: RateWindow(
+                usedPercent: candidate.usedPercent,
+                windowMinutes: windowMinutes,
+                resetsAt: resetsAt,
+                resetDescription: nil),
+            capturedAt: candidate.capturedAt)
     }
 
     private nonisolated static func codexBackfillingResetWindows(
@@ -609,6 +653,50 @@ extension UsageStore {
             subscriptionRenewsAt: snapshot.subscriptionRenewsAt,
             updatedAt: snapshot.updatedAt,
             identity: snapshot.identity)
+    }
+
+    private nonisolated static func codexMergedResetBackfillSnapshot(
+        _ snapshots: [UsageSnapshot],
+        now: Date = Date()) -> UsageSnapshot?
+    {
+        let primary = self.codexPreferredResetBackfillWindow(
+            snapshots.enumerated().compactMap { index, snapshot in
+                snapshot.primary.map { (window: $0, updatedAt: snapshot.updatedAt, priority: index) }
+            },
+            now: now)
+        let secondary = self.codexPreferredResetBackfillWindow(
+            snapshots.enumerated().compactMap { index, snapshot in
+                snapshot.secondary.map { (window: $0, updatedAt: snapshot.updatedAt, priority: index) }
+            },
+            now: now)
+        guard primary != nil || secondary != nil else { return nil }
+        return UsageSnapshot(
+            primary: primary,
+            secondary: secondary,
+            updatedAt: snapshots.map(\.updatedAt).max() ?? now)
+    }
+
+    private nonisolated static func codexPreferredResetBackfillWindow(
+        _ windows: [(window: RateWindow, updatedAt: Date, priority: Int)],
+        now: Date) -> RateWindow?
+    {
+        windows
+            .filter { ($0.window.resetsAt ?? .distantPast) > now }
+            .max { lhs, rhs in
+                if lhs.updatedAt != rhs.updatedAt {
+                    return lhs.updatedAt < rhs.updatedAt
+                }
+                if lhs.priority != rhs.priority {
+                    return lhs.priority < rhs.priority
+                }
+                let lhsReset = lhs.window.resetsAt ?? .distantPast
+                let rhsReset = rhs.window.resetsAt ?? .distantPast
+                if lhsReset != rhsReset {
+                    return lhsReset < rhsReset
+                }
+                return (lhs.window.windowMinutes ?? 0) < (rhs.window.windowMinutes ?? 0)
+            }
+            .map(\.window)
     }
 
     private nonisolated static func codexBackfillingResetWindow(
@@ -696,9 +784,8 @@ extension UsageStore {
         case let .success(result):
             let scoped = result.usage.scoped(to: .codex)
             let labeled = self.applyCodexVisibleAccountLabel(scoped, account: account)
-            let backfilled = resetBackfillSnapshots.reduce(labeled) { partial, cached in
-                Self.codexBackfillingResetWindows(partial, from: cached)
-            }
+            let backfilled = Self.codexMergedResetBackfillSnapshot(resetBackfillSnapshots)
+                .map { Self.codexBackfillingResetWindows(labeled, from: $0) } ?? labeled
             let snapshot = CodexAccountUsageSnapshot(
                 account: account,
                 snapshot: backfilled,

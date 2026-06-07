@@ -9,6 +9,7 @@ struct CodexOwnershipContext {
     let planUtilizationLegacyEmailHash: String?
     let currentWeeklyResetAt: Date?
     let hasAdjacentMultiAccountVeto: Bool
+    let hasAdjacentEmailScopeAmbiguity: Bool
 }
 
 extension UsageStore {
@@ -65,7 +66,10 @@ extension UsageStore {
                 Self.codexLegacyPlanUtilizationEmailHashKey(for: $0)
             },
             currentWeeklyResetAt: currentWeeklyResetAt,
-            hasAdjacentMultiAccountVeto: self.codexHasAdjacentMultiAccountVeto())
+            hasAdjacentMultiAccountVeto: self.codexHasAdjacentMultiAccountVeto(),
+            hasAdjacentEmailScopeAmbiguity: normalizedEmail.map {
+                self.codexHasAdjacentEmailScopeAmbiguity(normalizedEmail: $0)
+            } ?? false)
     }
 
     func codexOwnershipContext(
@@ -93,7 +97,11 @@ extension UsageStore {
             },
             currentWeeklyResetAt: currentWeeklyResetAt,
             hasAdjacentMultiAccountVeto: self.codexHasAdjacentMultiAccountVeto() ||
-                self.codexVisibleAccountsHaveAdjacentMultiAccountVeto())
+                self.codexVisibleAccountsHaveAdjacentMultiAccountVeto(),
+            hasAdjacentEmailScopeAmbiguity: normalizedEmail.map {
+                self.codexHasAdjacentEmailScopeAmbiguity(normalizedEmail: $0) ||
+                    self.codexVisibleAccountsHaveAdjacentEmailScopeAmbiguity(normalizedEmail: $0)
+            } ?? false)
     }
 
     func codexHasAdjacentMultiAccountVeto() -> Bool {
@@ -115,6 +123,29 @@ extension UsageStore {
         return distinctAccounts.count > 1
     }
 
+    private func codexHasAdjacentEmailScopeAmbiguity(normalizedEmail: String) -> Bool {
+        let snapshot = self.settings.codexAccountReconciliationSnapshot
+        var distinctAccounts: Set<String> = []
+
+        if let activeManagedAccount = self.settings.activeManagedCodexAccount,
+           CodexIdentityResolver.normalizeEmail(snapshot.runtimeEmail(for: activeManagedAccount)) == normalizedEmail
+        {
+            distinctAccounts.insert(CodexIdentityMatcher.selectionKey(
+                for: snapshot.runtimeIdentity(for: activeManagedAccount),
+                fallbackEmail: snapshot.runtimeEmail(for: activeManagedAccount)))
+        }
+
+        if let liveSystemAccount = snapshot.liveSystemAccount,
+           CodexIdentityResolver.normalizeEmail(liveSystemAccount.email) == normalizedEmail
+        {
+            distinctAccounts.insert(CodexIdentityMatcher.selectionKey(
+                for: snapshot.runtimeIdentity(for: liveSystemAccount),
+                fallbackEmail: liveSystemAccount.email))
+        }
+
+        return distinctAccounts.count > 1
+    }
+
     private func codexVisibleAccountsHaveAdjacentMultiAccountVeto() -> Bool {
         let accounts = self.settings.codexVisibleAccountProjection.visibleAccounts
         var distinctAccounts: Set<String> = []
@@ -124,6 +155,21 @@ extension UsageStore {
             {
                 distinctAccounts.insert("provider:\(workspaceAccountID)")
             } else if let normalizedEmail = CodexIdentityResolver.normalizeEmail(account.email) {
+                distinctAccounts.insert("email:\(normalizedEmail)")
+            }
+        }
+        return distinctAccounts.count > 1
+    }
+
+    private func codexVisibleAccountsHaveAdjacentEmailScopeAmbiguity(normalizedEmail: String) -> Bool {
+        let accounts = self.settings.codexVisibleAccountProjection.visibleAccounts
+        var distinctAccounts: Set<String> = []
+        for account in accounts where CodexIdentityResolver.normalizeEmail(account.email) == normalizedEmail {
+            if let workspaceAccountID = CodexOpenAIWorkspaceResolver.normalizeWorkspaceAccountID(
+                account.workspaceAccountID)
+            {
+                distinctAccounts.insert("provider:\(workspaceAccountID)")
+            } else {
                 distinctAccounts.insert("email:\(normalizedEmail)")
             }
         }
