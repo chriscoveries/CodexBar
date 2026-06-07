@@ -74,7 +74,9 @@ extension UsageStore {
         let previousGuard = self.lastCodexAccountScopedRefreshGuard
         self.lastCodexAccountScopedRefreshGuard = currentGuard
 
-        guard previousGuard != nil, previousGuard != currentGuard else { return false }
+        guard let previousGuard,
+              !Self.codexScopedRefreshGuardsMatchAccount(previousGuard, currentGuard)
+        else { return false }
 
         self.snapshots.removeValue(forKey: .codex)
         self.errors[.codex] = nil
@@ -376,6 +378,21 @@ extension UsageStore {
         guard case .providerAccount = rhs.identity, lhs.identity == rhs.identity else { return false }
         guard case .liveSystem = lhs.source else { return true }
         return lhs.accountKey != nil && lhs.accountKey == rhs.accountKey
+    }
+
+    nonisolated static func codexScopedRefreshGuardsMatchAccount(
+        _ lhs: CodexAccountScopedRefreshGuard,
+        _ rhs: CodexAccountScopedRefreshGuard) -> Bool
+    {
+        guard lhs.source == rhs.source else { return false }
+        if lhs == rhs { return true }
+        guard lhs.identity != .unresolved,
+              lhs.identity == rhs.identity,
+              lhs.accountKey == rhs.accountKey
+        else {
+            return false
+        }
+        return self.codexGuardAuthFingerprintAllowsUsageApply(lhs, rhs)
     }
 
     func currentCodexAuthFingerprint(source: CodexActiveSource) -> String? {

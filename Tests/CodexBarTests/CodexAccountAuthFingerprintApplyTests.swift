@@ -96,6 +96,55 @@ extension CodexAccountScopedRefreshTests {
     }
 
     @Test
+    func `same account token refresh fingerprint change keeps scoped state during prepare`() {
+        let settings = self.makeSettingsStore(
+            suite: "CodexAccountScopedRefreshTests-token-refresh-prepare")
+        defer {
+            settings._test_liveSystemCodexAccount = nil
+        }
+        settings.refreshFrequency = .manual
+        settings._test_liveSystemCodexAccount = ObservedSystemCodexAccount(
+            email: "alpha@example.com",
+            authFingerprint: "old-token-material",
+            codexHomePath: "/Users/test/.codex",
+            observedAt: Date(),
+            identity: .providerAccount(id: "acct-alpha"))
+        let store = self.makeUsageStore(settings: settings)
+        let resetsAt = Date().addingTimeInterval(45 * 60)
+        let cached = UsageSnapshot(
+            primary: RateWindow(
+                usedPercent: 10,
+                windowMinutes: 300,
+                resetsAt: resetsAt,
+                resetDescription: "resets soon"),
+            secondary: nil,
+            updatedAt: Date(),
+            identity: ProviderIdentitySnapshot(
+                providerID: .codex,
+                accountEmail: "alpha@example.com",
+                accountOrganization: nil,
+                loginMethod: "Pro"))
+        store.snapshots[.codex] = cached
+        store.lastKnownResetSnapshots[.codex] = cached
+        store.credits = self.credits(remaining: 42)
+        store.lastCodexAccountScopedRefreshGuard = store.freshCodexAccountScopedRefreshGuard()
+        settings._test_liveSystemCodexAccount = ObservedSystemCodexAccount(
+            email: "alpha@example.com",
+            authFingerprint: "new-token-material",
+            codexHomePath: "/Users/test/.codex",
+            observedAt: Date(),
+            identity: .providerAccount(id: "acct-alpha"))
+
+        let invalidated = store.prepareCodexAccountScopedRefreshIfNeeded()
+
+        #expect(!invalidated)
+        #expect(store.snapshots[.codex]?.primary?.resetsAt == resetsAt)
+        #expect(store.lastKnownResetSnapshots[.codex]?.primary?.resetsAt == resetsAt)
+        #expect(store.credits?.remaining == 42)
+        #expect(store.lastCodexAccountScopedRefreshGuard?.authFingerprint == "new-token-material")
+    }
+
+    @Test
     func `usage success applies when auth fingerprint appears after refresh starts`() {
         let settings = self.makeSettingsStore(
             suite: "CodexAccountScopedRefreshTests-auth-fingerprint-appears")
@@ -504,6 +553,326 @@ extension CodexAccountScopedRefreshTests {
         })
         #expect(!snapshotStore.storedSnapshots.contains {
             $0.account.workspaceAccountID == "acct-managed-token"
+        })
+    }
+
+    @Test
+    func `stacked visible refresh discards selected failure after managed auth file rotates`() async throws {
+        let settings = self.makeSettingsStore(
+            suite: "CodexAccountScopedRefreshTests-selected-managed-auth-file-failure")
+        settings.refreshFrequency = .manual
+        settings.multiAccountMenuLayout = .stacked
+
+        let targetID = try #require(UUID(uuidString: "DDDDDDDD-EEEE-FFFF-AAAA-121212121212"))
+        let siblingID = try #require(UUID(uuidString: "DDDDDDDD-EEEE-FFFF-AAAA-131313131313"))
+        let targetHome = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-visible-managed-auth-file-\(UUID().uuidString)", isDirectory: true)
+        let siblingHome = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-visible-managed-auth-file-sibling-\(UUID().uuidString)", isDirectory: true)
+        try Self.writeCodexAuthFile(
+            homeURL: targetHome,
+            email: "managed-file-token@example.com",
+            plan: "Pro",
+            accountId: "acct-managed-file-token")
+        let oldFingerprint = try #require(CodexAuthFingerprint.fingerprint(homePath: targetHome.path))
+        let targetAccount = ManagedCodexAccount(
+            id: targetID,
+            email: "managed-file-token@example.com",
+            providerAccountID: "acct-managed-file-token",
+            workspaceLabel: "Managed Team",
+            workspaceAccountID: "acct-managed-file-token",
+            authFingerprint: oldFingerprint,
+            managedHomePath: targetHome.path,
+            createdAt: 1,
+            updatedAt: 2,
+            lastAuthenticatedAt: 2)
+        let siblingAccount = ManagedCodexAccount(
+            id: siblingID,
+            email: "managed-file-token-sibling@example.com",
+            providerAccountID: "acct-managed-file-token-sibling",
+            workspaceLabel: "Sibling Team",
+            workspaceAccountID: "acct-managed-file-token-sibling",
+            authFingerprint: "sibling-managed-file-token",
+            managedHomePath: siblingHome.path,
+            createdAt: 1,
+            updatedAt: 2,
+            lastAuthenticatedAt: 2)
+        let storeURL = try self.makeManagedAccountStoreURL(accounts: [targetAccount, siblingAccount])
+        defer {
+            settings._test_managedCodexAccountStoreURL = nil
+            try? FileManager.default.removeItem(at: storeURL)
+            try? FileManager.default.removeItem(at: targetHome)
+            try? FileManager.default.removeItem(at: siblingHome)
+        }
+        settings._test_managedCodexAccountStoreURL = storeURL
+        settings.codexActiveSource = .managedAccount(id: targetID)
+
+        let snapshotStore = RecordingCodexAccountUsageSnapshotStore(initialSnapshots: [])
+        let store = UsageStore(
+            fetcher: UsageFetcher(environment: [:]),
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings,
+            codexAccountUsageSnapshotStore: snapshotStore,
+            startupBehavior: .testing)
+        let blocker = BlockingCodexFetchStrategy()
+        let targetHomePath = targetHome.path
+        let now = Date()
+        self.installContextualCodexProvider(on: store) { context in
+            if context.env["CODEX_HOME"] == targetHomePath {
+                return try await blocker.awaitResult()
+            }
+            return UsageSnapshot(
+                primary: RateWindow(
+                    usedPercent: 9,
+                    windowMinutes: 300,
+                    resetsAt: nil,
+                    resetDescription: nil),
+                secondary: nil,
+                updatedAt: now,
+                identity: ProviderIdentitySnapshot(
+                    providerID: .codex,
+                    accountEmail: "managed-file-token-sibling@example.com",
+                    accountOrganization: nil,
+                    loginMethod: "Sibling Team"))
+        }
+
+        let refreshTask = Task { await store.refreshCodexVisibleAccountsForMenu() }
+        await blocker.waitUntilStarted()
+        try Self.writeCodexAuthFile(
+            homeURL: targetHome,
+            email: "managed-file-token@example.com",
+            plan: "Team",
+            accountId: "acct-managed-file-token")
+        let newFingerprint = try #require(CodexAuthFingerprint.fingerprint(homePath: targetHome.path))
+        #expect(newFingerprint != oldFingerprint)
+        await blocker.resume(with: .failure(TestRefreshError(message: "old managed auth file failure")))
+        await refreshTask.value
+
+        #expect(store.snapshots[.codex] == nil)
+        #expect(store.errors[.codex] == nil)
+        #expect(!store.codexAccountSnapshots.contains {
+            $0.account.workspaceAccountID == "acct-managed-file-token"
+        })
+        #expect(!snapshotStore.storedSnapshots.contains {
+            $0.account.workspaceAccountID == "acct-managed-file-token"
+        })
+    }
+
+    @Test
+    func `stacked visible refresh keeps selected failure when managed auth file rotated before start`() async throws {
+        let settings = self.makeSettingsStore(
+            suite: "CodexAccountScopedRefreshTests-selected-managed-auth-file-current-failure")
+        settings.refreshFrequency = .manual
+        settings.multiAccountMenuLayout = .stacked
+
+        let targetID = try #require(UUID(uuidString: "DDDDDDDD-EEEE-FFFF-AAAA-161616161616"))
+        let siblingID = try #require(UUID(uuidString: "DDDDDDDD-EEEE-FFFF-AAAA-171717171717"))
+        let targetHome = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-visible-managed-current-failure-\(UUID().uuidString)", isDirectory: true)
+        let siblingHome = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-visible-managed-current-sibling-\(UUID().uuidString)", isDirectory: true)
+        try Self.writeCodexAuthFile(
+            homeURL: targetHome,
+            email: "managed-current-failure@example.com",
+            plan: "Pro",
+            accountId: "acct-managed-current-failure")
+        let oldFingerprint = try #require(CodexAuthFingerprint.fingerprint(homePath: targetHome.path))
+        let targetAccount = ManagedCodexAccount(
+            id: targetID,
+            email: "managed-current-failure@example.com",
+            providerAccountID: "acct-managed-current-failure",
+            workspaceLabel: "Managed Team",
+            workspaceAccountID: "acct-managed-current-failure",
+            authFingerprint: oldFingerprint,
+            managedHomePath: targetHome.path,
+            createdAt: 1,
+            updatedAt: 2,
+            lastAuthenticatedAt: 2)
+        let siblingAccount = ManagedCodexAccount(
+            id: siblingID,
+            email: "managed-current-sibling@example.com",
+            providerAccountID: "acct-managed-current-sibling",
+            workspaceLabel: "Sibling Team",
+            workspaceAccountID: "acct-managed-current-sibling",
+            authFingerprint: "sibling-managed-current",
+            managedHomePath: siblingHome.path,
+            createdAt: 1,
+            updatedAt: 2,
+            lastAuthenticatedAt: 2)
+        let storeURL = try self.makeManagedAccountStoreURL(accounts: [targetAccount, siblingAccount])
+        defer {
+            settings._test_managedCodexAccountStoreURL = nil
+            try? FileManager.default.removeItem(at: storeURL)
+            try? FileManager.default.removeItem(at: targetHome)
+            try? FileManager.default.removeItem(at: siblingHome)
+        }
+        settings._test_managedCodexAccountStoreURL = storeURL
+        settings.codexActiveSource = .managedAccount(id: targetID)
+
+        try Self.writeCodexAuthFile(
+            homeURL: targetHome,
+            email: "managed-current-failure@example.com",
+            plan: "Team",
+            accountId: "acct-managed-current-failure")
+        let newFingerprint = try #require(CodexAuthFingerprint.fingerprint(homePath: targetHome.path))
+        #expect(newFingerprint != oldFingerprint)
+
+        let snapshotStore = RecordingCodexAccountUsageSnapshotStore(initialSnapshots: [])
+        let store = UsageStore(
+            fetcher: UsageFetcher(environment: [:]),
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings,
+            codexAccountUsageSnapshotStore: snapshotStore,
+            startupBehavior: .testing)
+        let targetHomePath = targetHome.path
+        let now = Date()
+        self.installContextualCodexProvider(on: store) { context in
+            if context.env["CODEX_HOME"] == targetHomePath {
+                throw TestRefreshError(message: "current managed auth file failure")
+            }
+            return UsageSnapshot(
+                primary: RateWindow(
+                    usedPercent: 9,
+                    windowMinutes: 300,
+                    resetsAt: nil,
+                    resetDescription: nil),
+                secondary: nil,
+                updatedAt: now,
+                identity: ProviderIdentitySnapshot(
+                    providerID: .codex,
+                    accountEmail: "managed-current-sibling@example.com",
+                    accountOrganization: nil,
+                    loginMethod: "Sibling Team"))
+        }
+
+        await store.refreshCodexVisibleAccountsForMenu()
+
+        #expect(store.errors[.codex] == "current managed auth file failure")
+        let targetSnapshot = try #require(store.codexAccountSnapshots.first {
+            $0.account.workspaceAccountID == "acct-managed-current-failure"
+        })
+        #expect(targetSnapshot.error == "current managed auth file failure")
+        #expect(targetSnapshot.account.authFingerprint == newFingerprint)
+        let persistedTargetSnapshot = try #require(snapshotStore.storedSnapshots.first {
+            $0.account.workspaceAccountID == "acct-managed-current-failure"
+        })
+        #expect(persistedTargetSnapshot.error == "current managed auth file failure")
+        #expect(persistedTargetSnapshot.account.authFingerprint == newFingerprint)
+    }
+
+    @Test
+    func `stacked visible refresh discards selected success after managed auth file switches accounts`() async throws {
+        let settings = self.makeSettingsStore(
+            suite: "CodexAccountScopedRefreshTests-selected-managed-auth-file-success")
+        settings.refreshFrequency = .manual
+        settings.multiAccountMenuLayout = .stacked
+
+        let targetID = try #require(UUID(uuidString: "DDDDDDDD-EEEE-FFFF-AAAA-141414141414"))
+        let siblingID = try #require(UUID(uuidString: "DDDDDDDD-EEEE-FFFF-AAAA-151515151515"))
+        let targetHome = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-visible-managed-auth-success-\(UUID().uuidString)", isDirectory: true)
+        let siblingHome = FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "codex-visible-managed-auth-success-sibling-\(UUID().uuidString)",
+                isDirectory: true)
+        try Self.writeCodexAuthFile(
+            homeURL: targetHome,
+            email: "managed-old-success@example.com",
+            plan: "Pro",
+            accountId: "acct-managed-old-success")
+        let oldFingerprint = try #require(CodexAuthFingerprint.fingerprint(homePath: targetHome.path))
+        let targetAccount = ManagedCodexAccount(
+            id: targetID,
+            email: "managed-old-success@example.com",
+            providerAccountID: "acct-managed-old-success",
+            workspaceLabel: "Managed Team",
+            workspaceAccountID: "acct-managed-old-success",
+            authFingerprint: oldFingerprint,
+            managedHomePath: targetHome.path,
+            createdAt: 1,
+            updatedAt: 2,
+            lastAuthenticatedAt: 2)
+        let siblingAccount = ManagedCodexAccount(
+            id: siblingID,
+            email: "managed-success-sibling@example.com",
+            providerAccountID: "acct-managed-success-sibling",
+            workspaceLabel: "Sibling Team",
+            workspaceAccountID: "acct-managed-success-sibling",
+            authFingerprint: "sibling-managed-success",
+            managedHomePath: siblingHome.path,
+            createdAt: 1,
+            updatedAt: 2,
+            lastAuthenticatedAt: 2)
+        let storeURL = try self.makeManagedAccountStoreURL(accounts: [targetAccount, siblingAccount])
+        defer {
+            settings._test_managedCodexAccountStoreURL = nil
+            try? FileManager.default.removeItem(at: storeURL)
+            try? FileManager.default.removeItem(at: targetHome)
+            try? FileManager.default.removeItem(at: siblingHome)
+        }
+        settings._test_managedCodexAccountStoreURL = storeURL
+        settings.codexActiveSource = .managedAccount(id: targetID)
+
+        let snapshotStore = RecordingCodexAccountUsageSnapshotStore(initialSnapshots: [])
+        let store = UsageStore(
+            fetcher: UsageFetcher(environment: [:]),
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings,
+            codexAccountUsageSnapshotStore: snapshotStore,
+            startupBehavior: .testing)
+        let blocker = BlockingCodexFetchStrategy()
+        let targetHomePath = targetHome.path
+        let now = Date()
+        self.installContextualCodexProvider(on: store) { context in
+            if context.env["CODEX_HOME"] == targetHomePath {
+                return try await blocker.awaitResult()
+            }
+            return UsageSnapshot(
+                primary: RateWindow(
+                    usedPercent: 9,
+                    windowMinutes: 300,
+                    resetsAt: nil,
+                    resetDescription: nil),
+                secondary: nil,
+                updatedAt: now,
+                identity: ProviderIdentitySnapshot(
+                    providerID: .codex,
+                    accountEmail: "managed-success-sibling@example.com",
+                    accountOrganization: nil,
+                    loginMethod: "Sibling Team"))
+        }
+
+        let refreshTask = Task { await store.refreshCodexVisibleAccountsForMenu() }
+        await blocker.waitUntilStarted()
+        try Self.writeCodexAuthFile(
+            homeURL: targetHome,
+            email: "managed-new-success@example.com",
+            plan: "Pro",
+            accountId: "acct-managed-new-success")
+        let newFingerprint = try #require(CodexAuthFingerprint.fingerprint(homePath: targetHome.path))
+        #expect(newFingerprint != oldFingerprint)
+        await blocker.resume(with: .success(UsageSnapshot(
+            primary: RateWindow(
+                usedPercent: 64,
+                windowMinutes: 300,
+                resetsAt: nil,
+                resetDescription: nil),
+            secondary: nil,
+            updatedAt: now,
+            identity: ProviderIdentitySnapshot(
+                providerID: .codex,
+                accountEmail: "managed-old-success@example.com",
+                accountOrganization: nil,
+                loginMethod: "Managed Team"))))
+        await refreshTask.value
+
+        #expect(store.snapshots[.codex] == nil)
+        #expect(store.errors[.codex] == nil)
+        #expect(!store.codexAccountSnapshots.contains {
+            $0.account.workspaceAccountID == "acct-managed-old-success"
+        })
+        #expect(!snapshotStore.storedSnapshots.contains {
+            $0.account.workspaceAccountID == "acct-managed-old-success"
         })
     }
 

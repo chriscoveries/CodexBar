@@ -45,6 +45,11 @@ private struct CodexAccountFetchResult {
     let outcome: ProviderFetchOutcome
 }
 
+private struct CodexManagedVisibleAccountRuntimeState {
+    let authFingerprint: String?
+    let workspaceAccountID: String?
+}
+
 extension UsageStore {
     static let tokenAccountMenuSnapshotLimit = 6
     private static let codexSessionWindowMinutes = 5 * 60
@@ -66,7 +71,7 @@ extension UsageStore {
     }
 
     func refreshCodexVisibleAccountsForMenu() async {
-        let projection = self.settings.codexVisibleAccountProjection
+        let projection = self.freshCodexVisibleAccountProjectionForAccountRefresh()
         let accounts = self.limitedCodexVisibleAccounts(
             projection.visibleAccounts,
             snapshots: self.codexAccountSnapshots,
@@ -118,7 +123,7 @@ extension UsageStore {
             }
         }
 
-        let currentProjection = self.freshCodexVisibleAccountProjectionForStaleResultGuard()
+        let currentProjection = self.freshCodexVisibleAccountProjectionForAccountRefresh()
         let currentSnapshots = snapshots.compactMap { snapshot -> CodexAccountUsageSnapshot? in
             guard let currentAccount = Self.currentCodexVisibleAccount(
                 matching: snapshot.account,
@@ -205,11 +210,58 @@ extension UsageStore {
         return Self.codexVisibleAccountMatchesCurrentProjection(originalAccount, account: currentActiveAccount)
     }
 
-    private func freshCodexVisibleAccountProjectionForStaleResultGuard() -> CodexVisibleAccountProjection {
-        // Auth files can change while account fetches are in flight, so stale-result guards must bypass the
-        // short-lived reconciliation cache used for normal menu rendering.
+    private func freshCodexVisibleAccountProjectionForAccountRefresh() -> CodexVisibleAccountProjection {
+        // Auth files can change while account fetches are in flight, so account refreshes bypass the
+        // short-lived reconciliation cache used for normal menu rendering and stale-result guards.
         self.settings.invalidateCodexAccountReconciliationSnapshotCache()
-        return self.settings.codexVisibleAccountProjection
+        let snapshot = self.settings.codexAccountReconciliationSnapshot
+        return Self.codexVisibleAccountProjectionWithFreshManagedAuthFingerprints(
+            CodexVisibleAccountProjection.make(from: snapshot),
+            snapshot: snapshot)
+    }
+
+    private nonisolated static func codexVisibleAccountProjectionWithFreshManagedAuthFingerprints(
+        _ projection: CodexVisibleAccountProjection,
+        snapshot: CodexAccountReconciliationSnapshot) -> CodexVisibleAccountProjection
+    {
+        let managedRuntimeStates = Dictionary(
+            uniqueKeysWithValues: snapshot.storedAccounts.map { account in
+                let workspaceAccountID: String? = switch snapshot.runtimeIdentity(for: account) {
+                case let .providerAccount(id):
+                    id
+                case .emailOnly, .unresolved:
+                    nil
+                }
+                return (account.id, CodexManagedVisibleAccountRuntimeState(
+                    authFingerprint: CodexAuthFingerprint.fingerprint(homePath: account.managedHomePath),
+                    workspaceAccountID: workspaceAccountID))
+            })
+        let visibleAccounts = projection.visibleAccounts.map { account in
+            guard case let .managedAccount(id) = account.selectionSource else { return account }
+            guard let runtimeState = managedRuntimeStates[id],
+                  let authFingerprint = runtimeState.authFingerprint,
+                  authFingerprint != account.authFingerprint
+            else {
+                return account
+            }
+            return CodexVisibleAccount(
+                id: account.id,
+                email: account.email,
+                workspaceLabel: account.workspaceLabel,
+                workspaceAccountID: runtimeState.workspaceAccountID,
+                authFingerprint: authFingerprint,
+                storedAccountID: account.storedAccountID,
+                selectionSource: account.selectionSource,
+                isActive: account.isActive,
+                isLive: account.isLive,
+                canReauthenticate: account.canReauthenticate,
+                canRemove: account.canRemove)
+        }
+        return CodexVisibleAccountProjection(
+            visibleAccounts: visibleAccounts,
+            activeVisibleAccountID: projection.activeVisibleAccountID,
+            liveVisibleAccountID: projection.liveVisibleAccountID,
+            hasUnreadableAddedAccountStore: projection.hasUnreadableAddedAccountStore)
     }
 
     private static func currentCodexVisibleAccount(
@@ -779,15 +831,7 @@ extension UsageStore {
         _ lastGuard: CodexAccountScopedRefreshGuard,
         matching expectedGuard: CodexAccountScopedRefreshGuard) -> Bool
     {
-        guard lastGuard.source == expectedGuard.source else { return false }
-        if lastGuard == expectedGuard { return true }
-        guard lastGuard.identity != .unresolved,
-              lastGuard.identity == expectedGuard.identity,
-              lastGuard.accountKey == expectedGuard.accountKey
-        else {
-            return false
-        }
-        return self.codexGuardAuthFingerprintAllowsUsageApply(lastGuard, expectedGuard)
+        self.codexScopedRefreshGuardsMatchAccount(lastGuard, expectedGuard)
     }
 
     private nonisolated static func codexScopedRefreshGuard(for account: CodexVisibleAccount)
