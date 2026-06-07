@@ -7,6 +7,7 @@
 - Localization: add Ukrainian as a selectable app language (#1250). Thanks @Yuxin-Qiao!
 
 ### Fixed
+- Claude: remove transient ClaudeProbe session artifacts after CLI usage polls so background refreshes no longer fill Claude Code project history with CodexBar `/usage` sessions (#1301). Thanks @LPFchan and @matthewod11-stack!
 - Cursor: show deficit and run-out pace details for 30-day Total, Auto, and API billing-cycle usage rows (#1336). Thanks @dhruv-anand-aintech!
 - Codex: time out stalled managed `codex login` processes so account switches no longer stay stuck in progress after OAuth completes (#1330). Thanks @dhruv-anand-aintech!
 - Codex Spark: show the same deficit and run-out pace details as the core Codex quota lanes for 5-hour and weekly model limits (#1335). Thanks @dhruv-anand-aintech!
