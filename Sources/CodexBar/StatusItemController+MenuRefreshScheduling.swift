@@ -89,8 +89,12 @@ extension StatusItemController {
         return self.formatDoubleForSignature(value)
     }
 
+    /// The signature is only ever compared for equality against the previous signature, so it does
+    /// not need a human-readable decimal form. `String(format: "%.8f", …)` is a surprisingly hot
+    /// cost here because it runs for every daily/service value across every enabled provider on each
+    /// store mutation. The raw bit pattern is both exact (no rounding collisions) and far cheaper.
     private static func formatDoubleForSignature(_ value: Double) -> String {
-        String(format: "%.8f", value)
+        String(value.bitPattern, radix: 16)
     }
 
     func performMenuMutationWithoutAnimation(_ updates: () -> Void) {
