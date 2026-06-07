@@ -384,7 +384,8 @@ extension UsageStore {
         case .liveSystem:
             return CodexAuthFingerprint.normalize(snapshot.liveSystemAccount?.authFingerprint)
         case let .managedAccount(id):
-            return CodexAuthFingerprint.normalize(snapshot.storedAccounts.first { $0.id == id }?.authFingerprint)
+            guard let account = snapshot.storedAccounts.first(where: { $0.id == id }) else { return nil }
+            return CodexAuthFingerprint.fingerprint(homePath: account.managedHomePath)
         }
     }
 

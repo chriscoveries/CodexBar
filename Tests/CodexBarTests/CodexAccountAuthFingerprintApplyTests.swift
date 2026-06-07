@@ -460,6 +460,57 @@ extension CodexAccountScopedRefreshTests {
     }
 
     @Test
+    func `managed failure guard reads current auth file fingerprint`() throws {
+        let settings = self.makeSettingsStore(
+            suite: "CodexAccountScopedRefreshTests-managed-auth-file-fingerprint")
+        settings.refreshFrequency = .manual
+        let accountID = try #require(UUID(uuidString: "DDDDDDDD-EEEE-FFFF-AAAA-555555555555"))
+        let managedHome = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-managed-auth-file-\(UUID().uuidString)", isDirectory: true)
+        try Self.writeCodexAuthFile(
+            homeURL: managedHome,
+            email: "managed-auth@example.com",
+            plan: "Pro",
+            accountId: "acct-managed-auth")
+        let oldFingerprint = try #require(CodexAuthFingerprint.fingerprint(homePath: managedHome.path))
+        let managedAccount = ManagedCodexAccount(
+            id: accountID,
+            email: "managed-auth@example.com",
+            providerAccountID: "acct-managed-auth",
+            workspaceLabel: "Managed Auth",
+            workspaceAccountID: "acct-managed-auth",
+            authFingerprint: oldFingerprint,
+            managedHomePath: managedHome.path,
+            createdAt: 1,
+            updatedAt: 2,
+            lastAuthenticatedAt: 2)
+        let storeURL = try self.makeManagedAccountStoreURL(accounts: [managedAccount])
+        defer {
+            settings._test_managedCodexAccountStoreURL = nil
+            try? FileManager.default.removeItem(at: storeURL)
+            try? FileManager.default.removeItem(at: managedHome)
+        }
+        settings._test_managedCodexAccountStoreURL = storeURL
+        settings.codexActiveSource = .managedAccount(id: accountID)
+
+        let store = self.makeUsageStore(settings: settings)
+        let expectedGuard = store.freshCodexAccountScopedRefreshGuard()
+        #expect(expectedGuard.authFingerprint == oldFingerprint)
+
+        try Self.writeCodexAuthFile(
+            homeURL: managedHome,
+            email: "managed-auth@example.com",
+            plan: "Team",
+            accountId: "acct-managed-auth")
+        let newFingerprint = try #require(CodexAuthFingerprint.fingerprint(homePath: managedHome.path))
+        #expect(newFingerprint != oldFingerprint)
+
+        #expect(store.freshCodexAccountScopedRefreshGuard().authFingerprint == newFingerprint)
+        #expect(!store.shouldApplyCodexScopedFailure(expectedGuard: expectedGuard))
+        #expect(!store.shouldApplyCodexScopedNonUsageFailure(expectedGuard: expectedGuard))
+    }
+
+    @Test
     func `stale auth fingerprint cache at refresh start keeps current codex usage success`() async {
         SettingsStore.codexAccountReconciliationSnapshotCacheIntervalOverrideForTesting = 60
         let settings = self.makeSettingsStore(
