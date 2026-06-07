@@ -23,7 +23,7 @@ extension UsageStore {
     func refreshProvider(_ provider: UsageProvider, allowDisabled: Bool = false) async {
         self.prepareRefreshState(for: provider)
         guard let spec = await self.providerRefreshSpec(provider) else { return }
-        let codexExpectedGuard = provider == .codex ? self.currentCodexAccountScopedRefreshGuard() : nil
+        let codexExpectedGuard = provider == .codex ? self.freshCodexAccountScopedRefreshGuard() : nil
 
         if !spec.isEnabled(), !allowDisabled {
             await self.clearDisabledProviderRefreshState(provider)

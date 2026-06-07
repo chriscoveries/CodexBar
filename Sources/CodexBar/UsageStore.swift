@@ -620,7 +620,7 @@ final class UsageStore {
                     "phase": openAIWebRefreshPhase == .startup ? "startup" : "regular",
                 ])
             if shouldRefreshOpenAIWeb {
-                let codexDashboardGuard = self.currentCodexOpenAIWebRefreshGuard()
+                let codexDashboardGuard = self.freshCodexOpenAIWebRefreshGuard()
                 if forceTokenUsage {
                     await self.refreshOpenAIDashboardIfNeeded(
                         force: true,

@@ -15,7 +15,7 @@ extension UsageStore {
 
     func scheduleCreditsRefreshIfNeeded(minimumSnapshotUpdatedAt: Date? = nil) {
         let refreshKey = self.codexCreditsRefreshKey(
-            expectedGuard: self.currentCodexAccountScopedRefreshGuard())
+            expectedGuard: self.freshCodexAccountScopedRefreshGuard())
         if let existing = self.creditsRefreshTask,
            !existing.isCancelled,
            self.creditsRefreshTaskKey == refreshKey
@@ -76,13 +76,13 @@ extension UsageStore {
 
     func refreshCreditsIfNeeded(minimumSnapshotUpdatedAt: Date? = nil) async {
         guard self.isEnabled(.codex) else { return }
-        var expectedGuard = self.currentCodexAccountScopedRefreshGuard()
+        var expectedGuard = self.freshCodexAccountScopedRefreshGuard()
         if expectedGuard.identity == .unresolved,
            let minimumSnapshotUpdatedAt,
            case .liveSystem = expectedGuard.source
         {
             _ = await self.waitForCodexSnapshotOrRefreshCompletion(minimumUpdatedAt: minimumSnapshotUpdatedAt)
-            expectedGuard = self.currentCodexAccountScopedRefreshGuard()
+            expectedGuard = self.freshCodexAccountScopedRefreshGuard()
         }
         guard expectedGuard.identity != .unresolved,
               expectedGuard.accountKey != nil

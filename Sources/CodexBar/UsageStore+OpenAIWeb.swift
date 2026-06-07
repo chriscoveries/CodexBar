@@ -108,7 +108,7 @@ extension UsageStore {
                 "batterySaverEnabled": self.settings.openAIWebBatterySaverEnabled ? "1" : "0",
                 "interaction": ProviderInteractionContext.current == .userInitiated ? "user" : "background",
             ])
-        let expectedGuard = self.currentCodexOpenAIWebRefreshGuard()
+        let expectedGuard = self.freshCodexOpenAIWebRefreshGuard()
         Task { await self.refreshOpenAIDashboardIfNeeded(force: forceRefresh, expectedGuard: expectedGuard) }
     }
 
@@ -832,7 +832,7 @@ extension UsageStore {
             allowCurrentSnapshotFallback: true,
             allowLastKnownLiveFallback: false)
         _ = await self.importOpenAIDashboardCookiesIfNeeded(targetEmail: targetEmail, force: true)
-        let expectedGuard = self.currentCodexOpenAIWebRefreshGuard()
+        let expectedGuard = self.freshCodexOpenAIWebRefreshGuard()
         await self.refreshOpenAIDashboardIfNeeded(
             force: true,
             expectedGuard: expectedGuard,
