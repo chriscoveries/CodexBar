@@ -52,9 +52,25 @@ extension StatusItemController {
         guard self.isMenuRefreshEnabled else { return }
         guard self.openMenus.isEmpty else { return }
         guard !self.isMenuDataRefreshInFlight else { return }
-        for menu in self.attachedMenusForClosedPreparation() {
+        let menus = self.attachedMenusForClosedPreparation()
+        let requiredClosedPreparationVersion: Int?
+        if self.menuContentVersion > self.latestRequiredMenuRebuildVersion {
+            guard self.latestRequiredMenuRebuildVersion > 0 else { return }
+            let hasRequiredClosedMenu = menus.contains { menu in
+                let key = ObjectIdentifier(menu)
+                return (self.menuVersions[key] ?? -1) < self.latestRequiredMenuRebuildVersion
+            }
+            guard hasRequiredClosedMenu else { return }
+            requiredClosedPreparationVersion = self.latestRequiredMenuRebuildVersion
+        } else {
+            requiredClosedPreparationVersion = nil
+        }
+        for menu in menus {
             let key = ObjectIdentifier(menu)
             guard !self.closedMenusDeferredUntilNextOpen.contains(key) else { continue }
+            if let requiredClosedPreparationVersion {
+                guard (self.menuVersions[key] ?? -1) < requiredClosedPreparationVersion else { continue }
+            }
             // Pre-warming the merged menu while it is closed runs a full main-thread populateMenu
             // (incl. SwiftUI hosting-view layout) that menuWillOpen redoes synchronously on display
             // anyway. In Merge Icons mode it is the only attached menu, so this just relocates that

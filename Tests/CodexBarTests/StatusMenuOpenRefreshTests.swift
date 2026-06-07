@@ -199,7 +199,8 @@ extension StatusMenuTests {
         let key = ObjectIdentifier(menu)
         let openedVersion = controller.menuVersions[key]
 
-        // Background data-refresh tick (stale allowed): the closed merged menu must not be pre-warmed.
+        // Background data-refresh tick (stale allowed): closed prep is skipped entirely, so
+        // the closed merged menu must not be pre-warmed or marked deferred.
         controller.invalidateMenus(allowStaleContentDuringDataRefresh: true)
         for _ in 0..<40 {
             await Task.yield()
@@ -207,7 +208,7 @@ extension StatusMenuTests {
         #expect(controller.openMenus.isEmpty)
         #expect(controller.menuContentVersion != openedVersion)
         #expect(controller.menuVersions[key] == openedVersion)
-        #expect(controller.closedMenusDeferredUntilNextOpen.contains(key))
+        #expect(!controller.closedMenusDeferredUntilNextOpen.contains(key))
 
         // A required (non-stale) invalidation must also leave the closed merged menu deferred.
         controller.invalidateMenus()
@@ -222,6 +223,99 @@ extension StatusMenuTests {
         defer { controller.menuDidClose(menu) }
         #expect(controller.menuVersions[key] == controller.menuContentVersion)
         #expect(!controller.closedMenusDeferredUntilNextOpen.contains(key))
+    }
+
+    @Test
+    func `data refresh invalidation does not rebuild closed non merged attached menu`() async {
+        self.disableMenuCardsForTesting()
+        let settings = self.makeSettings()
+        settings.statusChecksEnabled = false
+        settings.refreshFrequency = .manual
+        settings.mergeIcons = true
+        self.enableOnlyCodex(settings)
+
+        let store = self.makeCodexStore(settings: settings, dashboardAuthorized: false)
+        let controller = StatusItemController(
+            store: store,
+            settings: settings,
+            account: UsageFetcher().loadAccountInfo(),
+            updater: DisabledUpdaterController(),
+            preferencesSelection: PreferencesSelection(),
+            statusBar: self.makeStatusBarForTesting())
+        defer { controller.releaseStatusItemsForTesting() }
+        StatusItemController.setClosedMenuPreparationDelayForTesting(.zero)
+        defer { StatusItemController.resetClosedMenuPreparationDelayForTesting() }
+
+        controller.menuRefreshEnabledOverrideForTesting = true
+        let menu = controller.makeMenu()
+        // Use a non-merged attached menu: stale data-refresh invalidations should not pre-warm any
+        // closed attached menu, while required invalidations still may prepare non-merged menus.
+        controller.fallbackMenu = menu
+        controller.statusItem.menu = menu
+
+        controller.populateMenu(menu, provider: nil)
+        controller.markMenuFresh(menu)
+        let key = ObjectIdentifier(menu)
+        let openedVersion = controller.menuVersions[key]
+
+        controller.invalidateMenus(allowStaleContentDuringDataRefresh: true)
+        for _ in 0..<40 {
+            await Task.yield()
+        }
+
+        #expect(controller.openMenus.isEmpty)
+        #expect(controller.menuContentVersion != openedVersion)
+        #expect(controller.menuVersions[key] == openedVersion)
+
+        controller.menuWillOpen(menu)
+        defer { controller.menuDidClose(menu) }
+
+        #expect(controller.menuVersions[key] == controller.menuContentVersion)
+    }
+
+    @Test
+    func `required non merged closed menu preparation survives later data refresh invalidation`() async {
+        self.disableMenuCardsForTesting()
+        let settings = self.makeSettings()
+        settings.statusChecksEnabled = false
+        settings.refreshFrequency = .manual
+        settings.mergeIcons = true
+        self.enableOnlyCodex(settings)
+
+        let store = self.makeCodexStore(settings: settings, dashboardAuthorized: false)
+        let controller = StatusItemController(
+            store: store,
+            settings: settings,
+            account: UsageFetcher().loadAccountInfo(),
+            updater: DisabledUpdaterController(),
+            preferencesSelection: PreferencesSelection(),
+            statusBar: self.makeStatusBarForTesting())
+        defer { controller.releaseStatusItemsForTesting() }
+        StatusItemController.setClosedMenuPreparationDelayForTesting(.zero)
+        defer { StatusItemController.resetClosedMenuPreparationDelayForTesting() }
+
+        controller.menuRefreshEnabledOverrideForTesting = true
+        let menu = controller.makeMenu()
+        // Use a non-merged attached menu so this covers the delayed closed-menu rebuild path. Merged
+        // menus are intentionally deferred until next open on current main (#1274).
+        controller.fallbackMenu = menu
+        controller.statusItem.menu = menu
+
+        controller.populateMenu(menu, provider: nil)
+        controller.markMenuFresh(menu)
+        let key = ObjectIdentifier(menu)
+        let openedVersion = controller.menuVersions[key]
+
+        controller.invalidateMenus()
+        let requiredVersion = controller.latestRequiredMenuRebuildVersion
+        controller.invalidateMenus(allowStaleContentDuringDataRefresh: true)
+        for _ in 0..<40 where controller.menuVersions[key] == openedVersion {
+            await Task.yield()
+        }
+
+        #expect(controller.openMenus.isEmpty)
+        #expect(requiredVersion > (openedVersion ?? -1))
+        #expect(controller.menuVersions[key] == controller.menuContentVersion)
     }
 
     @Test
