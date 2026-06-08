@@ -150,9 +150,11 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
             }
         }
     }
+
     var terminateApplicationForQuit: @MainActor () -> Void = {
         NSApp.terminate(nil)
     }
+
     var openMenuInvalidationRetryTask: Task<Void, Never>?
     #if DEBUG
     var onDelayedMenuRefreshAttemptForTesting: (() -> Void)?
