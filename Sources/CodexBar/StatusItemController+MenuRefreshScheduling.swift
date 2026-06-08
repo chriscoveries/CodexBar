@@ -37,7 +37,10 @@ extension StatusItemController {
         menuWasFreshBeforeOpen: Bool)
     {
         let signature = self.menuAdjunctReadinessSignature()
-        guard signature != self.lastMenuAdjunctReadinessSignature else { return }
+        guard signature != self.lastMenuAdjunctReadinessSignature else {
+            self.lastMenuAdjunctReadinessBaselineVersion = self.menuContentVersion
+            return
+        }
 
         if menuWasFreshBeforeOpen {
             let menuKey = ObjectIdentifier(menu)
