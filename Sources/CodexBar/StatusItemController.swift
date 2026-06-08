@@ -117,8 +117,11 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
     var menuContentVersion: Int = 0
     var latestRequiredMenuRebuildVersion: Int = 0
     var menuVersions: [ObjectIdentifier: Int] = [:]
+    var menuReadinessSignatures: [ObjectIdentifier: String] = [:]
     var menuCardHeightCache: [MenuCardHeightCacheKey: CGFloat] = [:]
     var lastMenuAdjunctReadinessSignature = ""
+    var lastMenuAdjunctReadinessBaselineVersion = 0
+    var rootOpenHandledMenuObservationSignature: String?
     var mergedMenu: NSMenu?
     var providerMenus: [UsageProvider: NSMenu] = [:]
     var fallbackMenu: NSMenu?
@@ -373,6 +376,7 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
                 metadata: ["keys": repairedStatusItemVisibilityKeys.joined(separator: ",")])
         }
         self.lastMenuAdjunctReadinessSignature = self.menuAdjunctReadinessSignature()
+        self.lastMenuAdjunctReadinessBaselineVersion = self.menuContentVersion
         self.wireBindings()
         self.updateVisibility()
         self.updateIcons()
@@ -443,13 +447,25 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                self.observeStoreChanges()
-                self.invalidateMenus(
-                    refreshOpenMenus: self.didMenuAdjunctReadinessChange(),
-                    deferOpenParentMenuRebuild: true,
-                    allowStaleContentDuringDataRefresh: true)
+                self.handleObservedStoreMenuChange()
             }
         }
+    }
+
+    func handleObservedStoreMenuChange() {
+        self.observeStoreChanges()
+        let rootOpenHandledReadiness = self.consumeRootOpenHandledMenuObservationIfNeeded()
+        // `refreshOpenMenus` is only consulted when a menu is currently open.
+        // Computing the readiness signature serializes every enabled provider's
+        // token snapshot and 30-day daily breakdown, which is wasted main-thread
+        // work on the common path where no menu is open (background refresh ticks).
+        let refreshOpenMenus = self.openMenus.isEmpty
+            ? false
+            : rootOpenHandledReadiness || self.didMenuAdjunctReadinessChange()
+        self.invalidateMenus(
+            refreshOpenMenus: refreshOpenMenus,
+            deferOpenParentMenuRebuild: true,
+            allowStaleContentDuringDataRefresh: true)
     }
 
     private func observeStoreIconChanges() {

@@ -85,6 +85,11 @@ extension StatusItemController {
         self.cancelDeferredMenuInteractionRefreshTask()
         self.cancelClosedMenuRebuild(menu)
 
+        // Track whether this is the root menu opening (no menus were open). Only the root open rebuilds
+        // all content from current data, so the readiness baseline is re-anchored only here — re-anchoring
+        // on a nested submenu open could mask a pending refresh for the already-open parent menu.
+        let menuTrackingWasIdle = self.openMenus.isEmpty
+
         if self.isHostedSubviewMenu(menu) {
             self.hydrateHostedSubviewMenuIfNeeded(menu)
             self.refreshHostedSubviewHeights(in: menu)
@@ -95,6 +100,9 @@ extension StatusItemController {
                 // Intentionally skip open-menu tracking when refresh is disabled (tests).
                 // If refresh is re-enabled while this menu stays open, it will not be backfilled until next open.
                 self.openMenus[ObjectIdentifier(menu)] = menu
+                if menuTrackingWasIdle {
+                    self.resyncMenuAdjunctReadinessBaseline()
+                }
             }
             // Removed redundant async refresh - single pass is sufficient after initial layout
             return
@@ -123,11 +131,21 @@ extension StatusItemController {
             self.deferOpenAIDashboardRefreshUntilMenuCloses(reason: "parent menu open")
         }
 
+        let menuWasFreshBeforeOpen = !self.menuNeedsRefresh(menu)
         self.refreshMenuForOpenIfNeeded(menu, provider: provider)
         if self.isMenuRefreshEnabled {
             // Intentionally skip open-menu tracking when refresh is disabled (tests).
             // If refresh is re-enabled while this menu stays open, it will not be backfilled until next open.
             self.openMenus[ObjectIdentifier(menu)] = menu
+            // Only re-anchor when the opened menu actually shows current data. During an in-flight provider
+            // refresh `refreshMenuForOpenIfNeeded` can preserve stale content; resyncing the baseline to
+            // live store data in that case would mask the refresh-completion update (#1351).
+            if menuTrackingWasIdle, !self.menuNeedsRefresh(menu) {
+                self.resyncMenuAdjunctReadinessBaselineForRootOpen(
+                    menu,
+                    provider: provider,
+                    menuWasFreshBeforeOpen: menuWasFreshBeforeOpen)
+            }
             self.installProviderSwitcherShortcutMonitorIfNeeded(for: menu)
             // Only schedule refresh after menu is registered as open - refreshNow is called async
             self.scheduleOpenMenuRefresh(for: menu)
