@@ -20,10 +20,10 @@ struct LocalizationBundleCacheTests {
         #expect(fr.bundleURL.lastPathComponent == "fr.lproj")
 
         // Switching language must re-resolve rather than return the cached French bundle.
-        let ja = CodexBarLocalizationOverride.$appLanguage.withValue("ja") {
+        let es = CodexBarLocalizationOverride.$appLanguage.withValue("es") {
             codexBarLocalizedBundleForTesting()
         }
-        #expect(ja.bundleURL.lastPathComponent == "ja.lproj")
+        #expect(es.bundleURL.lastPathComponent == "es.lproj")
 
         // Switching back must still produce the French bundle (cache key is the language).
         let frAgain = CodexBarLocalizationOverride.$appLanguage.withValue("fr") {
