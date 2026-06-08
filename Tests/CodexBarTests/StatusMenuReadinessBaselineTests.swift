@@ -248,6 +248,61 @@ extension StatusMenuTests {
     }
 
     @Test
+    func `fresh newer-version root open during unrelated refresh still reanchors baseline`() {
+        // An in-flight refresh elsewhere must not block re-anchoring when this menu was already rebuilt for
+        // a newer menuContentVersion. Otherwise the stale baseline can still hide a later reverted update.
+        self.disableMenuCardsForTesting()
+        let settings = self.makeSettings()
+        settings.statusChecksEnabled = false
+        settings.refreshFrequency = .manual
+        settings.mergeIcons = false
+        settings.costUsageEnabled = true
+        self.enableOnlyCodexForReadinessBaseline(settings)
+
+        let snapshotA = self.makeReadinessBaselineTokenSnapshot(
+            sessionTokens: 111,
+            sessionCostUSD: 1.11,
+            last30DaysTokens: 1111,
+            last30DaysCostUSD: 11.11,
+            updatedAt: Date(timeIntervalSince1970: 100))
+        let snapshotB = self.makeReadinessBaselineTokenSnapshot(
+            sessionTokens: 222,
+            sessionCostUSD: 2.22,
+            last30DaysTokens: 2222,
+            last30DaysCostUSD: 22.22,
+            updatedAt: Date(timeIntervalSince1970: 200))
+
+        let store = self.makeCodexStore(settings: settings, dashboardAuthorized: false)
+        store._setTokenSnapshotForTesting(snapshotA, provider: .codex)
+        let controller = StatusItemController(
+            store: store,
+            settings: settings,
+            account: UsageFetcher().loadAccountInfo(),
+            updater: DisabledUpdaterController(),
+            preferencesSelection: PreferencesSelection(),
+            statusBar: self.makeStatusBarForTesting())
+        defer { controller.releaseStatusItemsForTesting() }
+        controller.menuRefreshEnabledOverrideForTesting = true
+
+        let menu = controller.makeMenu()
+        controller.populateMenu(menu, provider: .codex)
+        controller.markMenuFresh(menu)
+        controller.resyncMenuAdjunctReadinessBaseline()
+
+        store._setTokenSnapshotForTesting(snapshotB, provider: .codex)
+        controller.invalidateMenus()
+        controller.populateMenu(menu, provider: .codex)
+        controller.markMenuFresh(menu)
+
+        store.isRefreshing = true
+        controller.menuWillOpen(menu)
+        defer { controller.menuDidClose(menu) }
+
+        store._setTokenSnapshotForTesting(snapshotA, provider: .codex)
+        #expect(controller.didMenuAdjunctReadinessChange())
+    }
+
+    @Test
     func `provider root open before deferred store observation leaves sibling provider menu stale`() {
         // The readiness signature is global across enabled providers. In split-icon mode, opening one
         // provider's menu must not consume a pending global observation while leaving sibling menus marked

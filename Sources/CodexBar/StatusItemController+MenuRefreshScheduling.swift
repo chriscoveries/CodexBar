@@ -7,7 +7,7 @@ extension StatusItemController {
 
     func didMenuAdjunctReadinessChange() -> Bool {
         let signature = self.menuAdjunctReadinessSignature()
-        defer { self.lastMenuAdjunctReadinessSignature = signature }
+        defer { self.recordMenuAdjunctReadinessBaseline(signature) }
         return signature != self.lastMenuAdjunctReadinessSignature
     }
 
@@ -22,7 +22,7 @@ extension StatusItemController {
     /// content during an in-flight refresh — that would record live store data while the visible menu
     /// still shows older content and mask the refresh-completion update.
     func resyncMenuAdjunctReadinessBaseline() {
-        self.lastMenuAdjunctReadinessSignature = self.menuAdjunctReadinessSignature()
+        self.recordMenuAdjunctReadinessBaseline(self.menuAdjunctReadinessSignature())
     }
 
     /// Resyncs a root-menu baseline after open and handles the narrow race where a store change
@@ -40,13 +40,27 @@ extension StatusItemController {
         guard signature != self.lastMenuAdjunctReadinessSignature else { return }
 
         if menuWasFreshBeforeOpen {
-            guard !self.isMenuDataRefreshInFlight else { return }
+            let menuKey = ObjectIdentifier(menu)
+            let menuIsFreshForNewerVersion = self.menuVersions[menuKey] == self.menuContentVersion &&
+                self.menuContentVersion > self.lastMenuAdjunctReadinessBaselineVersion
+            if self.isMenuDataRefreshInFlight, !menuIsFreshForNewerVersion {
+                return
+            }
+            if menuIsFreshForNewerVersion {
+                self.recordMenuAdjunctReadinessBaseline(signature)
+                return
+            }
             self.invalidateMenus()
             self.populateMenu(menu, provider: provider)
             self.markMenuFresh(menu)
             self.rememberRootOpenHandledMenuObservation(signature: signature)
         }
+        self.recordMenuAdjunctReadinessBaseline(signature)
+    }
+
+    private func recordMenuAdjunctReadinessBaseline(_ signature: String) {
         self.lastMenuAdjunctReadinessSignature = signature
+        self.lastMenuAdjunctReadinessBaselineVersion = self.menuContentVersion
     }
 
     private func rememberRootOpenHandledMenuObservation(signature: String) {
@@ -67,7 +81,7 @@ extension StatusItemController {
             return false
         }
         self.rootOpenHandledMenuObservationSignature = nil
-        self.lastMenuAdjunctReadinessSignature = signature
+        self.recordMenuAdjunctReadinessBaseline(signature)
         return true
     }
 
