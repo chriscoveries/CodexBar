@@ -189,11 +189,78 @@ extension StatusMenuTests {
         #expect(!controller.didMenuAdjunctReadinessChange())
     }
 
+    @Test
+    func `provider root open before deferred store observation leaves sibling provider menu stale`() {
+        // The readiness signature is global across enabled providers. In split-icon mode, opening one
+        // provider's menu must not consume a pending global observation while leaving sibling menus marked
+        // fresh even though their provider data changed.
+        self.disableMenuCardsForTesting()
+        let settings = self.makeSettings()
+        settings.statusChecksEnabled = false
+        settings.refreshFrequency = .manual
+        settings.mergeIcons = false
+        settings.costUsageEnabled = true
+        self.enableProvidersForReadinessBaseline(settings, providers: [.claude, .codex])
+
+        let snapshotA = self.makeReadinessBaselineTokenSnapshot(
+            sessionTokens: 111,
+            sessionCostUSD: 1.11,
+            last30DaysTokens: 1111,
+            last30DaysCostUSD: 11.11,
+            updatedAt: Date(timeIntervalSince1970: 100))
+        let snapshotB = self.makeReadinessBaselineTokenSnapshot(
+            sessionTokens: 222,
+            sessionCostUSD: 2.22,
+            last30DaysTokens: 2222,
+            last30DaysCostUSD: 22.22,
+            updatedAt: Date(timeIntervalSince1970: 200))
+
+        let store = self.makeCodexStore(settings: settings, dashboardAuthorized: false)
+        store._setTokenSnapshotForTesting(snapshotA, provider: .claude)
+        store._setTokenSnapshotForTesting(snapshotA, provider: .codex)
+        let controller = StatusItemController(
+            store: store,
+            settings: settings,
+            account: UsageFetcher().loadAccountInfo(),
+            updater: DisabledUpdaterController(),
+            preferencesSelection: PreferencesSelection(),
+            statusBar: self.makeStatusBarForTesting())
+        defer { controller.releaseStatusItemsForTesting() }
+        controller.menuRefreshEnabledOverrideForTesting = true
+
+        let claudeMenu = controller.makeMenu(for: .claude)
+        controller.populateMenu(claudeMenu, provider: .claude)
+        controller.markMenuFresh(claudeMenu)
+        let codexMenu = controller.makeMenu(for: .codex)
+        controller.populateMenu(codexMenu, provider: .codex)
+        controller.markMenuFresh(codexMenu)
+        controller.resyncMenuAdjunctReadinessBaseline()
+
+        store._setTokenSnapshotForTesting(snapshotB, provider: .claude)
+        controller.menuWillOpen(codexMenu)
+        defer { controller.menuDidClose(codexMenu) }
+
+        let versionAfterOpen = controller.menuContentVersion
+        #expect(!controller.menuNeedsRefresh(codexMenu))
+        #expect(controller.menuNeedsRefresh(claudeMenu))
+
+        controller.handleObservedStoreMenuChange()
+
+        #expect(controller.menuContentVersion == versionAfterOpen)
+        #expect(!controller.menuNeedsRefresh(codexMenu))
+        #expect(controller.menuNeedsRefresh(claudeMenu))
+        #expect(!controller.didMenuAdjunctReadinessChange())
+    }
+
     private func enableOnlyCodexForReadinessBaseline(_ settings: SettingsStore) {
+        self.enableProvidersForReadinessBaseline(settings, providers: [.codex])
+    }
+
+    private func enableProvidersForReadinessBaseline(_ settings: SettingsStore, providers: Set<UsageProvider>) {
         let registry = ProviderRegistry.shared
         for provider in UsageProvider.allCases {
             guard let metadata = registry.metadata[provider] else { continue }
-            settings.setProviderEnabled(provider: provider, metadata: metadata, enabled: provider == .codex)
+            settings.setProviderEnabled(provider: provider, metadata: metadata, enabled: providers.contains(provider))
         }
     }
 

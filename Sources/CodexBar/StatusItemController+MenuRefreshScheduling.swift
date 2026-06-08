@@ -27,6 +27,10 @@ extension StatusItemController {
 
     /// Resyncs a root-menu baseline after open and handles the narrow race where a store change
     /// has updated live data but its deferred observation task has not invalidated menus yet.
+    ///
+    /// If a previously fresh menu sees new live data before the observer version tick, invalidate all
+    /// menus first, rebuild only the opened menu, then consume the matching observer. This keeps sibling
+    /// provider menus stale instead of globally acknowledging data they have not rendered.
     func resyncMenuAdjunctReadinessBaselineForRootOpen(
         _ menu: NSMenu,
         provider: UsageProvider?,
@@ -36,6 +40,7 @@ extension StatusItemController {
         guard signature != self.lastMenuAdjunctReadinessSignature else { return }
 
         if menuWasFreshBeforeOpen {
+            self.invalidateMenus()
             self.populateMenu(menu, provider: provider)
             self.markMenuFresh(menu)
             self.rememberRootOpenHandledMenuObservation(signature: signature)
