@@ -131,6 +131,7 @@ extension StatusItemController {
             self.deferOpenAIDashboardRefreshUntilMenuCloses(reason: "parent menu open")
         }
 
+        let menuWasFreshBeforeOpen = !self.menuNeedsRefresh(menu)
         self.refreshMenuForOpenIfNeeded(menu, provider: provider)
         if self.isMenuRefreshEnabled {
             // Intentionally skip open-menu tracking when refresh is disabled (tests).
@@ -140,7 +141,10 @@ extension StatusItemController {
             // refresh `refreshMenuForOpenIfNeeded` can preserve stale content; resyncing the baseline to
             // live store data in that case would mask the refresh-completion update (#1351).
             if menuTrackingWasIdle, !self.menuNeedsRefresh(menu) {
-                self.resyncMenuAdjunctReadinessBaseline()
+                self.resyncMenuAdjunctReadinessBaselineForRootOpen(
+                    menu,
+                    provider: provider,
+                    menuWasFreshBeforeOpen: menuWasFreshBeforeOpen)
             }
             self.installProviderSwitcherShortcutMonitorIfNeeded(for: menu)
             // Only schedule refresh after menu is registered as open - refreshNow is called async

@@ -128,6 +128,67 @@ extension StatusMenuTests {
         #expect(controller.didMenuAdjunctReadinessChange())
     }
 
+    @Test
+    func `root open before deferred store observation rebuilds and consumes matching observer`() {
+        // Store observation invalidates menus from a deferred main-actor task. If a closed menu opens after
+        // live data changes but before that task runs, it must rebuild from live data and consume the matching
+        // observer instead of letting it mark the freshly rebuilt visible menu stale.
+        self.disableMenuCardsForTesting()
+        let settings = self.makeSettings()
+        settings.statusChecksEnabled = false
+        settings.refreshFrequency = .manual
+        settings.mergeIcons = false
+        settings.costUsageEnabled = true
+        self.enableOnlyCodexForReadinessBaseline(settings)
+
+        let snapshotA = self.makeReadinessBaselineTokenSnapshot(
+            sessionTokens: 111,
+            sessionCostUSD: 1.11,
+            last30DaysTokens: 1111,
+            last30DaysCostUSD: 11.11,
+            updatedAt: Date(timeIntervalSince1970: 100))
+        let snapshotB = self.makeReadinessBaselineTokenSnapshot(
+            sessionTokens: 222,
+            sessionCostUSD: 2.22,
+            last30DaysTokens: 2222,
+            last30DaysCostUSD: 22.22,
+            updatedAt: Date(timeIntervalSince1970: 200))
+
+        let store = self.makeCodexStore(settings: settings, dashboardAuthorized: false)
+        store._setTokenSnapshotForTesting(snapshotA, provider: .codex)
+        let controller = StatusItemController(
+            store: store,
+            settings: settings,
+            account: UsageFetcher().loadAccountInfo(),
+            updater: DisabledUpdaterController(),
+            preferencesSelection: PreferencesSelection(),
+            statusBar: self.makeStatusBarForTesting())
+        defer { controller.releaseStatusItemsForTesting() }
+        controller.menuRefreshEnabledOverrideForTesting = true
+
+        let menu = controller.makeMenu()
+        controller.populateMenu(menu, provider: .codex)
+        controller.markMenuFresh(menu)
+        controller.resyncMenuAdjunctReadinessBaseline()
+
+        // Simulate the live store mutation being visible before the observation task has invalidated menus.
+        store._setTokenSnapshotForTesting(snapshotB, provider: .codex)
+        controller.menuWillOpen(menu)
+        defer { controller.menuDidClose(menu) }
+
+        let key = ObjectIdentifier(menu)
+        let versionAfterOpen = controller.menuContentVersion
+        let menuVersionAfterOpen = controller.menuVersions[key]
+        #expect(!controller.menuNeedsRefresh(menu))
+
+        controller.handleObservedStoreMenuChange()
+
+        #expect(controller.menuContentVersion == versionAfterOpen)
+        #expect(controller.menuVersions[key] == menuVersionAfterOpen)
+        #expect(!controller.menuNeedsRefresh(menu))
+        #expect(!controller.didMenuAdjunctReadinessChange())
+    }
+
     private func enableOnlyCodexForReadinessBaseline(_ settings: SettingsStore) {
         let registry = ProviderRegistry.shared
         for provider in UsageProvider.allCases {

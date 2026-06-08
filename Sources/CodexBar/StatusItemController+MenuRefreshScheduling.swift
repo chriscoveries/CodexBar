@@ -25,6 +25,46 @@ extension StatusItemController {
         self.lastMenuAdjunctReadinessSignature = self.menuAdjunctReadinessSignature()
     }
 
+    /// Resyncs a root-menu baseline after open and handles the narrow race where a store change
+    /// has updated live data but its deferred observation task has not invalidated menus yet.
+    func resyncMenuAdjunctReadinessBaselineForRootOpen(
+        _ menu: NSMenu,
+        provider: UsageProvider?,
+        menuWasFreshBeforeOpen: Bool)
+    {
+        let signature = self.menuAdjunctReadinessSignature()
+        guard signature != self.lastMenuAdjunctReadinessSignature else { return }
+
+        if menuWasFreshBeforeOpen {
+            self.populateMenu(menu, provider: provider)
+            self.markMenuFresh(menu)
+            self.rememberRootOpenHandledMenuObservation(signature: signature)
+        }
+        self.lastMenuAdjunctReadinessSignature = signature
+    }
+
+    private func rememberRootOpenHandledMenuObservation(signature: String) {
+        self.rootOpenHandledMenuObservationSignature = signature
+        Task { @MainActor [weak self] in
+            await Task.yield()
+            if self?.rootOpenHandledMenuObservationSignature == signature {
+                self?.rootOpenHandledMenuObservationSignature = nil
+            }
+        }
+    }
+
+    func consumeRootOpenHandledMenuObservationIfNeeded() -> Bool {
+        guard let handledSignature = self.rootOpenHandledMenuObservationSignature else { return false }
+        let signature = self.menuAdjunctReadinessSignature()
+        guard signature == handledSignature else {
+            self.rootOpenHandledMenuObservationSignature = nil
+            return false
+        }
+        self.rootOpenHandledMenuObservationSignature = nil
+        self.lastMenuAdjunctReadinessSignature = signature
+        return true
+    }
+
     func menuAdjunctReadinessSignature() -> String {
         let dashboard = self.store.openAIDashboard
         let dashboardUsageBreakdown = OpenAIDashboardDailyBreakdown.removingSkillUsageServices(
