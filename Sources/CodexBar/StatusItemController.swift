@@ -117,6 +117,7 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
     var menuContentVersion: Int = 0
     var latestRequiredMenuRebuildVersion: Int = 0
     var menuVersions: [ObjectIdentifier: Int] = [:]
+    var menuReadinessSignatures: [ObjectIdentifier: String] = [:]
     var menuCardHeightCache: [MenuCardHeightCacheKey: CGFloat] = [:]
     var lastMenuAdjunctReadinessSignature = ""
     var lastMenuAdjunctReadinessBaselineVersion = 0

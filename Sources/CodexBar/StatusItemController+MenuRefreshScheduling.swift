@@ -44,12 +44,12 @@ extension StatusItemController {
 
         if menuWasFreshBeforeOpen {
             let menuKey = ObjectIdentifier(menu)
-            let menuIsFreshForNewerVersion = self.menuVersions[menuKey] == self.menuContentVersion &&
-                self.menuContentVersion > self.lastMenuAdjunctReadinessBaselineVersion
-            if self.isMenuDataRefreshInFlight, !menuIsFreshForNewerVersion {
+            let menuRenderedCurrentSignature = self.menuVersions[menuKey] == self.menuContentVersion &&
+                self.menuReadinessSignatures[menuKey] == signature
+            if self.isMenuDataRefreshInFlight, !menuRenderedCurrentSignature {
                 return
             }
-            if menuIsFreshForNewerVersion {
+            if menuRenderedCurrentSignature {
                 self.recordMenuAdjunctReadinessBaseline(signature)
                 return
             }

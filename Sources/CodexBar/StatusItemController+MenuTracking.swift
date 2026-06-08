@@ -91,6 +91,7 @@ extension StatusItemController {
     func clearTransientMenuTrackingState(_ key: ObjectIdentifier) {
         self.menuProviders.removeValue(forKey: key)
         self.menuVersions.removeValue(forKey: key)
+        self.menuReadinessSignatures.removeValue(forKey: key)
         self.closedMenusDeferredUntilNextOpen.remove(key)
     }
 
@@ -227,6 +228,7 @@ extension StatusItemController {
     func markMenuFresh(_ menu: NSMenu) {
         let key = ObjectIdentifier(menu)
         self.menuVersions[key] = self.menuContentVersion
+        self.menuReadinessSignatures[key] = self.menuAdjunctReadinessSignature()
     }
 
     func hasOpenHostedSubviewMenu() -> Bool {
