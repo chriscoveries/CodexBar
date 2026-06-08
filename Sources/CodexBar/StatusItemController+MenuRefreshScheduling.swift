@@ -40,6 +40,7 @@ extension StatusItemController {
         guard signature != self.lastMenuAdjunctReadinessSignature else { return }
 
         if menuWasFreshBeforeOpen {
+            guard !self.isMenuDataRefreshInFlight else { return }
             self.invalidateMenus()
             self.populateMenu(menu, provider: provider)
             self.markMenuFresh(menu)
