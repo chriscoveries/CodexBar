@@ -181,6 +181,103 @@ struct CostUsageScannerCodexPriorityTests {
         #expect(turns.keys.sorted() == ["turn-after"])
     }
 
+    @Test
+    func `incremental memo picks up rows appended after the first query`() throws {
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+        let dbURL = env.root.appendingPathComponent("logs_2.sqlite")
+        try Self.createTestLogsDatabase(at: dbURL)
+        try Self.insertTestLog(
+            dbURL: dbURL,
+            timestamp: "2026-05-10T12:00:00Z",
+            body: "thread_id=thread-a turn.id=turn-a websocket request: "
+                + #"{"type":"response.create","model":"gpt-5.5","service_tier":"priority"}"#)
+
+        #expect(CostUsageScanner.codexPriorityTurns(databaseURL: dbURL).keys.sorted() == ["turn-a"])
+
+        try Self.insertTestLog(
+            dbURL: dbURL,
+            timestamp: "2026-05-10T12:05:00Z",
+            body: "thread_id=thread-b turn.id=turn-b websocket request: "
+                + #"{"type":"response.create","model":"gpt-5.5","service_tier":"priority"}"#)
+        try Self.insertTestLog(
+            dbURL: dbURL,
+            timestamp: "2026-05-10T12:05:01Z",
+            body: "thread_id=thread-a turn.id=turn-a websocket event: "
+                + #"{"type":"response.completed","response":{"model":"gpt-5.6"}}"#)
+
+        let merged = CostUsageScanner.codexPriorityTurns(databaseURL: dbURL)
+        #expect(merged.keys.sorted() == ["turn-a", "turn-b"])
+        // A completed event appended later still upgrades the model of a turn accumulated earlier.
+        #expect(merged["turn-a"]?.model == "gpt-5.6")
+    }
+
+    @Test
+    func `memo rescans when requested window expands earlier than accumulated coverage`() throws {
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+        let dbURL = env.root.appendingPathComponent("logs_2.sqlite")
+        try Self.createTestLogsDatabase(at: dbURL)
+        // Live refreshes always query through today, which is the memoized path.
+        let today = Date()
+        let yesterday = try #require(Calendar.current.date(byAdding: .day, value: -1, to: today))
+        let todayKey = CostUsageScanner.CostUsageDayRange.dayKey(from: today)
+        let yesterdayKey = CostUsageScanner.CostUsageDayRange.dayKey(from: yesterday)
+        let formatter = ISO8601DateFormatter()
+        try Self.insertTestLog(
+            dbURL: dbURL,
+            timestamp: formatter.string(from: yesterday),
+            body: "thread_id=thread-old turn.id=turn-old websocket request: "
+                + #"{"type":"response.create","model":"gpt-5.5","service_tier":"priority"}"#)
+        try Self.insertTestLog(
+            dbURL: dbURL,
+            timestamp: formatter.string(from: today),
+            body: "thread_id=thread-new turn.id=turn-new websocket request: "
+                + #"{"type":"response.create","model":"gpt-5.5","service_tier":"priority"}"#)
+
+        let narrow = CostUsageScanner.codexPriorityTurns(
+            databaseURL: dbURL,
+            sinceDayKey: todayKey,
+            untilDayKey: todayKey)
+        #expect(narrow.keys.sorted() == ["turn-new"])
+
+        let expanded = CostUsageScanner.codexPriorityTurns(
+            databaseURL: dbURL,
+            sinceDayKey: yesterdayKey,
+            untilDayKey: todayKey)
+        #expect(expanded.keys.sorted() == ["turn-new", "turn-old"])
+    }
+
+    @Test
+    func `memo rescans when the database shrinks or is replaced`() throws {
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+        let dbURL = env.root.appendingPathComponent("logs_2.sqlite")
+        try Self.createTestLogsDatabase(at: dbURL)
+        try Self.insertTestLog(
+            dbURL: dbURL,
+            timestamp: "2026-05-10T12:00:00Z",
+            body: "thread_id=thread-a turn.id=turn-a websocket request: "
+                + #"{"type":"response.create","model":"gpt-5.5","service_tier":"priority"}"#)
+        try Self.insertTestLog(
+            dbURL: dbURL,
+            timestamp: "2026-05-10T12:01:00Z",
+            body: "thread_id=thread-b turn.id=turn-b websocket request: "
+                + #"{"type":"response.create","model":"gpt-5.5","service_tier":"priority"}"#)
+        #expect(CostUsageScanner.codexPriorityTurns(databaseURL: dbURL).count == 2)
+
+        try FileManager.default.removeItem(at: dbURL)
+        try Self.createTestLogsDatabase(at: dbURL)
+        try Self.insertTestLog(
+            dbURL: dbURL,
+            timestamp: "2026-05-11T09:00:00Z",
+            body: "thread_id=thread-c turn.id=turn-c websocket request: "
+                + #"{"type":"response.create","model":"gpt-5.5","service_tier":"priority"}"#)
+
+        let replaced = CostUsageScanner.codexPriorityTurns(databaseURL: dbURL)
+        #expect(replaced.keys.sorted() == ["turn-c"])
+    }
+
     static func createTestLogsDatabase(at dbURL: URL) throws {
         var db: OpaquePointer?
         guard sqlite3_open(dbURL.path, &db) == SQLITE_OK else { throw SQLiteTestError.open }

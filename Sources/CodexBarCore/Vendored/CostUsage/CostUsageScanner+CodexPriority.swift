@@ -1,4 +1,5 @@
 import Foundation
+import os
 #if canImport(SQLite3)
 import SQLite3
 #endif
@@ -19,6 +20,35 @@ extension CostUsageScanner {
             .appendingPathComponent("logs_2.sqlite", isDirectory: false)
     }
 
+    #if canImport(SQLite3)
+    /// Accumulated priority-turn state for one trace database. The `logs` table is an
+    /// append-only log with an `INTEGER PRIMARY KEY AUTOINCREMENT` id, so rowids are
+    /// monotonic and never reused: rows at or below `lastRowID` have already been examined
+    /// and only newer rows need scanning on subsequent refreshes.
+    private struct CodexPriorityTurnsMemoState {
+        var coverageSinceEpoch: Int64
+        var lastRowID: Int64
+        var fileIdentity: UInt64?
+        var turns: [String: CodexPriorityTurnMetadata]
+        var completedModelsByTurnID: [String: String]
+    }
+
+    private static let codexPriorityTurnsMemo =
+        OSAllocatedUnfairLock<[String: CodexPriorityTurnsMemoState]>(initialState: [:])
+
+    static func _test_resetCodexPriorityTurnsMemo() {
+        self.codexPriorityTurnsMemo.withLock { $0.removeAll() }
+    }
+    #endif
+
+    /// Resolves priority turn metadata from the codex CLI trace database. The full-table
+    /// `LIKE` scan over `feedback_log_body` grows with the database (hundreds of megabytes on
+    /// active machines) and used to run on every refresh past the scan interval. For windows
+    /// that extend through today — every live refresh — the result is now accumulated per
+    /// database in process memory and only rows appended since the last call are examined; the
+    /// database shrinking or being replaced, or the requested window expanding earlier than
+    /// the accumulated coverage, triggers a full rescan. Windows that end before today keep
+    /// the original bounded one-shot query so historical lookups never pay an open-ended scan.
     static func codexPriorityTurns(
         databaseURL: URL? = nil,
         sinceDayKey: String? = nil,
@@ -28,6 +58,13 @@ extension CostUsageScanner {
         guard FileManager.default.fileExists(atPath: url.path) else { return [:] }
 
         #if canImport(SQLite3)
+        if let untilDayKey, untilDayKey < CostUsageDayRange.dayKey(from: Date()) {
+            return self.boundedCodexPriorityTurns(
+                databaseURL: url,
+                sinceDayKey: sinceDayKey,
+                untilDayKey: untilDayKey)
+        }
+
         var db: OpaquePointer?
         guard sqlite3_open_v2(url.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
             sqlite3_close(db)
@@ -36,33 +73,79 @@ extension CostUsageScanner {
         defer { sqlite3_close(db) }
         sqlite3_busy_timeout(db, 250)
 
-        let query = if sinceDayKey != nil || untilDayKey != nil {
-            """
-            select ts, feedback_log_body
-            from logs
-            where ts >= ? and ts < ?
-              and (feedback_log_body like '%websocket request:%'
-                   or feedback_log_body like '%response.completed%')
-            """
+        guard let maxRowID = self.maxLogsRowID(db) else { return [:] }
+
+        let requestedSinceEpoch: Int64 = if sinceDayKey != nil || untilDayKey != nil {
+            self.epochSeconds(forDayKey: sinceDayKey ?? "0000-01-01") ?? 0
         } else {
-            """
-            select ts, feedback_log_body
-            from logs
-            where feedback_log_body like '%websocket request:%'
-               or feedback_log_body like '%response.completed%'
-            """
+            0
         }
+
+        let fileIdentity = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.systemFileNumber]
+            .flatMap { $0 as? UInt64 }
+
+        var state = self.codexPriorityTurnsMemo.withLock { $0[url.path] }
+        if let memo = state,
+           maxRowID < memo.lastRowID
+           || requestedSinceEpoch < memo.coverageSinceEpoch
+           || memo.fileIdentity != fileIdentity
+        {
+            state = nil
+        }
+        var resolved = state ?? CodexPriorityTurnsMemoState(
+            coverageSinceEpoch: requestedSinceEpoch,
+            lastRowID: 0,
+            fileIdentity: fileIdentity,
+            turns: [:],
+            completedModelsByTurnID: [:])
+
+        if maxRowID > resolved.lastRowID {
+            guard self.accumulateCodexPriorityTurns(db, into: &resolved) else { return [:] }
+            resolved.lastRowID = maxRowID
+            let updated = resolved
+            self.codexPriorityTurnsMemo.withLock { $0[url.path] = updated }
+        }
+
+        guard sinceDayKey != nil || untilDayKey != nil else { return resolved.turns }
+        return resolved.turns.filter { _, turn in
+            self.timestamp(turn.timestamp, isInRangeSince: sinceDayKey, until: untilDayKey)
+        }
+        #else
+        return [:]
+        #endif
+    }
+
+    #if canImport(SQLite3)
+    /// The pre-memo one-shot query, kept for windows that end before today: both `ts` bounds
+    /// stay in SQL, so a narrow historical window never scans the database tail.
+    private static func boundedCodexPriorityTurns(
+        databaseURL: URL,
+        sinceDayKey: String?,
+        untilDayKey: String?) -> [String: CodexPriorityTurnMetadata]
+    {
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(databaseURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
+            sqlite3_close(db)
+            return [:]
+        }
+        defer { sqlite3_close(db) }
+        sqlite3_busy_timeout(db, 250)
+
+        let query = """
+        select ts, feedback_log_body
+        from logs
+        where ts >= ? and ts < ?
+          and (feedback_log_body like '%websocket request:%'
+               or feedback_log_body like '%response.completed%')
+        """
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, query, -1, &stmt, nil) == SQLITE_OK else { return [:] }
         defer { sqlite3_finalize(stmt) }
-
-        if sinceDayKey != nil || untilDayKey != nil {
-            let start = self.epochSeconds(forDayKey: sinceDayKey ?? "0000-01-01") ?? 0
-            let end = self.epochSeconds(forDayKey: self.nextDayKey(after: untilDayKey ?? "9999-12-30"))
-                ?? Int64.max
-            sqlite3_bind_int64(stmt, 1, start)
-            sqlite3_bind_int64(stmt, 2, end)
-        }
+        let start = self.epochSeconds(forDayKey: sinceDayKey ?? "0000-01-01") ?? 0
+        let end = self.epochSeconds(forDayKey: self.nextDayKey(after: untilDayKey ?? "9999-12-30"))
+            ?? Int64.max
+        sqlite3_bind_int64(stmt, 1, start)
+        sqlite3_bind_int64(stmt, 2, end)
 
         var turns: [String: CodexPriorityTurnMetadata] = [:]
         var completedModelsByTurnID: [String: String] = [:]
@@ -87,10 +170,56 @@ extension CostUsageScanner {
             turns[parsed.turnID] = parsed
         }
         return turns
-        #else
-        return [:]
-        #endif
     }
+
+    private static func maxLogsRowID(_ db: OpaquePointer?) -> Int64? {
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "select max(rowid) from logs", -1, &stmt, nil) == SQLITE_OK
+        else { return nil }
+        defer { sqlite3_finalize(stmt) }
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+        return sqlite3_column_int64(stmt, 0)
+    }
+
+    private static func accumulateCodexPriorityTurns(
+        _ db: OpaquePointer?,
+        into state: inout CodexPriorityTurnsMemoState) -> Bool
+    {
+        let query = """
+        select rowid, ts, feedback_log_body
+        from logs
+        where rowid > ? and ts >= ?
+          and (feedback_log_body like '%websocket request:%'
+               or feedback_log_body like '%response.completed%')
+        order by rowid
+        """
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, query, -1, &stmt, nil) == SQLITE_OK else { return false }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_int64(stmt, 1, state.lastRowID)
+        sqlite3_bind_int64(stmt, 2, state.coverageSinceEpoch)
+
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            let timestamp = self.timestamp(stmt: stmt, index: 1)
+            guard let body = self.text(stmt: stmt, index: 2) else { continue }
+            if let completed = self.parseCodexCompletedTraceRow(body: body) {
+                state.completedModelsByTurnID[completed.turnID] = completed.model
+                if var existing = state.turns[completed.turnID] {
+                    existing.model = completed.model
+                    state.turns[completed.turnID] = existing
+                }
+                continue
+            }
+            guard var parsed = self.parseCodexPriorityTraceRow(timestamp: timestamp, body: body)
+            else { continue }
+            if let completedModel = state.completedModelsByTurnID[parsed.turnID] {
+                parsed.model = completedModel
+            }
+            state.turns[parsed.turnID] = parsed
+        }
+        return true
+    }
+    #endif
 
     static func parseCodexPriorityTraceRow(timestamp: String?, body: String) -> CodexPriorityTurnMetadata? {
         guard let markerRange = body.range(of: self.requestMarker) else { return nil }
