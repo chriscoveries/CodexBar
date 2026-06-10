@@ -5,6 +5,7 @@ import QuartzCore
 extension StatusItemController {
     private static let defaultDeferredMenuInteractionRefreshDelay: Duration = .milliseconds(250)
     private static let slowMenuOperationThreshold: TimeInterval = 0.15
+    private static let slowChartRenderThreshold: TimeInterval = 0.050
 
     #if DEBUG
     private static var deferredMenuInteractionRefreshDelayForTesting: Duration = .milliseconds(250)
@@ -43,6 +44,17 @@ extension StatusItemController {
                 "provider": provider?.rawValue ?? "nil",
                 "openMenus": "\(self.openMenus.count)",
                 "storeRefreshing": self.store.isRefreshing ? "1" : "0",
+            ])
+    }
+
+    func logChartRenderDurationIfSlow(_ label: String, startedAt: CFTimeInterval) {
+        let elapsed = CACurrentMediaTime() - startedAt
+        guard elapsed >= Self.slowChartRenderThreshold else { return }
+        self.menuLogger.warning(
+            "slow chart render",
+            metadata: [
+                "section": label,
+                "durationMs": String(format: "%.1f", elapsed * 1000),
             ])
     }
 

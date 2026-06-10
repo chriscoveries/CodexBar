@@ -597,6 +597,9 @@ extension StatusItemController {
             }
         guard !rows.isEmpty else { return false }
 
+        let t0 = CACurrentMediaTime()
+        defer { self.logChartRenderDurationIfSlow("addOverviewRows(\(rows.count))", startedAt: t0) }
+
         for (index, row) in rows.enumerated() {
             let identifier = "\(Self.overviewRowIdentifierPrefix)\(row.provider.rawValue)"
             let storageText = self.store.storageFootprintText(for: row.provider)

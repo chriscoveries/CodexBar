@@ -1,5 +1,6 @@
 import AppKit
 import CodexBarCore
+import QuartzCore
 import SwiftUI
 
 extension StatusItemController {
@@ -60,6 +61,7 @@ extension StatusItemController {
             providerRawValue: placeholder.toolTip)
         menu.removeAllItems()
 
+        let t0 = CACurrentMediaTime()
         let didHydrate: Bool = switch chartID {
         case Self.usageBreakdownChartID:
             self.appendUsageBreakdownChartItem(to: menu, width: width)
@@ -100,6 +102,7 @@ extension StatusItemController {
         default:
             false
         }
+        self.logChartRenderDurationIfSlow("hydrateHostedSubview:\(chartID)", startedAt: t0)
 
         if !didHydrate {
             self.appendHostedSubviewUnavailableItem(
@@ -126,6 +129,7 @@ extension StatusItemController {
         }
 
         menu.removeAllItems()
+        let t0 = CACurrentMediaTime()
         let didHydrate: Bool = switch identity.chartID {
         case Self.usageBreakdownChartID:
             self.appendUsageBreakdownChartItem(to: menu, width: width)
@@ -158,6 +162,7 @@ extension StatusItemController {
         default:
             false
         }
+        self.logChartRenderDurationIfSlow("refreshHostedSubview:\(identity.chartID)", startedAt: t0)
 
         if !didHydrate {
             self.appendHostedSubviewUnavailableItem(
