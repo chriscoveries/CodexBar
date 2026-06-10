@@ -113,6 +113,9 @@ final class OpenAIDashboardWebViewCache {
     private let idleTimeout: TimeInterval
     private var idlePruneWorkItem: DispatchWorkItem?
     private var idlePruneGeneration = 0
+    #if DEBUG
+    private(set) var idlePruneDeadlineForTesting: Date?
+    #endif
     /// Reuse the validated analytics page only for the immediate next handoff.
     private let preservedPageHandoffTimeout: TimeInterval = 5
     private let blankURL = URL(string: "about:blank")!
@@ -492,12 +495,18 @@ final class OpenAIDashboardWebViewCache {
             MainActor.assumeIsolated {
                 guard let self, self.idlePruneGeneration == generation else { return }
                 self.idlePruneWorkItem = nil
+                #if DEBUG
+                self.idlePruneDeadlineForTesting = nil
+                #endif
                 let pruneTime = Date()
                 self.prune(now: pruneTime)
                 self.scheduleNextIdlePrune(now: pruneTime)
             }
         }
         self.idlePruneWorkItem = workItem
+        #if DEBUG
+        self.idlePruneDeadlineForTesting = nextExpiry
+        #endif
         let delay = max(0, nextExpiry.timeIntervalSince(now)) + 0.01
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
     }
@@ -506,6 +515,9 @@ final class OpenAIDashboardWebViewCache {
         self.idlePruneGeneration &+= 1
         self.idlePruneWorkItem?.cancel()
         self.idlePruneWorkItem = nil
+        #if DEBUG
+        self.idlePruneDeadlineForTesting = nil
+        #endif
     }
 
     private func prune(now: Date) {
