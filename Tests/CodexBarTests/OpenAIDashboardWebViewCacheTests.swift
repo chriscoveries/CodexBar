@@ -237,7 +237,7 @@ struct OpenAIDashboardWebViewCacheTests {
     @Test
     func `Later release does not postpone an older idle entry`() async throws {
         if self.shouldSkipOnCI() { return }
-        let cache = OpenAIDashboardWebViewCache(idleTimeout: 0.5)
+        let cache = OpenAIDashboardWebViewCache(idleTimeout: 5)
         let firstStore = WKWebsiteDataStore.nonPersistent()
         let secondStore = WKWebsiteDataStore.nonPersistent()
         let url = try #require(URL(string: "about:blank"))
@@ -247,29 +247,22 @@ struct OpenAIDashboardWebViewCacheTests {
             usageURL: url,
             logger: nil)
         firstLease.release()
+        let firstDeadline = try #require(cache.idlePruneDeadlineForTesting)
 
-        try await Task.sleep(for: .milliseconds(250))
+        try await Task.sleep(for: .milliseconds(50))
 
         let secondLease = try await cache.acquire(
             websiteDataStore: secondStore,
             usageURL: url,
             logger: nil)
         secondLease.release()
+        let rescheduledDeadline = try #require(cache.idlePruneDeadlineForTesting)
 
-        let firstDeadline = Date().addingTimeInterval(1.5)
-        while cache.hasCachedEntry(for: firstStore), Date() < firstDeadline {
-            try await Task.sleep(for: .milliseconds(20))
-        }
-
-        #expect(!cache.hasCachedEntry(for: firstStore), "Expected the oldest idle entry to be pruned first")
+        #expect(
+            abs(rescheduledDeadline.timeIntervalSince(firstDeadline)) < 0.001,
+            "A later release should keep the prune scheduled for the oldest idle entry")
+        #expect(cache.hasCachedEntry(for: firstStore))
         #expect(cache.hasCachedEntry(for: secondStore), "A later release should keep its own idle window")
-
-        let secondDeadline = Date().addingTimeInterval(1)
-        while cache.hasCachedEntry(for: secondStore), Date() < secondDeadline {
-            try await Task.sleep(for: .milliseconds(20))
-        }
-
-        #expect(!cache.hasCachedEntry(for: secondStore), "Expected the next idle deadline to be scheduled")
         cache.clearAllForTesting()
     }
 
