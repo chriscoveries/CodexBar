@@ -35,7 +35,7 @@ extension StatusItemController {
 
     func codexAccountMenuDisplay(for provider: UsageProvider) -> CodexAccountMenuDisplay? {
         guard provider == .codex else { return nil }
-        let projection = self.settings.codexVisibleAccountProjection
+        let projection = self.settings.codexVisibleAccountProjectionForMenuDisplay
         guard projection.visibleAccounts.count > 1 else { return nil }
         let showAll = self.settings.multiAccountMenuLayout == .stacked
         let accounts = showAll

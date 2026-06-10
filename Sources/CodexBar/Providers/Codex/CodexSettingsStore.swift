@@ -240,8 +240,47 @@ extension SettingsStore {
         return snapshot
     }
 
+    /// Menu rendering must not block on live `auth.json` reads, JWT parsing, and fingerprint
+    /// hashing. This returns the cached reconciliation snapshot even when it is older than the
+    /// freshness interval and refreshes the cache off the menu-build path instead, so only the
+    /// first menu build after launch (no cache yet) or an active-source change pays the
+    /// synchronous load. Account changes land on the next menu rebuild.
+    var codexAccountReconciliationSnapshotForMenuDisplay: CodexAccountReconciliationSnapshot {
+        let activeSource = self.codexPersistedActiveSource
+        guard Self.codexAccountReconciliationSnapshotCacheInterval > 0,
+              let cached = self.cachedCodexAccountReconciliationSnapshot,
+              cached.activeSource == activeSource
+        else {
+            return self.codexAccountReconciliationSnapshot(activeSourceOverride: nil)
+        }
+        if Date().timeIntervalSince(cached.loadedAt) >= Self.codexAccountReconciliationSnapshotCacheInterval {
+            self.scheduleCodexAccountReconciliationSnapshotRevalidation()
+        }
+        return cached.snapshot
+    }
+
+    private func scheduleCodexAccountReconciliationSnapshotRevalidation() {
+        guard self.codexAccountSnapshotRevalidationTask == nil else { return }
+        self.codexAccountSnapshotRevalidationTask = Task { @MainActor [weak self] in
+            // The main dispatch queue does not drain while AppKit runs the menu-tracking run loop
+            // mode, so this hop keeps the reload from landing inside an open tracking session.
+            await withCheckedContinuation { continuation in
+                DispatchQueue.main.async { continuation.resume() }
+            }
+            guard let self else { return }
+            defer { self.codexAccountSnapshotRevalidationTask = nil }
+            guard !Task.isCancelled else { return }
+            self.invalidateCodexAccountReconciliationSnapshotCache()
+            _ = self.codexAccountReconciliationSnapshot(activeSourceOverride: nil)
+        }
+    }
+
     var codexVisibleAccountProjection: CodexVisibleAccountProjection {
         CodexVisibleAccountProjection.make(from: self.codexAccountReconciliationSnapshot)
+    }
+
+    var codexVisibleAccountProjectionForMenuDisplay: CodexVisibleAccountProjection {
+        CodexVisibleAccountProjection.make(from: self.codexAccountReconciliationSnapshotForMenuDisplay)
     }
 
     var codexVisibleAccounts: [CodexVisibleAccount] {

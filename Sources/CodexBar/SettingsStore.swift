@@ -140,6 +140,7 @@ final class SettingsStore {
     @ObservationIgnored var tokenAccountsLoaded = false
     @ObservationIgnored var cachedCodexAccountReconciliationSnapshot:
         CachedCodexAccountReconciliationSnapshot?
+    @ObservationIgnored var codexAccountSnapshotRevalidationTask: Task<Void, Never>?
     @ObservationIgnored var mergedMenuLastSelectedWasOverviewStorage = false
     @ObservationIgnored var selectedMenuProviderRawStorage: String?
     var defaultsState: SettingsDefaultsState
