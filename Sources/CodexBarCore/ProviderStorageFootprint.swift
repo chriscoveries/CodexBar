@@ -329,6 +329,15 @@ public enum ProviderStoragePathCatalog {
             [
                 homePath(".config/github-copilot"),
             ]
+        case .cursor:
+            [
+                homePath("Library/Application Support/Cursor"),
+                homePath(".cursor"),
+                homePath("Library/Caches/Cursor"),
+                homePath("Library/Caches/com.todesktop.230313mzl4w4u92"),
+                homePath("Library/Caches/com.todesktop.230313mzl4w4u92.ShipIt"),
+                homePath("Library/Caches/cursor-compile-cache"),
+            ]
         default:
             []
         }

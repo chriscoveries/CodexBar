@@ -109,6 +109,21 @@ struct ProviderStorageFootprintTests {
     }
 
     @Test
+    func `cursor path catalog includes application data and caches`() {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let paths = ProviderStoragePathCatalog.candidatePaths(for: .cursor, environment: [:])
+
+        #expect(paths == [
+            home.appendingPathComponent("Library/Application Support/Cursor", isDirectory: true).path,
+            home.appendingPathComponent(".cursor", isDirectory: true).path,
+            home.appendingPathComponent("Library/Caches/Cursor", isDirectory: true).path,
+            home.appendingPathComponent("Library/Caches/com.todesktop.230313mzl4w4u92", isDirectory: true).path,
+            home.appendingPathComponent("Library/Caches/com.todesktop.230313mzl4w4u92.ShipIt", isDirectory: true).path,
+            home.appendingPathComponent("Library/Caches/cursor-compile-cache", isDirectory: true).path,
+        ])
+    }
+
+    @Test
     func `claude recommendations use documented cleanup categories`() {
         let root = "/Users/test/.claude"
         let footprint = ProviderStorageFootprint(

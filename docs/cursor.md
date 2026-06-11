@@ -46,6 +46,17 @@ Manual option:
 - Chrome/Chromium forks: `~/Library/Application Support/Google/Chrome/*/Cookies`
 - Firefox: `~/Library/Application Support/Firefox/Profiles/*/cookies.sqlite`
 
+## Local storage footprint
+When **Settings → Advanced → Track provider local storage** is enabled, CodexBar measures:
+- `~/Library/Application Support/Cursor`
+- `~/.cursor`
+- `~/Library/Caches/Cursor`
+- `~/Library/Caches/com.todesktop.230313mzl4w4u92`
+- `~/Library/Caches/com.todesktop.230313mzl4w4u92.ShipIt`
+- `~/Library/Caches/cursor-compile-cache`
+
+The storage detail lists measured paths and their sizes. CodexBar does not delete Cursor data.
+
 ## Snapshot mapping
 - Primary: plan usage percent (included plan).
 - Secondary: Auto + Composer usage percent.
