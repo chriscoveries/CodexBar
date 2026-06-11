@@ -11,6 +11,7 @@
 - Claude: explain that an unauthorized Web session requires signing in at claude.ai or refreshing imported cookies (#1287). Thanks @LeoLin990405!
 - CLI server: reload provider config for every usage and cost request, invalidate config-dependent cache entries, and prune expired config variants without restarting `codexbar serve`. Thanks @enieuwy!
 - Menu bar: reserve quota-bar space consistently across Overview and provider switcher segments so selection no longer changes segment height (#1445). Thanks @Zihao-Qi!
+- Cost usage: accept normal models.dev catalog churn while retaining prior model prices as fallbacks, so newly priced models appear without requiring a manual cache reset (#1438). Thanks @tom-rigelblu!
 - Menu bar: anchor merged provider dropdowns to the status item's trailing edge without marking preserved in-flight refresh content fresh, preventing horizontal drift while keeping deferred updates visible (#1288). Thanks @Yuxin-Qiao!
 - Cost usage: replace repeated Foundation metadata/root checks with one portable file-stat pass so expired Codex history refreshes stay responsive on very large session archives (#1392). Thanks @TheAngryPit and @ProspectOre!
 - Cursor: show the Safari Full Disk Access recovery hint before the long browser login list so permission guidance remains visible when menu errors truncate (#1419, fixes #1417). Thanks @hhh2210!
