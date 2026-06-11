@@ -634,6 +634,47 @@ struct CostUsageScannerCodexPriorityTests {
     }
 
     @Test
+    func `persisted memos load independently from distinct cache roots`() throws {
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+        let firstRoot = env.root.appendingPathComponent("first-cache", isDirectory: true)
+        let secondRoot = env.root.appendingPathComponent("second-cache", isDirectory: true)
+        let firstPath = "/tmp/codex-priority-first-\(UUID().uuidString)"
+        let secondPath = "/tmp/codex-priority-second-\(UUID().uuidString)"
+        defer {
+            CostUsageScanner._test_removeCodexPriorityTurnsMemoState(forPath: firstPath)
+            CostUsageScanner._test_removeCodexPriorityTurnsMemoState(forPath: secondPath)
+        }
+
+        func state(lastRowID: Int64) -> CostUsageScanner.CodexPriorityTurnsMemoState {
+            CostUsageScanner.CodexPriorityTurnsMemoState(
+                observationID: 7,
+                coverageSinceEpoch: 0,
+                lastRowID: lastRowID,
+                fileIdentity: 42,
+                turns: [:],
+                requestSourcesByTurnID: [:],
+                priorityCompletedModelsByTurnID: [:],
+                completedModelsByTurnID: [:],
+                completedTurnIDInsertionOrder: [],
+                completedTurnIDInsertionOrderStartIndex: 0)
+        }
+
+        CodexPriorityTurnsMemoIO.save(
+            states: [firstPath: state(lastRowID: 11)],
+            cacheRoot: firstRoot)
+        CodexPriorityTurnsMemoIO.save(
+            states: [secondPath: state(lastRowID: 22)],
+            cacheRoot: secondRoot)
+
+        CostUsageScanner.loadCodexPriorityTurnsMemoFromDiskIfNeeded(cacheRoot: firstRoot)
+        CostUsageScanner.loadCodexPriorityTurnsMemoFromDiskIfNeeded(cacheRoot: secondRoot)
+
+        #expect(CostUsageScanner._test_codexPriorityTurnsMemoState(forPath: firstPath)?.lastRowID == 11)
+        #expect(CostUsageScanner._test_codexPriorityTurnsMemoState(forPath: secondPath)?.lastRowID == 22)
+    }
+
+    @Test
     func `persisted memo from a different parser hash or version is discarded`() throws {
         let env = try CostUsageTestEnvironment()
         defer { env.cleanup() }

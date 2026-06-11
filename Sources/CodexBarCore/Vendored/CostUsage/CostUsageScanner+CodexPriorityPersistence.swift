@@ -89,16 +89,16 @@ extension CostUsageScanner {
     }
 
     private static let codexPriorityTurnsMemoDiskState =
-        CodexPriorityDiskLockedState<(loaded: Bool, dirty: Bool)>((loaded: false, dirty: false))
+        CodexPriorityDiskLockedState<(loadedArtifactURLs: Set<URL>, dirty: Bool)>(
+            (loadedArtifactURLs: [], dirty: false))
 
-    /// Seeds the in-process memo from the persisted artifact once per process, before the
-    /// first priority-turns scan. Seeding goes through the monotonic store, so a scan that
-    /// somehow completed first can never be regressed by older on-disk state.
+    /// Seeds the in-process memo from each selected persisted artifact once per process,
+    /// before that cache root's first priority-turns scan. Seeding goes through the monotonic
+    /// store, so a scan that somehow completed first can never be regressed by older on-disk state.
     static func loadCodexPriorityTurnsMemoFromDiskIfNeeded(cacheRoot: URL? = nil) {
+        let artifactURL = CodexPriorityTurnsMemoIO.artifactURL(cacheRoot: cacheRoot).standardizedFileURL
         let shouldLoad = self.codexPriorityTurnsMemoDiskState.withLock { state in
-            if state.loaded { return false }
-            state.loaded = true
-            return true
+            state.loadedArtifactURLs.insert(artifactURL).inserted
         }
         guard shouldLoad, let persisted = CodexPriorityTurnsMemoIO.load(cacheRoot: cacheRoot)
         else { return }
@@ -130,7 +130,9 @@ extension CostUsageScanner {
     }
 
     static func _test_resetCodexPriorityTurnsMemoDiskState() {
-        self.codexPriorityTurnsMemoDiskState.withLock { $0 = (loaded: false, dirty: false) }
+        self.codexPriorityTurnsMemoDiskState.withLock {
+            $0 = (loadedArtifactURLs: [], dirty: false)
+        }
     }
 }
 #else
