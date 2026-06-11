@@ -5,17 +5,19 @@ import Testing
 struct CostUsageScanExecutorTests {
     @Test
     func `runs work on the dedicated scan queue and returns its value`() async throws {
-        let label = try await CostUsageScanExecutor.run { _ in
+        let queue = self.makeQueue()
+        let label = try await CostUsageScanExecutor.run(on: queue) { _ in
             String(cString: __dispatch_queue_get_label(nil))
         }
-        #expect(label == CostUsageScanExecutor.queueLabel)
+        #expect(label == queue.label)
     }
 
     @Test
     func `propagates thrown errors`() async {
         struct ScanFailure: Error {}
+        let queue = self.makeQueue()
         await #expect(throws: ScanFailure.self) {
-            try await CostUsageScanExecutor.run { _ -> Int in
+            try await CostUsageScanExecutor.run(on: queue) { _ -> Int in
                 throw ScanFailure()
             }
         }
@@ -23,11 +25,12 @@ struct CostUsageScanExecutorTests {
 
     @Test
     func `serializes overlapping scans`() async throws {
+        let queue = self.makeQueue()
         let state = LockedValue((active: 0, maxActive: 0))
         try await withThrowingTaskGroup(of: Void.self) { group in
             for _ in 0..<4 {
                 group.addTask {
-                    try await CostUsageScanExecutor.run { _ in
+                    try await CostUsageScanExecutor.run(on: queue) { _ in
                         state.update {
                             $0.active += 1
                             $0.maxActive = max($0.maxActive, $0.active)
@@ -44,9 +47,10 @@ struct CostUsageScanExecutorTests {
 
     @Test
     func `cancellation reaches in-flight work through checkCancellation`() async {
+        let queue = self.makeQueue()
         let workStarted = LockedValue(false)
         let task = Task {
-            try await CostUsageScanExecutor.run { checkCancellation in
+            try await CostUsageScanExecutor.run(on: queue) { checkCancellation in
                 workStarted.set(true)
                 while true {
                     try checkCancellation()
@@ -63,10 +67,11 @@ struct CostUsageScanExecutorTests {
 
     @Test
     func `work cancelled while queued resumes with CancellationError`() async {
+        let queue = self.makeQueue()
         let blockerStarted = LockedValue(false)
         let releaseBlocker = LockedValue(false)
         let blocker = Task {
-            try await CostUsageScanExecutor.run { _ in
+            try await CostUsageScanExecutor.run(on: queue) { _ in
                 blockerStarted.set(true)
                 while !releaseBlocker.value {
                     Thread.sleep(forTimeInterval: 0.002)
@@ -77,7 +82,7 @@ struct CostUsageScanExecutorTests {
 
         let queuedWorkStarted = LockedValue(false)
         let queued = Task {
-            try await CostUsageScanExecutor.run { _ in
+            try await CostUsageScanExecutor.run(on: queue) { _ in
                 queuedWorkStarted.set(true)
                 Issue.record("queued work should not run after cancellation")
             }
@@ -105,6 +110,10 @@ struct CostUsageScanExecutorTests {
         releaseBlocker.set(true)
         await observer.value
         _ = try? await blocker.value
+    }
+
+    private func makeQueue() -> DispatchQueue {
+        DispatchQueue(label: "\(CostUsageScanExecutor.queueLabel).tests.\(UUID().uuidString)")
     }
 
     private func waitUntil(

@@ -103,6 +103,14 @@ public enum CostUsageScanExecutor {
         _ work: @escaping @Sendable (_ checkCancellation: @escaping @Sendable () throws -> Void) throws -> T)
         async throws -> T
     {
+        try await self.run(on: self.queue, work)
+    }
+
+    static func run<T: Sendable>(
+        on queue: DispatchQueue,
+        _ work: @escaping @Sendable (_ checkCancellation: @escaping @Sendable () throws -> Void) throws -> T)
+        async throws -> T
+    {
         let state = RunState<T>()
         let checkCancellation: @Sendable () throws -> Void = {
             try state.checkCancellation()
@@ -110,7 +118,7 @@ public enum CostUsageScanExecutor {
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 guard state.install(continuation) else { return }
-                self.queue.async {
+                queue.async {
                     guard state.begin() else { return }
                     state.complete(with: Result { try work(checkCancellation) })
                 }
