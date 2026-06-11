@@ -36,10 +36,27 @@ extension UsageStore {
 
     func userFacingError(for provider: UsageProvider) -> String? {
         if let raw = self.errors[provider] {
-            guard provider == .codex else { return raw }
-            return CodexUIErrorMapper.userFacingMessage(raw)
+            switch provider {
+            case .codex:
+                return CodexUIErrorMapper.userFacingMessage(raw)
+            case .grok:
+                return Self.userFacingGrokError(raw)
+            default:
+                return raw
+            }
         }
         return self.unavailableMessage(for: provider)
+    }
+
+    static func userFacingGrokError(_ raw: String) -> String {
+        let lower = raw.lowercased()
+        guard lower.contains("grok web billing rpc failed with status 7"),
+              lower.contains("oauth2") || lower.contains("access token"),
+              lower.contains("unauthenticated") || lower.contains("bad-credentials")
+        else {
+            return raw
+        }
+        return "Grok web billing rejected credentials. Sign in to grok.com in Chrome or run `grok login` to refresh xAI auth."
     }
 
     func unavailableMessage(for provider: UsageProvider) -> String? {

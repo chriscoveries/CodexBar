@@ -73,7 +73,7 @@ struct GrokWebBillingFetcherTests {
         ]
         var attemptedHeaders: [String] = []
 
-        let result = try await GrokWebFetchStrategy.fetchFirstValidCookieSession(sessions) { cookieHeader in
+        let result = try await GrokWebFetchStrategy.fetchFirstValidCookieSession(sessions) { cookieHeader, _ in
             attemptedHeaders.append(cookieHeader)
             guard cookieHeader.contains("valid") else {
                 throw GrokWebBillingError.requestFailed(401, "stale")
@@ -111,6 +111,43 @@ struct GrokWebBillingFetcherTests {
 
         #expect(snapshot.usedPercent == 42.5)
         #expect(snapshot.resetsAt == Date(timeIntervalSince1970: TimeInterval(reset)))
+    }
+
+    @Test
+    func `parses unframed grok billing protobuf payload`() throws {
+        let hex =
+            "0a3f0d7f6a9c3f12001a002206088097f3d0062a060880b191d2063a07080215a9389b3f3a07080115d6ea183c" +
+            "421208011206088097f3d0061a060880b191d206"
+        let data = try #require(Self.data(hexString: hex))
+
+        let snapshot = try GrokWebBillingFetcher.parseGRPCWebResponse(
+            data,
+            now: Date(timeIntervalSince1970: 1_780_000_000))
+
+        #expect(snapshot.usedPercent == 1.222000002861023)
+        #expect(snapshot.resetsAt == Date(timeIntervalSince1970: 1_782_864_000))
+    }
+
+    @Test
+    func `web strategy tries cookie plus bearer before cookie only`() async throws {
+        let cookie = try #require(Self.cookie(name: "sso", value: "session"))
+        let sessions = [GrokCookieImporter.SessionInfo(cookies: [cookie], sourceLabel: "Chrome")]
+        var attempts: [String] = []
+
+        let result = try await GrokWebFetchStrategy.fetchFirstValidCookieSession(
+            sessions,
+            credentials: Self.credentials)
+        { _, authCredentials in
+            let mode = authCredentials == nil ? "cookie-only" : "cookie+bearer"
+            attempts.append(mode)
+            guard mode == "cookie+bearer" else {
+                throw GrokWebBillingError.requestFailed(401, "needs bearer")
+            }
+            return GrokWebBillingSnapshot(usedPercent: 9, resetsAt: nil)
+        }
+
+        #expect(attempts == ["cookie+bearer"])
+        #expect(result.0.usedPercent == 9)
     }
 
     @Test
@@ -198,6 +235,48 @@ struct GrokWebBillingFetcherTests {
                 endpoint: endpoint)
         } throws: { error in
             error.localizedDescription.contains("grok login")
+        }
+    }
+
+    @Test
+    func `web fetch turns grpc permission denied bad credentials into reauth guidance`() async throws {
+        defer {
+            GrokWebBillingStubURLProtocol.requests = []
+            GrokWebBillingStubURLProtocol.requestBodies = []
+            GrokWebBillingStubURLProtocol.handler = nil
+        }
+
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [GrokWebBillingStubURLProtocol.self]
+        let session = URLSession(configuration: config)
+        let endpoint = try #require(URL(string: "https://grok.test/grok_api_v2.GrokBuildBilling/GetGrokCreditsConfig"))
+        let message = "The OAuth2 access token could not be validated. [WKE=unauthenticated:bad-credentials]"
+        let encodedMessage = message.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? message
+        let body = Self.grpcFrame(
+            Data("grpc-status: 7\r\ngrpc-message: \(encodedMessage)\r\n".utf8),
+            flags: 0x80)
+
+        GrokWebBillingStubURLProtocol.requests = []
+        GrokWebBillingStubURLProtocol.requestBodies = []
+        GrokWebBillingStubURLProtocol.handler = { request in
+            let url = try #require(request.url)
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/grpc-web+proto"])!
+            return (response, body)
+        }
+
+        await #expect {
+            _ = try await GrokWebBillingFetcher.fetch(
+                credentials: Self.credentials,
+                session: session,
+                endpoint: endpoint)
+        } throws: { error in
+            error.localizedDescription.contains("grok.com") &&
+                error.localizedDescription.contains("grok login") &&
+                !error.localizedDescription.contains("status 7")
         }
     }
 
@@ -591,6 +670,18 @@ struct GrokWebBillingFetcherTests {
             .name: name,
             .value: value,
         ])
+    }
+
+    private static func data(hexString: String) -> Data? {
+        var data = Data()
+        var index = hexString.startIndex
+        while index < hexString.endIndex {
+            let next = hexString.index(index, offsetBy: 2, limitedBy: hexString.endIndex) ?? hexString.endIndex
+            guard let byte = UInt8(hexString[index..<next], radix: 16) else { return nil }
+            data.append(byte)
+            index = next
+        }
+        return data
     }
 }
 

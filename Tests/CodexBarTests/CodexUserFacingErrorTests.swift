@@ -150,6 +150,29 @@ struct CodexUserFacingErrorTests {
     }
 
     @Test
+    func `grok status seven bad credentials shows reauth guidance`() {
+        let store = self.makeUsageStore(suite: "CodexUserFacingErrorTests-grok-status-seven")
+        store.errors[.grok] = """
+        Grok web billing RPC failed with status 7: The OAuth2 access token could not be validated. \
+        [WKE=unauthenticated:bad-credentials]
+        """
+
+        #expect(
+            store.userFacingError(for: .grok) ==
+                "Grok web billing rejected credentials. Sign in to grok.com in Chrome or run `grok login` to refresh xAI auth.")
+    }
+
+    @Test
+    func `grok unrelated errors keep raw text`() {
+        let store = self.makeUsageStore(suite: "CodexUserFacingErrorTests-grok-raw")
+        store.errors[.grok] = "Grok web billing RPC failed with status 7: quota temporarily unavailable"
+
+        #expect(
+            store.userFacingError(for: .grok) ==
+                "Grok web billing RPC failed with status 7: quota temporarily unavailable")
+    }
+
+    @Test
     func `providers pane codex model uses sanitized values`() {
         let settings = self.makeSettingsStore(suite: "CodexUserFacingErrorTests-pane-model")
         let store = self.makeUsageStore(settings: settings)

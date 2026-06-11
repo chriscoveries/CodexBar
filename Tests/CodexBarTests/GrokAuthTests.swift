@@ -140,6 +140,9 @@ struct GrokAuthTests {
         #expect(GrokStatusProbe.shouldSurfaceRemoteAuthError(GrokWebBillingError.requestFailed(401, "unauthorized")))
         #expect(GrokStatusProbe.shouldSurfaceRemoteAuthError(GrokWebBillingError.requestFailed(403, "forbidden")))
         #expect(GrokStatusProbe.shouldSurfaceRemoteAuthError(GrokWebBillingError.rpcFailed(16, "token expired")))
+        #expect(GrokStatusProbe.shouldSurfaceRemoteAuthError(GrokWebBillingError.rpcFailed(
+            7,
+            "The OAuth2 access token could not be validated. [WKE=unauthenticated:bad-credentials]")))
         #expect(!GrokStatusProbe.shouldSurfaceRemoteAuthError(GrokWebBillingError.parseFailed))
     }
 

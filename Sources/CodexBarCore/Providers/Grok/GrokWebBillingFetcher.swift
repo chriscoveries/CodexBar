@@ -31,19 +31,32 @@ public enum GrokWebBillingError: LocalizedError, Sendable {
             "Grok web billing returned an invalid response."
         case let .requestFailed(status, body):
             if status == 401 || status == 403 {
-                "Grok web billing rejected credentials. Run `grok login` to refresh xAI auth."
+                Self.reauthMessage
             } else {
                 "Grok web billing request failed with HTTP \(status): \(body)"
             }
         case let .rpcFailed(status, message):
-            if status == 16 {
-                "Grok web billing rejected credentials. Run `grok login` to refresh xAI auth."
+            if Self.isAuthenticationFailure(status: status, message: message) {
+                Self.reauthMessage
             } else {
                 "Grok web billing RPC failed with status \(status): \(message)"
             }
         case .parseFailed:
             "Could not parse Grok web billing usage."
         }
+    }
+
+    private static let reauthMessage =
+        "Grok web billing rejected credentials. Sign in to grok.com in Chrome or run `grok login` to refresh xAI auth."
+
+    static func isAuthenticationFailure(status: Int, message: String) -> Bool {
+        if status == 16 { return true }
+        guard status == 7 else { return false }
+        let lower = message.lowercased()
+        return lower.contains("bad-credentials") ||
+            lower.contains("unauthenticated") ||
+            lower.contains("oauth2") ||
+            lower.contains("access token")
     }
 }
 
@@ -70,7 +83,23 @@ public enum GrokWebBillingFetcher {
         endpoint: URL = Self.defaultEndpoint) async throws -> GrokWebBillingSnapshot
     {
         try await self.fetch(
-            authorizationHeader: nil,
+            cookieHeader: cookieHeader,
+            credentials: nil,
+            session: transport,
+            endpoint: endpoint)
+    }
+
+    public static func fetch(
+        cookieHeader: String,
+        credentials: GrokCredentials?,
+        session transport: any ProviderHTTPTransport = ProviderHTTPClient.shared,
+        endpoint: URL = Self.defaultEndpoint) async throws -> GrokWebBillingSnapshot
+    {
+        let authorizationHeader = credentials.flatMap { credential in
+            credential.isExpired ? nil : "Bearer \(credential.accessToken)"
+        }
+        return try await self.fetch(
+            authorizationHeader: authorizationHeader,
             cookieHeader: cookieHeader,
             transport: transport,
             endpoint: endpoint)
@@ -157,7 +186,10 @@ public enum GrokWebBillingFetcher {
     }
 
     static func parseGRPCWebResponse(_ data: Data, now: Date = Date()) throws -> GrokWebBillingSnapshot {
-        let payloads = Self.grpcWebDataFrames(from: data)
+        var payloads = Self.grpcWebDataFrames(from: data)
+        if payloads.isEmpty, Self.looksLikeProtobufPayload(data) {
+            payloads = [data]
+        }
         guard !payloads.isEmpty else { throw GrokWebBillingError.emptyResponse }
 
         var scan = ProtobufScan()
@@ -195,6 +227,12 @@ public enum GrokWebBillingFetcher {
             throw GrokWebBillingError.parseFailed
         }
         return GrokWebBillingSnapshot(usedPercent: percent, resetsAt: reset)
+    }
+
+    static func looksLikeProtobufPayload(_ data: Data) -> Bool {
+        guard let first = data.first else { return false }
+        let wireType = first & 0x07
+        return wireType == 0 || wireType == 1 || wireType == 2 || wireType == 5
     }
 
     static func grpcWebDataFrames(from data: Data) -> [Data] {

@@ -148,8 +148,8 @@ public struct GrokStatusProbe: Sendable {
         switch error {
         case let .requestFailed(status, _):
             return status == 401 || status == 403
-        case let .rpcFailed(status, _):
-            return status == 16
+        case let .rpcFailed(status, message):
+            return GrokWebBillingError.isAuthenticationFailure(status: status, message: message)
         case .missingCredentials, .emptyResponse, .invalidResponse, .parseFailed:
             return false
         }
