@@ -1,13 +1,15 @@
+import AppKit
 import CodexBarCore
 import Foundation
 import Testing
 @testable import CodexBar
 
 @Suite(.serialized)
+@MainActor
 struct CodexAccountMenuDisplaySnapshotTests {
-    @MainActor
-    private static func makeSettings(suite: String) throws -> SettingsStore {
-        let defaults = try #require(UserDefaults(suiteName: suite))
+    private func makeSettings() -> SettingsStore {
+        let suite = "CodexAccountMenuDisplaySnapshotTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
         defaults.removePersistentDomain(forName: suite)
         defaults.set(true, forKey: "providerDetectionCompleted")
         let settings = SettingsStore(
@@ -19,96 +21,326 @@ struct CodexAccountMenuDisplaySnapshotTests {
         return settings
     }
 
-    private static func writeCodexAuthFile(homeURL: URL, email: String, plan: String) throws {
-        try FileManager.default.createDirectory(at: homeURL, withIntermediateDirectories: true)
-        let auth = ["tokens": [
-            "accessToken": "access-token",
-            "refreshToken": "refresh-token",
-            "idToken": Self.fakeJWT(email: email, plan: plan),
-        ]]
-        let data = try JSONSerialization.data(withJSONObject: auth)
-        try data.write(to: homeURL.appendingPathComponent("auth.json"))
+    private func enableOnlyCodex(_ settings: SettingsStore) {
+        for provider in UsageProvider.allCases {
+            guard let metadata = ProviderRegistry.shared.metadata[provider] else { continue }
+            settings.setProviderEnabled(provider: provider, metadata: metadata, enabled: provider == .codex)
+        }
     }
 
-    private static func fakeJWT(email: String, plan: String) -> String {
-        let header = (try? JSONSerialization.data(withJSONObject: ["alg": "none"])) ?? Data()
-        let payload = (try? JSONSerialization.data(withJSONObject: [
-            "email": email,
-            "chatgpt_plan_type": plan,
-        ])) ?? Data()
+    private func liveSnapshot(email: String) -> CodexAccountReconciliationSnapshot {
+        CodexAccountReconciliationSnapshot(
+            storedAccounts: [],
+            activeStoredAccount: nil,
+            liveSystemAccount: ObservedSystemCodexAccount(
+                email: email,
+                codexHomePath: "/tmp/\(email)",
+                observedAt: Date()),
+            matchingStoredAccountForLiveSystemAccount: nil,
+            activeSource: .liveSystem,
+            hasUnreadableAddedAccountStore: false)
+    }
 
-        func base64URL(_ data: Data) -> String {
-            data.base64EncodedString()
-                .replacingOccurrences(of: "=", with: "")
-                .replacingOccurrences(of: "+", with: "-")
-                .replacingOccurrences(of: "/", with: "_")
-        }
-
-        return "\(base64URL(header)).\(base64URL(payload))."
+    private func cachedProjection(
+        snapshot: CodexAccountReconciliationSnapshot,
+        loadedAt: Date = Date(timeIntervalSinceNow: -3600)) -> CachedCodexAccountMenuProjection
+    {
+        CachedCodexAccountMenuProjection(
+            activeSource: snapshot.activeSource,
+            loadedAt: loadedAt,
+            projection: CodexVisibleAccountProjection.make(from: snapshot))
     }
 
     @Test
-    @MainActor
-    func `menu display snapshot tolerates stale cache and revalidates off the menu path`() async throws {
-        let suite = "CodexAccountMenuDisplaySnapshotTests-stale-cache"
-        let settings = try Self.makeSettings(suite: suite)
-        let ambientHome = FileManager.default.temporaryDirectory.appendingPathComponent(
-            UUID().uuidString,
-            isDirectory: true)
-        try Self.writeCodexAuthFile(homeURL: ambientHome, email: "before@example.com", plan: "pro")
-        settings._test_codexReconciliationEnvironment = ["CODEX_HOME": ambientHome.path]
+    func `cold menu projection read never loads auth state`() async {
+        let settings = self.makeSettings()
+        let probe = CodexAccountSnapshotLoaderProbe(snapshot: self.liveSnapshot(email: "loaded@example.com"))
+        settings._test_codexAccountSnapshotLoader = { _ in probe.load() }
+        defer { settings._test_codexAccountSnapshotLoader = nil }
+
+        #expect(settings.codexVisibleAccountProjectionForMenuDisplay == nil)
+        #expect(probe.callCount == 0)
+
+        let result = await settings.revalidateCodexAccountMenuProjection()
+
+        #expect(result == .updated)
+        #expect(probe.callCount == 1)
+        #expect(probe.loadedOffMainThread)
+        #expect(
+            settings.codexVisibleAccountProjectionForMenuDisplay?.visibleAccounts.first?.email ==
+                "loaded@example.com")
+    }
+
+    @Test
+    func `override snapshot load preserves persisted account menu projection`() {
+        let settings = self.makeSettings()
+        let activeSnapshot = self.liveSnapshot(email: "active@example.com")
+        settings.cachedCodexAccountMenuProjection = self.cachedProjection(snapshot: activeSnapshot)
+
+        let otherID = UUID()
+        let otherAccount = ManagedCodexAccount(
+            id: otherID,
+            email: "other@example.com",
+            managedHomePath: "/tmp/other",
+            createdAt: 1,
+            updatedAt: 1,
+            lastAuthenticatedAt: 1)
+        let overrideSnapshot = CodexAccountReconciliationSnapshot(
+            storedAccounts: [otherAccount],
+            activeStoredAccount: otherAccount,
+            liveSystemAccount: nil,
+            matchingStoredAccountForLiveSystemAccount: nil,
+            activeSource: .managedAccount(id: otherID),
+            hasUnreadableAddedAccountStore: false)
+        settings._test_codexAccountSnapshotLoader = { _ in overrideSnapshot }
+        defer { settings._test_codexAccountSnapshotLoader = nil }
+
+        _ = settings.codexAccountReconciliationSnapshot(activeSourceOverride: .managedAccount(id: otherID))
+
+        #expect(
+            settings.codexVisibleAccountProjectionForMenuDisplay?.visibleAccounts.first?.email ==
+                "active@example.com")
+    }
+
+    @Test
+    func `managed account change refreshes account menu projection`() {
+        let settings = self.makeSettings()
+        let activeSnapshot = self.liveSnapshot(email: "active@example.com")
+        settings.cachedCodexAccountMenuProjection = self.cachedProjection(snapshot: activeSnapshot, loadedAt: Date())
+
+        let addedAccount = ManagedCodexAccount(
+            id: UUID(),
+            email: "added@example.com",
+            managedHomePath: "/tmp/added",
+            createdAt: 1,
+            updatedAt: 1,
+            lastAuthenticatedAt: 1)
+        let refreshedSnapshot = CodexAccountReconciliationSnapshot(
+            storedAccounts: [addedAccount],
+            activeStoredAccount: nil,
+            liveSystemAccount: activeSnapshot.liveSystemAccount,
+            matchingStoredAccountForLiveSystemAccount: nil,
+            activeSource: .liveSystem,
+            hasUnreadableAddedAccountStore: false)
+        settings._test_codexAccountSnapshotLoader = { _ in refreshedSnapshot }
+        defer { settings._test_codexAccountSnapshotLoader = nil }
+
+        settings.refreshCodexAccountReconciliationAfterManagedAccountsDidChange()
+
+        #expect(
+            settings.codexVisibleAccountProjectionForMenuDisplay?.visibleAccounts.contains {
+                $0.email == "added@example.com"
+            } == true)
+    }
+
+    @Test
+    func `stale menu projection returns immediately then refreshes concurrently`() async {
+        let settings = self.makeSettings()
+        let staleSnapshot = self.liveSnapshot(email: "before@example.com")
+        let probe = CodexAccountSnapshotLoaderProbe(snapshot: self.liveSnapshot(email: "after@example.com"))
+        settings.cachedCodexAccountMenuProjection = self.cachedProjection(snapshot: staleSnapshot)
+        settings._test_codexAccountSnapshotLoader = { _ in probe.load() }
         SettingsStore.codexAccountReconciliationSnapshotCacheIntervalOverrideForTesting = 60
         defer {
             SettingsStore.codexAccountReconciliationSnapshotCacheIntervalOverrideForTesting = nil
-            settings._test_codexReconciliationEnvironment = nil
-            try? FileManager.default.removeItem(at: ambientHome)
+            settings._test_codexAccountSnapshotLoader = nil
         }
 
-        let primed = settings.codexAccountReconciliationSnapshot
-        #expect(primed.liveSystemAccount?.email == "before@example.com")
-
-        // Simulate a cache that has outlived the freshness interval while the auth file changed.
-        try Self.writeCodexAuthFile(homeURL: ambientHome, email: "after@example.com", plan: "pro")
-        let cached = try #require(settings.cachedCodexAccountReconciliationSnapshot)
-        settings.cachedCodexAccountReconciliationSnapshot = CachedCodexAccountReconciliationSnapshot(
-            activeSource: cached.activeSource,
-            loadedAt: Date(timeIntervalSinceNow: -3600),
-            snapshot: cached.snapshot)
-
-        // The menu path returns the stale cache without a synchronous reload.
-        let menuSnapshot = settings.codexAccountReconciliationSnapshotForMenuDisplay
-        #expect(menuSnapshot.liveSystemAccount?.email == "before@example.com")
-
-        // The scheduled revalidation refreshes the cache off the menu path.
-        let revalidation = try #require(settings.codexAccountSnapshotRevalidationTask)
-        await revalidation.value
-        #expect(settings.codexAccountSnapshotRevalidationTask == nil)
         #expect(
-            settings.codexAccountReconciliationSnapshotForMenuDisplay.liveSystemAccount?.email ==
+            settings.codexVisibleAccountProjectionForMenuDisplay?.visibleAccounts.first?.email ==
+                "before@example.com")
+        #expect(probe.callCount == 0)
+        #expect(settings.codexAccountMenuProjectionNeedsRevalidation)
+
+        let result = await settings.revalidateCodexAccountMenuProjection()
+
+        #expect(result == .updated)
+        #expect(probe.callCount == 1)
+        #expect(probe.loadedOffMainThread)
+        #expect(
+            settings.codexVisibleAccountProjectionForMenuDisplay?.visibleAccounts.first?.email ==
                 "after@example.com")
     }
 
     @Test
-    @MainActor
-    func `menu display snapshot loads synchronously without a cache`() throws {
-        let suite = "CodexAccountMenuDisplaySnapshotTests-cold-cache"
-        let settings = try Self.makeSettings(suite: suite)
-        let ambientHome = FileManager.default.temporaryDirectory.appendingPathComponent(
-            UUID().uuidString,
-            isDirectory: true)
-        try Self.writeCodexAuthFile(homeURL: ambientHome, email: "cold@example.com", plan: "pro")
-        settings._test_codexReconciliationEnvironment = ["CODEX_HOME": ambientHome.path]
+    func `revalidation discards result after reconciliation generation changes`() async {
+        let settings = self.makeSettings()
+        let staleSnapshot = self.liveSnapshot(email: "before@example.com")
+        let probe = CodexAccountSnapshotLoaderProbe(
+            snapshot: self.liveSnapshot(email: "discarded@example.com"),
+            blocks: true)
+        settings.cachedCodexAccountMenuProjection = self.cachedProjection(snapshot: staleSnapshot)
+        settings._test_codexAccountSnapshotLoader = { _ in probe.load() }
         SettingsStore.codexAccountReconciliationSnapshotCacheIntervalOverrideForTesting = 60
         defer {
+            probe.release()
             SettingsStore.codexAccountReconciliationSnapshotCacheIntervalOverrideForTesting = nil
-            settings._test_codexReconciliationEnvironment = nil
-            try? FileManager.default.removeItem(at: ambientHome)
+            settings._test_codexAccountSnapshotLoader = nil
         }
 
-        #expect(settings.cachedCodexAccountReconciliationSnapshot == nil)
-        let menuSnapshot = settings.codexAccountReconciliationSnapshotForMenuDisplay
-        #expect(menuSnapshot.liveSystemAccount?.email == "cold@example.com")
-        #expect(settings.codexAccountSnapshotRevalidationTask == nil)
-        #expect(settings.cachedCodexAccountReconciliationSnapshot != nil)
+        let task = Task { await settings.revalidateCodexAccountMenuProjection() }
+        await probe.waitUntilCalled()
+        settings.invalidateCodexAccountReconciliationSnapshotCache()
+        probe.release()
+
+        #expect(await task.value == .discarded)
+        #expect(
+            settings.codexVisibleAccountProjectionForMenuDisplay?.visibleAccounts.first?.email ==
+                "before@example.com")
+    }
+
+    @Test
+    func `fresh menu open coalesces account projection revalidation and identity stays read only`() async throws {
+        StatusItemController.menuCardRenderingEnabled = false
+        StatusItemController.setMenuRefreshEnabledForTesting(false)
+        StatusItemController.setCodexAccountMenuProjectionRevalidationEnabledForTesting(true)
+        defer {
+            StatusItemController.resetCodexAccountMenuProjectionRevalidationEnabledForTesting()
+            StatusItemController.resetMenuRefreshEnabledForTesting()
+        }
+
+        let settings = self.makeSettings()
+        settings.statusChecksEnabled = false
+        settings.refreshFrequency = .manual
+        settings.mergeIcons = false
+        self.enableOnlyCodex(settings)
+        let store = UsageStore(
+            fetcher: UsageFetcher(),
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings)
+        let controller = StatusItemController(
+            store: store,
+            settings: settings,
+            account: AccountInfo(email: nil, plan: nil),
+            updater: DisabledUpdaterController(),
+            preferencesSelection: PreferencesSelection(),
+            statusBar: .system)
+        defer { controller.releaseStatusItemsForTesting() }
+
+        let staleSnapshot = self.liveSnapshot(email: "before@example.com")
+        let probe = CodexAccountSnapshotLoaderProbe(
+            snapshot: self.liveSnapshot(email: "after@example.com"),
+            blocks: true)
+        settings.cachedCodexAccountMenuProjection = self.cachedProjection(snapshot: staleSnapshot)
+        settings._test_codexAccountSnapshotLoader = { _ in probe.load() }
+        SettingsStore.codexAccountReconciliationSnapshotCacheIntervalOverrideForTesting = 60
+        defer {
+            probe.release()
+            SettingsStore.codexAccountReconciliationSnapshotCacheIntervalOverrideForTesting = nil
+            settings._test_codexAccountSnapshotLoader = nil
+        }
+
+        let menu = NSMenu()
+        controller.menuProviders[ObjectIdentifier(menu)] = .codex
+        controller.markMenuFresh(menu)
+        #expect(controller.codexAccountMenuDisplay(for: .codex) == nil)
+        #expect(probe.callCount == 0)
+
+        let versionBeforeOpen = controller.menuContentVersion
+        controller.menuWillOpen(menu)
+        let revalidation = try #require(controller.codexAccountMenuProjectionRevalidationTask)
+        controller.menuWillOpen(menu)
+        await probe.waitUntilCalled()
+
+        #expect(probe.callCount == 1)
+        #expect(probe.loadedOffMainThread)
+        probe.release()
+        await revalidation.value
+
+        #expect(controller.codexAccountMenuProjectionRevalidationTask == nil)
+        #expect(controller.menuContentVersion == versionBeforeOpen + 1)
+    }
+
+    @Test
+    func `selecting displayed account uses captured source without reconciliation`() throws {
+        let settings = self.makeSettings()
+        let firstID = UUID()
+        let secondID = UUID()
+        let first = ManagedCodexAccount(
+            id: firstID,
+            email: "first@example.com",
+            managedHomePath: "/tmp/first",
+            createdAt: 1,
+            updatedAt: 1,
+            lastAuthenticatedAt: 1)
+        let second = ManagedCodexAccount(
+            id: secondID,
+            email: "second@example.com",
+            managedHomePath: "/tmp/second",
+            createdAt: 1,
+            updatedAt: 1,
+            lastAuthenticatedAt: 1)
+        let snapshot = CodexAccountReconciliationSnapshot(
+            storedAccounts: [first, second],
+            activeStoredAccount: first,
+            liveSystemAccount: nil,
+            matchingStoredAccountForLiveSystemAccount: nil,
+            activeSource: .managedAccount(id: firstID),
+            hasUnreadableAddedAccountStore: false)
+        let projection = CodexVisibleAccountProjection.make(from: snapshot)
+        let displayedAccount = try #require(projection.visibleAccounts.first {
+            $0.selectionSource == .managedAccount(id: secondID)
+        })
+        let probe = CodexAccountSnapshotLoaderProbe(snapshot: snapshot)
+        settings.cachedCodexAccountMenuProjection = self.cachedProjection(snapshot: snapshot)
+        settings._test_codexAccountSnapshotLoader = { _ in probe.load() }
+        defer { settings._test_codexAccountSnapshotLoader = nil }
+
+        settings.selectDisplayedCodexVisibleAccount(displayedAccount)
+
+        #expect(probe.callCount == 0)
+        #expect(settings.codexActiveSource == .managedAccount(id: secondID))
+        #expect(settings.cachedCodexAccountMenuProjection == nil)
+    }
+}
+
+private final class CodexAccountSnapshotLoaderProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private let snapshot: CodexAccountReconciliationSnapshot
+    private let blocks: Bool
+    private let releaseSemaphore = DispatchSemaphore(value: 0)
+    private var _callCount = 0
+    private var _loadedOffMainThread = false
+    private var released = false
+
+    init(snapshot: CodexAccountReconciliationSnapshot, blocks: Bool = false) {
+        self.snapshot = snapshot
+        self.blocks = blocks
+    }
+
+    var callCount: Int {
+        self.lock.withLock { self._callCount }
+    }
+
+    var loadedOffMainThread: Bool {
+        self.lock.withLock { self._loadedOffMainThread }
+    }
+
+    func load() -> CodexAccountReconciliationSnapshot {
+        self.lock.withLock {
+            self._callCount += 1
+            self._loadedOffMainThread = self._loadedOffMainThread || !Thread.isMainThread
+        }
+        if self.blocks {
+            self.releaseSemaphore.wait()
+        }
+        return self.snapshot
+    }
+
+    func waitUntilCalled() async {
+        while self.callCount == 0 {
+            await Task.yield()
+        }
+    }
+
+    func release() {
+        let shouldSignal = self.lock.withLock {
+            guard !self.released else { return false }
+            self.released = true
+            return true
+        }
+        if shouldSignal {
+            self.releaseSemaphore.signal()
+        }
     }
 }

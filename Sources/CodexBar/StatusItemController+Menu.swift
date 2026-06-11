@@ -121,6 +121,8 @@ extension StatusItemController {
 
         let menuWasFreshBeforeOpen = !self.menuNeedsRefresh(menu)
         self.refreshMenuForOpenIfNeeded(menu, provider: provider)
+        self.scheduleCodexAccountMenuProjectionRevalidationIfNeeded(
+            for: self.renderedProviders(for: menu))
         if self.isMenuRefreshEnabled {
             // Intentionally skip open-menu tracking when refresh is disabled (tests).
             // If refresh is re-enabled while this menu stays open, it will not be backfilled until next open.
