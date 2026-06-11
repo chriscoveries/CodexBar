@@ -34,6 +34,7 @@ extension CostUsageScanner {
         var turns: [String: CodexPriorityTurnMetadata]
         var completedModelsByTurnID: [String: String]
         var completedTurnIDInsertionOrder: [String]
+        var completedTurnIDInsertionOrderStartIndex: Int
     }
 
     /// Completed-turn models are retained so a priority request parsed later — in the same
@@ -137,7 +138,8 @@ extension CostUsageScanner {
             fileIdentity: fileIdentity,
             turns: [:],
             completedModelsByTurnID: [:],
-            completedTurnIDInsertionOrder: [])
+            completedTurnIDInsertionOrder: [],
+            completedTurnIDInsertionOrderStartIndex: 0)
 
         if maxRowID > resolved.lastRowID {
             guard self.accumulateCodexPriorityTurns(db, into: &resolved) else { return [:] }
@@ -244,9 +246,22 @@ extension CostUsageScanner {
             if let completed = self.parseCodexCompletedTraceRow(body: body) {
                 if state.completedModelsByTurnID.updateValue(completed.model, forKey: completed.turnID) == nil {
                     state.completedTurnIDInsertionOrder.append(completed.turnID)
-                    if state.completedTurnIDInsertionOrder.count > self.codexPriorityCompletedModelRetentionLimit {
-                        let evicted = state.completedTurnIDInsertionOrder.removeFirst()
+                    let retainedCount = state.completedTurnIDInsertionOrder.count
+                        - state.completedTurnIDInsertionOrderStartIndex
+                    if retainedCount > self.codexPriorityCompletedModelRetentionLimit {
+                        let evicted = state.completedTurnIDInsertionOrder[
+                            state.completedTurnIDInsertionOrderStartIndex,
+                        ]
+                        state.completedTurnIDInsertionOrderStartIndex += 1
                         state.completedModelsByTurnID.removeValue(forKey: evicted)
+                        // Compact in full-limit chunks so sustained overflow stays amortized O(1).
+                        if state.completedTurnIDInsertionOrderStartIndex
+                            >= self.codexPriorityCompletedModelRetentionLimit
+                        {
+                            state.completedTurnIDInsertionOrder.removeFirst(
+                                state.completedTurnIDInsertionOrderStartIndex)
+                            state.completedTurnIDInsertionOrderStartIndex = 0
+                        }
                     }
                 }
                 if var existing = state.turns[completed.turnID] {

@@ -333,7 +333,7 @@ struct CostUsageScannerCodexPriorityTests {
         let dbURL = env.root.appendingPathComponent("logs_2.sqlite")
         try Self.createTestLogsDatabase(at: dbURL)
         let limit = CostUsageScanner.codexPriorityCompletedModelRetentionLimit
-        let overflow = 8
+        let overflow = limit + 8
         let epoch = Self.epochSeconds("2026-05-10T12:00:00Z")
 
         // A long-running trace: far more non-priority completed turns than the retention
@@ -360,7 +360,10 @@ struct CostUsageScannerCodexPriorityTests {
 
         let memo = try #require(CostUsageScanner._test_codexPriorityTurnsMemoState(forPath: dbURL.path))
         #expect(memo.completedModelsByTurnID.count == limit)
-        #expect(memo.completedTurnIDInsertionOrder.count == limit)
+        #expect(
+            memo.completedTurnIDInsertionOrder.count
+                - memo.completedTurnIDInsertionOrderStartIndex == limit)
+        #expect(memo.completedTurnIDInsertionOrder.count < limit * 2)
         // The oldest completions were evicted, so the early request keeps its alias; the
         // recent completion is still retained and upgrades its request.
         #expect(turns["turn-0"]?.model == "alias-evicted")

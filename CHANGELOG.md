@@ -2,6 +2,9 @@
 
 ## 0.33.1 — Unreleased
 
+### Fixed
+- Cost usage: resolve Codex priority-turn metadata incrementally so warm refreshes scan only new trace rows instead of rescanning the full database (#1404). Thanks @ProspectOre!
+
 ## 0.33.0 — 2026-06-11
 
 ### Added
