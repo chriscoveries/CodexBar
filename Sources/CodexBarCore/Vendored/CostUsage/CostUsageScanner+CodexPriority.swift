@@ -33,7 +33,17 @@ extension CostUsageScanner {
         var fileIdentity: UInt64?
         var turns: [String: CodexPriorityTurnMetadata]
         var completedModelsByTurnID: [String: String]
+        var completedTurnIDInsertionOrder: [String]
     }
+
+    /// Completed-turn models are retained so a priority request parsed later — in the same
+    /// batch or a later refresh — can still resolve its model alias. Whether a turn is
+    /// priority is unknowable when its completion row is parsed, so non-priority completions
+    /// land in the map too; without a bound it would grow with every completed turn for the
+    /// process lifetime. Once the map exceeds this limit the oldest completions are evicted,
+    /// keeping memory constant while preserving completion-before-request ordering and late
+    /// model upgrades within the retention window.
+    static let codexPriorityCompletedModelRetentionLimit = 4096
 
     private static let codexPriorityTurnsMemo =
         OSAllocatedUnfairLock<[String: CodexPriorityTurnsMemoState]>(initialState: [:])
@@ -126,7 +136,8 @@ extension CostUsageScanner {
             lastRowID: 0,
             fileIdentity: fileIdentity,
             turns: [:],
-            completedModelsByTurnID: [:])
+            completedModelsByTurnID: [:],
+            completedTurnIDInsertionOrder: [])
 
         if maxRowID > resolved.lastRowID {
             guard self.accumulateCodexPriorityTurns(db, into: &resolved) else { return [:] }
@@ -231,7 +242,13 @@ extension CostUsageScanner {
             let timestamp = self.timestamp(stmt: stmt, index: 1)
             guard let body = self.text(stmt: stmt, index: 2) else { continue }
             if let completed = self.parseCodexCompletedTraceRow(body: body) {
-                state.completedModelsByTurnID[completed.turnID] = completed.model
+                if state.completedModelsByTurnID.updateValue(completed.model, forKey: completed.turnID) == nil {
+                    state.completedTurnIDInsertionOrder.append(completed.turnID)
+                    if state.completedTurnIDInsertionOrder.count > self.codexPriorityCompletedModelRetentionLimit {
+                        let evicted = state.completedTurnIDInsertionOrder.removeFirst()
+                        state.completedModelsByTurnID.removeValue(forKey: evicted)
+                    }
+                }
                 if var existing = state.turns[completed.turnID] {
                     existing.model = completed.model
                     state.turns[completed.turnID] = existing

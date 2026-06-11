@@ -326,6 +326,69 @@ struct CostUsageScannerCodexPriorityTests {
                 .coverageSinceEpoch == broader.coverageSinceEpoch)
     }
 
+    @Test
+    func `memo bounds retained completion metadata for non-priority turns`() throws {
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+        let dbURL = env.root.appendingPathComponent("logs_2.sqlite")
+        try Self.createTestLogsDatabase(at: dbURL)
+        let limit = CostUsageScanner.codexPriorityCompletedModelRetentionLimit
+        let overflow = 8
+        let epoch = Self.epochSeconds("2026-05-10T12:00:00Z")
+
+        // A long-running trace: far more non-priority completed turns than the retention
+        // limit, followed by priority requests whose completions are evicted vs retained.
+        var rows = (0..<(limit + overflow)).map { index in
+            (
+                epochSeconds: epoch,
+                body: "thread_id=thread-\(index) turn.id=turn-\(index) websocket event: "
+                    + #"{"type":"response.completed","response":{"model":"gpt-5.4"}}"#)
+        }
+        rows.append((
+            epochSeconds: epoch,
+            body: "thread_id=thread-0 turn.id=turn-0 websocket request: "
+                + #"{"type":"response.create","model":"alias-evicted","service_tier":"priority"}"#))
+        let newest = limit + overflow - 1
+        rows.append((
+            epochSeconds: epoch,
+            body: "thread_id=thread-\(newest) turn.id=turn-\(newest) "
+                + "websocket request: "
+                + #"{"type":"response.create","model":"alias-retained","service_tier":"priority"}"#))
+        try Self.insertTestLogs(dbURL: dbURL, rows: rows)
+
+        let turns = CostUsageScanner.codexPriorityTurns(databaseURL: dbURL)
+
+        let memo = try #require(CostUsageScanner._test_codexPriorityTurnsMemoState(forPath: dbURL.path))
+        #expect(memo.completedModelsByTurnID.count == limit)
+        #expect(memo.completedTurnIDInsertionOrder.count == limit)
+        // The oldest completions were evicted, so the early request keeps its alias; the
+        // recent completion is still retained and upgrades its request.
+        #expect(turns["turn-0"]?.model == "alias-evicted")
+        #expect(turns["turn-\(newest)"]?.model == "gpt-5.4")
+    }
+
+    static func insertTestLogs(dbURL: URL, rows: [(epochSeconds: Int64, body: String)]) throws {
+        var db: OpaquePointer?
+        guard sqlite3_open(dbURL.path, &db) == SQLITE_OK else { throw SQLiteTestError.open }
+        defer { sqlite3_close(db) }
+
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "insert into logs (ts, feedback_log_body) values (?, ?)", -1, &stmt, nil)
+            == SQLITE_OK
+        else { throw SQLiteTestError.prepare }
+        defer { sqlite3_finalize(stmt) }
+
+        try self.exec(db, "begin transaction")
+        let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+        for row in rows {
+            sqlite3_bind_int64(stmt, 1, row.epochSeconds)
+            sqlite3_bind_text(stmt, 2, row.body, -1, transient)
+            guard sqlite3_step(stmt) == SQLITE_DONE else { throw SQLiteTestError.step }
+            sqlite3_reset(stmt)
+        }
+        try self.exec(db, "commit")
+    }
+
     static func createTestLogsDatabase(at dbURL: URL) throws {
         var db: OpaquePointer?
         guard sqlite3_open(dbURL.path, &db) == SQLITE_OK else { throw SQLiteTestError.open }
