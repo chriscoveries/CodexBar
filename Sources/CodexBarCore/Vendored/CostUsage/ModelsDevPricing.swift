@@ -168,9 +168,7 @@ struct ModelsDevProvider: Codable, Equatable {
             {
                 return ModelsDevPricingLookup(pricing: pricing, normalizedModelID: candidate)
             }
-        }
 
-        for candidate in candidates {
             for match in self.models.values where match.normalizedID == candidate {
                 if let pricing = match.pricing(providerID: self.id ?? self.mapKey ?? "", providerName: self.name) {
                     return ModelsDevPricingLookup(pricing: pricing, normalizedModelID: match.normalizedID)

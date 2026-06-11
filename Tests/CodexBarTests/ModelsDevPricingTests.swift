@@ -576,8 +576,8 @@ extension ModelsDevPricingTests {
           "anthropic": {
             "id": "anthropic",
             "models": {
-              "claude-sonnet-4-6@default": {
-                "id": "claude-sonnet-4-6@default",
+              "base-model@default": {
+                "id": "base-model@default",
                 "cost": { "input": 3, "output": 15 }
               }
             }
@@ -589,8 +589,8 @@ extension ModelsDevPricingTests {
           "anthropic": {
             "id": "anthropic",
             "models": {
-              "claude-sonnet-4-6": {
-                "id": "claude-sonnet-4-6",
+              "base-model": {
+                "id": "base-model",
                 "cost": { "input": 99, "output": 100 }
               }
             }
@@ -601,7 +601,7 @@ extension ModelsDevPricingTests {
         let merged = refreshedCatalog.mergingFallbackPricing(from: cachedCatalog)
         let aliasLookup = try #require(merged.pricing(
             providerID: "anthropic",
-            modelID: "claude-sonnet-4-6@default"))
+            modelID: "base-model@default"))
 
         #expect(aliasLookup.pricing.inputCostPerToken == 99 / 1_000_000.0)
         #expect(merged.providers["anthropic"]?.models.count == 1)
@@ -685,7 +685,7 @@ extension ModelsDevPricingTests {
           "openai": {
             "id": "openai",
             "models": {
-              "snapshot-model-2025-01-01": {
+              "historical-map-key": {
                 "id": "snapshot-model-2025-01-01",
                 "cost": { "input": 3, "output": 15 }
               }
