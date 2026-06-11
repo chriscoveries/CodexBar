@@ -275,6 +275,9 @@ enum ModelsDevModelIDNormalizer {
 
         let base = String(normalized[..<atSign])
         let suffix = String(normalized[normalized.index(after: atSign)...])
+        if suffix == "default" {
+            return base
+        }
         guard suffix.range(of: #"^\d{8}$"#, options: .regularExpression) != nil else { return normalized }
         return "\(base)-\(suffix)"
     }

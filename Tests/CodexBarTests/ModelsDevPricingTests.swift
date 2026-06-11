@@ -570,6 +570,44 @@ extension ModelsDevPricingTests {
     }
 
     @Test
+    func `fallback merge treats default alias as the canonical base model`() throws {
+        let cachedCatalog = try Self.catalog("""
+        {
+          "anthropic": {
+            "id": "anthropic",
+            "models": {
+              "claude-sonnet-4-6@default": {
+                "id": "claude-sonnet-4-6@default",
+                "cost": { "input": 3, "output": 15 }
+              }
+            }
+          }
+        }
+        """)
+        let refreshedCatalog = try Self.catalog("""
+        {
+          "anthropic": {
+            "id": "anthropic",
+            "models": {
+              "claude-sonnet-4-6": {
+                "id": "claude-sonnet-4-6",
+                "cost": { "input": 99, "output": 100 }
+              }
+            }
+          }
+        }
+        """)
+
+        let merged = refreshedCatalog.mergingFallbackPricing(from: cachedCatalog)
+        let aliasLookup = try #require(merged.pricing(
+            providerID: "anthropic",
+            modelID: "claude-sonnet-4-6@default"))
+
+        #expect(aliasLookup.pricing.inputCostPerToken == 99 / 1_000_000.0)
+        #expect(merged.providers["anthropic"]?.models.count == 1)
+    }
+
+    @Test
     func `refresh keeps historical pinned pricing while accepting a new snapshot`() async throws {
         let root = try Self.cacheRoot()
         let old = Date(timeIntervalSince1970: 1)
