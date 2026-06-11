@@ -68,16 +68,46 @@ struct ModelsDevCatalog: Codable, Equatable {
         return self.providers[providerID]?.pricing(modelID: rawModelID)
     }
 
-    func containsProviderIDs(_ providerIDs: some Sequence<String>) -> Bool {
-        providerIDs.allSatisfy { self.providers.keys.contains(ModelsDevProvider.normalizeProviderID($0)) }
+    func isPlausibleRefresh(comparedTo cachedCatalog: ModelsDevCatalog?) -> Bool {
+        let providerCount = self.priceableProviderCount
+        let modelCount = self.priceableModelCount
+        guard providerCount > 0, modelCount > 0 else { return false }
+        guard let cachedCatalog else { return true }
+
+        // models.dev regularly removes or renames individual models. Reject only a
+        // substantial catalog collapse, which is more likely a truncated response.
+        return providerCount * 2 >= cachedCatalog.priceableProviderCount &&
+            modelCount * 2 >= cachedCatalog.priceableModelCount
     }
 
-    func containsProviderModels(from cachedCatalog: ModelsDevCatalog) -> Bool {
-        cachedCatalog.providers.allSatisfy { providerID, cachedProvider in
-            guard let provider = self.providers[ModelsDevProvider.normalizeProviderID(providerID)] else { return false }
-            return cachedProvider.models.values
-                .filter(\.isPriceable)
-                .allSatisfy { provider.containsModel(matching: $0) }
+    func mergingFallbackPricing(from cachedCatalog: ModelsDevCatalog) -> ModelsDevCatalog {
+        var merged = self
+        for (providerID, cachedProvider) in cachedCatalog.providers {
+            let normalizedProviderID = ModelsDevProvider.normalizeProviderID(providerID)
+            guard var provider = merged.providers[normalizedProviderID] else {
+                merged.providers[normalizedProviderID] = cachedProvider
+                continue
+            }
+
+            for (modelKey, cachedModel) in cachedProvider.models
+                where cachedModel.isPriceable && !provider.containsModel(matching: cachedModel)
+            {
+                provider.models[modelKey] = cachedModel
+            }
+            merged.providers[normalizedProviderID] = provider
+        }
+        return merged
+    }
+
+    private var priceableProviderCount: Int {
+        self.providers.values.count { provider in
+            provider.models.values.contains(where: \.isPriceable)
+        }
+    }
+
+    private var priceableModelCount: Int {
+        self.providers.values.reduce(into: 0) { count, provider in
+            count += provider.models.values.count(where: \.isPriceable)
         }
     }
 }
@@ -553,12 +583,10 @@ enum ModelsDevPricingPipeline {
 
         do {
             let catalog = try await client.fetchCatalog()
-            if let oldCatalog = load.artifact?.catalog,
-               !catalog.containsProviderModels(from: oldCatalog)
-            {
-                return
-            }
-            ModelsDevCache.save(catalog: catalog, fetchedAt: now, cacheRoot: cacheRoot)
+            let oldCatalog = load.artifact?.catalog
+            guard catalog.isPlausibleRefresh(comparedTo: oldCatalog) else { return }
+            let refreshedCatalog = oldCatalog.map { catalog.mergingFallbackPricing(from: $0) } ?? catalog
+            ModelsDevCache.save(catalog: refreshedCatalog, fetchedAt: now, cacheRoot: cacheRoot)
         } catch {
             // Best-effort refresh only. Future scanner integration should keep using the last valid cache.
         }

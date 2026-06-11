@@ -152,7 +152,7 @@ struct ModelsDevPricingTests {
     }
 
     @Test
-    func `refresh preserves cache when fetched catalog drops cached model`() async throws {
+    func `refresh accepts model churn and preserves removed pricing as fallback`() async throws {
         let root = try Self.cacheRoot()
         let old = Date(timeIntervalSince1970: 1)
         try ModelsDevCache.save(catalog: Self.fixtureCatalog(), fetchedAt: old, cacheRoot: root)
@@ -165,6 +165,10 @@ struct ModelsDevPricingTests {
               "shared-model": {
                 "id": "shared-model",
                 "cost": { "input": 99, "output": 99 }
+              },
+              "gpt-new": {
+                "id": "gpt-new",
+                "cost": { "input": 7, "output": 8 }
               }
             }
           },
@@ -194,12 +198,22 @@ struct ModelsDevPricingTests {
             client: ModelsDevClient(transport: MockTransport(
                 result: .success((partialCatalog, Self.response(status: 200))))))
 
-        let lookup = try #require(ModelsDevPricingPipeline.lookup(
+        let oldLookup = try #require(ModelsDevPricingPipeline.lookup(
             providerID: "openai",
             modelID: "gpt-4o-mini",
             cacheRoot: root))
+        let newLookup = try #require(ModelsDevPricingPipeline.lookup(
+            providerID: "openai",
+            modelID: "gpt-new",
+            cacheRoot: root))
+        let updatedLookup = try #require(ModelsDevPricingPipeline.lookup(
+            providerID: "openai",
+            modelID: "shared-model",
+            cacheRoot: root))
 
-        #expect(lookup.pricing.inputCostPerToken == 0.15 / 1_000_000.0)
+        #expect(oldLookup.pricing.inputCostPerToken == 0.15 / 1_000_000.0)
+        #expect(newLookup.pricing.inputCostPerToken == 7 / 1_000_000.0)
+        #expect(updatedLookup.pricing.inputCostPerToken == 99 / 1_000_000.0)
     }
 
     @Test
@@ -317,8 +331,13 @@ struct ModelsDevPricingTests {
             providerID: "openai",
             modelID: "gpt-4o-mini",
             cacheRoot: root))
+        let updatedLookup = try #require(ModelsDevPricingPipeline.lookup(
+            providerID: "openai",
+            modelID: "shared-model",
+            cacheRoot: root))
 
         #expect(lookup.pricing.inputCostPerToken == 0.15 / 1_000_000.0)
+        #expect(updatedLookup.pricing.inputCostPerToken == 99 / 1_000_000.0)
     }
 
     @Test
@@ -386,7 +405,7 @@ struct ModelsDevPricingTests {
     }
 
     @Test
-    func `refresh preserves cache when fetched catalog only has different pinned snapshot`() async throws {
+    func `refresh keeps historical pinned pricing while accepting a new snapshot`() async throws {
         let root = try Self.cacheRoot()
         let old = Date(timeIntervalSince1970: 1)
         let cachedCatalog = try Self.catalog("""
@@ -423,12 +442,17 @@ struct ModelsDevPricingTests {
             client: ModelsDevClient(transport: MockTransport(
                 result: .success((fetchedCatalog, Self.response(status: 200))))))
 
-        let lookup = try #require(ModelsDevPricingPipeline.lookup(
+        let oldLookup = try #require(ModelsDevPricingPipeline.lookup(
             providerID: "google-vertex-anthropic",
             modelID: "claude-sonnet-4@20250101",
             cacheRoot: root))
+        let newLookup = try #require(ModelsDevPricingPipeline.lookup(
+            providerID: "google-vertex-anthropic",
+            modelID: "claude-sonnet-4@20250201",
+            cacheRoot: root))
 
-        #expect(lookup.pricing.inputCostPerToken == 3 / 1_000_000.0)
+        #expect(oldLookup.pricing.inputCostPerToken == 3 / 1_000_000.0)
+        #expect(newLookup.pricing.inputCostPerToken == 99 / 1_000_000.0)
     }
 
     @Test
