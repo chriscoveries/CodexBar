@@ -303,7 +303,7 @@ extension StatusItemController {
             parts.append(target.rawValue)
             parts.append(self.providerIdentitySignature(self.store.snapshot(for: target)?.identity(for: target)))
 
-            if self.store.metadata(for: target).usesAccountFallback {
+            if target != .codex, self.store.metadata(for: target).usesAccountFallback {
                 let account = self.store.accountInfo(for: target)
                 parts.append(Self.menuIdentityField(account.email))
                 parts.append(Self.menuIdentityField(account.plan))
@@ -316,7 +316,9 @@ extension StatusItemController {
             }
 
             if target == .codex {
-                for account in self.settings.codexVisibleAccountProjection.visibleAccounts {
+                parts.append(Self.menuIdentityField(self.account.email))
+                parts.append(Self.menuIdentityField(self.account.plan))
+                for account in self.settings.codexVisibleAccountProjectionForMenuDisplay?.visibleAccounts ?? [] {
                     parts.append(Self.menuIdentityField(account.id))
                     parts.append(Self.menuIdentityField(account.email))
                     parts.append(Self.menuIdentityField(account.workspaceLabel))

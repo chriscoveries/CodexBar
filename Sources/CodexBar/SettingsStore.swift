@@ -114,6 +114,19 @@ struct CachedCodexAccountReconciliationSnapshot {
     let snapshot: CodexAccountReconciliationSnapshot
 }
 
+struct CachedCodexAccountMenuProjection: Equatable {
+    let activeSource: CodexActiveSource
+    let loadedAt: Date
+    let projection: CodexVisibleAccountProjection
+}
+
+enum CodexAccountMenuProjectionRevalidationResult: Equatable {
+    case skipped
+    case discarded
+    case unchanged
+    case updated
+}
+
 @MainActor
 @Observable
 final class SettingsStore {
@@ -140,6 +153,12 @@ final class SettingsStore {
     @ObservationIgnored var tokenAccountsLoaded = false
     @ObservationIgnored var cachedCodexAccountReconciliationSnapshot:
         CachedCodexAccountReconciliationSnapshot?
+    @ObservationIgnored var cachedCodexAccountMenuProjection: CachedCodexAccountMenuProjection?
+    @ObservationIgnored var codexAccountReconciliationGeneration: UInt = 0
+    #if DEBUG
+    @ObservationIgnored var _test_codexAccountSnapshotLoader:
+        (@Sendable (CodexActiveSource) -> CodexAccountReconciliationSnapshot)?
+    #endif
     @ObservationIgnored var mergedMenuLastSelectedWasOverviewStorage = false
     @ObservationIgnored var selectedMenuProviderRawStorage: String?
     var defaultsState: SettingsDefaultsState

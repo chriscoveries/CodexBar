@@ -139,6 +139,7 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
     var openMenuRebuildTokens: [ObjectIdentifier: Int] = [:]
     var openMenuRebuildTokenCounter = 0
     var menuIdentitySignatures: [ObjectIdentifier: String] = [:]
+    var codexAccountMenuProjectionRevalidationTask: Task<Void, Never>?
     var openMenuRebuildsClosingHostedSubviewMenus: Set<ObjectIdentifier> = []
     var parentMenuRebuildsDeferredDuringTracking: Set<ObjectIdentifier> = []
     var deferredMenuInteractionRefreshProviders: Set<UsageProvider> = []
@@ -415,6 +416,8 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
         self.wireBindings()
         self.updateVisibility()
         self.updateIcons()
+        self.scheduleCodexAccountMenuProjectionRevalidationIfNeeded(
+            for: self.store.enabledProvidersForDisplay())
         self.scheduleStartupStatusItemVisibilityCheck()
         NotificationCenter.default.addObserver(
             self,
