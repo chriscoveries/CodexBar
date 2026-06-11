@@ -63,6 +63,18 @@ struct MiniMaxEndpointOverrideSettingsTests {
     }
 
     @Test
+    func `endpoint overrides reject whitespace and control characters in hosts`() {
+        for host in ["https://bad host", "https://bad%20host", "https://bad%09host"] {
+            #expect(MiniMaxSettingsReader.hostOverride(environment: [
+                MiniMaxSettingsReader.hostKey: host,
+            ]) == nil)
+            #expect(MiniMaxSettingsReader.remainsURL(environment: [
+                MiniMaxSettingsReader.remainsURLKey: "\(host)/remains",
+            ]) == nil)
+        }
+    }
+
+    @Test
     func `endpoint overrides require https and no userinfo`() {
         #expect(MiniMaxSettingsReader.hostOverride(environment: [
             MiniMaxSettingsReader.hostKey: "http://platform.minimax.io",

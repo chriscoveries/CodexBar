@@ -89,6 +89,18 @@ struct AlibabaCodingPlanSettingsReaderTests {
     }
 
     @Test
+    func `endpoint overrides reject whitespace and control characters in hosts`() {
+        for host in ["https://bad host", "https://bad%20host", "https://bad%09host"] {
+            #expect(AlibabaCodingPlanSettingsReader.hostOverride(environment: [
+                AlibabaCodingPlanSettingsReader.hostKey: host,
+            ]) == nil)
+            #expect(AlibabaCodingPlanSettingsReader.quotaURL(environment: [
+                AlibabaCodingPlanSettingsReader.quotaURLKey: "\(host)/data/api.json",
+            ]) == nil)
+        }
+    }
+
+    @Test
     func `endpoint overrides require https and no userinfo`() {
         #expect(AlibabaCodingPlanSettingsReader.hostOverride(environment: [
             AlibabaCodingPlanSettingsReader.hostKey: "http://modelstudio.console.alibabacloud.com",
