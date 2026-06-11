@@ -37,18 +37,18 @@ struct ModelsDevPricingTests {
     }
 
     @Test
-    func `supports provider scoped alias normalization`() throws {
+    func `supports provider scoped model normalization`() throws {
         let catalog = try Self.fixtureCatalog()
 
         let anthropic = try #require(catalog.pricing(
             providerID: "anthropic",
-            modelID: "anthropic.us-east-1.claude-sonnet-4-6-v1:0"))
+            modelID: "us.anthropic.claude-sonnet-4-6"))
         let vertex = try #require(catalog.pricing(
             providerID: "google-vertex-anthropic",
             modelID: "claude-sonnet-4-6"))
 
         #expect(anthropic.normalizedModelID == "claude-sonnet-4-6")
-        #expect(vertex.normalizedModelID == "claude-sonnet-4-6@default")
+        #expect(vertex.normalizedModelID == "claude-sonnet-4-6")
         #expect(vertex.pricing.inputCostPerToken == 3.1 / 1_000_000.0)
     }
 
@@ -166,8 +166,8 @@ struct ModelsDevPricingTests {
                 "id": "shared-model",
                 "cost": { "input": 99, "output": 99 }
               },
-              "gpt-new": {
-                "id": "gpt-new",
+              "provider-a-new": {
+                "id": "provider-a-new",
                 "cost": { "input": 7, "output": 8 }
               }
             }
@@ -184,8 +184,8 @@ struct ModelsDevPricingTests {
           "google-vertex-anthropic": {
             "id": "google-vertex-anthropic",
             "models": {
-              "claude-sonnet-4-6@default": {
-                "id": "claude-sonnet-4-6@default",
+              "claude-sonnet-4-6": {
+                "id": "claude-sonnet-4-6",
                 "cost": { "input": 99, "output": 99 }
               }
             }
@@ -204,7 +204,7 @@ struct ModelsDevPricingTests {
             cacheRoot: root))
         let newLookup = try #require(ModelsDevPricingPipeline.lookup(
             providerID: "openai",
-            modelID: "gpt-new",
+            modelID: "provider-a-new",
             cacheRoot: root))
         let updatedLookup = try #require(ModelsDevPricingPipeline.lookup(
             providerID: "openai",
@@ -225,13 +225,13 @@ struct ModelsDevPricingTests {
           "openai": {
             "id": "openai",
             "models": {
-              "gpt-old": { "id": "gpt-old", "cost": { "input": 1, "output": 2 } }
+              "provider-a-old": { "id": "provider-a-old", "cost": { "input": 1, "output": 2 } }
             }
           },
           "anthropic": {
             "id": "anthropic",
             "models": {
-              "claude-old": { "id": "claude-old", "cost": { "input": 3, "output": 4 } }
+              "provider-b-old": { "id": "provider-b-old", "cost": { "input": 3, "output": 4 } }
             }
           },
           "stale-a": {
@@ -261,13 +261,13 @@ struct ModelsDevPricingTests {
           "openai": {
             "id": "openai",
             "models": {
-              "gpt-new": { "id": "gpt-new", "cost": { "input": 11, "output": 12 } }
+              "provider-a-new": { "id": "provider-a-new", "cost": { "input": 11, "output": 12 } }
             }
           },
           "anthropic": {
             "id": "anthropic",
             "models": {
-              "claude-new": { "id": "claude-new", "cost": { "input": 13, "output": 14 } }
+              "provider-b-new": { "id": "provider-b-new", "cost": { "input": 13, "output": 14 } }
             }
           }
         }
@@ -280,7 +280,7 @@ struct ModelsDevPricingTests {
 
         let newLookup = try #require(ModelsDevPricingPipeline.lookup(
             providerID: "openai",
-            modelID: "gpt-new",
+            modelID: "provider-a-new",
             cacheRoot: root))
         let fallbackLookup = try #require(ModelsDevPricingPipeline.lookup(
             providerID: "stale-a",
@@ -300,13 +300,13 @@ struct ModelsDevPricingTests {
           "openai": {
             "id": "openai",
             "models": {
-              "rolling": { "id": "gpt-old", "cost": { "input": 1, "output": 2 } }
+              "rolling": { "id": "provider-a-old", "cost": { "input": 1, "output": 2 } }
             }
           },
           "anthropic": {
             "id": "anthropic",
             "models": {
-              "claude-anchor": { "id": "claude-anchor", "cost": { "input": 3, "output": 4 } }
+              "provider-b-anchor": { "id": "provider-b-anchor", "cost": { "input": 3, "output": 4 } }
             }
           }
         }
@@ -318,13 +318,13 @@ struct ModelsDevPricingTests {
           "openai": {
             "id": "openai",
             "models": {
-              "rolling": { "id": "gpt-new", "cost": { "input": 99, "output": 100 } }
+              "rolling": { "id": "provider-a-new", "cost": { "input": 99, "output": 100 } }
             }
           },
           "anthropic": {
             "id": "anthropic",
             "models": {
-              "claude-anchor": { "id": "claude-anchor", "cost": { "input": 3, "output": 4 } }
+              "provider-b-anchor": { "id": "provider-b-anchor", "cost": { "input": 3, "output": 4 } }
             }
           }
         }
@@ -337,11 +337,11 @@ struct ModelsDevPricingTests {
 
         let freshLookup = try #require(ModelsDevPricingPipeline.lookup(
             providerID: "openai",
-            modelID: "gpt-new",
+            modelID: "provider-a-new",
             cacheRoot: root))
         let fallbackLookup = try #require(ModelsDevPricingPipeline.lookup(
             providerID: "openai",
-            modelID: "gpt-old",
+            modelID: "provider-a-old",
             cacheRoot: root))
 
         #expect(freshLookup.pricing.inputCostPerToken == 99 / 1_000_000.0)
@@ -359,7 +359,7 @@ struct ModelsDevPricingTests {
           "openai": {
             "id": "openai",
             "models": {
-              "gpt-4o-mini-renamed": {
+              "renamed-model-key": {
                 "id": "gpt-4o-mini",
                 "cost": { "input": 99, "output": 99 }
               },
@@ -385,8 +385,8 @@ struct ModelsDevPricingTests {
           "google-vertex-anthropic": {
             "id": "google-vertex-anthropic",
             "models": {
-              "claude-sonnet-4-6-renamed": {
-                "id": "claude-sonnet-4-6@default",
+              "renamed-vertex-key": {
+                "id": "claude-sonnet-4-6",
                 "cost": { "input": 99, "output": 99 }
               }
             }
@@ -445,8 +445,8 @@ struct ModelsDevPricingTests {
           "google-vertex-anthropic": {
             "id": "google-vertex-anthropic",
             "models": {
-              "claude-sonnet-4-6@default": {
-                "id": "claude-sonnet-4-6@default",
+              "claude-sonnet-4-6": {
+                "id": "claude-sonnet-4-6",
                 "cost": { "input": 99, "output": 99 }
               }
             }
@@ -476,7 +476,38 @@ struct ModelsDevPricingTests {
     func `refresh updates cache when fetched catalog canonicalizes alias model id`() async throws {
         let root = try Self.cacheRoot()
         let old = Date(timeIntervalSince1970: 1)
-        try ModelsDevCache.save(catalog: Self.fixtureCatalog(), fetchedAt: old, cacheRoot: root)
+        let cachedCatalog = try Self.catalog("""
+        {
+          "openai": {
+            "id": "openai",
+            "models": {
+              "gpt-4o-mini": {
+                "id": "gpt-4o-mini",
+                "cost": { "input": 0.15, "output": 0.6 }
+              }
+            }
+          },
+          "anthropic": {
+            "id": "anthropic",
+            "models": {
+              "claude-sonnet-4-6": {
+                "id": "claude-sonnet-4-6",
+                "cost": { "input": 3, "output": 15 }
+              }
+            }
+          },
+          "google-vertex-anthropic": {
+            "id": "google-vertex-anthropic",
+            "models": {
+              "snapshot-model@20250101": {
+                "id": "snapshot-model@20250101",
+                "cost": { "input": 3.1, "output": 15.1 }
+              }
+            }
+          }
+        }
+        """)
+        ModelsDevCache.save(catalog: cachedCatalog, fetchedAt: old, cacheRoot: root)
 
         let canonicalizedCatalog = Data("""
         {
@@ -509,8 +540,8 @@ struct ModelsDevPricingTests {
           "google-vertex-anthropic": {
             "id": "google-vertex-anthropic",
             "models": {
-              "claude-sonnet-4-6": {
-                "id": "claude-sonnet-4-6",
+              "snapshot-model-20250101": {
+                "id": "snapshot-model-20250101",
                 "cost": { "input": 99, "output": 99 }
               }
             }
@@ -523,17 +554,17 @@ struct ModelsDevPricingTests {
             client: ModelsDevClient(transport: MockTransport(
                 result: .success((canonicalizedCatalog, Self.response(status: 200))))))
 
-        let defaultLookup = try #require(ModelsDevPricingPipeline.lookup(
+        let aliasLookup = try #require(ModelsDevPricingPipeline.lookup(
             providerID: "google-vertex-anthropic",
-            modelID: "claude-sonnet-4-6@default",
+            modelID: "snapshot-model@20250101",
             cacheRoot: root))
-        let baseLookup = try #require(ModelsDevPricingPipeline.lookup(
+        let canonicalLookup = try #require(ModelsDevPricingPipeline.lookup(
             providerID: "google-vertex-anthropic",
-            modelID: "claude-sonnet-4-6",
+            modelID: "snapshot-model-20250101",
             cacheRoot: root))
 
-        #expect(defaultLookup.pricing.inputCostPerToken == 99 / 1_000_000.0)
-        #expect(baseLookup.pricing.inputCostPerToken == 99 / 1_000_000.0)
+        #expect(aliasLookup.pricing.inputCostPerToken == 99 / 1_000_000.0)
+        #expect(canonicalLookup.pricing.inputCostPerToken == 99 / 1_000_000.0)
     }
 
     @Test
@@ -545,8 +576,8 @@ struct ModelsDevPricingTests {
           "google-vertex-anthropic": {
             "id": "google-vertex-anthropic",
             "models": {
-              "claude-sonnet-4@20250101": {
-                "id": "claude-sonnet-4@20250101",
+              "snapshot-model@20250101": {
+                "id": "snapshot-model@20250101",
                 "cost": { "input": 3, "output": 15 }
               }
             }
@@ -560,8 +591,8 @@ struct ModelsDevPricingTests {
           "openai": {
             "id": "openai",
             "models": {
-              "gpt-anchor": {
-                "id": "gpt-anchor",
+              "provider-a-anchor": {
+                "id": "provider-a-anchor",
                 "cost": { "input": 1, "output": 2 }
               }
             }
@@ -569,8 +600,8 @@ struct ModelsDevPricingTests {
           "anthropic": {
             "id": "anthropic",
             "models": {
-              "claude-anchor": {
-                "id": "claude-anchor",
+              "provider-b-anchor": {
+                "id": "provider-b-anchor",
                 "cost": { "input": 3, "output": 4 }
               }
             }
@@ -578,8 +609,8 @@ struct ModelsDevPricingTests {
           "google-vertex-anthropic": {
             "id": "google-vertex-anthropic",
             "models": {
-              "claude-sonnet-4@20250201": {
-                "id": "claude-sonnet-4@20250201",
+              "snapshot-model@20250201": {
+                "id": "snapshot-model@20250201",
                 "cost": { "input": 99, "output": 99 }
               }
             }
@@ -594,15 +625,84 @@ struct ModelsDevPricingTests {
 
         let oldLookup = try #require(ModelsDevPricingPipeline.lookup(
             providerID: "google-vertex-anthropic",
-            modelID: "claude-sonnet-4@20250101",
+            modelID: "snapshot-model@20250101",
             cacheRoot: root))
         let newLookup = try #require(ModelsDevPricingPipeline.lookup(
             providerID: "google-vertex-anthropic",
-            modelID: "claude-sonnet-4@20250201",
+            modelID: "snapshot-model@20250201",
             cacheRoot: root))
 
         #expect(oldLookup.pricing.inputCostPerToken == 3 / 1_000_000.0)
         #expect(newLookup.pricing.inputCostPerToken == 99 / 1_000_000.0)
+    }
+
+    @Test
+    func `refresh preserves dated snapshot when fetched catalog only keeps base model`() async throws {
+        let root = try Self.cacheRoot()
+        let old = Date(timeIntervalSince1970: 1)
+        let cachedCatalog = try Self.catalog("""
+        {
+          "openai": {
+            "id": "openai",
+            "models": {
+              "snapshot-model-2025-01-01": {
+                "id": "snapshot-model-2025-01-01",
+                "cost": { "input": 3, "output": 15 }
+              }
+            }
+          },
+          "anthropic": {
+            "id": "anthropic",
+            "models": {
+              "provider-b-anchor": {
+                "id": "provider-b-anchor",
+                "cost": { "input": 3, "output": 4 }
+              }
+            }
+          }
+        }
+        """)
+        ModelsDevCache.save(catalog: cachedCatalog, fetchedAt: old, cacheRoot: root)
+
+        let fetchedCatalog = Data("""
+        {
+          "openai": {
+            "id": "openai",
+            "models": {
+              "snapshot-model": {
+                "id": "snapshot-model",
+                "cost": { "input": 99, "output": 99 }
+              }
+            }
+          },
+          "anthropic": {
+            "id": "anthropic",
+            "models": {
+              "provider-b-anchor": {
+                "id": "provider-b-anchor",
+                "cost": { "input": 3, "output": 4 }
+              }
+            }
+          }
+        }
+        """.utf8)
+        await ModelsDevPricingPipeline.refreshIfNeeded(
+            now: Date(timeIntervalSince1970: 1 + ModelsDevCache.ttlSeconds + 1),
+            cacheRoot: root,
+            client: ModelsDevClient(transport: MockTransport(
+                result: .success((fetchedCatalog, Self.response(status: 200))))))
+
+        let snapshotLookup = try #require(ModelsDevPricingPipeline.lookup(
+            providerID: "openai",
+            modelID: "snapshot-model-2025-01-01",
+            cacheRoot: root))
+        let baseLookup = try #require(ModelsDevPricingPipeline.lookup(
+            providerID: "openai",
+            modelID: "snapshot-model",
+            cacheRoot: root))
+
+        #expect(snapshotLookup.pricing.inputCostPerToken == 3 / 1_000_000.0)
+        #expect(baseLookup.pricing.inputCostPerToken == 99 / 1_000_000.0)
     }
 
     @Test
@@ -618,8 +718,8 @@ struct ModelsDevPricingTests {
                 "id": "gpt-4o-mini",
                 "cost": { "input": 0.15, "output": 0.6 }
               },
-              "unpriced-preview": {
-                "id": "unpriced-preview"
+              "unpriced-model": {
+                "id": "unpriced-model"
               }
             }
           }
@@ -641,8 +741,8 @@ struct ModelsDevPricingTests {
           "anthropic": {
             "id": "anthropic",
             "models": {
-              "claude-anchor": {
-                "id": "claude-anchor",
+              "provider-b-anchor": {
+                "id": "provider-b-anchor",
                 "cost": { "input": 3, "output": 4 }
               }
             }
@@ -764,7 +864,7 @@ struct ModelsDevPricingTests {
 
         let catalog = try await client.fetchCatalog()
 
-        #expect(catalog.providers["google-vertex-anthropic"]?.models["claude-sonnet-4-6@default"]?.cost?.input == 3.1)
+        #expect(catalog.providers["google-vertex-anthropic"]?.models["claude-sonnet-4-6"]?.cost?.input == 3.1)
     }
 
     @Test

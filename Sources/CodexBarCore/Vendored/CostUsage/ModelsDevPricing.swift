@@ -87,7 +87,8 @@ struct ModelsDevCatalog: Codable, Equatable {
             }
 
             for (modelKey, cachedModel) in cachedProvider.models
-                where cachedModel.isPriceable && !provider.containsModel(matching: cachedModel)
+                where cachedModel.isPriceable && !provider.containsPricedModel(
+                    withStableIdentity: cachedModel.stableIdentity)
             {
                 let fallbackKey = provider.models[modelKey] == nil
                     ? modelKey
@@ -180,8 +181,10 @@ struct ModelsDevProvider: Codable, Equatable {
         return nil
     }
 
-    func containsModel(matching cachedModel: ModelsDevModel) -> Bool {
-        self.pricing(modelID: cachedModel.id) != nil
+    func containsPricedModel(withStableIdentity modelID: String) -> Bool {
+        self.models.values.contains { model in
+            model.isPriceable && model.stableIdentity == modelID
+        }
     }
 }
 
@@ -193,6 +196,10 @@ struct ModelsDevModel: Codable, Equatable {
 
     var normalizedID: String {
         ModelsDevModelIDNormalizer.normalize(self.id)
+    }
+
+    var stableIdentity: String {
+        ModelsDevModelIDNormalizer.stableIdentity(self.id)
     }
 
     var isPriceable: Bool {
@@ -260,6 +267,16 @@ struct ModelsDevLimit: Codable, Equatable {
 enum ModelsDevModelIDNormalizer {
     static func normalize(_ raw: String) -> String {
         raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    static func stableIdentity(_ raw: String) -> String {
+        let normalized = self.normalize(raw)
+        guard let atSign = normalized.firstIndex(of: "@") else { return normalized }
+
+        let base = String(normalized[..<atSign])
+        let suffix = String(normalized[normalized.index(after: atSign)...])
+        guard suffix.range(of: #"^\d{8}$"#, options: .regularExpression) != nil else { return normalized }
+        return "\(base)-\(suffix)"
     }
 
     static func candidates(_ raw: String) -> [String] {
