@@ -292,6 +292,63 @@ struct ModelsDevPricingTests {
     }
 
     @Test
+    func `historical fallback does not overwrite a refreshed model that reuses its map key`() async throws {
+        let root = try Self.cacheRoot()
+        let old = Date(timeIntervalSince1970: 1)
+        let cachedCatalog = try Self.catalog("""
+        {
+          "openai": {
+            "id": "openai",
+            "models": {
+              "rolling": { "id": "gpt-old", "cost": { "input": 1, "output": 2 } }
+            }
+          },
+          "anthropic": {
+            "id": "anthropic",
+            "models": {
+              "claude-anchor": { "id": "claude-anchor", "cost": { "input": 3, "output": 4 } }
+            }
+          }
+        }
+        """)
+        ModelsDevCache.save(catalog: cachedCatalog, fetchedAt: old, cacheRoot: root)
+
+        let fetchedCatalog = Data("""
+        {
+          "openai": {
+            "id": "openai",
+            "models": {
+              "rolling": { "id": "gpt-new", "cost": { "input": 99, "output": 100 } }
+            }
+          },
+          "anthropic": {
+            "id": "anthropic",
+            "models": {
+              "claude-anchor": { "id": "claude-anchor", "cost": { "input": 3, "output": 4 } }
+            }
+          }
+        }
+        """.utf8)
+        await ModelsDevPricingPipeline.refreshIfNeeded(
+            now: Date(timeIntervalSince1970: 1 + ModelsDevCache.ttlSeconds + 1),
+            cacheRoot: root,
+            client: ModelsDevClient(transport: MockTransport(
+                result: .success((fetchedCatalog, Self.response(status: 200))))))
+
+        let freshLookup = try #require(ModelsDevPricingPipeline.lookup(
+            providerID: "openai",
+            modelID: "gpt-new",
+            cacheRoot: root))
+        let fallbackLookup = try #require(ModelsDevPricingPipeline.lookup(
+            providerID: "openai",
+            modelID: "gpt-old",
+            cacheRoot: root))
+
+        #expect(freshLookup.pricing.inputCostPerToken == 99 / 1_000_000.0)
+        #expect(fallbackLookup.pricing.inputCostPerToken == 1 / 1_000_000.0)
+    }
+
+    @Test
     func `refresh updates cache when fetched catalog renames model key but keeps id`() async throws {
         let root = try Self.cacheRoot()
         let old = Date(timeIntervalSince1970: 1)

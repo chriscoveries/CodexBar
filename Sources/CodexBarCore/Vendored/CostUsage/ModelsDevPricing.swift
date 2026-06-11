@@ -89,7 +89,10 @@ struct ModelsDevCatalog: Codable, Equatable {
             for (modelKey, cachedModel) in cachedProvider.models
                 where cachedModel.isPriceable && !provider.containsModel(matching: cachedModel)
             {
-                provider.models[modelKey] = cachedModel
+                let fallbackKey = provider.models[modelKey] == nil
+                    ? modelKey
+                    : "codexbar-fallback:\(modelKey):\(cachedModel.normalizedID)"
+                provider.models[fallbackKey] = cachedModel
             }
             merged.providers[normalizedProviderID] = provider
         }
@@ -167,10 +170,10 @@ struct ModelsDevProvider: Codable, Equatable {
         }
 
         for candidate in candidates {
-            if let match = self.models.values.first(where: { $0.normalizedID == candidate }),
-               let pricing = match.pricing(providerID: self.id ?? self.mapKey ?? "", providerName: self.name)
-            {
-                return ModelsDevPricingLookup(pricing: pricing, normalizedModelID: match.normalizedID)
+            for match in self.models.values where match.normalizedID == candidate {
+                if let pricing = match.pricing(providerID: self.id ?? self.mapKey ?? "", providerName: self.name) {
+                    return ModelsDevPricingLookup(pricing: pricing, normalizedModelID: match.normalizedID)
+                }
             }
         }
 
