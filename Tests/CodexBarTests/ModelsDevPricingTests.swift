@@ -784,6 +784,34 @@ extension ModelsDevPricingTests {
     }
 
     @Test
+    func `compact snapshot alias prefers snapshot pricing over base pricing`() throws {
+        let catalog = try Self.catalog("""
+        {
+          "openai": {
+            "id": "openai",
+            "models": {
+              "snapshot-model": {
+                "id": "snapshot-model",
+                "cost": { "input": 99, "output": 100 }
+              },
+              "snapshot-model-20250101": {
+                "id": "snapshot-model-20250101",
+                "cost": { "input": 3, "output": 15 }
+              }
+            }
+          }
+        }
+        """)
+
+        let lookup = try #require(catalog.pricing(
+            providerID: "openai",
+            modelID: "snapshot-model@20250101"))
+
+        #expect(lookup.pricing.inputCostPerToken == 3 / 1_000_000.0)
+        #expect(lookup.normalizedModelID == "snapshot-model-20250101")
+    }
+
+    @Test
     func `refresh ignores unpriceable models in old cache continuity check`() async throws {
         let root = try Self.cacheRoot()
         let old = Date(timeIntervalSince1970: 1)

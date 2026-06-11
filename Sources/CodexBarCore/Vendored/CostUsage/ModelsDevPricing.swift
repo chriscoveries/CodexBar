@@ -323,11 +323,11 @@ enum ModelsDevModelIDNormalizer {
             let candidate = candidates[index]
             if let atSign = candidate.firstIndex(of: "@") {
                 let base = String(candidate[..<atSign])
-                append(base)
                 let suffix = String(candidate[candidate.index(after: atSign)...])
                 if suffix.range(of: #"^\d{8}$"#, options: .regularExpression) != nil {
                     append("\(base)-\(suffix)")
                 }
+                append(base)
             } else if candidate.hasPrefix("claude-") {
                 append("\(candidate)@default")
             }
