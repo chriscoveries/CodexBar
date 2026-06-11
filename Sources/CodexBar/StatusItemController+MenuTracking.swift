@@ -199,8 +199,29 @@ extension StatusItemController {
     }
 
     func renderedMenuWidth(for menu: NSMenu) -> CGFloat {
-        let measuredWidth = ceil(menu.size.width)
-        return max(measuredWidth, Self.menuCardBaseWidth)
+        let menuKey = ObjectIdentifier(menu)
+        let trackedWindowWidth: CGFloat? = if self.openMenus[menuKey] != nil {
+            menu.items.lazy.compactMap { item -> CGFloat? in
+                guard let window = item.view?.window else { return nil }
+                let contentWidth = window.contentLayoutRect.width
+                return contentWidth > 0 ? contentWidth : window.frame.width
+            }.first
+        } else {
+            nil
+        }
+        return Self.resolvedRenderedMenuWidth(
+            menuWidth: menu.size.width,
+            trackedWindowWidth: trackedWindowWidth)
+    }
+
+    static func resolvedRenderedMenuWidth(
+        menuWidth: CGFloat,
+        trackedWindowWidth: CGFloat?) -> CGFloat
+    {
+        max(
+            ceil(menuWidth),
+            ceil(trackedWindowWidth ?? 0),
+            menuCardBaseWidth)
     }
 
     func rebuildClosedMenuIfNeeded(_ menu: NSMenu) {

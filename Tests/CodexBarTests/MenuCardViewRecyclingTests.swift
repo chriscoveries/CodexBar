@@ -36,6 +36,74 @@ extension StatusMenuTests {
     }
 
     @Test
+    func `merged menu width uses widest provider action set`() {
+        let settings = self.makeSettings()
+        settings.statusChecksEnabled = false
+        let controller = self.makeRecyclingController(settings: settings)
+        defer { controller.releaseStatusItemsForTesting() }
+
+        let narrow = [
+            MenuDescriptor.Section(entries: [
+                .action("Usage Dashboard", .dashboard),
+            ]),
+        ]
+        let wide = [
+            MenuDescriptor.Section(entries: [
+                .action(String(repeating: "W", count: 60), .dashboard),
+            ]),
+        ]
+
+        let narrowWidth = controller.measuredMenuCardWidth(for: [narrow])
+        let stableWidth = controller.measuredMenuCardWidth(for: [narrow, wide])
+
+        #expect(narrowWidth == StatusItemController.menuCardBaseWidth)
+        #expect(stableWidth > narrowWidth)
+        #expect(controller.measuredMenuCardWidth(for: [wide, narrow]) == stableWidth)
+    }
+
+    @Test
+    func `menu width normalization includes usage history submenu row`() {
+        let previousRendering = StatusItemController.menuCardRenderingEnabled
+        StatusItemController.menuCardRenderingEnabled = true
+        defer { StatusItemController.menuCardRenderingEnabled = previousRendering }
+
+        let settings = self.makeSettings()
+        settings.statusChecksEnabled = false
+        let controller = self.makeRecyclingController(settings: settings)
+        defer { controller.releaseStatusItemsForTesting() }
+
+        let menu = NSMenu()
+        let usageHistoryItem = controller.makeMenuCardItem(
+            Text("Subscription Utilization"),
+            id: "usageHistorySubmenu",
+            width: StatusItemController.menuCardBaseWidth)
+        menu.addItem(usageHistoryItem)
+        menu.addItem(NSMenuItem(
+            title: String(repeating: "W", count: 60),
+            action: nil,
+            keyEquivalent: ""))
+
+        let expectedWidth = controller.renderedMenuWidth(for: menu)
+        #expect(expectedWidth > StatusItemController.menuCardBaseWidth)
+
+        controller.refreshMenuCardHeights(in: menu)
+
+        #expect(abs((usageHistoryItem.view?.frame.width ?? 0) - expectedWidth) <= 0.5)
+    }
+
+    @Test
+    func `rendered menu width keeps tracked window width after AppKit shrink`() {
+        let width = StatusItemController.resolvedRenderedMenuWidth(
+            menuWidth: 310,
+            trackedWindowWidth: 356)
+
+        #expect(width == 356)
+        #expect(StatusItemController.resolvedRenderedMenuWidth(
+            menuWidth: 310,
+            trackedWindowWidth: nil) == 310)
+    }
+
+    @Test
     func `data only repopulate reuses menu card hosting views`() {
         StatusItemController.setMenuRefreshEnabledForTesting(false)
         let previousRendering = StatusItemController.menuCardRenderingEnabled

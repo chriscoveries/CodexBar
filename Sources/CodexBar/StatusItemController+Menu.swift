@@ -49,15 +49,6 @@ extension StatusItemController {
         }
     }
 
-    private func menuCardWidth(
-        for providers: [UsageProvider],
-        sections: [MenuDescriptor.Section]) -> CGFloat
-    {
-        _ = providers
-        let baselineWidth = Self.menuCardBaseWidth
-        return max(baselineWidth, self.measuredStandardMenuWidth(for: sections, baseWidth: baselineWidth))
-    }
-
     func makeMenu() -> NSMenu {
         guard self.shouldMergeIcons else {
             return self.makeMenu(for: nil)
@@ -217,6 +208,7 @@ extension StatusItemController {
                 menu: menu,
                 provider: provider)
         }
+        defer { self.refreshMenuCardHeights(in: menu) }
 
         let enabledProviders = self.store.enabledProvidersForDisplay()
         let includesOverview = self.includesOverviewTab(enabledProviders: enabledProviders)
@@ -244,16 +236,13 @@ extension StatusItemController {
         let openAIContext = self.openAIWebContext(
             currentProvider: currentProvider,
             showAllAccounts: showAllAccounts)
-        let descriptor = MenuDescriptor.build(
+        let descriptor = self.makeMenuDescriptor(
             provider: selectedProvider,
-            store: self.store,
-            settings: self.settings,
-            account: self.account,
-            managedCodexAccountCoordinator: self.managedCodexAccountCoordinator,
-            codexAccountPromotionCoordinator: self.codexAccountPromotionCoordinator,
-            updateReady: self.updater.updateStatus.isUpdateReady,
             includeContextualActions: !isOverviewSelected)
-        let menuWidth = self.menuCardWidth(for: enabledProviders, sections: descriptor.sections)
+        let menuWidth = self.menuCardWidth(
+            for: enabledProviders,
+            selectedProvider: selectedProvider,
+            descriptor: descriptor)
 
         let hasTokenSwitcher = menu.items.contains { $0.view is TokenAccountSwitcherView }
         let hasCodexSwitcher = menu.items.contains { $0.view is CodexAccountSwitcherView }
