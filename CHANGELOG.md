@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.32.6 — Unreleased
+## 0.33.0 — 2026-06-11
 
 ### Added
 - Settings: choose Terminal.app or iTerm for Open Terminal actions, including Vertex AI login commands (#1225, fixes #1147). Thanks @Yuxin-Qiao!
