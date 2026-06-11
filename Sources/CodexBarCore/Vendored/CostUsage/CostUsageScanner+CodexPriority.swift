@@ -27,7 +27,7 @@ extension CostUsageScanner {
     /// append-only log with an `INTEGER PRIMARY KEY AUTOINCREMENT` id, so rowids are
     /// monotonic and never reused: rows at or below `lastRowID` have already been examined
     /// and only newer rows need scanning on subsequent refreshes.
-    private struct CodexPriorityTurnsMemoState {
+    struct CodexPriorityTurnsMemoState {
         var coverageSinceEpoch: Int64
         var lastRowID: Int64
         var fileIdentity: UInt64?
@@ -38,8 +38,35 @@ extension CostUsageScanner {
     private static let codexPriorityTurnsMemo =
         OSAllocatedUnfairLock<[String: CodexPriorityTurnsMemoState]>(initialState: [:])
 
+    /// Scans run outside the lock, so two overlapping refreshes can both read the same memo,
+    /// scan independently, and write back out of order. Stored state only advances: a snapshot
+    /// is discarded when the stored one already covers it (same file, coverage starting at
+    /// least as early, cursor at least as far), so a slower writer with an older cursor can
+    /// never replace newer accumulated state. Writers that neither dominate nor are dominated
+    /// (e.g. one expanded coverage while another advanced the cursor) overwrite and converge
+    /// through the rescan checks on the next refresh.
+    static func storeCodexPriorityTurnsMemoIfNewer(
+        _ updated: CodexPriorityTurnsMemoState,
+        forPath path: String)
+    {
+        self.codexPriorityTurnsMemo.withLock { memo in
+            if let existing = memo[path],
+               existing.fileIdentity == updated.fileIdentity,
+               existing.coverageSinceEpoch <= updated.coverageSinceEpoch,
+               existing.lastRowID >= updated.lastRowID
+            {
+                return
+            }
+            memo[path] = updated
+        }
+    }
+
     static func _test_resetCodexPriorityTurnsMemo() {
         self.codexPriorityTurnsMemo.withLock { $0.removeAll() }
+    }
+
+    static func _test_codexPriorityTurnsMemoState(forPath path: String) -> CodexPriorityTurnsMemoState? {
+        self.codexPriorityTurnsMemo.withLock { $0[path] }
     }
     #endif
 
@@ -104,8 +131,7 @@ extension CostUsageScanner {
         if maxRowID > resolved.lastRowID {
             guard self.accumulateCodexPriorityTurns(db, into: &resolved) else { return [:] }
             resolved.lastRowID = maxRowID
-            let updated = resolved
-            self.codexPriorityTurnsMemo.withLock { $0[url.path] = updated }
+            self.storeCodexPriorityTurnsMemoIfNewer(resolved, forPath: url.path)
         }
 
         guard sinceDayKey != nil || untilDayKey != nil else { return resolved.turns }

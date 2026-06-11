@@ -8,7 +8,6 @@
 
 ### Fixed
 - Cost history: keep all per-day model breakdown rows available in a bounded scrolling detail area instead of hiding models after the first four (#1370). Thanks @MoollaMore!
-- Cost usage: resolve codex priority-turn metadata incrementally per refresh instead of re-running the full trace-database scan, removing a per-tick cost that grows with `logs_2.sqlite` (#1392).
 - Copilot: keep explicitly unlimited chat quotas visible instead of dropping their zero-entitlement payload as unavailable (#1320). Thanks @soumikbhatta!
 - Security: block credentialed provider redirects that leave the original HTTPS origin while preserving same-origin redirects (#1237). Thanks @Hinotoi-agent!
 - Codex: keep local token and cost history visible when remote quota data is unavailable (#1390). Thanks @vaibhavarora14!

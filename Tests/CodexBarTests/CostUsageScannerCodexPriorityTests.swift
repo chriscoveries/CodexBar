@@ -278,6 +278,54 @@ struct CostUsageScannerCodexPriorityTests {
         #expect(replaced.keys.sorted() == ["turn-c"])
     }
 
+    @Test
+    func `overlapping refresh writeback cannot replace newer memo state`() throws {
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+        let dbURL = env.root.appendingPathComponent("logs_2.sqlite")
+        try Self.createTestLogsDatabase(at: dbURL)
+        try Self.insertTestLog(
+            dbURL: dbURL,
+            timestamp: "2026-05-10T12:00:00Z",
+            body: "thread_id=thread-a turn.id=turn-a websocket request: "
+                + #"{"type":"response.create","model":"gpt-5.5","service_tier":"priority"}"#)
+        try Self.insertTestLog(
+            dbURL: dbURL,
+            timestamp: "2026-05-10T12:01:00Z",
+            body: "thread_id=thread-b turn.id=turn-b websocket request: "
+                + #"{"type":"response.create","model":"gpt-5.5","service_tier":"priority"}"#)
+        #expect(CostUsageScanner.codexPriorityTurns(databaseURL: dbURL).count == 2)
+        let stored = try #require(CostUsageScanner._test_codexPriorityTurnsMemoState(forPath: dbURL.path))
+
+        // A slower overlapping refresh writes back a snapshot read before the second row was
+        // appended: an older cursor that only observed the first turn. It must not win.
+        var stale = stored
+        stale.lastRowID -= 1
+        stale.turns = stored.turns.filter { $0.key == "turn-a" }
+        CostUsageScanner.storeCodexPriorityTurnsMemoIfNewer(stale, forPath: dbURL.path)
+
+        let retained = try #require(CostUsageScanner._test_codexPriorityTurnsMemoState(forPath: dbURL.path))
+        #expect(retained.lastRowID == stored.lastRowID)
+        #expect(retained.turns.keys.sorted() == ["turn-a", "turn-b"])
+
+        // A snapshot with a newer cursor still replaces the stored state.
+        var newer = stored
+        newer.lastRowID += 1
+        CostUsageScanner.storeCodexPriorityTurnsMemoIfNewer(newer, forPath: dbURL.path)
+        #expect(
+            CostUsageScanner._test_codexPriorityTurnsMemoState(forPath: dbURL.path)?
+                .lastRowID == stored.lastRowID + 1)
+
+        // A full rescan that expanded coverage earlier than the stored window also replaces,
+        // even when its cursor is not ahead, so broader history is never discarded.
+        var broader = stored
+        broader.coverageSinceEpoch -= 1
+        CostUsageScanner.storeCodexPriorityTurnsMemoIfNewer(broader, forPath: dbURL.path)
+        #expect(
+            CostUsageScanner._test_codexPriorityTurnsMemoState(forPath: dbURL.path)?
+                .coverageSinceEpoch == broader.coverageSinceEpoch)
+    }
+
     static func createTestLogsDatabase(at dbURL: URL) throws {
         var db: OpaquePointer?
         guard sqlite3_open(dbURL.path, &db) == SQLITE_OK else { throw SQLiteTestError.open }
