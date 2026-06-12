@@ -3,6 +3,7 @@
 ## 0.33.1 — Unreleased
 
 ### Added
+- Copilot: optionally import GitHub billing budget windows, bind them to the active account, and expose budget metrics in cards and menu bar icons (#1273). Thanks @Quicksaver!
 - Localization: add native Korean language support across the app and language picker (#1460). Thanks @soohanpark!
 - Localization: add German as a selectable app language (#1245). Thanks @Yuxin-Qiao!
 - Localization: add Turkish as a selectable app language (#1232). Thanks @ykarateke!
