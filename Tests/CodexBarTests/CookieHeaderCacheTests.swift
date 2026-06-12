@@ -265,6 +265,78 @@ struct CookieHeaderCacheTests {
     }
 
     @Test
+    func `stale refresh cannot overwrite a newer store`() {
+        KeychainCacheStore.setTestStoreForTesting(true)
+        defer { KeychainCacheStore.setTestStoreForTesting(false) }
+        CookieHeaderCache.resetDisplayCacheForTesting()
+        defer { CookieHeaderCache.resetDisplayCacheForTesting() }
+
+        let provider: UsageProvider = .codex
+        CookieHeaderCache.store(provider: provider, cookieHeader: "auth=old", sourceLabel: "Chrome")
+        #expect(CookieHeaderCache.loadForDisplay(provider: provider)?.cookieHeader == "auth=old")
+
+        // A refresh scheduled now races with a store that lands before it commits.
+        let staleGeneration = CookieHeaderCache.displayGenerationForTesting(provider: provider)
+        let staleEntry = CookieHeaderCache.load(provider: provider)
+        CookieHeaderCache.store(provider: provider, cookieHeader: "auth=new", sourceLabel: "Safari")
+
+        let committed = CookieHeaderCache.commitDisplaySnapshotIfCurrentForTesting(
+            provider: provider,
+            entry: staleEntry,
+            generation: staleGeneration)
+
+        #expect(committed?.cookieHeader == "auth=new")
+        #expect(CookieHeaderCache.loadForDisplay(provider: provider)?.cookieHeader == "auth=new")
+    }
+
+    @Test
+    func `stale refresh cannot resurrect a cleared snapshot`() {
+        KeychainCacheStore.setTestStoreForTesting(true)
+        defer { KeychainCacheStore.setTestStoreForTesting(false) }
+        CookieHeaderCache.resetDisplayCacheForTesting()
+        defer { CookieHeaderCache.resetDisplayCacheForTesting() }
+
+        let provider: UsageProvider = .codex
+        CookieHeaderCache.store(provider: provider, cookieHeader: "auth=secret", sourceLabel: "Chrome")
+        #expect(CookieHeaderCache.loadForDisplay(provider: provider)?.cookieHeader == "auth=secret")
+
+        let staleGeneration = CookieHeaderCache.displayGenerationForTesting(provider: provider)
+        let staleEntry = CookieHeaderCache.load(provider: provider)
+        CookieHeaderCache.clear(provider: provider)
+
+        let committed = CookieHeaderCache.commitDisplaySnapshotIfCurrentForTesting(
+            provider: provider,
+            entry: staleEntry,
+            generation: staleGeneration)
+
+        #expect(committed == nil)
+        #expect(CookieHeaderCache.loadForDisplay(provider: provider) == nil)
+    }
+
+    @Test
+    func `stale refresh cannot survive clear all`() {
+        KeychainCacheStore.setTestStoreForTesting(true)
+        defer { KeychainCacheStore.setTestStoreForTesting(false) }
+        CookieHeaderCache.resetDisplayCacheForTesting()
+        defer { CookieHeaderCache.resetDisplayCacheForTesting() }
+
+        let provider: UsageProvider = .codex
+        CookieHeaderCache.store(provider: provider, cookieHeader: "auth=secret", sourceLabel: "Chrome")
+        #expect(CookieHeaderCache.loadForDisplay(provider: provider)?.cookieHeader == "auth=secret")
+
+        let staleGeneration = CookieHeaderCache.displayGenerationForTesting(provider: provider)
+        let staleEntry = CookieHeaderCache.load(provider: provider)
+        CookieHeaderCache.clearAll()
+
+        CookieHeaderCache.commitDisplaySnapshotIfCurrentForTesting(
+            provider: provider,
+            entry: staleEntry,
+            generation: staleGeneration)
+
+        #expect(CookieHeaderCache.loadForDisplay(provider: provider) == nil)
+    }
+
+    @Test
     func `stale display snapshot revalidates off the calling path`() async throws {
         KeychainCacheStore.setTestStoreForTesting(true)
         defer { KeychainCacheStore.setTestStoreForTesting(false) }

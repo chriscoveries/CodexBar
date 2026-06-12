@@ -37,6 +37,7 @@ public enum CookieHeaderCache {
 
     private static let displayCacheLock = NSLock()
     private nonisolated(unsafe) static var displayCache: [KeychainCacheStore.Key: DisplaySnapshot] = [:]
+    private nonisolated(unsafe) static var displayGenerations: [KeychainCacheStore.Key: UInt64] = [:]
     private nonisolated(unsafe) static var displayRevalidationsInFlight: Set<KeychainCacheStore.Key> = []
     private nonisolated(unsafe) static var displayStalenessIntervalOverride: TimeInterval?
     private static let displayStalenessInterval: TimeInterval = 30
@@ -51,14 +52,14 @@ public enum CookieHeaderCache {
         let key = self.key(for: provider, scope: scope)
         self.displayCacheLock.lock()
         let cached = self.displayCache[key]
+        let generation = self.displayGenerations[key, default: 0]
         self.displayCacheLock.unlock()
         guard let cached else {
             let entry = self.load(provider: provider, scope: scope)
-            self.updateDisplaySnapshot(key: key, entry: entry)
-            return entry
+            return self.commitDisplaySnapshotIfCurrent(key: key, entry: entry, generation: generation)
         }
         if Date().timeIntervalSince(cached.loadedAt) >= self.currentDisplayStalenessInterval {
-            self.scheduleDisplayRevalidation(provider: provider, scope: scope, key: key)
+            self.scheduleDisplayRevalidation(provider: provider, scope: scope, key: key, generation: generation)
         }
         return cached.entry
     }
@@ -66,32 +67,53 @@ public enum CookieHeaderCache {
     private static func scheduleDisplayRevalidation(
         provider: UsageProvider,
         scope: Scope?,
-        key: KeychainCacheStore.Key)
+        key: KeychainCacheStore.Key,
+        generation: UInt64)
     {
         self.displayCacheLock.lock()
         let inserted = self.displayRevalidationsInFlight.insert(key).inserted
         self.displayCacheLock.unlock()
         guard inserted else { return }
         Task(priority: .utility) {
-            self.revalidateDisplaySnapshot(provider: provider, scope: scope, key: key)
+            self.revalidateDisplaySnapshot(provider: provider, scope: scope, key: key, generation: generation)
         }
     }
 
     private static func revalidateDisplaySnapshot(
         provider: UsageProvider,
         scope: Scope?,
-        key: KeychainCacheStore.Key)
+        key: KeychainCacheStore.Key,
+        generation: UInt64)
     {
         let entry = self.load(provider: provider, scope: scope)
+        _ = self.commitDisplaySnapshotIfCurrent(key: key, entry: entry, generation: generation)
         self.displayCacheLock.lock()
-        self.displayCache[key] = DisplaySnapshot(entry: entry, loadedAt: Date())
         self.displayRevalidationsInFlight.remove(key)
         self.displayCacheLock.unlock()
+    }
+
+    /// Keychain reads for the display cache happen outside the lock, so a concurrent `store` or
+    /// `clear` can publish newer state before the read commits. Each mutation bumps the per-key
+    /// generation; a read only commits if the generation it started from is still current, and
+    /// otherwise returns whatever newer snapshot won the race.
+    private static func commitDisplaySnapshotIfCurrent(
+        key: KeychainCacheStore.Key,
+        entry: Entry?,
+        generation: UInt64) -> Entry?
+    {
+        self.displayCacheLock.lock()
+        defer { self.displayCacheLock.unlock() }
+        guard self.displayGenerations[key, default: 0] == generation else {
+            return self.displayCache[key]?.entry
+        }
+        self.displayCache[key] = DisplaySnapshot(entry: entry, loadedAt: Date())
+        return entry
     }
 
     private static func updateDisplaySnapshot(key: KeychainCacheStore.Key, entry: Entry?) {
         self.displayCacheLock.lock()
         self.displayCache[key] = DisplaySnapshot(entry: entry, loadedAt: Date())
+        self.displayGenerations[key, default: 0] += 1
         self.displayCacheLock.unlock()
     }
 
@@ -106,8 +128,29 @@ public enum CookieHeaderCache {
     static func resetDisplayCacheForTesting() {
         self.displayCacheLock.lock()
         self.displayCache.removeAll()
+        self.displayGenerations.removeAll()
         self.displayRevalidationsInFlight.removeAll()
         self.displayCacheLock.unlock()
+    }
+
+    static func displayGenerationForTesting(provider: UsageProvider, scope: Scope? = nil) -> UInt64 {
+        let key = self.key(for: provider, scope: scope)
+        self.displayCacheLock.lock()
+        defer { self.displayCacheLock.unlock() }
+        return self.displayGenerations[key, default: 0]
+    }
+
+    @discardableResult
+    static func commitDisplaySnapshotIfCurrentForTesting(
+        provider: UsageProvider,
+        scope: Scope? = nil,
+        entry: Entry?,
+        generation: UInt64) -> Entry?
+    {
+        self.commitDisplaySnapshotIfCurrent(
+            key: self.key(for: provider, scope: scope),
+            entry: entry,
+            generation: generation)
     }
 
     public static func load(provider: UsageProvider, scope: Scope? = nil) -> Entry? {
@@ -202,6 +245,9 @@ public enum CookieHeaderCache {
             cleared += 1
         }
         self.displayCacheLock.lock()
+        for key in Set(self.displayCache.keys).union(self.displayGenerations.keys) {
+            self.displayGenerations[key, default: 0] += 1
+        }
         self.displayCache.removeAll()
         self.displayCacheLock.unlock()
         self.log.debug("Cookie cache clearAll completed", metadata: ["cleared": "\(cleared)"])
