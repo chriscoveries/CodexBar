@@ -59,15 +59,6 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
     var menuRefreshEnabledOverrideForTesting: Bool?
     #endif
 
-    var isMenuRefreshEnabled: Bool {
-        #if DEBUG
-        if let menuRefreshEnabledOverrideForTesting {
-            return menuRefreshEnabledOverrideForTesting
-        }
-        #endif
-        return Self.menuRefreshEnabled
-    }
-
     typealias Factory =
         @MainActor (
             UsageStore,
@@ -105,6 +96,11 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
 
     let store: UsageStore
     let settings: SettingsStore
+    lazy var menuCardRefreshMonitor = MenuCardRefreshMonitor { [weak self] provider in
+        guard let model = self?.menuCardModel(for: provider) else { return nil }
+        return MenuCardLiveSubtitle(text: model.subtitleText, style: model.subtitleStyle)
+    }
+
     let account: AccountInfo
     let updater: UpdaterProviding
     let managedCodexAccountCoordinator: ManagedCodexAccountCoordinator
@@ -121,6 +117,9 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
     var menuVersions: [ObjectIdentifier: Int] = [:]
     var menuReadinessSignatures: [ObjectIdentifier: String] = [:]
     let hostedSubviewRenderSignatures = NSMapTable<NSMenu, NSString>.weakToStrongObjects()
+    /// Live persistent Refresh rows, tracked weakly so they can be given in-place in-flight
+    /// feedback (spinner) while the menu stays open, without rebuilding the menu.
+    let persistentRefreshRows = NSHashTable<PersistentMenuActionItemView>.weakObjects()
     var menuCardHeightCache: [MenuCardHeightCacheKey: CGFloat] = [:]
     var measuredStandardMenuWidthCache: [String: CGFloat] = [:]
     var lastMenuAdjunctReadinessSignature = ""
@@ -131,6 +130,7 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
     var fallbackMenu: NSMenu?
     var openMenus: [ObjectIdentifier: NSMenu] = [:]
     var menuRefreshTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
+    var manualRefreshTask: Task<Void, Never>?
     var closedMenuRebuildTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
     var closedMenuRebuildTokens: [ObjectIdentifier: Int] = [:]
     var closedMenuRebuildTokenCounter = 0
@@ -181,6 +181,7 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
     var _test_providerSwitcherMenuRebuildDebounceNanoseconds: UInt64?
     var _test_codexAmbientLoginRunnerOverride:
         (@MainActor (TimeInterval) async -> CodexLoginRunner.Result)?
+    var _test_manualRefreshOperation: (@MainActor () async -> Void)?
     #endif
     var blinkTask: Task<Void, Never>?
     var menuBarCountdownRefreshTask: Task<Void, Never>?
@@ -495,6 +496,9 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
 
     func handleObservedStoreMenuChange() {
         self.observeStoreChanges()
+        // In-place spinner sync for the persistent Refresh rows. Safe during menu tracking:
+        // it mutates existing row views only and never rebuilds the menu.
+        self.updatePersistentRefreshRowsInProgress()
         let rootOpenHandledReadiness = self.consumeRootOpenHandledMenuObservationIfNeeded()
         // `refreshOpenMenus` is only consulted when a menu is currently open.
         // Computing the readiness signature serializes every enabled provider's
