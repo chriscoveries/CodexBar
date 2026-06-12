@@ -1335,7 +1335,7 @@ extension CursorStatusProbeTests {
     }
 
     @Test
-    func `cached session failure continues to Cursor app auth fallback`() async throws {
+    func `cached session transient failure does not switch to Cursor app auth`() async throws {
         CookieHeaderCache.store(provider: .cursor, cookieHeader: "cached=bad", sourceLabel: "test")
         defer {
             CookieHeaderCache.clear(provider: .cursor)
@@ -1354,45 +1354,28 @@ extension CursorStatusProbeTests {
                     url: requestURL,
                     body: #"{"error":"temporary"}"#,
                     statusCode: 500)
-            case "/api/usage-summary" where cookie == appCookie:
-                return makeCursorStatusProbeResponse(
-                    url: requestURL,
-                    body: """
-                    {
-                      "membershipType": "pro",
-                      "individualUsage": {
-                        "plan": {
-                          "used": 100,
-                          "limit": 1000,
-                          "totalPercentUsed": 10
-                        }
-                      }
-                    }
-                    """,
-                    statusCode: 200)
-            case "/api/auth/me":
-                return makeCursorStatusProbeResponse(
-                    url: requestURL,
-                    body: #"{"email":"user@example.com"}"#,
-                    statusCode: 200)
+            case _ where cookie == appCookie:
+                Issue.record("Transient cached-session failure unexpectedly switched to Cursor.app auth")
+                throw URLError(.userAuthenticationRequired)
             default:
                 throw URLError(.badURL)
             }
         }
 
         let baseURL = try #require(URL(string: "https://cursor-web.test"))
-        let snapshot = try await CursorStatusProbe(
+        let probe = CursorStatusProbe(
             baseURL: baseURL,
             browserDetection: BrowserDetection(cacheTTL: 0),
             browserCookieImportOrder: [],
             urlSession: makeCursorStatusProbeSession(),
             appAuthStore: CursorAppAuthSessionProviderStub(session: CursorAppAuthSession(
-                accessToken: accessToken))).fetch()
+                accessToken: accessToken)))
 
-        #expect(snapshot.planPercentUsed == 10)
-        #expect(snapshot.accountEmail == "user@example.com")
+        await #expect(throws: CursorStatusProbeError.self) {
+            _ = try await probe.fetch()
+        }
         #expect(CursorStatusProbeStubURLProtocol.requestCookies.contains("cached=bad"))
-        #expect(CursorStatusProbeStubURLProtocol.requestCookies.contains(appCookie))
+        #expect(!CursorStatusProbeStubURLProtocol.requestCookies.contains(appCookie))
     }
 }
 

@@ -982,6 +982,11 @@ public struct CursorStatusProbe: Sendable {
             }
         }
 
+        // A transient failure for an explicitly selected session must not switch to Cursor.app's account.
+        if let firstRecoverableError {
+            throw firstRecoverableError
+        }
+
         // Last fallback: derive Cursor's first-party web session from the app token in its global state DB.
         // Reusing the web flow preserves modern billing, legacy request quotas, and account-scoped identity.
         if allowAppAuthFallback,
@@ -1000,10 +1005,6 @@ public struct CursorStatusProbe: Sendable {
             } catch {
                 firstRecoverableError = firstRecoverableError ?? .networkError(error.localizedDescription)
             }
-        }
-
-        if let firstRecoverableError {
-            throw firstRecoverableError
         }
 
         throw CursorStatusProbeError.noSessionCookie
