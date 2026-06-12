@@ -89,6 +89,35 @@ struct UsageStoreCoverageTests {
     }
 
     @Test
+    func `amp balances are rendered in provider cards`() {
+        let settings = Self.makeSettingsStore(suite: "UsageStoreCoverageTests-amp-credits")
+        let store = Self.makeUsageStore(settings: settings)
+        let now = Date()
+
+        store._setSnapshotForTesting(
+            UsageSnapshot(
+                primary: RateWindow(
+                    usedPercent: 51.4,
+                    windowMinutes: 1440,
+                    resetsAt: now.addingTimeInterval(12 * 3600),
+                    resetDescription: nil),
+                secondary: nil,
+                ampUsage: AmpUsageDetails(
+                    individualCredits: 25.64,
+                    workspaceBalances: [AmpWorkspaceBalance(name: "billing@example.test", remaining: 10.22)]),
+                updatedAt: now),
+            provider: .amp)
+        let model = ProvidersPane(settings: settings, store: store)._test_menuCardModel(for: .amp)
+
+        #expect(model.creditsText == "Individual credits: $25.64\nWorkspace billing@example.test: $10.22")
+        #expect(model.creditsRemaining == nil)
+
+        settings.hidePersonalInfo = true
+        let redactedModel = ProvidersPane(settings: settings, store: store)._test_menuCardModel(for: .amp)
+        #expect(redactedModel.creditsText == "Individual credits: $25.64\nWorkspace Hidden: $10.22")
+    }
+
+    @Test
     func `account info caches codex auth parsing until config revision changes`() throws {
         let settings = Self.makeSettingsStore(suite: "UsageStoreCoverageTests-account-info-cache")
         let home = FileManager.default.temporaryDirectory.appendingPathComponent(

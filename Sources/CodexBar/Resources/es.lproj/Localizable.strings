@@ -98,6 +98,8 @@
 "Could not start codex login" = "No se pudo iniciar codex login";
 "Could not switch system account" = "No se pudo cambiar la cuenta del sistema";
 "Credits" = "Créditos";
+"Individual credits" = "Créditos individuales";
+"Workspace" = "Espacio de trabajo";
 "Credits history" = "Historial de créditos";
 "Cursor login failed" = "El inicio de sesión de Cursor falló";
 "Custom" = "Personalizado";

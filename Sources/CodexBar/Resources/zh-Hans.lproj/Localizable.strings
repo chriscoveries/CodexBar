@@ -101,6 +101,8 @@
 "Could not start codex login" = "无法启动 codex login";
 "Could not switch system account" = "无法切换系统账户";
 "Credits" = "额度";
+"Individual credits" = "个人额度";
+"Workspace" = "工作区";
 "Credits history" = "额度记录";
 "Cursor login failed" = "Cursor 登录失败";
 "Custom" = "自定义";
