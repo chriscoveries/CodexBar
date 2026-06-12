@@ -382,7 +382,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AppNotifications.shared.requestAuthorizationOnStartup()
         self.ensureStatusController()
         KeyboardShortcuts.onKeyUp(for: .openMenu) { [weak self] in
-            Task { @MainActor [weak self] in
+            MainActor.assumeIsolated {
                 self?.statusController?.openMenuFromShortcut()
             }
         }
