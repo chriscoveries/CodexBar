@@ -31,11 +31,23 @@ enum LaunchAtLoginManager {
     {
         do {
             if enabled {
-                guard status() != .enabled else { return }
-                try register()
+                switch status() {
+                case .enabled, .requiresApproval:
+                    return
+                case .notRegistered, .notFound:
+                    try register()
+                @unknown default:
+                    try register()
+                }
             } else {
-                guard status() != .notRegistered else { return }
-                try unregister()
+                switch status() {
+                case .enabled, .requiresApproval:
+                    try unregister()
+                case .notRegistered, .notFound:
+                    return
+                @unknown default:
+                    try unregister()
+                }
             }
         } catch {
             CodexBarLog.logger(LogCategories.launchAtLogin).error("Failed to update login item: \(error)")
