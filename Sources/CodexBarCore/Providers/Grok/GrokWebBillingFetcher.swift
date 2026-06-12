@@ -222,10 +222,14 @@ public enum GrokWebBillingFetcher {
             .map(\.date)
             .min()
 
+        let hasUsagePeriod = scan.varintFields.contains { field in
+            field.path.starts(with: [1, 6]) ||
+                (field.path == [1, 8, 1] && (field.value == 1 || field.value == 2))
+        }
         let noUsageYet = parsedPercent == nil &&
             scan.fixed32Fields.isEmpty &&
             reset != nil &&
-            scan.varintFields.contains { $0.path.starts(with: [1, 6]) }
+            hasUsagePeriod
         guard let percent = parsedPercent ?? (noUsageYet ? 0 : nil) else {
             throw GrokWebBillingError.parseFailed
         }

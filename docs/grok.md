@@ -44,8 +44,9 @@ browser session when the CLI surface does not expose billing.
      bearer-only probe after browser sessions fail. Expired tokens are not sent.
    - Parses the returned protobuf enough to recover used percent and
      reset timestamp, accepting both gRPC-web frames and the raw protobuf form
-     returned by some successful requests. This keeps billing visible when
-     `grok agent stdio` returns `Method not found`.
+     returned by some successful requests. A current billing period with an
+     omitted proto3 `credit_usage_percent` is treated as zero usage. This keeps
+     billing visible when `grok agent stdio` returns `Method not found`.
 4) **Local session signals** (informational fallback)
    - Walks `~/.grok/sessions/<encoded-cwd>/<session-id>/signals.json` files (last 30 days).
    - Aggregates `totalTokensBeforeCompaction`, `contextTokensUsed`, `modelsUsed`,
