@@ -437,18 +437,16 @@ public struct CursorDashboardCurrentPeriodUsage: Codable, Sendable {
     public let planUsage: CursorDashboardPlanUsage?
     public let enabled: Bool?
     public let displayMessage: String?
-    public let autoModelSelectedDisplayMessage: String?
-    public let namedModelSelectedDisplayMessage: String?
 }
 
 public struct CursorDashboardPlanUsage: Codable, Sendable {
     public let totalSpend: Double?
     public let includedSpend: Double?
     public let bonusSpend: Double?
+    public let remaining: Double?
     public let limit: Double?
-    public let autoPercentUsed: Double?
-    public let apiPercentUsed: Double?
-    public let totalPercentUsed: Double?
+    public let remainingBonus: Bool?
+    public let bonusTooltip: String?
 }
 
 public struct CursorDashboardMe: Codable, Sendable {
@@ -1287,27 +1285,14 @@ public struct CursorStatusProbe: Sendable {
             throw CursorStatusProbeError.parseFailed("DashboardService GetCurrentPeriodUsage missing planUsage")
         }
 
-        func normPct(_ value: Double?) -> Double? {
-            guard let value else { return nil }
-            if value < 0 { return 0 }
-            if value > 100 { return 100 }
-            return value
-        }
+        let includedSpend = max(0, plan.includedSpend ?? 0)
+        let limit = max(0, plan.limit ?? 0)
+        // Cursor's own usage UI derives the plan percentage from included spend, not total/bonus spend.
+        let planPercentUsed = limit > 0
+            ? min(100, includedSpend / limit * 100)
+            : 0
 
-        let autoPercent = normPct(plan.autoPercentUsed)
-        let apiPercent = normPct(plan.apiPercentUsed)
-        let planPercentUsed: Double = if let totalPercent = normPct(plan.totalPercentUsed) {
-            totalPercent
-        } else if let autoPercent, let apiPercent {
-            max(0, min(100, (autoPercent + apiPercent) / 2))
-        } else if let autoPercent {
-            autoPercent
-        } else if let apiPercent {
-            apiPercent
-        } else {
-            0
-        }
-
+        let billingCycleStart = Self.parseEpochMillisDate(usage.billingCycleStart)
         let billingCycleEnd = Self.parseEpochMillisDate(usage.billingCycleEnd)
         let rawJSON: String? = {
             let encoder = JSONEncoder()
@@ -1318,14 +1303,15 @@ public struct CursorStatusProbe: Sendable {
 
         return CursorStatusSnapshot(
             planPercentUsed: planPercentUsed,
-            autoPercentUsed: autoPercent,
-            apiPercentUsed: apiPercent,
-            planUsedUSD: (plan.totalSpend ?? 0) / 100.0,
-            planLimitUSD: (plan.limit ?? 0) / 100.0,
+            autoPercentUsed: nil,
+            apiPercentUsed: nil,
+            planUsedUSD: includedSpend / 100.0,
+            planLimitUSD: limit / 100.0,
             onDemandUsedUSD: 0,
             onDemandLimitUSD: nil,
             teamOnDemandUsedUSD: nil,
             teamOnDemandLimitUSD: nil,
+            billingCycleStart: billingCycleStart,
             billingCycleEnd: billingCycleEnd,
             membershipType: appSession.membershipType,
             accountEmail: account?.email ?? appSession.cachedEmail,

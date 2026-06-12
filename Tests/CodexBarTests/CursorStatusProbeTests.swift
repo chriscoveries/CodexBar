@@ -1,4 +1,5 @@
 import Foundation
+import SQLite3
 import Testing
 @testable import CodexBarCore
 
@@ -930,6 +931,35 @@ private func makeCursorStatusProbeResponse(
 
 extension CursorStatusProbeTests {
     @Test
+    func `app auth store reads Cursor global state database`() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cursor-app-auth-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let dbURL = directory.appendingPathComponent("state.vscdb")
+        var db: OpaquePointer?
+        try #require(sqlite3_open(dbURL.path, &db) == SQLITE_OK)
+        defer { sqlite3_close(db) }
+
+        let sql = """
+        CREATE TABLE ItemTable(key TEXT PRIMARY KEY, value BLOB);
+        INSERT INTO ItemTable VALUES('cursorAuth/accessToken', 'app-token');
+        INSERT INTO ItemTable VALUES('cursorAuth/stripeMembershipType', 'pro');
+        INSERT INTO ItemTable VALUES('cursorAuth/stripeSubscriptionStatus', 'active');
+        INSERT INTO ItemTable VALUES('cursorAuth/cachedEmail', 'user@example.com');
+        """
+        try #require(sqlite3_exec(db, sql, nil, nil, nil) == SQLITE_OK)
+
+        let session = try #require(try CursorAppAuthStore(dbPath: dbURL.path).loadSession())
+        #expect(session == CursorAppAuthSession(
+            accessToken: "app-token",
+            membershipType: "pro",
+            subscriptionStatus: "active",
+            cachedEmail: "user@example.com"))
+    }
+
+    @Test
     func `fetch ignores user info failure when usage summary succeeds`() async throws {
         defer {
             CursorStatusProbeStubURLProtocol.reset()
@@ -1052,17 +1082,15 @@ extension CursorStatusProbeTests {
                       "billingCycleEnd": "1782215224000",
                       "planUsage": {
                         "totalSpend": 3783,
-                        "includedSpend": 2000,
-                        "bonusSpend": 1783,
+                        "includedSpend": 388,
+                        "bonusSpend": 3395,
+                        "remaining": 1612,
                         "limit": 2000,
-                        "autoPercentUsed": 25.013333333333332,
-                        "apiPercentUsed": 0.6888888888888889,
-                        "totalPercentUsed": 19.4
+                        "remainingBonus": true,
+                        "bonusTooltip": "Bonus usage remains"
                       },
                       "enabled": true,
-                      "displayMessage": "You've hit your usage limit",
-                      "autoModelSelectedDisplayMessage": "You've used 19% of your included total usage",
-                      "namedModelSelectedDisplayMessage": "You've used 1% of your included API usage"
+                      "displayMessage": "You've used 19% of your included usage"
                     }
                     """,
                     statusCode: 200)
@@ -1097,11 +1125,12 @@ extension CursorStatusProbeTests {
                 subscriptionStatus: "active",
                 cachedEmail: "cached@example.com"))).fetch(allowCachedSessions: false)
 
-        #expect(snapshot.planPercentUsed == 19.4)
-        #expect(snapshot.autoPercentUsed == 25.013333333333332)
-        #expect(snapshot.apiPercentUsed == 0.6888888888888889)
-        #expect(snapshot.planUsedUSD == 37.83)
+        #expect(abs(snapshot.planPercentUsed - 19.4) < 0.0001)
+        #expect(snapshot.autoPercentUsed == nil)
+        #expect(snapshot.apiPercentUsed == nil)
+        #expect(snapshot.planUsedUSD == 3.88)
         #expect(snapshot.planLimitUSD == 20.0)
+        #expect(snapshot.billingCycleStart == Date(timeIntervalSince1970: 1_779_536_824_000 / 1000.0))
         #expect(snapshot.billingCycleEnd == Date(timeIntervalSince1970: 1_782_215_224_000 / 1000.0))
         #expect(snapshot.membershipType == "pro")
         #expect(snapshot.accountEmail == "user@example.com")
