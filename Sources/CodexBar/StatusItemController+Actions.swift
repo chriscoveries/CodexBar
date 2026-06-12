@@ -48,6 +48,10 @@ extension StatusItemController: StatusItemMenuPersistentActionDelegate {
     }
 
     @objc func refreshNow() {
+        // Show the persistent Refresh row spinner immediately: `refreshStore` only flips
+        // `store.isRefreshing` asynchronously, so force the spinner on here for instant click
+        // feedback. The store observation reverts it once the refresh completes (or fails).
+        self.beginPersistentRefreshRowsInProgress()
         self.refreshStore(forceTokenUsage: true)
     }
 

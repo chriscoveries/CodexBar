@@ -166,6 +166,74 @@ struct StatusMenuPersistentRefreshTests {
     }
 
     @Test
+    func `refresh row in-progress spinner keeps fixed metrics`() {
+        let view = PersistentMenuActionItemView(
+            title: "Refresh",
+            systemImageName: "arrow.clockwise",
+            shortcutText: "⌘R",
+            width: 320,
+            onClick: {})
+
+        view.setInProgress(true)
+        #expect(view.frame.height == PersistentMenuActionItemView.rowHeight)
+        #expect(view.intrinsicContentSize.height == PersistentMenuActionItemView.rowHeight)
+        #expect(view.fittingSize.height == PersistentMenuActionItemView.rowHeight)
+
+        view.setHighlighted(true)
+        #expect(view.frame.height == PersistentMenuActionItemView.rowHeight)
+
+        view.setInProgress(false)
+        #expect(view.frame.height == PersistentMenuActionItemView.rowHeight)
+        #expect(view.intrinsicContentSize.height == PersistentMenuActionItemView.rowHeight)
+        #expect(view.fittingSize.height == PersistentMenuActionItemView.rowHeight)
+    }
+
+    @Test
+    func `persistent refresh rows reflect store refresh state in place`() {
+        let settings = self.makeSettings()
+        settings.refreshFrequency = .manual
+        settings.mergeIcons = false
+
+        let controller = self.makeController(settings: settings)
+        let menu = controller.makeMenu(for: .codex)
+        controller.menuWillOpen(menu)
+
+        let refreshItem = menu.items.first { $0.title == "Refresh" }
+        let row = refreshItem?.view as? PersistentMenuActionItemView
+        #expect(row != nil)
+        #expect(controller.persistentRefreshRows.allObjects.contains { $0 === row })
+
+        // Immediate click feedback flips the spinner on before the async refresh begins.
+        controller.beginPersistentRefreshRowsInProgress()
+        #expect(row?.isInProgressForTesting == true)
+
+        // Once the store reports no refresh in flight, the observation sync reverts it.
+        controller.store.isRefreshing = false
+        controller.updatePersistentRefreshRowsInProgress()
+        #expect(row?.isInProgressForTesting == false)
+
+        // And a live refresh flag is mirrored onto the row.
+        controller.store.isRefreshing = true
+        controller.updatePersistentRefreshRowsInProgress()
+        #expect(row?.isInProgressForTesting == true)
+    }
+
+    @Test
+    func `refresh monitor mirrors the store refreshing indicator gate`() {
+        let settings = self.makeSettings()
+        let controller = self.makeController(settings: settings)
+        let monitor = MenuCardRefreshMonitor(store: controller.store)
+
+        #expect(monitor.isRefreshingIndicatorVisible(for: .codex) == false)
+
+        controller.store.isRefreshing = true
+        #expect(monitor.isRefreshingIndicatorVisible(for: .codex) == true)
+
+        controller.store.isRefreshing = false
+        #expect(monitor.isRefreshingIndicatorVisible(for: .codex) == false)
+    }
+
+    @Test
     func `status item menu intercepts persistent shortcuts without native item selection`() throws {
         let menu = StatusItemMenu()
         let recorder = RefreshShortcutRecorder()

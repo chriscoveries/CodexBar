@@ -865,6 +865,11 @@ extension StatusItemController {
                 self?.performPersistentMenuAction(action, in: menu)
             })
 
+        if action == .refresh {
+            row.setInProgress(self.store.isRefreshing)
+            self.persistentRefreshRows.add(row)
+        }
+
         let item = NSMenuItem(title: title, action: nil, keyEquivalent: shortcut?.key ?? "")
         item.keyEquivalentModifierMask = shortcut?.modifiers ?? NSEvent.ModifierFlags()
         item.isEnabled = true

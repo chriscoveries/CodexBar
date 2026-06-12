@@ -2,6 +2,27 @@ import AppKit
 import CodexBarCore
 import SwiftUI
 
+/// Narrowly-scoped observable bridge that lets a menu card subtitle re-render in place
+/// whenever the store's refreshing state changes, without rebuilding the NSMenu.
+///
+/// `UsageStore` is `@Observable`; a SwiftUI view that reads
+/// `isRefreshingIndicatorVisible(for:)` only establishes observation on the refreshing
+/// flags + per-provider error presence consulted inside
+/// `shouldShowRefreshingMenuCardIndicator(for:)`, so unrelated store mutations do not
+/// trigger card re-renders.
+@MainActor
+final class MenuCardRefreshMonitor {
+    private let store: UsageStore
+
+    init(store: UsageStore) {
+        self.store = store
+    }
+
+    func isRefreshingIndicatorVisible(for provider: UsageProvider) -> Bool {
+        self.store.shouldShowRefreshingMenuCardIndicator(for: provider)
+    }
+}
+
 enum UsageMenuCardLayout {
     static let horizontalPadding: CGFloat = 20
     static let headerOnlyVerticalPadding: CGFloat = 7
@@ -255,6 +276,7 @@ struct UsageMenuCardView: View {
 private struct UsageMenuCardHeaderView: View {
     let model: UsageMenuCardView.Model
     @Environment(\.menuItemHighlighted) private var isHighlighted
+    @Environment(\.menuCardRefreshMonitor) private var refreshMonitor
 
     var body: some View {
         VStack(alignment: .leading, spacing: UsageMenuCardLayout.headerLineSpacing) {
@@ -267,18 +289,19 @@ private struct UsageMenuCardHeaderView: View {
                     .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
                     .lineLimit(1).truncationMode(.middle)
             }
-            let subtitleAlignment: VerticalAlignment = self.model.subtitleStyle == .error ? .top : .firstTextBaseline
+            let subtitleStyle = self.liveSubtitleStyle
+            let subtitleAlignment: VerticalAlignment = subtitleStyle == .error ? .top : .firstTextBaseline
             HStack(alignment: subtitleAlignment, spacing: UsageMenuCardLayout.headerColumnSpacing) {
-                Text(self.model.subtitleText)
+                Text(self.liveSubtitleText)
                     .font(.footnote)
-                    .foregroundStyle(self.subtitleColor)
-                    .lineLimit(self.model.subtitleStyle == .error ? 4 : 1)
+                    .foregroundStyle(self.subtitleColor(for: subtitleStyle))
+                    .lineLimit(subtitleStyle == .error ? 4 : 1)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
                     .layoutPriority(1)
-                    .padding(.bottom, self.model.subtitleStyle == .error ? 4 : 0)
+                    .padding(.bottom, subtitleStyle == .error ? 4 : 0)
                 Spacer()
-                if self.model.subtitleStyle == .error, !self.model.subtitleText.isEmpty {
+                if subtitleStyle == .error, !self.model.subtitleText.isEmpty {
                     CopyIconButton(copyText: self.model.subtitleText, isHighlighted: self.isHighlighted)
                 }
                 if let plan = self.model.planText {
@@ -291,8 +314,23 @@ private struct UsageMenuCardHeaderView: View {
         }
     }
 
-    private var subtitleColor: Color {
-        switch self.model.subtitleStyle {
+    /// True while the live monitor reports an in-flight refresh for this provider. The
+    /// monitor gate already requires `error == nil`, so the live override never swaps the
+    /// multi-line `.error` layout — keeping the single-line subtitle height stable.
+    private var isLiveRefreshing: Bool {
+        self.refreshMonitor?.isRefreshingIndicatorVisible(for: self.model.provider) ?? false
+    }
+
+    private var liveSubtitleText: String {
+        self.isLiveRefreshing ? "\(L("Refreshing"))…" : self.model.subtitleText
+    }
+
+    private var liveSubtitleStyle: UsageMenuCardView.Model.SubtitleStyle {
+        self.isLiveRefreshing ? .loading : self.model.subtitleStyle
+    }
+
+    private func subtitleColor(for style: UsageMenuCardView.Model.SubtitleStyle) -> Color {
+        switch style {
         case .info: MenuHighlightStyle.secondary(self.isHighlighted)
         case .loading: MenuHighlightStyle.secondary(self.isHighlighted)
         case .error: MenuHighlightStyle.error(self.isHighlighted)

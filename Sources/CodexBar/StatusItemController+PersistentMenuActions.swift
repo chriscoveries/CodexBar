@@ -48,6 +48,25 @@ extension StatusItemController {
         }
     }
 
+    /// Forces every live persistent Refresh row's spinner on immediately for instant click
+    /// feedback, before the async refresh flips `store.isRefreshing`.
+    func beginPersistentRefreshRowsInProgress() {
+        for row in self.persistentRefreshRows.allObjects {
+            row.setInProgress(true)
+        }
+    }
+
+    /// Syncs every live persistent Refresh row's spinner to the store's refresh state. This is
+    /// an in-place AppKit mutation on the existing row views — it never rebuilds the menu, so it
+    /// is safe to call during NSMenu tracking. Called from the store observation so the spinner
+    /// reverts once the refresh completes (including the failure path that sets the error).
+    func updatePersistentRefreshRowsInProgress() {
+        let inProgress = self.store.isRefreshing
+        for row in self.persistentRefreshRows.allObjects {
+            row.setInProgress(inProgress)
+        }
+    }
+
     private func closeMenuForPersistentAction(_ menu: NSMenu?) {
         guard let menu else { return }
         menu.cancelTrackingWithoutAnimation()
