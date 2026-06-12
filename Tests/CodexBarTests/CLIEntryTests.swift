@@ -316,5 +316,9 @@ final class CLIEntryTests: XCTestCase {
             provider: .ollama,
             settings: ProviderSettingsSnapshot.make(
                 ollama: .init(cookieSource: .off, manualCookieHeader: nil))))
+        XCTAssertTrue(CodexBarCLI.sourceModeRequiresWebSupport(
+            .auto,
+            provider: .codex,
+            environment: ["OLLAMA_API_KEY": "ollama-test"]))
     }
 }
