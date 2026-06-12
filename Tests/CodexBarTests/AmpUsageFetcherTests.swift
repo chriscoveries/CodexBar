@@ -3,6 +3,22 @@ import Testing
 @testable import CodexBarCore
 
 struct AmpUsageFetcherTests {
+    private func makeContext(sourceMode: ProviderSourceMode) -> ProviderFetchContext {
+        let browserDetection = BrowserDetection(cacheTTL: 0)
+        return ProviderFetchContext(
+            runtime: .app,
+            sourceMode: sourceMode,
+            includeCredits: true,
+            webTimeout: 1,
+            webDebugDumpHTML: false,
+            verbose: false,
+            env: [:],
+            settings: nil,
+            fetcher: UsageFetcher(),
+            claudeFetcher: ClaudeUsageFetcher(browserDetection: browserDetection),
+            browserDetection: browserDetection)
+    }
+
     @Test
     func `uses amp internal usage endpoint`() {
         #expect(
@@ -35,6 +51,28 @@ struct AmpUsageFetcherTests {
         #expect(AmpStatusFetchStrategy.canUseWebFallback(
             settings: validManual,
             canImportBrowserCookies: false))
+    }
+
+    @Test
+    func `cli cancellation does not fall back to web`() {
+        let strategy = AmpCLIFetchStrategy()
+        let context = self.makeContext(sourceMode: .auto)
+
+        #expect(!strategy.shouldFallback(on: CancellationError(), context: context))
+        #expect(!strategy.shouldFallback(on: URLError(.cancelled), context: context))
+        #expect(strategy.shouldFallback(on: AmpUsageError.parseFailed("missing"), context: context))
+        #expect(!strategy.shouldFallback(
+            on: AmpUsageError.parseFailed("missing"),
+            context: self.makeContext(sourceMode: .cli)))
+    }
+
+    @Test
+    func `api cancellation does not fall back to legacy scraper`() {
+        #expect(!AmpUsageFetcher.shouldTryLegacyFallback(after: CancellationError()))
+        #expect(!AmpUsageFetcher.shouldTryLegacyFallback(after: URLError(.cancelled)))
+        #expect(AmpUsageFetcher.shouldTryLegacyFallback(after: URLError(.timedOut)))
+        #expect(AmpUsageFetcher.shouldTryLegacyFallback(after: AmpUsageError.parseFailed("missing")))
+        #expect(!AmpUsageFetcher.shouldTryLegacyFallback(after: AmpUsageError.invalidCredentials))
     }
 
     @Test

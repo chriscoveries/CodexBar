@@ -310,7 +310,10 @@ public struct AmpUsageFetcher: Sendable {
         return try AmpUsageParser.parse(displayText: displayText, now: now)
     }
 
-    private static func shouldTryLegacyFallback(after error: Error) -> Bool {
+    static func shouldTryLegacyFallback(after error: Error) -> Bool {
+        if error is CancellationError || (error as? URLError)?.code == .cancelled {
+            return false
+        }
         guard let ampError = error as? AmpUsageError else { return true }
         switch ampError {
         case .networkError, .parseFailed:

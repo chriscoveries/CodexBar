@@ -70,8 +70,11 @@ struct AmpCLIFetchStrategy: ProviderFetchStrategy {
             sourceLabel: "cli")
     }
 
-    func shouldFallback(on _: Error, context: ProviderFetchContext) -> Bool {
-        context.sourceMode == .auto
+    func shouldFallback(on error: Error, context: ProviderFetchContext) -> Bool {
+        if error is CancellationError || (error as? URLError)?.code == .cancelled {
+            return false
+        }
+        return context.sourceMode == .auto
     }
 }
 
