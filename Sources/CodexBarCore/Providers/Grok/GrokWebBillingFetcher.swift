@@ -243,7 +243,8 @@ public enum GrokWebBillingFetcher {
         let bytes = [UInt8](data)
         var frames: [Data] = []
         var index = 0
-        while index + 5 <= bytes.count {
+        while index < bytes.count {
+            guard index + 5 <= bytes.count else { return [] }
             let flags = bytes[index]
             let length = (Int(bytes[index + 1]) << 24)
                 | (Int(bytes[index + 2]) << 16)
@@ -251,7 +252,7 @@ public enum GrokWebBillingFetcher {
                 | Int(bytes[index + 4])
             let start = index + 5
             let end = start + length
-            guard length >= 0, end <= bytes.count else { break }
+            guard length >= 0, end <= bytes.count else { return [] }
             if flags & 0x80 == 0 {
                 frames.append(Data(bytes[start..<end]))
             }

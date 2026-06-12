@@ -129,6 +129,21 @@ struct GrokWebBillingFetcherTests {
     }
 
     @Test
+    func `parses unframed zero percent payload that resembles an empty grpc frame`() throws {
+        let reset = UInt64(1_800_000_000)
+        let payload = Self.protobufPayload(usedPercent: 0, resetEpoch: reset)
+
+        #expect(GrokWebBillingFetcher.grpcWebDataFrames(from: payload).isEmpty)
+
+        let snapshot = try GrokWebBillingFetcher.parseGRPCWebResponse(
+            payload,
+            now: Date(timeIntervalSince1970: 1_799_000_000))
+
+        #expect(snapshot.usedPercent == 0)
+        #expect(snapshot.resetsAt == Date(timeIntervalSince1970: TimeInterval(reset)))
+    }
+
+    @Test
     func `does not treat grpc frame prefix as raw protobuf`() {
         #expect(!GrokWebBillingFetcher.looksLikeProtobufPayload(Data([0, 0, 0, 0, 10])))
     }
