@@ -55,8 +55,11 @@ public enum GrokWebBillingError: LocalizedError, Sendable {
         let lower = message.lowercased()
         return lower.contains("bad-credentials") ||
             lower.contains("unauthenticated") ||
-            lower.contains("oauth2") ||
-            lower.contains("access token")
+            (lower.contains("oauth2") && lower.contains("could not be validated")) ||
+            (lower.contains("access token") &&
+                (lower.contains("invalid") ||
+                    lower.contains("expired") ||
+                    lower.contains("could not be validated")))
     }
 }
 
@@ -231,8 +234,9 @@ public enum GrokWebBillingFetcher {
 
     static func looksLikeProtobufPayload(_ data: Data) -> Bool {
         guard let first = data.first else { return false }
+        let fieldNumber = first >> 3
         let wireType = first & 0x07
-        return wireType == 0 || wireType == 1 || wireType == 2 || wireType == 5
+        return fieldNumber > 0 && (wireType == 0 || wireType == 1 || wireType == 2 || wireType == 5)
     }
 
     static func grpcWebDataFrames(from data: Data) -> [Data] {

@@ -129,6 +129,11 @@ struct GrokWebBillingFetcherTests {
     }
 
     @Test
+    func `does not treat grpc frame prefix as raw protobuf`() {
+        #expect(!GrokWebBillingFetcher.looksLikeProtobufPayload(Data([0, 0, 0, 0, 10])))
+    }
+
+    @Test
     func `web strategy tries cookie plus bearer before cookie only`() async throws {
         let cookie = try #require(Self.cookie(name: "sso", value: "session"))
         let sessions = [GrokCookieImporter.SessionInfo(cookies: [cookie], sourceLabel: "Chrome")]
@@ -148,6 +153,74 @@ struct GrokWebBillingFetcherTests {
 
         #expect(attempts == ["cookie+bearer"])
         #expect(result.0.usedPercent == 9)
+    }
+
+    @Test
+    func `web strategy skips expired bearer for browser cookies`() async throws {
+        let cookie = try #require(Self.cookie(name: "sso", value: "session"))
+        let sessions = [GrokCookieImporter.SessionInfo(cookies: [cookie], sourceLabel: "Chrome")]
+        let expired = GrokCredentials(
+            accessToken: "expired-token",
+            refreshToken: nil,
+            scope: "https://auth.x.ai::client",
+            authMode: "oidc",
+            userId: nil,
+            email: nil,
+            firstName: nil,
+            lastName: nil,
+            teamId: nil,
+            oidcIssuer: nil,
+            oidcClientId: nil,
+            expiresAt: .distantPast,
+            createTime: nil)
+        var attempts: [String] = []
+
+        _ = try await GrokWebFetchStrategy.fetchFirstValidCookieSession(
+            sessions,
+            credentials: expired)
+        { _, authCredentials in
+            attempts.append(authCredentials == nil ? "cookie-only" : "cookie+bearer")
+            return GrokWebBillingSnapshot(usedPercent: 9, resetsAt: nil)
+        }
+
+        #expect(attempts == ["cookie-only"])
+    }
+
+    @Test
+    func `web strategy preserves malformed auth file error`() async throws {
+        let grokHome = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CodexBar-GrokWebBilling-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: grokHome, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: grokHome) }
+        try Data("not-json".utf8).write(to: grokHome.appendingPathComponent("auth.json"))
+
+        let browserDetection = BrowserDetection(cacheTTL: 0)
+        let context = ProviderFetchContext(
+            runtime: .cli,
+            sourceMode: .web,
+            includeCredits: true,
+            webTimeout: 1,
+            webDebugDumpHTML: false,
+            verbose: false,
+            env: ["GROK_HOME": grokHome.path],
+            settings: nil,
+            fetcher: UsageFetcher(),
+            claudeFetcher: ClaudeUsageFetcher(browserDetection: browserDetection),
+            browserDetection: browserDetection)
+
+        await #expect {
+            _ = try await GrokWebFetchStrategy().fetch(context)
+        } throws: { error in
+            guard case GrokCredentialsError.decodeFailed = error else { return false }
+            return true
+        }
+    }
+
+    @Test
+    func `status seven scope failure is not classified as bad credentials`() {
+        #expect(!GrokWebBillingError.isAuthenticationFailure(
+            status: 7,
+            message: "OAuth2 access token lacks the required billing scope"))
     }
 
     @Test
@@ -556,6 +629,41 @@ struct GrokWebBillingFetcherTests {
 
         let snapshot = try await GrokWebBillingFetcher.fetch(
             cookieHeader: "sso=session; sso-rw=session",
+            session: session,
+            endpoint: endpoint)
+
+        #expect(snapshot.usedPercent == 9)
+    }
+
+    @Test
+    func `web fetch sends browser cookies with bearer credentials`() async throws {
+        defer {
+            GrokWebBillingStubURLProtocol.requests = []
+            GrokWebBillingStubURLProtocol.requestBodies = []
+            GrokWebBillingStubURLProtocol.handler = nil
+        }
+
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [GrokWebBillingStubURLProtocol.self]
+        let session = URLSession(configuration: config)
+        let endpoint = try #require(URL(string: "https://grok.test/grok_api_v2.GrokBuildBilling/GetGrokCreditsConfig"))
+
+        GrokWebBillingStubURLProtocol.requests = []
+        GrokWebBillingStubURLProtocol.requestBodies = []
+        GrokWebBillingStubURLProtocol.handler = { request in
+            #expect(request.value(forHTTPHeaderField: "Cookie") == "sso=session")
+            #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer token-123")
+            let response = HTTPURLResponse(
+                url: endpoint,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/grpc-web+proto"])!
+            return (response, Self.protobufPayload(usedPercent: 9, resetEpoch: 1_800_000_004))
+        }
+
+        let snapshot = try await GrokWebBillingFetcher.fetch(
+            cookieHeader: "sso=session",
+            credentials: Self.credentials,
             session: session,
             endpoint: endpoint)
 
