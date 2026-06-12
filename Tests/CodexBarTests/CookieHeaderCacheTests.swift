@@ -276,7 +276,7 @@ struct CookieHeaderCacheTests {
         #expect(CookieHeaderCache.loadForDisplay(provider: provider)?.cookieHeader == "auth=old")
 
         // A refresh scheduled now races with a store that lands before it commits.
-        let staleGeneration = CookieHeaderCache.displayGenerationForTesting(provider: provider)
+        let staleGeneration = CookieHeaderCache.beginDisplayReadGenerationForTesting(provider: provider)
         let staleEntry = CookieHeaderCache.load(provider: provider)
         CookieHeaderCache.store(provider: provider, cookieHeader: "auth=new", sourceLabel: "Safari")
 
@@ -300,7 +300,7 @@ struct CookieHeaderCacheTests {
         CookieHeaderCache.store(provider: provider, cookieHeader: "auth=secret", sourceLabel: "Chrome")
         #expect(CookieHeaderCache.loadForDisplay(provider: provider)?.cookieHeader == "auth=secret")
 
-        let staleGeneration = CookieHeaderCache.displayGenerationForTesting(provider: provider)
+        let staleGeneration = CookieHeaderCache.beginDisplayReadGenerationForTesting(provider: provider)
         let staleEntry = CookieHeaderCache.load(provider: provider)
         CookieHeaderCache.clear(provider: provider)
 
@@ -324,7 +324,7 @@ struct CookieHeaderCacheTests {
         CookieHeaderCache.store(provider: provider, cookieHeader: "auth=secret", sourceLabel: "Chrome")
         #expect(CookieHeaderCache.loadForDisplay(provider: provider)?.cookieHeader == "auth=secret")
 
-        let staleGeneration = CookieHeaderCache.displayGenerationForTesting(provider: provider)
+        let staleGeneration = CookieHeaderCache.beginDisplayReadGenerationForTesting(provider: provider)
         let staleEntry = CookieHeaderCache.load(provider: provider)
         CookieHeaderCache.clearAll()
 
@@ -333,6 +333,35 @@ struct CookieHeaderCacheTests {
             entry: staleEntry,
             generation: staleGeneration)
 
+        #expect(CookieHeaderCache.loadForDisplay(provider: provider) == nil)
+    }
+
+    @Test
+    func `clear all invalidates an in flight first display population`() {
+        KeychainCacheStore.setTestStoreForTesting(true)
+        defer { KeychainCacheStore.setTestStoreForTesting(false) }
+        CookieHeaderCache.resetDisplayCacheForTesting()
+        defer { CookieHeaderCache.resetDisplayCacheForTesting() }
+
+        let provider: UsageProvider = .codex
+        KeychainCacheStore.store(
+            key: .cookie(provider: provider),
+            entry: CookieHeaderCache.Entry(
+                cookieHeader: "auth=secret",
+                storedAt: Date(timeIntervalSince1970: 0),
+                sourceLabel: "Chrome"))
+
+        // A first display load registers its key, then reads the Keychain outside the lock.
+        let staleGeneration = CookieHeaderCache.beginDisplayReadGenerationForTesting(provider: provider)
+        let staleEntry = CookieHeaderCache.load(provider: provider)
+        CookieHeaderCache.clearAll()
+
+        let committed = CookieHeaderCache.commitDisplaySnapshotIfCurrentForTesting(
+            provider: provider,
+            entry: staleEntry,
+            generation: staleGeneration)
+
+        #expect(committed == nil)
         #expect(CookieHeaderCache.loadForDisplay(provider: provider) == nil)
     }
 

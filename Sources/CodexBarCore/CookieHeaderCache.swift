@@ -50,10 +50,7 @@ public enum CookieHeaderCache {
     /// first lookup per key pays the keychain read.
     public static func loadForDisplay(provider: UsageProvider, scope: Scope? = nil) -> Entry? {
         let key = self.key(for: provider, scope: scope)
-        self.displayCacheLock.lock()
-        let cached = self.displayCache[key]
-        let generation = self.displayGenerations[key, default: 0]
-        self.displayCacheLock.unlock()
+        let (cached, generation) = self.beginDisplayRead(key: key)
         guard let cached else {
             let entry = self.load(provider: provider, scope: scope)
             return self.commitDisplaySnapshotIfCurrent(key: key, entry: entry, generation: generation)
@@ -62,6 +59,16 @@ public enum CookieHeaderCache {
             self.scheduleDisplayRevalidation(provider: provider, scope: scope, key: key, generation: generation)
         }
         return cached.entry
+    }
+
+    /// Registers the key before the Keychain read starts so `clearAll` can invalidate an
+    /// in-flight first population even when no display snapshot exists yet.
+    private static func beginDisplayRead(key: KeychainCacheStore.Key) -> (DisplaySnapshot?, UInt64) {
+        self.displayCacheLock.lock()
+        defer { self.displayCacheLock.unlock() }
+        let generation = self.displayGenerations[key] ?? 0
+        self.displayGenerations[key] = generation
+        return (self.displayCache[key], generation)
     }
 
     private static func scheduleDisplayRevalidation(
@@ -133,11 +140,8 @@ public enum CookieHeaderCache {
         self.displayCacheLock.unlock()
     }
 
-    static func displayGenerationForTesting(provider: UsageProvider, scope: Scope? = nil) -> UInt64 {
-        let key = self.key(for: provider, scope: scope)
-        self.displayCacheLock.lock()
-        defer { self.displayCacheLock.unlock() }
-        return self.displayGenerations[key, default: 0]
+    static func beginDisplayReadGenerationForTesting(provider: UsageProvider, scope: Scope? = nil) -> UInt64 {
+        self.beginDisplayRead(key: self.key(for: provider, scope: scope)).1
     }
 
     @discardableResult
