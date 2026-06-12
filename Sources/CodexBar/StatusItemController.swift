@@ -59,15 +59,6 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
     var menuRefreshEnabledOverrideForTesting: Bool?
     #endif
 
-    var isMenuRefreshEnabled: Bool {
-        #if DEBUG
-        if let menuRefreshEnabledOverrideForTesting {
-            return menuRefreshEnabledOverrideForTesting
-        }
-        #endif
-        return Self.menuRefreshEnabled
-    }
-
     typealias Factory =
         @MainActor (
             UsageStore,
