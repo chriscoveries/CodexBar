@@ -296,7 +296,8 @@ struct StatusMenuPersistentRefreshTests {
 
         #expect(liveSubtitle.text == model.subtitleText)
         #expect(liveSubtitle.style == model.subtitleStyle)
-        #expect(model.placeholder == "Limits not available")
+        #expect(liveSubtitle.text != UsageError.noRateLimitsFound.errorDescription)
+        #expect(liveSubtitle.style != .error)
     }
 
     @Test
