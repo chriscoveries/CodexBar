@@ -27,6 +27,12 @@ struct LocalizationLanguageCatalogTests {
     }
 
     @Test
+    func `app language catalog includes Korean`() {
+        #expect(AppLanguage.allCases.contains(.korean))
+        #expect(AppLanguage.korean.rawValue == "ko")
+    }
+
+    @Test
     func `localized catalogs include every app language label`() throws {
         #expect(self.languageKeys.count == AppLanguage.allCases.count)
 
@@ -69,6 +75,22 @@ struct LocalizationLanguageCatalogTests {
         for key in requiredKeys {
             #expect(contents.contains(key), "Missing localization key: \(key)")
         }
+    }
+
+    @Test
+    func `korean localization bundle includes representative native labels`() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let koURL = root.appendingPathComponent("Sources/CodexBar/Resources/ko.lproj/Localizable.strings")
+        let catalog = try #require(NSDictionary(contentsOf: koURL) as? [String: String])
+
+        #expect(catalog["language_korean"] == "한국어")
+        #expect(catalog["tab_general"] == "일반")
+        #expect(catalog["quota_warning_session"] == "세션")
+        #expect(catalog["quota_warning_warn_at"] == "경고 기준")
+        #expect(catalog["quit_app"] == "CodexBar 종료")
     }
 
     @Test
