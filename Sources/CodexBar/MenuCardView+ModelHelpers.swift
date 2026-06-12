@@ -77,6 +77,11 @@ extension UsageMenuCardView.Model {
         return lastError
     }
 
+    static func dashboardHint(error: String?) -> String? {
+        guard let error, !error.isEmpty else { return nil }
+        return error
+    }
+
     private static func hasLocalCodexTokenUsage(_ input: Input) -> Bool {
         input.provider == .codex &&
             input.tokenCostUsageEnabled &&
@@ -204,6 +209,9 @@ extension UsageMenuCardView.Model {
         // "optional credits and extra usage" setting. Other providers' extra windows (Antigravity
         // per-model quotas, Factory core windows, etc.) are core data and must always render.
         if input.provider == .codex, !input.showOptionalCreditsAndExtraUsage {
+            return []
+        }
+        if input.provider == .copilot, !input.copilotBudgetExtrasEnabled {
             return []
         }
         return extraRateWindows.map { namedWindow in

@@ -205,6 +205,30 @@ public struct UsageSnapshot: Codable, Sendable {
         self.identity = identity
     }
 
+    public func with(extraRateWindows: [NamedRateWindow]?) -> UsageSnapshot {
+        UsageSnapshot(
+            primary: self.primary,
+            secondary: self.secondary,
+            tertiary: self.tertiary,
+            extraRateWindows: extraRateWindows,
+            kiroUsage: self.kiroUsage,
+            ampUsage: self.ampUsage,
+            providerCost: self.providerCost,
+            zaiUsage: self.zaiUsage,
+            minimaxUsage: self.minimaxUsage,
+            deepseekUsage: self.deepseekUsage,
+            openRouterUsage: self.openRouterUsage,
+            openAIAPIUsage: self.openAIAPIUsage,
+            claudeAdminAPIUsage: self.claudeAdminAPIUsage,
+            mistralUsage: self.mistralUsage,
+            deepgramUsage: self.deepgramUsage,
+            cursorRequests: self.cursorRequests,
+            subscriptionExpiresAt: self.subscriptionExpiresAt,
+            subscriptionRenewsAt: self.subscriptionRenewsAt,
+            updatedAt: self.updatedAt,
+            identity: self.identity)
+    }
+
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.primary = try container.decodeIfPresent(RateWindow.self, forKey: .primary)
