@@ -11,6 +11,33 @@ struct AmpUsageFetcherTests {
     }
 
     @Test
+    func `web fallback requires browser import or a manual session cookie`() {
+        let disabled = ProviderSettingsSnapshot.AmpProviderSettings(cookieSource: .off, manualCookieHeader: nil)
+        let invalidManual = ProviderSettingsSnapshot.AmpProviderSettings(
+            cookieSource: .manual,
+            manualCookieHeader: "other=value")
+        let validManual = ProviderSettingsSnapshot.AmpProviderSettings(
+            cookieSource: .manual,
+            manualCookieHeader: "session=test")
+
+        #expect(AmpStatusFetchStrategy.canUseWebFallback(
+            settings: nil,
+            canImportBrowserCookies: false) == false)
+        #expect(AmpStatusFetchStrategy.canUseWebFallback(
+            settings: nil,
+            canImportBrowserCookies: true))
+        #expect(AmpStatusFetchStrategy.canUseWebFallback(
+            settings: disabled,
+            canImportBrowserCookies: true) == false)
+        #expect(AmpStatusFetchStrategy.canUseWebFallback(
+            settings: invalidManual,
+            canImportBrowserCookies: false) == false)
+        #expect(AmpStatusFetchStrategy.canUseWebFallback(
+            settings: validManual,
+            canImportBrowserCookies: false))
+    }
+
+    @Test
     func `attaches cookie for amp hosts`() {
         #expect(AmpUsageFetcher.shouldAttachCookie(to: URL(string: "https://ampcode.com/settings")))
         #expect(AmpUsageFetcher.shouldAttachCookie(to: URL(string: "https://www.ampcode.com")))

@@ -81,8 +81,14 @@ struct AmpStatusFetchStrategy: ProviderFetchStrategy {
 
     func isAvailable(_ context: ProviderFetchContext) async -> Bool {
         guard context.sourceMode.usesWeb else { return false }
-        guard context.settings?.amp?.cookieSource != .off else { return false }
-        return true
+        #if os(macOS)
+        let canImportBrowserCookies = true
+        #else
+        let canImportBrowserCookies = false
+        #endif
+        return Self.canUseWebFallback(
+            settings: context.settings?.amp,
+            canImportBrowserCookies: canImportBrowserCookies)
     }
 
     func fetch(_ context: ProviderFetchContext) async throws -> ProviderFetchResult {
@@ -101,8 +107,30 @@ struct AmpStatusFetchStrategy: ProviderFetchStrategy {
         false
     }
 
+    static func canUseWebFallback(
+        settings: ProviderSettingsSnapshot.AmpProviderSettings?,
+        canImportBrowserCookies: Bool) -> Bool
+    {
+        guard let settings else { return canImportBrowserCookies }
+        switch settings.cookieSource {
+        case .auto:
+            return canImportBrowserCookies
+        case .manual:
+            return Self.manualCookieHeader(from: settings.manualCookieHeader) != nil
+        case .off:
+            return false
+        }
+    }
+
     private static func manualCookieHeader(from context: ProviderFetchContext) -> String? {
-        guard context.settings?.amp?.cookieSource == .manual else { return nil }
-        return CookieHeaderNormalizer.normalize(context.settings?.amp?.manualCookieHeader)
+        guard let settings = context.settings?.amp, settings.cookieSource == .manual else { return nil }
+        return Self.manualCookieHeader(from: settings.manualCookieHeader)
+    }
+
+    private static func manualCookieHeader(from rawHeader: String?) -> String? {
+        guard let header = CookieHeaderNormalizer.normalize(rawHeader),
+              CookieHeaderNormalizer.pairs(from: header).contains(where: { $0.name == "session" })
+        else { return nil }
+        return header
     }
 }
