@@ -33,7 +33,8 @@ Cursor is primarily web-backed. Usage is fetched via browser cookies or a stored
    - Reads Cursor.app's VS Code-style global state DB for the local app bearer token.
    - File: `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`.
    - Used only after cookie/session sources fail so existing account-selection precedence stays stable.
-   - Fetches usage from Cursor DashboardService with bearer auth.
+   - Derives Cursor's first-party web-session cookie, then uses the same usage and account endpoints as browser sessions.
+   - Account identity comes from that authenticated session; cached app profile fields are not mixed across accounts.
 
 Manual option:
 - Preferences → Providers → Cursor → Cookie source → Manual.
@@ -46,11 +47,6 @@ Manual option:
   - User email + name.
 - `GET https://cursor.com/api/usage?user=ID`
   - Legacy request-based plan usage (request counts + limits).
-- `POST https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage`
-  - Cursor.app local-auth fallback usage via bearer token.
-  - Headers include `Content-Type: application/json` and `Connect-Protocol-Version: 1`.
-- `POST https://api2.cursor.sh/aiserver.v1.DashboardService/GetMe`
-  - Cursor.app local-auth fallback account email + name.
 
 ## Cookie file paths
 - Safari: `~/Library/Cookies/Cookies.binarycookies`

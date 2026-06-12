@@ -945,18 +945,11 @@ extension CursorStatusProbeTests {
         let sql = """
         CREATE TABLE ItemTable(key TEXT PRIMARY KEY, value BLOB);
         INSERT INTO ItemTable VALUES('cursorAuth/accessToken', 'app-token');
-        INSERT INTO ItemTable VALUES('cursorAuth/stripeMembershipType', 'pro');
-        INSERT INTO ItemTable VALUES('cursorAuth/stripeSubscriptionStatus', 'active');
-        INSERT INTO ItemTable VALUES('cursorAuth/cachedEmail', 'user@example.com');
         """
         try #require(sqlite3_exec(db, sql, nil, nil, nil) == SQLITE_OK)
 
         let session = try #require(try CursorAppAuthStore(dbPath: dbURL.path).loadSession())
-        #expect(session == CursorAppAuthSession(
-            accessToken: "app-token",
-            membershipType: "pro",
-            subscriptionStatus: "active",
-            cachedEmail: "user@example.com"))
+        #expect(session == CursorAppAuthSession(accessToken: "app-token"))
     }
 
     @Test
@@ -1066,55 +1059,46 @@ extension CursorStatusProbeTests {
         }
         CursorStatusProbeStubURLProtocol.reset()
 
+        let accessToken = try makeCursorAppAuthToken()
+        let expectedCookie = "WorkosCursorSessionToken=user_test%3A%3A\(accessToken)"
         CursorStatusProbeStubURLProtocol.setHandler { request in
             let requestURL = try #require(request.url)
-            #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer app-token")
-            #expect(request.value(forHTTPHeaderField: "Connect-Protocol-Version") == "1")
-            #expect(request.httpMethod == "POST")
+            #expect(request.value(forHTTPHeaderField: "Authorization") == nil)
+            #expect(request.value(forHTTPHeaderField: "Cookie") == expectedCookie)
+            #expect(request.httpMethod == "GET")
 
             switch requestURL.path {
-            case "/aiserver.v1.DashboardService/GetCurrentPeriodUsage":
+            case "/api/usage-summary":
                 return makeCursorStatusProbeResponse(
                     url: requestURL,
                     body: """
                     {
-                      "billingCycleStart": "1779536824000",
-                      "billingCycleEnd": "1782215224000",
-                      "planUsage": {
-                        "totalSpend": 3783,
-                        "includedSpend": 388,
-                        "bonusSpend": 3395,
-                        "remaining": 1612,
-                        "limit": 2000,
-                        "remainingBonus": true,
-                        "bonusTooltip": "Bonus usage remains"
-                      },
-                      "spendLimitUsage": {
-                        "totalSpend": 450,
-                        "pooledLimit": 5000,
-                        "pooledUsed": 1200,
-                        "pooledRemaining": 3800,
-                        "individualLimit": 1000,
-                        "individualUsed": 450,
-                        "individualRemaining": 550,
-                        "limitType": "hard"
-                      },
-                      "enabled": true,
-                      "displayMessage": "You've used 19% of your included usage"
+                      "membershipType": "pro",
+                      "billingCycleStart": "2026-05-23T10:27:04.000Z",
+                      "billingCycleEnd": "2026-06-23T10:27:04.000Z",
+                      "individualUsage": {
+                        "plan": {
+                          "used": 388,
+                          "limit": 2000,
+                          "totalPercentUsed": 19.4
+                        },
+                        "onDemand": {
+                          "used": 450,
+                          "limit": 1000
+                        }
+                      }
                     }
                     """,
                     statusCode: 200)
-            case "/aiserver.v1.DashboardService/GetMe":
+            case "/api/auth/me":
                 return makeCursorStatusProbeResponse(
                     url: requestURL,
-                    body: """
-                    {
-                      "email": "user@example.com",
-                      "firstName": "Test",
-                      "lastName": "User",
-                      "isEnterpriseUser": false
-                    }
-                    """,
+                    body: #"{"email":"user@example.com","name":"Test User"}"#,
+                    statusCode: 200)
+            case "/api/usage":
+                return makeCursorStatusProbeResponse(
+                    url: requestURL,
+                    body: #"{"gpt-4":{},"startOfMonth":"2026-05-23"}"#,
                     statusCode: 200)
             default:
                 throw URLError(.badURL)
@@ -1122,36 +1106,26 @@ extension CursorStatusProbeTests {
         }
 
         let baseURL = try #require(URL(string: "https://cursor-web.test"))
-        let dashboardBaseURL = try #require(URL(string: "https://cursor-api.test"))
         let snapshot = try await CursorStatusProbe(
             baseURL: baseURL,
-            dashboardBaseURL: dashboardBaseURL,
             browserDetection: BrowserDetection(cacheTTL: 0),
             browserCookieImportOrder: [],
             urlSession: makeCursorStatusProbeSession(),
             appAuthStore: CursorAppAuthSessionProviderStub(session: CursorAppAuthSession(
-                accessToken: "app-token",
-                membershipType: "pro",
-                subscriptionStatus: "active",
-                cachedEmail: "cached@example.com"))).fetch(allowCachedSessions: false)
+                accessToken: accessToken))).fetch(allowCachedSessions: false)
 
         #expect(abs(snapshot.planPercentUsed - 19.4) < 0.0001)
-        #expect(snapshot.autoPercentUsed == nil)
-        #expect(snapshot.apiPercentUsed == nil)
         #expect(snapshot.planUsedUSD == 3.88)
         #expect(snapshot.planLimitUSD == 20.0)
         #expect(snapshot.onDemandUsedUSD == 4.5)
         #expect(snapshot.onDemandLimitUSD == 10.0)
-        #expect(snapshot.teamOnDemandUsedUSD == 12.0)
-        #expect(snapshot.teamOnDemandLimitUSD == 50.0)
-        #expect(snapshot.billingCycleStart == Date(timeIntervalSince1970: 1_779_536_824_000 / 1000.0))
-        #expect(snapshot.billingCycleEnd == Date(timeIntervalSince1970: 1_782_215_224_000 / 1000.0))
         #expect(snapshot.membershipType == "pro")
         #expect(snapshot.accountEmail == "user@example.com")
         #expect(snapshot.accountName == "Test User")
         #expect(CursorStatusProbeStubURLProtocol.requestPaths.sorted() == [
-            "/aiserver.v1.DashboardService/GetCurrentPeriodUsage",
-            "/aiserver.v1.DashboardService/GetMe",
+            "/api/auth/me",
+            "/api/usage",
+            "/api/usage-summary",
         ])
     }
 
@@ -1167,18 +1141,14 @@ extension CursorStatusProbeTests {
         }
 
         let baseURL = try #require(URL(string: "https://cursor-web.test"))
-        let dashboardBaseURL = try #require(URL(string: "https://cursor-api.test"))
+        let accessToken = try makeCursorAppAuthToken()
         let probe = CursorStatusProbe(
             baseURL: baseURL,
-            dashboardBaseURL: dashboardBaseURL,
             browserDetection: BrowserDetection(cacheTTL: 0),
             browserCookieImportOrder: [],
             urlSession: makeCursorStatusProbeSession(),
             appAuthStore: CursorAppAuthSessionProviderStub(session: CursorAppAuthSession(
-                accessToken: "app-token",
-                membershipType: "pro",
-                subscriptionStatus: "active",
-                cachedEmail: "cached@example.com")))
+                accessToken: accessToken)))
 
         await #expect(throws: CursorStatusProbeError.self) {
             _ = try await probe.fetch(
@@ -1244,18 +1214,14 @@ extension CursorStatusProbeTests {
         }
 
         let baseURL = try #require(URL(string: "https://cursor.test"))
-        let dashboardBaseURL = try #require(URL(string: "https://cursor-api.test"))
+        let accessToken = try makeCursorAppAuthToken()
         let snapshot = try await CursorStatusProbe(
             baseURL: baseURL,
-            dashboardBaseURL: dashboardBaseURL,
             browserDetection: BrowserDetection(cacheTTL: 0),
             browserCookieImportOrder: [],
             urlSession: makeCursorStatusProbeSession(),
             appAuthStore: CursorAppAuthSessionProviderStub(session: CursorAppAuthSession(
-                accessToken: "app-token",
-                membershipType: "enterprise",
-                subscriptionStatus: "active",
-                cachedEmail: "cached@example.com"))).fetch()
+                accessToken: accessToken))).fetch()
 
         #expect(snapshot.planPercentUsed == 30.0)
         #expect(snapshot.accountEmail == "stored@example.com")
@@ -1266,88 +1232,117 @@ extension CursorStatusProbeTests {
     }
 
     @Test
-    func `fetch with Cursor app auth rejects dashboard payload without plan usage`() async throws {
+    func `fetch with Cursor app auth preserves legacy request quotas`() async throws {
         defer {
             CursorStatusProbeStubURLProtocol.reset()
         }
         CursorStatusProbeStubURLProtocol.reset()
 
+        let accessToken = try makeCursorAppAuthToken()
+        let expectedCookie = "WorkosCursorSessionToken=user_test%3A%3A\(accessToken)"
         CursorStatusProbeStubURLProtocol.setHandler { request in
             let requestURL = try #require(request.url)
-            #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer app-token")
-            #expect(request.value(forHTTPHeaderField: "Connect-Protocol-Version") == "1")
-            #expect(request.httpMethod == "POST")
+            #expect(request.value(forHTTPHeaderField: "Cookie") == expectedCookie)
 
             switch requestURL.path {
-            case "/aiserver.v1.DashboardService/GetCurrentPeriodUsage":
+            case "/api/usage-summary":
                 return makeCursorStatusProbeResponse(
                     url: requestURL,
                     body: """
                     {
-                      "billingCycleStart": "1779536824000",
-                      "billingCycleEnd": "1782215224000",
-                      "enabled": true
+                      "membershipType": "enterprise",
+                      "individualUsage": {}
                     }
                     """,
                     statusCode: 200)
-            case "/aiserver.v1.DashboardService/GetMe":
+            case "/api/auth/me":
                 return makeCursorStatusProbeResponse(
                     url: requestURL,
-                    body: #"{"email":"user@example.com"}"#,
+                    body: #"{"error":"temporary"}"#,
+                    statusCode: 500)
+            case "/api/usage":
+                #expect(URLComponents(url: requestURL, resolvingAgainstBaseURL: false)?
+                    .queryItems?.first(where: { $0.name == "user" })?.value == "user_test")
+                return makeCursorStatusProbeResponse(
+                    url: requestURL,
+                    body: """
+                    {
+                      "gpt-4": {
+                        "numRequests": 200,
+                        "numRequestsTotal": 240,
+                        "maxRequestUsage": 500
+                      }
+                    }
+                    """,
                     statusCode: 200)
             default:
                 throw URLError(.badURL)
             }
         }
 
-        let dashboardBaseURL = try #require(URL(string: "https://cursor-api.test"))
+        let baseURL = try #require(URL(string: "https://cursor.test"))
         let probe = CursorStatusProbe(
-            dashboardBaseURL: dashboardBaseURL,
+            baseURL: baseURL,
             browserDetection: BrowserDetection(cacheTTL: 0),
             urlSession: makeCursorStatusProbeSession())
 
-        do {
-            _ = try await probe.fetchWithAppAuthSession(CursorAppAuthSession(
-                accessToken: "app-token",
-                membershipType: "enterprise",
-                subscriptionStatus: "active",
-                cachedEmail: "cached@example.com"))
-            Issue.record("Expected missing Dashboard planUsage to fail instead of returning a zero snapshot")
-        } catch let error as CursorStatusProbeError {
-            guard case let .parseFailed(message) = error else {
-                Issue.record("Expected parseFailed for missing Dashboard planUsage, got: \(error)")
-                return
-            }
-            #expect(message == "DashboardService GetCurrentPeriodUsage missing planUsage")
-        } catch {
-            Issue.record("Expected CursorStatusProbeError, got: \(error)")
+        let snapshot = try await probe.fetchWithAppAuthSession(CursorAppAuthSession(accessToken: accessToken))
+        #expect(snapshot.requestsUsed == 240)
+        #expect(snapshot.requestsLimit == 500)
+        #expect(snapshot.toUsageSnapshot().primary?.usedPercent == 48)
+        #expect(snapshot.accountEmail == nil)
+        #expect(CursorStatusProbeStubURLProtocol.requestPaths.sorted() == [
+            "/api/auth/me",
+            "/api/usage",
+            "/api/usage-summary",
+        ])
+    }
+
+    @Test
+    func `malformed Cursor app auth token is rejected before network access`() {
+        let session = CursorAppAuthSession(accessToken: "not-a-jwt")
+        #expect(throws: CursorStatusProbeError.self) {
+            _ = try session.cookieHeader()
         }
     }
 
     @Test
-    func `fetch with Cursor app auth rejects disabled dashboard usage`() async throws {
+    func `cached session failure continues to Cursor app auth fallback`() async throws {
+        CookieHeaderCache.store(provider: .cursor, cookieHeader: "cached=bad", sourceLabel: "test")
         defer {
+            CookieHeaderCache.clear(provider: .cursor)
             CursorStatusProbeStubURLProtocol.reset()
         }
         CursorStatusProbeStubURLProtocol.reset()
 
+        let accessToken = try makeCursorAppAuthToken()
+        let appCookie = "WorkosCursorSessionToken=user_test%3A%3A\(accessToken)"
         CursorStatusProbeStubURLProtocol.setHandler { request in
             let requestURL = try #require(request.url)
+            let cookie = request.value(forHTTPHeaderField: "Cookie")
             switch requestURL.path {
-            case "/aiserver.v1.DashboardService/GetCurrentPeriodUsage":
+            case "/api/usage-summary" where cookie == "cached=bad":
+                return makeCursorStatusProbeResponse(
+                    url: requestURL,
+                    body: #"{"error":"temporary"}"#,
+                    statusCode: 500)
+            case "/api/usage-summary" where cookie == appCookie:
                 return makeCursorStatusProbeResponse(
                     url: requestURL,
                     body: """
                     {
-                      "planUsage": {
-                        "includedSpend": 500,
-                        "limit": 2000
-                      },
-                      "enabled": false
+                      "membershipType": "pro",
+                      "individualUsage": {
+                        "plan": {
+                          "used": 100,
+                          "limit": 1000,
+                          "totalPercentUsed": 10
+                        }
+                      }
                     }
                     """,
                     statusCode: 200)
-            case "/aiserver.v1.DashboardService/GetMe":
+            case "/api/auth/me":
                 return makeCursorStatusProbeResponse(
                     url: requestURL,
                     body: #"{"email":"user@example.com"}"#,
@@ -1358,28 +1353,28 @@ extension CursorStatusProbeTests {
         }
 
         let baseURL = try #require(URL(string: "https://cursor-web.test"))
-        let dashboardBaseURL = try #require(URL(string: "https://cursor-api.test"))
-        let probe = CursorStatusProbe(
+        let snapshot = try await CursorStatusProbe(
             baseURL: baseURL,
-            dashboardBaseURL: dashboardBaseURL,
             browserDetection: BrowserDetection(cacheTTL: 0),
-            urlSession: makeCursorStatusProbeSession())
+            browserCookieImportOrder: [],
+            urlSession: makeCursorStatusProbeSession(),
+            appAuthStore: CursorAppAuthSessionProviderStub(session: CursorAppAuthSession(
+                accessToken: accessToken))).fetch()
 
-        do {
-            _ = try await probe.fetchWithAppAuthSession(CursorAppAuthSession(
-                accessToken: "app-token",
-                membershipType: "pro",
-                subscriptionStatus: "active",
-                cachedEmail: nil))
-            Issue.record("Expected disabled usage to fail")
-        } catch let error as CursorStatusProbeError {
-            guard case let .parseFailed(message) = error else {
-                Issue.record("Expected parseFailed, got: \(error)")
-                return
-            }
-            #expect(message == "DashboardService GetCurrentPeriodUsage is disabled")
-        }
+        #expect(snapshot.planPercentUsed == 10)
+        #expect(snapshot.accountEmail == "user@example.com")
+        #expect(CursorStatusProbeStubURLProtocol.requestCookies.contains("cached=bad"))
+        #expect(CursorStatusProbeStubURLProtocol.requestCookies.contains(appCookie))
     }
+}
+
+private func makeCursorAppAuthToken(subject: String = "auth0|user_test") throws -> String {
+    let payload = try JSONSerialization.data(withJSONObject: ["sub": subject], options: [.sortedKeys])
+    let encodedPayload = payload.base64EncodedString()
+        .replacingOccurrences(of: "+", with: "-")
+        .replacingOccurrences(of: "/", with: "_")
+        .replacingOccurrences(of: "=", with: "")
+    return "header.\(encodedPayload).signature"
 }
 
 private struct CursorAppAuthSessionProviderStub: CursorAppAuthSessionProviding {
@@ -1421,6 +1416,12 @@ final class CursorStatusProbeStubURLProtocol: URLProtocol {
         lock.lock()
         defer { Self.lock.unlock() }
         return state.requests.compactMap { $0.url?.path }
+    }
+
+    static var requestCookies: [String] {
+        lock.lock()
+        defer { Self.lock.unlock() }
+        return state.requests.compactMap { $0.value(forHTTPHeaderField: "Cookie") }
     }
 
     override static func canInit(with request: URLRequest) -> Bool {

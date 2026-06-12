@@ -338,16 +338,45 @@ public struct CursorUserInfo: Codable, Sendable {
     }
 }
 
-// MARK: - Cursor App Auth + Dashboard API Models
+// MARK: - Cursor App Auth
 
 struct CursorAppAuthSession: Equatable {
     let accessToken: String
-    let membershipType: String?
-    let subscriptionStatus: String?
-    let cachedEmail: String?
 
     var isUsable: Bool {
         !self.accessToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    func cookieHeader() throws -> String {
+        try "WorkosCursorSessionToken=\(self.userID())%3A%3A\(self.accessToken)"
+    }
+
+    func userID() throws -> String {
+        let parts = self.accessToken.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count >= 2 else {
+            throw CursorStatusProbeError.parseFailed("Cursor.app access token is not a JWT")
+        }
+
+        var payload = String(parts[1])
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        payload += String(repeating: "=", count: (4 - payload.count % 4) % 4)
+
+        guard let data = Data(base64Encoded: payload),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let subject = json["sub"] as? String,
+              let userID = subject.split(separator: "|", omittingEmptySubsequences: true).last.map(String.init),
+              !userID.isEmpty
+        else {
+            throw CursorStatusProbeError.parseFailed("Cursor.app access token is missing a user ID")
+        }
+
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "._-"))
+        guard userID.unicodeScalars.allSatisfy(allowed.contains) else {
+            throw CursorStatusProbeError.parseFailed("Cursor.app access token has an invalid user ID")
+        }
+
+        return userID
     }
 }
 
@@ -376,12 +405,7 @@ struct CursorAppAuthStore: CursorAppAuthSessionProviding {
             return nil
         }
 
-        return try CursorAppAuthSession(
-            accessToken: accessToken,
-            membershipType: self.value(for: "cursorAuth/stripeMembershipType") ?? self
-                .value(for: "cursorAuth/membershipType"),
-            subscriptionStatus: self.value(for: "cursorAuth/stripeSubscriptionStatus"),
-            cachedEmail: self.value(for: "cursorAuth/cachedEmail"))
+        return CursorAppAuthSession(accessToken: accessToken)
     }
 
     private func value(for key: String) throws -> String? {
@@ -430,57 +454,6 @@ struct CursorAppAuthStore: CursorAppAuthSessionProviding {
 }
 
 private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
-
-public struct CursorDashboardCurrentPeriodUsage: Codable, Sendable {
-    public let billingCycleStart: String?
-    public let billingCycleEnd: String?
-    public let planUsage: CursorDashboardPlanUsage?
-    public let spendLimitUsage: CursorDashboardSpendLimitUsage?
-    public let enabled: Bool?
-    public let displayMessage: String?
-}
-
-public struct CursorDashboardPlanUsage: Codable, Sendable {
-    public let totalSpend: Double?
-    public let includedSpend: Double?
-    public let bonusSpend: Double?
-    public let remaining: Double?
-    public let limit: Double?
-    public let remainingBonus: Bool?
-    public let bonusTooltip: String?
-}
-
-public struct CursorDashboardSpendLimitUsage: Codable, Sendable {
-    public let totalSpend: Double?
-    public let pooledLimit: Double?
-    public let pooledUsed: Double?
-    public let pooledRemaining: Double?
-    public let individualLimit: Double?
-    public let individualUsed: Double?
-    public let individualRemaining: Double?
-    public let limitType: String?
-}
-
-public struct CursorDashboardMe: Codable, Sendable {
-    public let email: String?
-    public let firstName: String?
-    public let lastName: String?
-    public let isEnterpriseUser: Bool?
-
-    public var displayName: String? {
-        [self.firstName, self.lastName]
-            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
-            .nilIfEmpty
-    }
-}
-
-extension String {
-    fileprivate var nilIfEmpty: String? {
-        self.isEmpty ? nil : self
-    }
-}
 
 // MARK: - Cursor Status Snapshot
 
@@ -838,7 +811,6 @@ public actor CursorSessionStore {
 
 public struct CursorStatusProbe: Sendable {
     public let baseURL: URL
-    public let dashboardBaseURL: URL
     public var timeout: TimeInterval = 15.0
     private let browserDetection: BrowserDetection
     private let browserCookieImportOrder: BrowserCookieImportOrder
@@ -847,14 +819,12 @@ public struct CursorStatusProbe: Sendable {
 
     public init(
         baseURL: URL = URL(string: "https://cursor.com")!,
-        dashboardBaseURL: URL = URL(string: "https://api2.cursor.sh")!,
         timeout: TimeInterval = 15.0,
         browserDetection: BrowserDetection,
         urlSession: any ProviderHTTPTransport = ProviderHTTPClient.shared)
     {
         self.init(
             baseURL: baseURL,
-            dashboardBaseURL: dashboardBaseURL,
             timeout: timeout,
             browserDetection: browserDetection,
             browserCookieImportOrder: cursorCookieImportOrder,
@@ -864,7 +834,6 @@ public struct CursorStatusProbe: Sendable {
 
     init(
         baseURL: URL = URL(string: "https://cursor.com")!,
-        dashboardBaseURL: URL = URL(string: "https://api2.cursor.sh")!,
         timeout: TimeInterval = 15.0,
         browserDetection: BrowserDetection,
         browserCookieImportOrder: BrowserCookieImportOrder = cursorCookieImportOrder,
@@ -872,7 +841,6 @@ public struct CursorStatusProbe: Sendable {
         appAuthStore: any CursorAppAuthSessionProviding)
     {
         self.baseURL = baseURL
-        self.dashboardBaseURL = dashboardBaseURL
         self.timeout = timeout
         self.browserDetection = browserDetection
         self.browserCookieImportOrder = browserCookieImportOrder
@@ -880,14 +848,11 @@ public struct CursorStatusProbe: Sendable {
         self.appAuthStore = appAuthStore
     }
 
-    /// Fetch Cursor usage using the access token already stored by Cursor.app.
+    /// Fetch Cursor usage using a first-party web session derived from Cursor.app's access token.
     func fetchWithAppAuthSession(_ session: CursorAppAuthSession) async throws -> CursorStatusSnapshot {
-        let usage = try await self.fetchDashboardCurrentPeriodUsage(bearerToken: session.accessToken)
-        let account = try? await self.fetchDashboardMe(bearerToken: session.accessToken)
-        return try self.parseDashboardCurrentPeriodUsage(
-            usage,
-            appSession: session,
-            account: account)
+        try await self.fetchWithCookieHeader(
+            session.cookieHeader(),
+            requestUsageUserIDFallback: session.userID())
     }
 
     /// Fetch Cursor usage with manual cookie header (for debugging).
@@ -922,10 +887,12 @@ public struct CursorStatusProbe: Sendable {
                 if case .notLoggedIn = error {
                     CookieHeaderCache.clear(provider: .cursor)
                 } else {
-                    throw error
+                    log("Cached session failed: \(error.localizedDescription)")
+                    firstRecoverableError = firstRecoverableError ?? error
                 }
             } catch {
-                throw error
+                log("Cached session failed: \(error.localizedDescription)")
+                firstRecoverableError = firstRecoverableError ?? .networkError(error.localizedDescription)
             }
         }
 
@@ -992,8 +959,8 @@ public struct CursorStatusProbe: Sendable {
             }
         }
 
-        // Last fallback: Cursor.app keeps a first-party bearer token in its VS Code-style global state DB.
-        // Use it only after the documented cookie/session sources fail so account precedence stays stable.
+        // Last fallback: derive Cursor's first-party web session from the app token in its global state DB.
+        // Reusing the web flow preserves modern billing, legacy request quotas, and account-scoped identity.
         if allowAppAuthFallback,
            let appSession = try? self.appAuthStore.loadSession(),
            appSession.isUsable
@@ -1102,60 +1069,10 @@ public struct CursorStatusProbe: Sendable {
         }
     }
 
-    private func fetchDashboardCurrentPeriodUsage(bearerToken: String) async throws
-    -> CursorDashboardCurrentPeriodUsage {
-        try await self.fetchDashboard(
-            method: "GetCurrentPeriodUsage",
-            bearerToken: bearerToken,
-            as: CursorDashboardCurrentPeriodUsage.self)
-    }
-
-    private func fetchDashboardMe(bearerToken: String) async throws -> CursorDashboardMe {
-        try await self.fetchDashboard(
-            method: "GetMe",
-            bearerToken: bearerToken,
-            as: CursorDashboardMe.self)
-    }
-
-    private func fetchDashboard<T: Decodable>(
-        method: String,
-        bearerToken: String,
-        as type: T.Type) async throws -> T
+    private func fetchWithCookieHeader(
+        _ cookieHeader: String,
+        requestUsageUserIDFallback: String? = nil) async throws -> CursorStatusSnapshot
     {
-        let url = self.dashboardBaseURL
-            .appendingPathComponent("/aiserver.v1.DashboardService/\(method)")
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = self.timeout
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("1", forHTTPHeaderField: "Connect-Protocol-Version")
-        request.setValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
-        request.httpBody = Data("{}".utf8)
-
-        let (data, response) = try await self.urlSession.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw CursorStatusProbeError.networkError("Invalid DashboardService response")
-        }
-        if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
-            throw CursorStatusProbeError.notLoggedIn
-        }
-        guard httpResponse.statusCode == 200 else {
-            throw CursorStatusProbeError.networkError("DashboardService \(method) HTTP \(httpResponse.statusCode)")
-        }
-
-        do {
-            return try JSONDecoder().decode(type, from: data)
-        } catch {
-            let rawJSON = String(data: data, encoding: .utf8) ?? "<binary>"
-            let snippet = rawJSON.prefix(200)
-            throw CursorStatusProbeError
-                .parseFailed(
-                    "DashboardService \(method) JSON decode failed: \(error.localizedDescription). Raw: \(snippet)")
-        }
-    }
-
-    private func fetchWithCookieHeader(_ cookieHeader: String) async throws -> CursorStatusSnapshot {
         enum FetchPart: Sendable {
             case usageSummary((CursorUsageSummary, String))
             case userInfo(Result<CursorUserInfo, Error>)
@@ -1196,7 +1113,7 @@ public struct CursorStatusProbe: Sendable {
         // Uses try? to avoid breaking the flow for users where this endpoint fails or returns unexpected data.
         var requestUsage: CursorUsageResponse?
         var requestUsageRawJSON: String?
-        if let userId = userInfo?.sub {
+        if let userId = userInfo?.sub ?? requestUsageUserIDFallback {
             do {
                 let (usage, usageRawJSON) = try await self.fetchRequestUsage(userId: userId, cookieHeader: cookieHeader)
                 requestUsage = usage
@@ -1290,64 +1207,6 @@ public struct CursorStatusProbe: Sendable {
         let decoder = JSONDecoder()
         let usage = try decoder.decode(CursorUsageResponse.self, from: data)
         return (usage, rawJSON)
-    }
-
-    func parseDashboardCurrentPeriodUsage(
-        _ usage: CursorDashboardCurrentPeriodUsage,
-        appSession: CursorAppAuthSession,
-        account: CursorDashboardMe?) throws -> CursorStatusSnapshot
-    {
-        guard usage.enabled != false else {
-            throw CursorStatusProbeError.parseFailed("DashboardService GetCurrentPeriodUsage is disabled")
-        }
-        guard let plan = usage.planUsage else {
-            throw CursorStatusProbeError.parseFailed("DashboardService GetCurrentPeriodUsage missing planUsage")
-        }
-
-        let includedSpend = max(0, plan.includedSpend ?? 0)
-        let limit = max(0, plan.limit ?? 0)
-        let spendLimit = usage.spendLimitUsage
-        let individualUsed = max(0, spendLimit?.individualUsed ?? 0)
-        let individualLimit = spendLimit?.individualLimit.map { max(0, $0) }
-        let pooledUsed = spendLimit?.pooledUsed.map { max(0, $0) }
-        let pooledLimit = spendLimit?.pooledLimit.map { max(0, $0) }
-        // Cursor's own usage UI derives the plan percentage from included spend, not total/bonus spend.
-        let planPercentUsed = limit > 0
-            ? min(100, includedSpend / limit * 100)
-            : 0
-
-        let billingCycleStart = Self.parseEpochMillisDate(usage.billingCycleStart)
-        let billingCycleEnd = Self.parseEpochMillisDate(usage.billingCycleEnd)
-        let rawJSON: String? = {
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-            guard let data = try? encoder.encode(usage) else { return nil }
-            return String(data: data, encoding: .utf8)
-        }()
-
-        return CursorStatusSnapshot(
-            planPercentUsed: planPercentUsed,
-            autoPercentUsed: nil,
-            apiPercentUsed: nil,
-            planUsedUSD: includedSpend / 100.0,
-            planLimitUSD: limit / 100.0,
-            onDemandUsedUSD: individualUsed / 100.0,
-            onDemandLimitUSD: individualLimit.map { $0 / 100.0 },
-            teamOnDemandUsedUSD: pooledUsed.map { $0 / 100.0 },
-            teamOnDemandLimitUSD: pooledLimit.map { $0 / 100.0 },
-            billingCycleStart: billingCycleStart,
-            billingCycleEnd: billingCycleEnd,
-            membershipType: appSession.membershipType,
-            accountEmail: account?.email ?? appSession.cachedEmail,
-            accountName: account?.displayName,
-            rawJSON: rawJSON)
-    }
-
-    private static func parseEpochMillisDate(_ value: String?) -> Date? {
-        guard let value,
-              let milliseconds = Double(value)
-        else { return nil }
-        return Date(timeIntervalSince1970: milliseconds / 1000.0)
     }
 
     func parseUsageSummary(
