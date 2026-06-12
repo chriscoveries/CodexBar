@@ -81,14 +81,21 @@ struct StatusMenuPersistentRefreshTests {
 
     private func makeController(
         settings: SettingsStore,
-        updater: UpdaterProviding = DisabledUpdaterController()) -> StatusItemController
+        updater: UpdaterProviding = DisabledUpdaterController(),
+        account: AccountInfo? = nil) -> StatusItemController
     {
         let fetcher = UsageFetcher()
         let store = UsageStore(fetcher: fetcher, browserDetection: BrowserDetection(cacheTTL: 0), settings: settings)
+        if let account {
+            store.accountInfoCache[.codex] = UsageStore.AccountInfoCacheEntry(
+                account: account,
+                configRevision: settings.configRevision,
+                expiresAt: .distantFuture)
+        }
         return StatusItemController(
             store: store,
             settings: settings,
-            account: fetcher.loadAccountInfo(),
+            account: account ?? fetcher.loadAccountInfo(),
             updater: updater,
             preferencesSelection: PreferencesSelection(),
             statusBar: .system)
@@ -287,7 +294,9 @@ struct StatusMenuPersistentRefreshTests {
     @Test
     func `live subtitle preserves canonical model error filtering`() throws {
         let settings = self.makeSettings()
-        let controller = self.makeController(settings: settings)
+        let controller = self.makeController(
+            settings: settings,
+            account: AccountInfo(email: "test@example.com", plan: "pro"))
         controller.store.errors[.codex] = UsageError.noRateLimitsFound.errorDescription
         let model = try #require(controller.menuCardModel(for: .codex))
         let fallback = MenuCardLiveSubtitle(text: "Fallback", style: .error)
