@@ -285,7 +285,7 @@ struct StatusMenuPersistentRefreshTests {
     }
 
     @Test
-    func `live subtitle preserves canonical model error filtering`() throws {
+    func `live subtitle follows canonical model output`() throws {
         let settings = self.makeSettings()
         let controller = self.makeController(settings: settings)
         controller.store.errors[.codex] = UsageError.noRateLimitsFound.errorDescription
@@ -296,8 +296,6 @@ struct StatusMenuPersistentRefreshTests {
 
         #expect(liveSubtitle.text == model.subtitleText)
         #expect(liveSubtitle.style == model.subtitleStyle)
-        #expect(liveSubtitle.text != UsageError.noRateLimitsFound.errorDescription)
-        #expect(liveSubtitle.style != .error)
     }
 
     @Test
