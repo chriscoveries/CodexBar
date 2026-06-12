@@ -249,6 +249,7 @@ final class PersistentMenuActionItemView: NSView, MenuCardHighlighting {
         self.titleField.textColor = primaryColor
         self.shortcutField.textColor = secondaryColor
         self.imageView.contentTintColor = primaryColor
+        self.progressIndicator.appearance = highlighted ? NSAppearance(named: .darkAqua) : nil
     }
 
     /// Gives the persistent Refresh row immediate, in-place feedback while a manual refresh

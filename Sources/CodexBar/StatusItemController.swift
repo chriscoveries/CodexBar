@@ -105,9 +105,11 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
 
     let store: UsageStore
     let settings: SettingsStore
-    /// Injected into menu card views so the provider card subtitle reflects the in-flight
-    /// "Refreshing…" state in place while the menu stays open (no NSMenu rebuild).
-    lazy var menuCardRefreshMonitor = MenuCardRefreshMonitor(store: self.store)
+    lazy var menuCardRefreshMonitor = MenuCardRefreshMonitor { [weak self] provider in
+        guard let model = self?.menuCardModel(for: provider) else { return nil }
+        return MenuCardLiveSubtitle(text: model.subtitleText, style: model.subtitleStyle)
+    }
+
     let account: AccountInfo
     let updater: UpdaterProviding
     let managedCodexAccountCoordinator: ManagedCodexAccountCoordinator
@@ -137,6 +139,7 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
     var fallbackMenu: NSMenu?
     var openMenus: [ObjectIdentifier: NSMenu] = [:]
     var menuRefreshTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
+    var manualRefreshTask: Task<Void, Never>?
     var closedMenuRebuildTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
     var closedMenuRebuildTokens: [ObjectIdentifier: Int] = [:]
     var closedMenuRebuildTokenCounter = 0
@@ -187,6 +190,7 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
     var _test_providerSwitcherMenuRebuildDebounceNanoseconds: UInt64?
     var _test_codexAmbientLoginRunnerOverride:
         (@MainActor (TimeInterval) async -> CodexLoginRunner.Result)?
+    var _test_manualRefreshOperation: (@MainActor () async -> Void)?
     #endif
     var blinkTask: Task<Void, Never>?
     var menuBarCountdownRefreshTask: Task<Void, Never>?

@@ -1,25 +1,35 @@
 import AppKit
 import CodexBarCore
+import Observation
 import SwiftUI
 
-/// Narrowly-scoped observable bridge that lets a menu card subtitle re-render in place
-/// whenever the store's refreshing state changes, without rebuilding the NSMenu.
-///
-/// `UsageStore` is `@Observable`; a SwiftUI view that reads
-/// `isRefreshingIndicatorVisible(for:)` only establishes observation on the refreshing
-/// flags + per-provider error presence consulted inside
-/// `shouldShowRefreshingMenuCardIndicator(for:)`, so unrelated store mutations do not
-/// trigger card re-renders.
-@MainActor
-final class MenuCardRefreshMonitor {
-    private let store: UsageStore
+struct MenuCardLiveSubtitle {
+    let text: String
+    let style: UsageMenuCardView.Model.SubtitleStyle
+}
 
-    init(store: UsageStore) {
-        self.store = store
+/// Narrow observable bridge for updating an already-hosted card subtitle without rebuilding
+/// the tracked NSMenu.
+@MainActor
+@Observable
+final class MenuCardRefreshMonitor {
+    typealias SubtitleResolver = @MainActor (UsageProvider) -> MenuCardLiveSubtitle?
+
+    private let resolveSubtitle: SubtitleResolver
+    var isManualRefreshInFlight = false
+
+    init(resolveSubtitle: @escaping SubtitleResolver) {
+        self.resolveSubtitle = resolveSubtitle
     }
 
-    func isRefreshingIndicatorVisible(for provider: UsageProvider) -> Bool {
-        self.store.shouldShowRefreshingMenuCardIndicator(for: provider)
+    func subtitle(
+        for provider: UsageProvider,
+        fallback: MenuCardLiveSubtitle) -> MenuCardLiveSubtitle
+    {
+        if self.isManualRefreshInFlight {
+            return MenuCardLiveSubtitle(text: "\(L("Refreshing"))…", style: .loading)
+        }
+        return self.resolveSubtitle(provider) ?? fallback
     }
 }
 
@@ -130,6 +140,7 @@ struct UsageMenuCardView: View {
         let email: String
         let subtitleText: String
         let subtitleStyle: SubtitleStyle
+        var usesLiveSubtitle: Bool = false
         let planText: String?
         let metrics: [Metric]
         let usageNotes: [String]
@@ -289,20 +300,46 @@ private struct UsageMenuCardHeaderView: View {
                     .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
                     .lineLimit(1).truncationMode(.middle)
             }
-            let subtitleStyle = self.liveSubtitleStyle
-            let subtitleAlignment: VerticalAlignment = subtitleStyle == .error ? .top : .firstTextBaseline
+            let liveSubtitle = self.liveSubtitle
+            // Keep the geometry AppKit measured for this hosted row. A new error stays one line
+            // until the next rebuild; a recovered error keeps its reserved height until then.
+            let usesErrorLayout = self.model.subtitleStyle == .error
+            let subtitleAlignment: VerticalAlignment = usesErrorLayout ? .top : .firstTextBaseline
             HStack(alignment: subtitleAlignment, spacing: UsageMenuCardLayout.headerColumnSpacing) {
-                Text(self.liveSubtitleText)
-                    .font(.footnote)
-                    .foregroundStyle(self.subtitleColor(for: subtitleStyle))
-                    .lineLimit(subtitleStyle == .error ? 4 : 1)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .layoutPriority(1)
-                    .padding(.bottom, subtitleStyle == .error ? 4 : 0)
+                if usesErrorLayout {
+                    Text(self.model.subtitleText)
+                        .font(.footnote)
+                        .lineLimit(4)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.bottom, 4)
+                        .hidden()
+                        .overlay(alignment: .topLeading) {
+                            Text(liveSubtitle.text)
+                                .font(.footnote)
+                                .foregroundStyle(self.subtitleColor(for: liveSubtitle.style))
+                                .lineLimit(4)
+                                .multilineTextAlignment(.leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .clipped()
+                        .layoutPriority(1)
+                } else {
+                    Text(liveSubtitle.text)
+                        .font(.footnote)
+                        .foregroundStyle(self.subtitleColor(for: liveSubtitle.style))
+                        .lineLimit(1)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .layoutPriority(1)
+                }
                 Spacer()
-                if subtitleStyle == .error, !self.model.subtitleText.isEmpty {
-                    CopyIconButton(copyText: self.model.subtitleText, isHighlighted: self.isHighlighted)
+                if usesErrorLayout {
+                    let showsCopyButton = liveSubtitle.style == .error && !liveSubtitle.text.isEmpty
+                    CopyIconButton(copyText: liveSubtitle.text, isHighlighted: self.isHighlighted)
+                        .opacity(showsCopyButton ? 1 : 0)
+                        .allowsHitTesting(showsCopyButton)
+                        .accessibilityHidden(!showsCopyButton)
                 }
                 if let plan = self.model.planText {
                     Text(plan)
@@ -314,19 +351,10 @@ private struct UsageMenuCardHeaderView: View {
         }
     }
 
-    /// True while the live monitor reports an in-flight refresh for this provider. The
-    /// monitor gate already requires `error == nil`, so the live override never swaps the
-    /// multi-line `.error` layout — keeping the single-line subtitle height stable.
-    private var isLiveRefreshing: Bool {
-        self.refreshMonitor?.isRefreshingIndicatorVisible(for: self.model.provider) ?? false
-    }
-
-    private var liveSubtitleText: String {
-        self.isLiveRefreshing ? "\(L("Refreshing"))…" : self.model.subtitleText
-    }
-
-    private var liveSubtitleStyle: UsageMenuCardView.Model.SubtitleStyle {
-        self.isLiveRefreshing ? .loading : self.model.subtitleStyle
+    private var liveSubtitle: MenuCardLiveSubtitle {
+        let fallback = MenuCardLiveSubtitle(text: self.model.subtitleText, style: self.model.subtitleStyle)
+        guard self.model.usesLiveSubtitle else { return fallback }
+        return self.refreshMonitor?.subtitle(for: self.model.provider, fallback: fallback) ?? fallback
     }
 
     private func subtitleColor(for style: UsageMenuCardView.Model.SubtitleStyle) -> Color {
@@ -760,6 +788,7 @@ extension UsageMenuCardView.Model {
         let weeklyPace: UsagePace?
         let quotaWarningThresholds: [QuotaWarningWindow: [Int]]
         let workDaysPerWeek: Int?
+        let usesLiveSubtitle: Bool
         let now: Date
 
         init(
@@ -786,6 +815,7 @@ extension UsageMenuCardView.Model {
             weeklyPace: UsagePace? = nil,
             quotaWarningThresholds: [QuotaWarningWindow: [Int]] = [:],
             workDaysPerWeek: Int? = nil,
+            usesLiveSubtitle: Bool = false,
             now: Date)
         {
             self.provider = provider
@@ -811,6 +841,7 @@ extension UsageMenuCardView.Model {
             self.weeklyPace = weeklyPace
             self.quotaWarningThresholds = quotaWarningThresholds
             self.workDaysPerWeek = workDaysPerWeek
+            self.usesLiveSubtitle = usesLiveSubtitle
             self.now = now
         }
     }
@@ -865,6 +896,7 @@ extension UsageMenuCardView.Model {
             email: redacted.email,
             subtitleText: redacted.subtitleText,
             subtitleStyle: subtitle.style,
+            usesLiveSubtitle: input.usesLiveSubtitle,
             planText: planText,
             metrics: metrics,
             usageNotes: usageNotes,

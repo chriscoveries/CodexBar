@@ -1,5 +1,6 @@
 import AppKit
 import CodexBarCore
+import SwiftUI
 import Testing
 @testable import CodexBar
 
@@ -36,6 +37,31 @@ private final class UpdateReadyUpdater: UpdaterProviding {
 
     func checkForUpdates(_: Any?) {}
     func installUpdate() {}
+}
+
+@MainActor
+private final class ManualRefreshGate {
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var isOpen = false
+
+    func wait() async {
+        if self.isOpen {
+            self.isOpen = false
+            return
+        }
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+        }
+    }
+
+    func resume() {
+        if let continuation = self.continuation {
+            continuation.resume()
+            self.continuation = nil
+        } else {
+            self.isOpen = true
+        }
+    }
 }
 
 @MainActor
@@ -203,11 +229,11 @@ struct StatusMenuPersistentRefreshTests {
         #expect(row != nil)
         #expect(controller.persistentRefreshRows.allObjects.contains { $0 === row })
 
-        // Immediate click feedback flips the spinner on before the async refresh begins.
-        controller.beginPersistentRefreshRowsInProgress()
+        controller.manualRefreshTask = Task {}
+        controller.updatePersistentRefreshRowsInProgress()
         #expect(row?.isInProgressForTesting == true)
 
-        // Once the store reports no refresh in flight, the observation sync reverts it.
+        controller.manualRefreshTask = nil
         controller.store.isRefreshing = false
         controller.updatePersistentRefreshRowsInProgress()
         #expect(row?.isInProgressForTesting == false)
@@ -219,18 +245,190 @@ struct StatusMenuPersistentRefreshTests {
     }
 
     @Test
-    func `refresh monitor mirrors the store refreshing indicator gate`() {
+    func `refresh monitor follows refresh success and failure`() {
         let settings = self.makeSettings()
         let controller = self.makeController(settings: settings)
-        let monitor = MenuCardRefreshMonitor(store: controller.store)
+        let monitor = controller.menuCardRefreshMonitor
+        let fallback = MenuCardLiveSubtitle(text: "Fallback", style: .info)
 
-        #expect(monitor.isRefreshingIndicatorVisible(for: .codex) == false)
+        #expect(monitor.subtitle(for: .codex, fallback: fallback).style == .info)
 
         controller.store.isRefreshing = true
-        #expect(monitor.isRefreshingIndicatorVisible(for: .codex) == true)
+        #expect(monitor.subtitle(for: .codex, fallback: fallback).style == .loading)
 
         controller.store.isRefreshing = false
-        #expect(monitor.isRefreshingIndicatorVisible(for: .codex) == false)
+        monitor.isManualRefreshInFlight = true
+        #expect(monitor.subtitle(for: .codex, fallback: fallback).style == .loading)
+        monitor.isManualRefreshInFlight = false
+
+        controller.store.isRefreshing = false
+        let now = Date()
+        controller.store.snapshots[.codex] = UsageSnapshot(
+            primary: RateWindow(
+                usedPercent: 10,
+                windowMinutes: nil,
+                resetsAt: now.addingTimeInterval(3600),
+                resetDescription: nil),
+            secondary: nil,
+            updatedAt: now)
+        let success = monitor.subtitle(for: .codex, fallback: fallback)
+        #expect(success.style == .info)
+        #expect(success.text == UsageFormatter.updatedString(from: now, now: Date()))
+
+        controller.store.errors[.codex] = "Refresh failed"
+        let failure = monitor.subtitle(for: .codex, fallback: fallback)
+        #expect(failure.style == .error)
+        #expect(failure.text == "Refresh failed")
+
+        monitor.isManualRefreshInFlight = true
+        #expect(monitor.subtitle(for: .codex, fallback: fallback).style == .loading)
+    }
+
+    @Test
+    func `live subtitle preserves canonical model error filtering`() throws {
+        let settings = self.makeSettings()
+        let controller = self.makeController(settings: settings)
+        controller.store.errors[.codex] = UsageError.noRateLimitsFound.errorDescription
+        let model = try #require(controller.menuCardModel(for: .codex))
+        let fallback = MenuCardLiveSubtitle(text: "Fallback", style: .error)
+
+        let liveSubtitle = controller.menuCardRefreshMonitor.subtitle(for: .codex, fallback: fallback)
+
+        #expect(liveSubtitle.text == model.subtitleText)
+        #expect(liveSubtitle.style == model.subtitleStyle)
+        #expect(model.placeholder == "Limits not available")
+    }
+
+    @Test
+    func `override cards keep their own subtitle`() throws {
+        let settings = self.makeSettings()
+        let controller = self.makeController(settings: settings)
+        let liveModel = try #require(controller.menuCardModel(for: .codex))
+        let overrideModel = try #require(controller.menuCardModel(
+            for: .codex,
+            errorOverride: "Account unavailable",
+            forceOverrideCard: true))
+
+        #expect(liveModel.usesLiveSubtitle)
+        #expect(!overrideModel.usesLiveSubtitle)
+        #expect(overrideModel.subtitleText == "Account unavailable")
+    }
+
+    @Test
+    func `live failure keeps the measured card height`() throws {
+        let settings = self.makeSettings()
+        let controller = self.makeController(settings: settings)
+
+        func fittingHeight(for model: UsageMenuCardView.Model) -> CGFloat {
+            NSHostingView(rootView: UsageMenuCardView(model: model, width: 320)
+                .environment(\.menuCardRefreshMonitor, controller.menuCardRefreshMonitor))
+                .fittingSize.height
+        }
+
+        let idleModel = try #require(controller.menuCardModel(for: .codex))
+        let idleHeight = fittingHeight(for: idleModel)
+        controller.store.errors[.codex] = "Short error"
+        let failureHeight = fittingHeight(for: idleModel)
+
+        #expect(failureHeight == idleHeight)
+
+        let errorModel = try #require(controller.menuCardModel(for: .codex))
+        let errorHeight = fittingHeight(for: errorModel)
+        controller.store.errors[.codex] =
+            "Refresh failed with a much longer replacement message that must not resize the tracked menu"
+        let replacementErrorHeight = fittingHeight(for: errorModel)
+        controller.menuCardRefreshMonitor.isManualRefreshInFlight = true
+        let retryHeight = fittingHeight(for: errorModel)
+
+        #expect(replacementErrorHeight == errorHeight)
+        let fallback = MenuCardLiveSubtitle(text: errorModel.subtitleText, style: errorModel.subtitleStyle)
+        #expect(controller.menuCardRefreshMonitor.subtitle(for: .codex, fallback: fallback).style == .loading)
+        #expect(retryHeight == errorHeight)
+    }
+
+    @Test
+    func `manual refresh is suppressed after shutdown preparation`() {
+        let settings = self.makeSettings()
+        let controller = self.makeController(settings: settings)
+        var requestCount = 0
+        controller._test_manualRefreshOperation = {
+            requestCount += 1
+        }
+
+        controller.prepareForAppShutdown()
+        controller.refreshNow()
+
+        #expect(requestCount == 0)
+        #expect(controller.manualRefreshTask == nil)
+        #expect(!controller.menuCardRefreshMonitor.isManualRefreshInFlight)
+    }
+
+    @Test
+    func `repeated manual refresh clicks share one lifecycle`() async throws {
+        let settings = self.makeSettings()
+        settings.refreshFrequency = .manual
+        settings.mergeIcons = false
+
+        let controller = self.makeController(settings: settings)
+        let menu = controller.makeMenu(for: .codex)
+        controller.menuWillOpen(menu)
+        let refreshItem = try #require(menu.items.first { $0.title == "Refresh" })
+        let row = try #require(refreshItem.view as? PersistentMenuActionItemView)
+
+        let gate = ManualRefreshGate()
+        var requestCount = 0
+        controller._test_manualRefreshOperation = {
+            requestCount += 1
+            await gate.wait()
+        }
+
+        controller.refreshNow()
+        let task = try #require(controller.manualRefreshTask)
+        controller.refreshNow()
+        controller.refreshNow()
+        await Task.yield()
+
+        #expect(requestCount == 1)
+        #expect(row.isInProgressForTesting)
+        #expect(controller.menuCardRefreshMonitor.isManualRefreshInFlight)
+
+        gate.resume()
+        await task.value
+
+        #expect(controller.manualRefreshTask == nil)
+        #expect(!row.isInProgressForTesting)
+        #expect(!controller.menuCardRefreshMonitor.isManualRefreshInFlight)
+    }
+
+    @Test
+    func `failed manual refresh returns row to idle and surfaces error`() async throws {
+        let settings = self.makeSettings()
+        settings.refreshFrequency = .manual
+        settings.mergeIcons = false
+
+        let controller = self.makeController(settings: settings)
+        let menu = controller.makeMenu(for: .codex)
+        controller.menuWillOpen(menu)
+        let refreshItem = try #require(menu.items.first { $0.title == "Refresh" })
+        let row = try #require(refreshItem.view as? PersistentMenuActionItemView)
+        let gate = ManualRefreshGate()
+
+        controller._test_manualRefreshOperation = {
+            await gate.wait()
+            controller.store.errors[.codex] = "Refresh failed"
+        }
+
+        controller.refreshNow()
+        let task = try #require(controller.manualRefreshTask)
+        #expect(row.isInProgressForTesting)
+
+        gate.resume()
+        await task.value
+
+        #expect(controller.manualRefreshTask == nil)
+        #expect(!row.isInProgressForTesting)
+        let fallback = MenuCardLiveSubtitle(text: "Fallback", style: .info)
+        #expect(controller.menuCardRefreshMonitor.subtitle(for: .codex, fallback: fallback).style == .error)
     }
 
     @Test

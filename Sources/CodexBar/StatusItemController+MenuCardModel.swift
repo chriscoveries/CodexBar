@@ -118,6 +118,7 @@ extension StatusItemController {
                 .weekly: self.quotaWarningMarkerThresholds(provider: target, window: .weekly),
             ],
             workDaysPerWeek: self.settings.weeklyProgressWorkDays,
+            usesLiveSubtitle: surface == .liveCard,
             now: now)
         return UsageMenuCardView.Model.make(input)
     }
