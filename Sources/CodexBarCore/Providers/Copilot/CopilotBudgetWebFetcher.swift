@@ -30,7 +30,7 @@ public struct CopilotBudgetWebFetcher: Sendable {
         }
     }
 
-    struct BudgetResponse: Decodable, Sendable {
+    struct BudgetResponse: Decodable {
         let budgets: [Budget]
         let hasNextPage: Bool?
 
@@ -58,7 +58,7 @@ public struct CopilotBudgetWebFetcher: Sendable {
         }
     }
 
-    struct Budget: Decodable, Equatable, Sendable {
+    struct Budget: Decodable, Equatable {
         let id: String?
         let name: String?
         let budgetType: String?
@@ -232,7 +232,7 @@ public struct CopilotBudgetWebFetcher: Sendable {
         }
     }
 
-    struct GitHubWebIdentity: Equatable, Sendable {
+    struct GitHubWebIdentity: Equatable {
         let id: String?
         let login: String?
 
@@ -248,7 +248,7 @@ public struct CopilotBudgetWebFetcher: Sendable {
         }
     }
 
-    private struct ProductSKU: Decodable, Sendable, Equatable {
+    private struct ProductSKU: Decodable, Equatable {
         let selectors: [String]
 
         init(from decoder: Decoder) throws {
@@ -268,7 +268,7 @@ public struct CopilotBudgetWebFetcher: Sendable {
         }
     }
 
-    private struct AmountValue: Decodable, Sendable {
+    private struct AmountValue: Decodable {
         let amount: Double?
 
         init(from decoder: Decoder) throws {
@@ -433,7 +433,7 @@ public struct CopilotBudgetWebFetcher: Sendable {
         }
     }
 
-    private struct BudgetPageMetadata: Sendable {
+    private struct BudgetPageMetadata {
         let nonce: String?
         let identity: GitHubWebIdentity?
     }
@@ -764,7 +764,7 @@ private enum CopilotGitHubCookieImporter {
         "dotcom_user",
     ]
 
-    struct SessionInfo: Sendable {
+    struct SessionInfo {
         let cookies: [HTTPCookie]
         let sourceLabel: String
 
