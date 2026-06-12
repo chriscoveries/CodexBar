@@ -111,4 +111,23 @@ struct LocalizationLanguageCatalogTests {
         #expect(rendered.contains("7日間"))
         #expect(rendered.contains("3サービス"))
     }
+
+    @Test
+    func `korean usage chart accessibility text preserves argument meanings`() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let koURL = root.appendingPathComponent("Sources/CodexBar/Resources/ko.lproj/Localizable.strings")
+        let catalog = try #require(NSDictionary(contentsOf: koURL) as? [String: String])
+        let format = try #require(catalog["%d days of usage data across %d services"])
+
+        let rendered = String(
+            format: format,
+            locale: Locale(identifier: "ko_KR"),
+            arguments: [7, 3])
+
+        #expect(rendered.contains("7일간"))
+        #expect(rendered.contains("3개 서비스"))
+    }
 }

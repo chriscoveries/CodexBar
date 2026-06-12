@@ -781,7 +781,7 @@
 "Credits history chart" = "크레딧 기록 차트";
 "%d days of credits data" = "크레딧 데이터 %d일";
 "Usage breakdown chart" = "사용량 분석 차트";
-"%d days of usage data across %d services" = "%d개 서비스의 %d일간 사용량 데이터";
+"%d days of usage data across %d services" = "%2$d개 서비스의 %1$d일간 사용량 데이터";
 "Cost history chart" = "비용 내역 차트";
 "%d days of cost data" = "%d일간 비용 데이터";
 "Plan utilization chart" = "요금제 사용률 차트";
