@@ -115,11 +115,17 @@ struct ProviderStorageFootprintTests {
 
         #expect(paths == [
             home.appendingPathComponent("Library/Application Support/Cursor", isDirectory: true).path,
+            home.appendingPathComponent(
+                "Library/Application Support/Caches/cursor-updater",
+                isDirectory: true).path,
             home.appendingPathComponent(".cursor", isDirectory: true).path,
             home.appendingPathComponent("Library/Caches/Cursor", isDirectory: true).path,
             home.appendingPathComponent("Library/Caches/com.todesktop.230313mzl4w4u92", isDirectory: true).path,
             home.appendingPathComponent("Library/Caches/com.todesktop.230313mzl4w4u92.ShipIt", isDirectory: true).path,
             home.appendingPathComponent("Library/Caches/cursor-compile-cache", isDirectory: true).path,
+            home.appendingPathComponent(
+                "Library/HTTPStorages/com.todesktop.230313mzl4w4u92",
+                isDirectory: true).path,
         ])
     }
 
