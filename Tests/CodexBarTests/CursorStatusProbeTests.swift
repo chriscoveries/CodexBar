@@ -1335,6 +1335,42 @@ extension CursorStatusProbeTests {
     }
 
     @Test
+    func `Cursor app auth transient failure is preserved`() async throws {
+        defer {
+            CursorStatusProbeStubURLProtocol.reset()
+        }
+        CursorStatusProbeStubURLProtocol.reset()
+
+        CursorStatusProbeStubURLProtocol.setHandler { request in
+            let requestURL = try #require(request.url)
+            return makeCursorStatusProbeResponse(
+                url: requestURL,
+                body: #"{"error":"temporary"}"#,
+                statusCode: 500)
+        }
+
+        let accessToken = try makeCursorAppAuthToken()
+        let baseURL = try #require(URL(string: "https://cursor-web.test"))
+        let probe = CursorStatusProbe(
+            baseURL: baseURL,
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            browserCookieImportOrder: [],
+            urlSession: makeCursorStatusProbeSession(),
+            appAuthStore: CursorAppAuthSessionProviderStub(session: CursorAppAuthSession(
+                accessToken: accessToken)))
+
+        do {
+            _ = try await probe.fetch(allowCachedSessions: false)
+            Issue.record("Expected Cursor.app auth request to fail")
+        } catch let error as CursorStatusProbeError {
+            guard case .networkError = error else {
+                Issue.record("Expected network error, got \(error)")
+                return
+            }
+        }
+    }
+
+    @Test
     func `cached session transient failure does not switch to Cursor app auth`() async throws {
         CookieHeaderCache.store(provider: .cursor, cookieHeader: "cached=bad", sourceLabel: "test")
         defer {

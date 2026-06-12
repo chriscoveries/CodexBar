@@ -1007,6 +1007,10 @@ public struct CursorStatusProbe: Sendable {
             }
         }
 
+        if let firstRecoverableError {
+            throw firstRecoverableError
+        }
+
         throw CursorStatusProbeError.noSessionCookie
     }
 
