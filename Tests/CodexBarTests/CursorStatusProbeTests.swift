@@ -1156,6 +1156,39 @@ extension CursorStatusProbeTests {
     }
 
     @Test
+    func `fetch can disable Cursor app auth during browser login verification`() async throws {
+        defer {
+            CursorStatusProbeStubURLProtocol.reset()
+        }
+        CursorStatusProbeStubURLProtocol.reset()
+        CursorStatusProbeStubURLProtocol.setHandler { request in
+            Issue.record("Disabled app auth unexpectedly requested \(request.url?.path ?? "<unknown>")")
+            throw URLError(.badURL)
+        }
+
+        let baseURL = try #require(URL(string: "https://cursor-web.test"))
+        let dashboardBaseURL = try #require(URL(string: "https://cursor-api.test"))
+        let probe = CursorStatusProbe(
+            baseURL: baseURL,
+            dashboardBaseURL: dashboardBaseURL,
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            browserCookieImportOrder: [],
+            urlSession: makeCursorStatusProbeSession(),
+            appAuthStore: CursorAppAuthSessionProviderStub(session: CursorAppAuthSession(
+                accessToken: "app-token",
+                membershipType: "pro",
+                subscriptionStatus: "active",
+                cachedEmail: "cached@example.com")))
+
+        await #expect(throws: CursorStatusProbeError.self) {
+            _ = try await probe.fetch(
+                allowCachedSessions: false,
+                allowAppAuthFallback: false)
+        }
+        #expect(CursorStatusProbeStubURLProtocol.requestCount == 0)
+    }
+
+    @Test
     func `fetch prefers stored session cookies before Cursor app auth fallback`() async throws {
         let store = CursorSessionStore.shared
         await store.clearCookies()
@@ -1288,6 +1321,63 @@ extension CursorStatusProbeTests {
             #expect(message == "DashboardService GetCurrentPeriodUsage missing planUsage")
         } catch {
             Issue.record("Expected CursorStatusProbeError, got: \(error)")
+        }
+    }
+
+    @Test
+    func `fetch with Cursor app auth rejects disabled dashboard usage`() async throws {
+        defer {
+            CursorStatusProbeStubURLProtocol.reset()
+        }
+        CursorStatusProbeStubURLProtocol.reset()
+
+        CursorStatusProbeStubURLProtocol.setHandler { request in
+            let requestURL = try #require(request.url)
+            switch requestURL.path {
+            case "/aiserver.v1.DashboardService/GetCurrentPeriodUsage":
+                return makeCursorStatusProbeResponse(
+                    url: requestURL,
+                    body: """
+                    {
+                      "planUsage": {
+                        "includedSpend": 500,
+                        "limit": 2000
+                      },
+                      "enabled": false
+                    }
+                    """,
+                    statusCode: 200)
+            case "/aiserver.v1.DashboardService/GetMe":
+                return makeCursorStatusProbeResponse(
+                    url: requestURL,
+                    body: #"{"email":"user@example.com"}"#,
+                    statusCode: 200)
+            default:
+                throw URLError(.badURL)
+            }
+        }
+
+        let baseURL = try #require(URL(string: "https://cursor-web.test"))
+        let dashboardBaseURL = try #require(URL(string: "https://cursor-api.test"))
+        let probe = CursorStatusProbe(
+            baseURL: baseURL,
+            dashboardBaseURL: dashboardBaseURL,
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            urlSession: makeCursorStatusProbeSession())
+
+        do {
+            _ = try await probe.fetchWithAppAuthSession(CursorAppAuthSession(
+                accessToken: "app-token",
+                membershipType: "pro",
+                subscriptionStatus: "active",
+                cachedEmail: nil))
+            Issue.record("Expected disabled usage to fail")
+        } catch let error as CursorStatusProbeError {
+            guard case let .parseFailed(message) = error else {
+                Issue.record("Expected parseFailed, got: \(error)")
+                return
+            }
+            #expect(message == "DashboardService GetCurrentPeriodUsage is disabled")
         }
     }
 }

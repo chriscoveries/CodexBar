@@ -899,6 +899,7 @@ public struct CursorStatusProbe: Sendable {
     public func fetch(
         cookieHeaderOverride: String? = nil,
         allowCachedSessions: Bool = true,
+        allowAppAuthFallback: Bool = true,
         logger: ((String) -> Void)? = nil)
         async throws -> CursorStatusSnapshot
     {
@@ -993,7 +994,10 @@ public struct CursorStatusProbe: Sendable {
 
         // Last fallback: Cursor.app keeps a first-party bearer token in its VS Code-style global state DB.
         // Use it only after the documented cookie/session sources fail so account precedence stays stable.
-        if let appSession = try? self.appAuthStore.loadSession(), appSession.isUsable {
+        if allowAppAuthFallback,
+           let appSession = try? self.appAuthStore.loadSession(),
+           appSession.isUsable
+        {
             log("Using Cursor.app local auth fallback")
             do {
                 return try await self.fetchWithAppAuthSession(appSession)
@@ -1293,6 +1297,9 @@ public struct CursorStatusProbe: Sendable {
         appSession: CursorAppAuthSession,
         account: CursorDashboardMe?) throws -> CursorStatusSnapshot
     {
+        guard usage.enabled != false else {
+            throw CursorStatusProbeError.parseFailed("DashboardService GetCurrentPeriodUsage is disabled")
+        }
         guard let plan = usage.planUsage else {
             throw CursorStatusProbeError.parseFailed("DashboardService GetCurrentPeriodUsage missing planUsage")
         }
