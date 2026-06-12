@@ -910,12 +910,10 @@ public struct CursorStatusProbe: Sendable {
                 if case .notLoggedIn = error {
                     CookieHeaderCache.clear(provider: .cursor)
                 } else {
-                    log("Cached session failed: \(error.localizedDescription)")
-                    firstRecoverableError = firstRecoverableError ?? error
+                    throw error
                 }
             } catch {
-                log("Cached session failed: \(error.localizedDescription)")
-                firstRecoverableError = firstRecoverableError ?? .networkError(error.localizedDescription)
+                throw error
             }
         }
 
