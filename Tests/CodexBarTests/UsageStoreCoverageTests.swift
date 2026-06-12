@@ -104,13 +104,17 @@ struct UsageStoreCoverageTests {
                 secondary: nil,
                 ampUsage: AmpUsageDetails(
                     individualCredits: 25.64,
-                    workspaceBalances: [AmpWorkspaceBalance(name: "meow", remaining: 10.22)]),
+                    workspaceBalances: [AmpWorkspaceBalance(name: "billing@example.test", remaining: 10.22)]),
                 updatedAt: now),
             provider: .amp)
         let model = ProvidersPane(settings: settings, store: store)._test_menuCardModel(for: .amp)
 
-        #expect(model.creditsText == "Individual credits: $25.64\nWorkspace meow: $10.22")
+        #expect(model.creditsText == "Individual credits: $25.64\nWorkspace billing@example.test: $10.22")
         #expect(model.creditsRemaining == nil)
+
+        settings.hidePersonalInfo = true
+        let redactedModel = ProvidersPane(settings: settings, store: store)._test_menuCardModel(for: .amp)
+        #expect(redactedModel.creditsText == "Individual credits: $25.64\nWorkspace Hidden: $10.22")
     }
 
     @Test

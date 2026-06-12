@@ -45,7 +45,7 @@ headers, source selection, provider ordering, and token accounts are stored in `
 | Vertex AI | Google ADC OAuth (gcloud) → Cloud Monitoring quota usage (`oauth`). |
 | Augment | `auggie` CLI first, then browser-cookie web fallback (`cli`, `web`). |
 | JetBrains AI | Local XML quota file (`local`). |
-| Amp | Local `amp usage` CLI with browser-cookie web fallback (`cli`, `web`). |
+| Amp | Local `amp usage` CLI, access-token API, then browser-cookie legacy fallback (`cli`, `api`, `web`). |
 | T3 Chat | Web tRPC customer-data endpoint via browser cookies (`web`). |
 | Warp | API token (config/env) → GraphQL request limits (`api`). |
 | ElevenLabs | API key from config/env → subscription usage API (`api`). |
@@ -252,7 +252,8 @@ headers, source selection, provider ordering, and token accounts are stored in `
 
 ## Amp
 - Auto mode tries the local `amp usage` command first.
-- Web fallback calls Amp's usage endpoint with browser cookies.
+- API mode calls Amp's balance endpoint with an access token.
+- Web fallback reads the legacy settings page with browser cookies.
 - Tracks Amp Free usage, account identity, and individual and workspace credit balances.
 - Status: none yet.
 - Details: `docs/amp.md`.
