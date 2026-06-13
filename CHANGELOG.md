@@ -2,6 +2,7 @@
 
 ## 0.34.1 — Unreleased
 
+- Menu bar: make the global open-menu shortcut toggle synchronously during menu tracking so repeated presses no longer queue delayed menu reopens. Thanks @Zihao-Qi!
 - Menu bar: restore native macOS positioning for merged provider dropdowns while preparing current content before AppKit lays out the menu.
 - Menu bar: keep cached provider content visible while switching merged tabs so the open menu no longer flickers through an empty state.
 - Menu bar: handle the global open-menu shortcut synchronously so repeated presses close the tracked menu instead of queueing a delayed reopen (#1470). Thanks @Zihao-Qi!

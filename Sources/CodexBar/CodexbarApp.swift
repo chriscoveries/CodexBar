@@ -382,6 +382,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AppNotifications.shared.requestAuthorizationOnStartup()
         self.ensureStatusController()
         KeyboardShortcuts.onKeyUp(for: .openMenu) { [weak self] in
+            // KeyboardShortcuts dispatches both normal and menu-tracking hotkeys on the main event loop.
             MainActor.assumeIsolated {
                 self?.statusController?.openMenuFromShortcut()
             }
