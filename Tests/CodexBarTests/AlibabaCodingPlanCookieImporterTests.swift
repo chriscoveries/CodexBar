@@ -8,11 +8,10 @@ import SweetCookieKit
 
 @Suite(.serialized)
 struct AlibabaCodingPlanCookieImporterTests {
-    @Test
+    @Test(.disabled(
+        if: ProcessInfo.processInfo.environment[BrowserCookieAccessGate.allowTestCookieAccessEnvironmentKey] == "1",
+        "Default-home cookie access is explicitly enabled for this test run."))
     func `default home import is suppressed before profile and keychain access`() throws {
-        guard ProcessInfo.processInfo.environment[BrowserCookieAccessGate.allowTestCookieAccessEnvironmentKey] != "1"
-        else { return }
-
         let profileProbeCount = OSAllocatedUnfairLock(initialState: 0)
         let keychainProbeCount = OSAllocatedUnfairLock(initialState: 0)
         let defaultHome = try #require(BrowserCookieClient.defaultHomeDirectories().first)
@@ -43,11 +42,10 @@ struct AlibabaCodingPlanCookieImporterTests {
         #expect(keychainProbeCount.withLock { $0 } == 0)
     }
 
-    @Test
+    @Test(.disabled(
+        if: ProcessInfo.processInfo.environment[BrowserCookieAccessGate.allowTestCookieAccessEnvironmentKey] == "1",
+        "Default-home cookie access is explicitly enabled for this test run."))
     func `chromium fallback rejects default client before keychain access`() {
-        guard ProcessInfo.processInfo.environment[BrowserCookieAccessGate.allowTestCookieAccessEnvironmentKey] != "1"
-        else { return }
-
         let keychainProbeCount = OSAllocatedUnfairLock(initialState: 0)
         _ = KeychainAccessGate.withTaskOverrideForTesting(false) {
             KeychainAccessPreflight.withCheckGenericPasswordOverrideForTesting { _, _ in

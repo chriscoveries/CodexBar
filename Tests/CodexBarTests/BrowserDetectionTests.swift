@@ -8,7 +8,9 @@ import SweetCookieKit
 
 @Suite(.serialized)
 struct BrowserDetectionTests {
-    @Test
+    @Test(.disabled(
+        if: ProcessInfo.processInfo.environment[BrowserCookieAccessGate.allowTestCookieAccessEnvironmentKey] == "1",
+        "Default-home cookie access is explicitly enabled for this test run."))
     func `default home detection is suppressed before profile probes`() throws {
         let probeCount = OSAllocatedUnfairLock(initialState: 0)
         let defaultHome = try #require(BrowserCookieClient.defaultHomeDirectories().first)
@@ -28,7 +30,9 @@ struct BrowserDetectionTests {
         #expect(probeCount.withLock { $0 } == 0)
     }
 
-    @Test
+    @Test(.disabled(
+        if: ProcessInfo.processInfo.environment[BrowserCookieAccessGate.allowTestCookieAccessEnvironmentKey] == "1",
+        "Default-home cookie access is explicitly enabled for this test run."))
     func `default client reports structured suppression before store discovery`() {
         let client = BrowserCookieClient()
 
@@ -61,20 +65,18 @@ struct BrowserDetectionTests {
             environment: [:]) == .allowed)
     }
 
-    @Test
+    @Test(.disabled(
+        if: ProcessInfo.processInfo.environment[BrowserCookieAccessGate.allowTestCookieAccessEnvironmentKey] == "1",
+        "Default-home cookie access is explicitly enabled for this test run."))
     func `safari is installed but default cookie access is disabled during tests`() {
-        guard ProcessInfo.processInfo.environment[BrowserCookieAccessGate.allowTestCookieAccessEnvironmentKey] != "1"
-        else { return }
-
         #expect(BrowserDetection(cacheTTL: 0).isAppInstalled(.safari) == true)
         #expect(BrowserDetection(cacheTTL: 0).isCookieSourceAvailable(.safari) == false)
     }
 
-    @Test
+    @Test(.disabled(
+        if: ProcessInfo.processInfo.environment[BrowserCookieAccessGate.allowTestCookieAccessEnvironmentKey] == "1",
+        "Default-home cookie access is explicitly enabled for this test run."))
     func `default cookie candidates exclude safari during tests`() {
-        guard ProcessInfo.processInfo.environment[BrowserCookieAccessGate.allowTestCookieAccessEnvironmentKey] != "1"
-        else { return }
-
         let detection = BrowserDetection(cacheTTL: 0)
         let browsers: [Browser] = [.safari, .chrome, .firefox]
         #expect(browsers.cookieImportCandidates(using: detection).contains(.safari) == false)
