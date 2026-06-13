@@ -214,11 +214,33 @@ build_product_path() {
   esac
 }
 
-# Resolve path to built binary; some SwiftPM versions use .build/$CONF/ when building for host only.
+# Ask SwiftPM where it put the products for this arch (cached per arch).
+# The legacy native build system uses .build/<arch>-apple-macosx/<conf>/, but the
+# swiftbuild system emits to .build/out/Products/<Conf>; resolving from the
+# toolchain keeps a stale legacy directory from shadowing fresh builds.
+swiftpm_bin_path() {
+  local arch="$1"
+  local var="SWIFTPM_BIN_PATH_${arch//[^A-Za-z0-9]/_}"
+  if [[ -z "${!var+set}" ]]; then
+    local path
+    path=$(swift build --show-bin-path -c "$CONF" --arch "$arch" 2>/dev/null || true)
+    printf -v "$var" '%s' "$path"
+  fi
+  echo "${!var}"
+}
+
+# Resolve path to built binary; prefer the bin dir SwiftPM reports, then fall
+# back to the known legacy layouts (.build/<arch>-apple-macosx/<conf>/ and
+# .build/$CONF/ for host-only builds on some SwiftPM versions).
 resolve_binary_path() {
   local name="$1"
   local arch="$2"
-  local candidate
+  local bin_dir candidate
+  bin_dir=$(swiftpm_bin_path "$arch")
+  if [[ -n "$bin_dir" && -f "$bin_dir/$name" ]]; then
+    echo "$bin_dir/$name"
+    return
+  fi
   candidate=$(build_product_path "$name" "$arch")
   if [[ -f "$candidate" ]]; then
     echo "$candidate"
@@ -257,7 +279,7 @@ install_binary() {
     local src
     src=$(resolve_binary_path "$name" "$arch")
     if [[ -z "$src" || ! -f "$src" ]]; then
-      echo "ERROR: Missing ${name} build for ${arch} at $(build_product_path "$name" "$arch")" >&2
+      echo "ERROR: Missing ${name} build for ${arch} (looked in: $(swiftpm_bin_path "$arch"), $(build_product_path "$name" "$arch"), .build/$CONF)" >&2
       exit 1
     fi
     binaries+=("$src")
