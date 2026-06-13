@@ -942,10 +942,7 @@ extension UsageMenuCardView.Model {
         }
 
         if input.provider == .mimo, input.snapshot != nil {
-            return [
-                L("Balance updates in near-real time (up to 5 min lag)"),
-                L("Daily billing data finalizes at 07:00 UTC"),
-            ] + subscriptionNotes
+            return Self.mimoUsageNotes(input: input, subscriptionNotes: subscriptionNotes)
         }
 
         if let notes = apiProviderUsageNotes(input: input) {
