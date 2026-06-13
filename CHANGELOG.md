@@ -2,6 +2,7 @@
 
 ## 0.34.1 — Unreleased
 
+- Menu bar: keep the selected quota percentage visible in Pace mode when pace is temporarily unavailable instead of collapsing to an icon-only status item (fixes #1462).
 - Menu bar: restore native macOS positioning for merged provider dropdowns while preparing current content before AppKit lays out the menu.
 - Menu bar: keep cached provider content visible while switching merged tabs so the open menu no longer flickers through an empty state.
 - Menu bar: handle the global open-menu shortcut synchronously so repeated presses close the tracked menu instead of queueing a delayed reopen (#1470). Thanks @Zihao-Qi!
