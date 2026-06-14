@@ -4,25 +4,12 @@ import Testing
 @testable import CodexBar
 
 @MainActor
+@Suite(.serialized)
 struct StatusItemAnimationSignatureTests {
-    private func makeStatusBarForTesting() -> NSStatusBar {
-        let env = ProcessInfo.processInfo.environment
-        if env["GITHUB_ACTIONS"] == "true" || env["CI"] == "true" {
-            return .system
-        }
-        return NSStatusBar()
-    }
-
     @Test
-    func `merged render signature changes when unified icon style changes`() throws {
+    func `merged render signature changes when unified icon style changes`() {
         let suite = "StatusItemAnimationSignatureTests-merged-style-signature"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
-        let settings = SettingsStore(
-            userDefaults: defaults,
-            configStore: testConfigStore(suiteName: suite),
-            zaiTokenStore: NoopZaiTokenStore(),
-            syntheticTokenStore: NoopSyntheticTokenStore())
+        let settings = testSettingsStore(suiteName: suite)
         settings.statusChecksEnabled = false
         settings.refreshFrequency = .manual
         settings.mergeIcons = true
@@ -46,7 +33,8 @@ struct StatusItemAnimationSignatureTests {
             account: fetcher.loadAccountInfo(),
             updater: DisabledUpdaterController(),
             preferencesSelection: PreferencesSelection(),
-            statusBar: self.makeStatusBarForTesting())
+            statusBar: testStatusBar())
+        defer { controller.releaseStatusItemsForTesting() }
 
         store._setSnapshotForTesting(
             UsageSnapshot(
@@ -80,14 +68,7 @@ struct StatusItemAnimationSignatureTests {
     @Test
     func `merged brand percent reapplies title when cached render is skipped`() throws {
         let suite = "StatusItemAnimationSignatureTests-merged-brand-percent-title-restore"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
-
-        let settings = SettingsStore(
-            userDefaults: defaults,
-            configStore: testConfigStore(suiteName: suite),
-            zaiTokenStore: NoopZaiTokenStore(),
-            syntheticTokenStore: NoopSyntheticTokenStore())
+        let settings = testSettingsStore(suiteName: suite)
         settings.statusChecksEnabled = false
         settings.refreshFrequency = .manual
         settings.mergeIcons = true
@@ -113,7 +94,8 @@ struct StatusItemAnimationSignatureTests {
             account: fetcher.loadAccountInfo(),
             updater: DisabledUpdaterController(),
             preferencesSelection: PreferencesSelection(),
-            statusBar: self.makeStatusBarForTesting())
+            statusBar: testStatusBar())
+        defer { controller.releaseStatusItemsForTesting() }
 
         let snapshot = UsageSnapshot(
             primary: RateWindow(usedPercent: 23, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
@@ -141,14 +123,7 @@ struct StatusItemAnimationSignatureTests {
     @Test
     func `merged icon render defers while merged menu is tracking`() async throws {
         let suite = "StatusItemAnimationSignatureTests-merged-icon-defers-during-tracking"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
-
-        let settings = SettingsStore(
-            userDefaults: defaults,
-            configStore: testConfigStore(suiteName: suite),
-            zaiTokenStore: NoopZaiTokenStore(),
-            syntheticTokenStore: NoopSyntheticTokenStore())
+        let settings = testSettingsStore(suiteName: suite)
         settings.statusChecksEnabled = false
         settings.refreshFrequency = .manual
         settings.mergeIcons = true
@@ -173,7 +148,7 @@ struct StatusItemAnimationSignatureTests {
             account: fetcher.loadAccountInfo(),
             updater: DisabledUpdaterController(),
             preferencesSelection: PreferencesSelection(),
-            statusBar: self.makeStatusBarForTesting())
+            statusBar: testStatusBar())
         defer { controller.releaseStatusItemsForTesting() }
         controller.menuRefreshEnabledOverrideForTesting = true
 
@@ -258,15 +233,9 @@ struct StatusItemAnimationSignatureTests {
     }
 
     @Test
-    func `merged fallback provider follows enabled provider order`() throws {
+    func `merged fallback provider follows enabled provider order`() {
         let suite = "StatusItemAnimationSignatureTests-merged-provider-order"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
-        let settings = SettingsStore(
-            userDefaults: defaults,
-            configStore: testConfigStore(suiteName: suite),
-            zaiTokenStore: NoopZaiTokenStore(),
-            syntheticTokenStore: NoopSyntheticTokenStore())
+        let settings = testSettingsStore(suiteName: suite)
         settings.statusChecksEnabled = false
         settings.refreshFrequency = .manual
         settings.mergeIcons = true
@@ -290,7 +259,8 @@ struct StatusItemAnimationSignatureTests {
             account: fetcher.loadAccountInfo(),
             updater: DisabledUpdaterController(),
             preferencesSelection: PreferencesSelection(),
-            statusBar: self.makeStatusBarForTesting())
+            statusBar: testStatusBar())
+        defer { controller.releaseStatusItemsForTesting() }
 
         let snapshot = UsageSnapshot(
             primary: RateWindow(usedPercent: 50, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
@@ -308,13 +278,7 @@ struct StatusItemAnimationSignatureTests {
     @Test
     func `merged icon follows overview provider order when first overview provider is loading`() {
         let suite = "StatusItemAnimationSignatureTests-merged-overview-provider-order"
-        let defaults = UserDefaults(suiteName: suite)
-        defaults?.removePersistentDomain(forName: suite)
-        let settings = SettingsStore(
-            userDefaults: defaults ?? .standard,
-            configStore: testConfigStore(suiteName: "StatusItemAnimationSignatureTests-merged-overview-provider-order"),
-            zaiTokenStore: NoopZaiTokenStore(),
-            syntheticTokenStore: NoopSyntheticTokenStore())
+        let settings = testSettingsStore(suiteName: suite)
         settings.statusChecksEnabled = false
         settings.refreshFrequency = .manual
         settings.mergeIcons = true
@@ -342,7 +306,8 @@ struct StatusItemAnimationSignatureTests {
             account: fetcher.loadAccountInfo(),
             updater: DisabledUpdaterController(),
             preferencesSelection: PreferencesSelection(),
-            statusBar: self.makeStatusBarForTesting())
+            statusBar: testStatusBar())
+        defer { controller.releaseStatusItemsForTesting() }
 
         let snapshot = UsageSnapshot(
             primary: RateWindow(usedPercent: 50, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
@@ -364,15 +329,9 @@ struct StatusItemAnimationSignatureTests {
     }
 
     @Test
-    func `split provider icon skips unchanged render signature`() throws {
+    func `split provider icon skips unchanged render signature`() {
         let suite = "StatusItemAnimationSignatureTests-split-provider-signature"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
-        let settings = SettingsStore(
-            userDefaults: defaults,
-            configStore: testConfigStore(suiteName: suite),
-            zaiTokenStore: NoopZaiTokenStore(),
-            syntheticTokenStore: NoopSyntheticTokenStore())
+        let settings = testSettingsStore(suiteName: suite)
         settings.statusChecksEnabled = false
         settings.refreshFrequency = .manual
         settings.mergeIcons = false
@@ -390,7 +349,8 @@ struct StatusItemAnimationSignatureTests {
             account: fetcher.loadAccountInfo(),
             updater: DisabledUpdaterController(),
             preferencesSelection: PreferencesSelection(),
-            statusBar: self.makeStatusBarForTesting())
+            statusBar: testStatusBar())
+        defer { controller.releaseStatusItemsForTesting() }
 
         store._setSnapshotForTesting(
             UsageSnapshot(
