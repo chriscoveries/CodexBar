@@ -317,7 +317,7 @@ struct AntigravityCLIHTTPSFetchStrategyTests {
     }
 
     @Test
-    func `cli HTTPS availability requires supported localhost trust`() async throws {
+    func `cli local strategy availability requires binary`() async throws {
         let binaryURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("codexbar-antigravity-\(UUID().uuidString)")
         try Data("#!/bin/sh\n".utf8).write(to: binaryURL)
@@ -331,6 +331,18 @@ struct AntigravityCLIHTTPSFetchStrategyTests {
         let isAvailable = await strategy.isAvailable(context)
 
         #expect(isAvailable)
+    }
+
+    @Test
+    func `cli local endpoints remain HTTPS only on macOS`() {
+        #expect(
+            AntigravityStatusProbe.cliEndpoints(ports: [55624]) == [
+                AntigravityStatusProbe.AntigravityConnectionEndpoint(
+                    scheme: "https",
+                    port: 55624,
+                    csrfToken: "",
+                    source: .cliHTTPS),
+            ])
     }
 
     @Test
