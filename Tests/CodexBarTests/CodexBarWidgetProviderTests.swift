@@ -5,6 +5,29 @@ import Testing
 
 struct CodexBarWidgetProviderTests {
     @Test
+    func `small widget limits custom usage rows`() {
+        let entry = WidgetSnapshot.ProviderEntry(
+            provider: .antigravity,
+            updatedAt: Date(),
+            primary: nil,
+            secondary: nil,
+            tertiary: nil,
+            usageRows: [
+                WidgetSnapshot.WidgetUsageRowSnapshot(id: "one", title: "One", percentLeft: 90),
+                WidgetSnapshot.WidgetUsageRowSnapshot(id: "two", title: "Two", percentLeft: 80),
+                WidgetSnapshot.WidgetUsageRowSnapshot(id: "three", title: "Three", percentLeft: 70),
+                WidgetSnapshot.WidgetUsageRowSnapshot(id: "four", title: "Four", percentLeft: 60),
+            ],
+            creditsRemaining: nil,
+            codeReviewRemainingPercent: nil,
+            tokenUsage: nil,
+            dailyUsage: [])
+
+        #expect(WidgetUsageRow.rows(for: entry, limit: 2).map(\.id) == ["one", "two"])
+        #expect(WidgetUsageRow.rows(for: entry).count == 4)
+    }
+
+    @Test
     func `provider choice supports alibaba`() {
         #expect(ProviderChoice(provider: .alibaba) == .alibaba)
         #expect(ProviderChoice.alibaba.provider == .alibaba)

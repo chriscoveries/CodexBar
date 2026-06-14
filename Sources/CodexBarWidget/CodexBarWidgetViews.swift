@@ -321,7 +321,7 @@ private struct SwitcherSmallUsageView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ForEach(WidgetUsageRow.rows(for: self.entry)) { row in
+            ForEach(WidgetUsageRow.rows(for: self.entry, limit: 2)) { row in
                 UsageBarRow(
                     title: row.title,
                     percentLeft: row.percentLeft,
@@ -411,7 +411,7 @@ private struct SmallUsageView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HeaderView(provider: self.entry.provider, updatedAt: self.entry.updatedAt)
-            ForEach(WidgetUsageRow.rows(for: self.entry)) { row in
+            ForEach(WidgetUsageRow.rows(for: self.entry, limit: 2)) { row in
                 UsageBarRow(
                     title: row.title,
                     percentLeft: row.percentLeft,
@@ -505,31 +505,34 @@ struct WidgetUsageRow: Identifiable, Equatable {
     let title: String
     let percentLeft: Double?
 
-    static func rows(for entry: WidgetSnapshot.ProviderEntry) -> [WidgetUsageRow] {
+    static func rows(for entry: WidgetSnapshot.ProviderEntry, limit: Int? = nil) -> [WidgetUsageRow] {
+        let rows: [WidgetUsageRow]
         if let usageRows = entry.usageRows {
-            return usageRows.map { row in
+            rows = usageRows.map { row in
                 WidgetUsageRow(id: row.id, title: row.title, percentLeft: row.percentLeft)
             }
+        } else {
+            let metadata = ProviderDefaults.metadata[entry.provider]
+            var defaultRows = [
+                WidgetUsageRow(
+                    id: "primary",
+                    title: metadata?.sessionLabel ?? "Session",
+                    percentLeft: entry.primary?.remainingPercent),
+                WidgetUsageRow(
+                    id: "secondary",
+                    title: metadata?.weeklyLabel ?? "Weekly",
+                    percentLeft: entry.secondary?.remainingPercent),
+            ]
+            if metadata?.supportsOpus == true {
+                defaultRows.append(WidgetUsageRow(
+                    id: "tertiary",
+                    title: metadata?.opusLabel ?? "Opus",
+                    percentLeft: entry.tertiary?.remainingPercent))
+            }
+            rows = defaultRows.filter { $0.percentLeft != nil }
         }
-
-        let metadata = ProviderDefaults.metadata[entry.provider]
-        var rows = [
-            WidgetUsageRow(
-                id: "primary",
-                title: metadata?.sessionLabel ?? "Session",
-                percentLeft: entry.primary?.remainingPercent),
-            WidgetUsageRow(
-                id: "secondary",
-                title: metadata?.weeklyLabel ?? "Weekly",
-                percentLeft: entry.secondary?.remainingPercent),
-        ]
-        if metadata?.supportsOpus == true {
-            rows.append(WidgetUsageRow(
-                id: "tertiary",
-                title: metadata?.opusLabel ?? "Opus",
-                percentLeft: entry.tertiary?.remainingPercent))
-        }
-        return rows.filter { $0.percentLeft != nil }
+        guard let limit else { return rows }
+        return Array(rows.prefix(max(0, limit)))
     }
 }
 

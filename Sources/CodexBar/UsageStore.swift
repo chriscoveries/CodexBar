@@ -756,6 +756,7 @@ final class UsageStore {
     enum SessionQuotaWindowSource: String {
         case primary
         case copilotSecondaryFallback
+        case antigravityQuotaSummary
     }
 
     struct QuotaWarningStateKey: Hashable {
@@ -849,8 +850,15 @@ final class UsageStore {
         guard self.settings.quotaWarningNotificationsEnabled else { return }
 
         let accountDisplayName = self.quotaWarningAccountDisplayName(provider: provider, snapshot: snapshot)
-        let primaryWindow = provider == .mimo ? nil : snapshot.primary
-        let secondaryWindow = provider == .mimo ? nil : snapshot.secondary
+        let primaryWindow: RateWindow?
+        let secondaryWindow: RateWindow?
+        if provider == .antigravity, Self.hasAntigravityQuotaSummaryWindows(snapshot: snapshot) {
+            primaryWindow = Self.antigravityQuotaSummaryWindow(snapshot: snapshot, windowMinutes: 5 * 60)
+            secondaryWindow = Self.antigravityQuotaSummaryWindow(snapshot: snapshot, windowMinutes: 7 * 24 * 60)
+        } else {
+            primaryWindow = provider == .mimo ? nil : snapshot.primary
+            secondaryWindow = provider == .mimo ? nil : snapshot.secondary
+        }
         self.handleQuotaWarningTransition(
             provider: provider,
             window: .session,

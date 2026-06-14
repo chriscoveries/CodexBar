@@ -135,6 +135,12 @@ extension UsageStore {
         snapshot: UsageSnapshot) -> (window: RateWindow, source: SessionQuotaWindowSource)?
     {
         guard provider != .mimo else { return nil }
+        if provider == .antigravity, Self.hasAntigravityQuotaSummaryWindows(snapshot: snapshot) {
+            guard let window = Self.antigravityQuotaSummaryWindow(snapshot: snapshot, windowMinutes: 5 * 60) else {
+                return nil
+            }
+            return (window, .antigravityQuotaSummary)
+        }
         if let primary = snapshot.primary, Self.isSessionWindow(primary) {
             return (primary, .primary)
         }
@@ -147,6 +153,28 @@ extension UsageStore {
     private static func isSessionWindow(_ window: RateWindow) -> Bool {
         guard let minutes = window.windowMinutes else { return true }
         return minutes <= 6 * 60
+    }
+
+    private static let antigravityQuotaSummaryWindowIDPrefix = "antigravity-quota-summary-"
+
+    static func hasAntigravityQuotaSummaryWindows(snapshot: UsageSnapshot) -> Bool {
+        snapshot.extraRateWindows?.contains {
+            $0.id.hasPrefix(Self.antigravityQuotaSummaryWindowIDPrefix)
+        } == true
+    }
+
+    static func antigravityQuotaSummaryWindow(
+        snapshot: UsageSnapshot,
+        windowMinutes: Int) -> RateWindow?
+    {
+        snapshot.extraRateWindows?
+            .filter {
+                $0.usageKnown
+                    && $0.id.hasPrefix(Self.antigravityQuotaSummaryWindowIDPrefix)
+                    && $0.window.windowMinutes == windowMinutes
+            }
+            .map(\.window)
+            .max { $0.usedPercent < $1.usedPercent }
     }
 }
 

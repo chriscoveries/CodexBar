@@ -154,11 +154,12 @@ public struct AntigravityStatusSnapshot: Sendable {
             nil
         }
 
-        let primary = (primaryQuota ?? fallbackQuota).map(Self.rateWindow(for:))
+        let primary = primaryQuota.map(Self.rateWindow(for:))
         let secondary = secondaryQuota.map(Self.rateWindow(for:))
         let extraWindows = Self.extraRateWindows(
             from: normalized,
             summaryCandidates: summaryCandidates,
+            compactFallbackModelID: fallbackQuota?.modelId,
             representedPools: Set([
                 primaryQuota.map { _ in AntigravityUsagePool.gemini },
                 secondaryQuota.map { _ in AntigravityUsagePool.claudeGPT },
@@ -555,6 +556,7 @@ public struct AntigravityStatusSnapshot: Sendable {
     private static func extraRateWindows(
         from models: [AntigravityNormalizedModel],
         summaryCandidates: [AntigravityNormalizedModel],
+        compactFallbackModelID: String?,
         representedPools: Set<AntigravityUsagePool>) -> [NamedRateWindow]
     {
         let resetOnlyPoolWindows = [AntigravityUsagePool.gemini, .claudeGPT].compactMap { pool -> NamedRateWindow? in
@@ -578,7 +580,9 @@ public struct AntigravityStatusSnapshot: Sendable {
             .sorted(by: Self.modelOrderPrecedes)
             .map { m in
                 NamedRateWindow(
-                    id: m.quota.modelId,
+                    id: m.quota.modelId == compactFallbackModelID
+                        ? Self.compactFallbackWindowID(modelID: m.quota.modelId)
+                        : m.quota.modelId,
                     title: m.quota.label,
                     window: Self.rateWindow(for: m.quota),
                     usageKnown: m.quota.remainingFraction != nil)
@@ -592,6 +596,10 @@ public struct AntigravityStatusSnapshot: Sendable {
             }
             return lhsPool.sortRank < rhsPool.sortRank
         } + distinctWindows
+    }
+
+    private static func compactFallbackWindowID(modelID: String) -> String {
+        "antigravity-compact-fallback-\(modelID)"
     }
 
     private static func shouldShowDistinctExtraWindow(_ model: AntigravityNormalizedModel) -> Bool {
@@ -744,13 +752,17 @@ public struct AntigravityStatusProbe: Sendable {
     public func fetch(matchingAccountEmail expectedAccountEmail: String? = nil) async throws
         -> AntigravityStatusSnapshot
     {
+        let deadline = Date().addingTimeInterval(self.timeout)
         let processInfos = try await Self.detectProcessInfos(timeout: self.timeout, scope: self.processScope)
         var snapshots: [AntigravityStatusSnapshot] = []
         var lastError: Error?
 
         for processInfo in processInfos {
             do {
-                let snapshot = try await Self.fetch(processInfo: processInfo, timeout: self.timeout)
+                let snapshot = try await Self.fetch(
+                    processInfo: processInfo,
+                    timeout: self.timeout,
+                    deadline: deadline)
                 snapshots.append(snapshot)
             } catch {
                 lastError = error
@@ -768,30 +780,6 @@ public struct AntigravityStatusProbe: Sendable {
             return bestSnapshot
         }
         throw lastError ?? AntigravityStatusProbeError.notRunning
-    }
-
-    private static func fetch(
-        processInfo: ProcessInfoResult,
-        timeout: TimeInterval) async throws -> AntigravityStatusSnapshot
-    {
-        let ports = try await Self.listeningPorts(pid: processInfo.pid, timeout: timeout)
-        let endpoint = try await Self.resolveWorkingEndpoint(
-            candidateEndpoints: Self.connectionCandidates(
-                listeningPorts: ports,
-                languageServerCSRFToken: processInfo.csrfToken,
-                extensionServerPort: processInfo.extensionPort,
-                extensionServerCSRFToken: processInfo.extensionServerCSRFToken),
-            timeout: timeout)
-        let context = RequestContext(
-            endpoints: Self.requestEndpoints(
-                resolvedEndpoint: endpoint,
-                listeningPorts: ports,
-                languageServerCSRFToken: processInfo.csrfToken,
-                extensionServerPort: processInfo.extensionPort,
-                extensionServerCSRFToken: processInfo.extensionServerCSRFToken),
-            timeout: timeout)
-
-        return try await Self.fetchSnapshot(context: context)
     }
 
     public func fetchPlanInfoSummary() async throws -> AntigravityPlanInfoSummary? {
@@ -1340,11 +1328,15 @@ public struct AntigravityStatusProbe: Sendable {
     static func resolveWorkingEndpoint(
         candidateEndpoints: [AntigravityConnectionEndpoint],
         timeout: TimeInterval,
+        deadline: Date? = nil,
         testConnectivity: @escaping @Sendable (AntigravityConnectionEndpoint, TimeInterval) async -> Bool = Self
             .testEndpointConnectivity) async throws -> AntigravityConnectionEndpoint
     {
         for endpoint in candidateEndpoints {
-            let ok = await testConnectivity(endpoint, timeout)
+            guard let attemptTimeout = timeoutForNextAttempt(timeout: timeout, deadline: deadline) else {
+                throw AntigravityStatusProbeError.timedOut
+            }
+            let ok = await testConnectivity(endpoint, attemptTimeout)
             if ok { return endpoint }
         }
         if let fallback = fallbackProbeEndpoint(candidateEndpoints) {
@@ -1432,10 +1424,7 @@ public struct AntigravityStatusProbe: Sendable {
         }
 
         func timeoutForNextAttempt() -> TimeInterval? {
-            guard let deadline else { return self.timeout }
-            let remaining = deadline.timeIntervalSinceNow
-            guard remaining > 0 else { return nil }
-            return min(self.timeout, remaining)
+            AntigravityStatusProbe.timeoutForNextAttempt(timeout: self.timeout, deadline: self.deadline)
         }
     }
 
