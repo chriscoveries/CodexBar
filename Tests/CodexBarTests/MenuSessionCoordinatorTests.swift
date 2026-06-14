@@ -71,3 +71,44 @@ struct MenuSessionCoordinatorTests {
         #expect(!coordinator.isParentRebuildDeferred(menu))
     }
 }
+
+struct MenuRebuildRequestRegistryTests {
+    @Test
+    func `replacement request invalidates prior token without affecting other menus`() {
+        var registry = MenuRebuildRequestRegistry<String>()
+
+        let first = registry.replaceRequest(for: "parent")
+        let child = registry.replaceRequest(for: "child")
+        let replacement = registry.replaceRequest(for: "parent")
+
+        #expect(!registry.isCurrent(first, for: "parent"))
+        #expect(registry.isCurrent(replacement, for: "parent"))
+        #expect(registry.isCurrent(child, for: "child"))
+    }
+
+    @Test
+    func `stale completion cannot clear replacement request`() {
+        var registry = MenuRebuildRequestRegistry<String>()
+        let stale = registry.replaceRequest(for: "menu")
+        let current = registry.replaceRequest(for: "menu")
+
+        let staleDidFinish = registry.finish(stale, for: "menu")
+        #expect(!staleDidFinish)
+        #expect(registry.isCurrent(current, for: "menu"))
+        let currentDidFinish = registry.finish(current, for: "menu")
+        #expect(currentDidFinish)
+        #expect(!registry.isCurrent(current, for: "menu"))
+    }
+
+    @Test
+    func `cancelling all requests keeps future tokens distinct`() {
+        var registry = MenuRebuildRequestRegistry<String>()
+        let cancelled = registry.replaceRequest(for: "menu")
+
+        registry.cancelAll()
+        let replacement = registry.replaceRequest(for: "menu")
+
+        #expect(cancelled != replacement)
+        #expect(registry.isCurrent(replacement, for: "menu"))
+    }
+}

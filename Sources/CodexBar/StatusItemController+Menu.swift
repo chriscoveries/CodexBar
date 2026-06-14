@@ -166,7 +166,7 @@ extension StatusItemController {
         self.openMenus.removeValue(forKey: key)
         self.menuRefreshTasks.removeValue(forKey: key)?.cancel()
         self.openMenuRebuildTasks.removeValue(forKey: key)?.cancel()
-        self.openMenuRebuildTokens.removeValue(forKey: key)
+        self.openMenuRebuildRequests.cancel(for: key)
         self.openMenuRebuildsClosingHostedSubviewMenus.remove(key)
         if let highlightedView = self.highlightedMenuItems.removeValue(forKey: key)?.view {
             (highlightedView as? MenuCardHighlighting)?.setHighlighted(false)

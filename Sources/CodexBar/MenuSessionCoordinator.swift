@@ -118,3 +118,33 @@ struct MenuSessionCoordinator<MenuID: Hashable> {
     }
     #endif
 }
+
+struct MenuRebuildRequestRegistry<MenuID: Hashable> {
+    private var nextToken = 0
+    private(set) var tokens: [MenuID: Int] = [:]
+
+    mutating func replaceRequest(for menuID: MenuID) -> Int {
+        self.nextToken &+= 1
+        self.tokens[menuID] = self.nextToken
+        return self.nextToken
+    }
+
+    func isCurrent(_ token: Int, for menuID: MenuID) -> Bool {
+        self.tokens[menuID] == token
+    }
+
+    @discardableResult
+    mutating func finish(_ token: Int, for menuID: MenuID) -> Bool {
+        guard self.isCurrent(token, for: menuID) else { return false }
+        self.tokens.removeValue(forKey: menuID)
+        return true
+    }
+
+    mutating func cancel(for menuID: MenuID) {
+        self.tokens.removeValue(forKey: menuID)
+    }
+
+    mutating func cancelAll() {
+        self.tokens.removeAll(keepingCapacity: false)
+    }
+}

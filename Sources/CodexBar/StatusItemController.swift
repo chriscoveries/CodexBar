@@ -129,11 +129,9 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
     var menuRefreshTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
     var manualRefreshTask: Task<Void, Never>?
     var closedMenuRebuildTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
-    var closedMenuRebuildTokens: [ObjectIdentifier: Int] = [:]
-    var closedMenuRebuildTokenCounter = 0
+    var closedMenuRebuildRequests = MenuRebuildRequestRegistry<ObjectIdentifier>()
     var openMenuRebuildTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
-    var openMenuRebuildTokens: [ObjectIdentifier: Int] = [:]
-    var openMenuRebuildTokenCounter = 0
+    var openMenuRebuildRequests = MenuRebuildRequestRegistry<ObjectIdentifier>()
     var menuIdentitySignatures: [ObjectIdentifier: String] = [:]
     var codexAccountMenuProjectionRevalidationTask: Task<Void, Never>?
     var openMenuRebuildsClosingHostedSubviewMenus: Set<ObjectIdentifier> = []
@@ -862,7 +860,7 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
             self.openMenus.removeValue(forKey: menuID)
             self.menuRefreshTasks.removeValue(forKey: menuID)?.cancel()
             self.openMenuRebuildTasks.removeValue(forKey: menuID)?.cancel()
-            self.openMenuRebuildTokens.removeValue(forKey: menuID)
+            self.openMenuRebuildRequests.cancel(for: menuID)
             self.openMenuRebuildsClosingHostedSubviewMenus.remove(menuID)
             self.highlightedMenuItems.removeValue(forKey: menuID)
         }
@@ -940,6 +938,10 @@ extension StatusItemController {
 
     var parentMenuRebuildsDeferredDuringTracking: Set<ObjectIdentifier> {
         self.menuSession.parentRebuildsDeferredDuringTracking
+    }
+
+    var closedMenuRebuildTokens: [ObjectIdentifier: Int] {
+        self.closedMenuRebuildRequests.tokens
     }
 }
 #endif

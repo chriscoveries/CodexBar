@@ -218,9 +218,7 @@ extension StatusItemController {
         guard !self.isMenuDataRefreshInFlight else { return }
         let key = ObjectIdentifier(menu)
         let provider = self.menuProvider(for: menu)
-        self.closedMenuRebuildTokenCounter &+= 1
-        let rebuildToken = self.closedMenuRebuildTokenCounter
-        self.closedMenuRebuildTokens[key] = rebuildToken
+        let rebuildToken = self.closedMenuRebuildRequests.replaceRequest(for: key)
         self.closedMenuRebuildTasks[key]?.cancel()
         self.closedMenuRebuildTasks[key] = Task { @MainActor [weak self, weak menu] in
             let delay = Self.closedMenuPreparationDelay
@@ -232,13 +230,12 @@ extension StatusItemController {
             guard !Task.isCancelled else { return }
             guard let self else { return }
             defer {
-                if self.closedMenuRebuildTokens[key] == rebuildToken {
+                if self.closedMenuRebuildRequests.finish(rebuildToken, for: key) {
                     self.closedMenuRebuildTasks.removeValue(forKey: key)
-                    self.closedMenuRebuildTokens.removeValue(forKey: key)
                 }
             }
             guard let menu else { return }
-            guard self.closedMenuRebuildTokens[key] == rebuildToken else { return }
+            guard self.closedMenuRebuildRequests.isCurrent(rebuildToken, for: key) else { return }
             guard !self.hasPreparedForAppShutdown else { return }
             guard !self.isMenuDataRefreshInFlight else { return }
             guard self.openMenus[ObjectIdentifier(menu)] == nil else { return }
@@ -262,7 +259,7 @@ extension StatusItemController {
     func cancelClosedMenuRebuild(_ menu: NSMenu) {
         let key = ObjectIdentifier(menu)
         self.closedMenuRebuildTasks.removeValue(forKey: key)?.cancel()
-        self.closedMenuRebuildTokens.removeValue(forKey: key)
+        self.closedMenuRebuildRequests.cancel(for: key)
     }
 
     func cancelAllClosedMenuRebuilds() {
@@ -270,7 +267,7 @@ extension StatusItemController {
             task.cancel()
         }
         self.closedMenuRebuildTasks.removeAll(keepingCapacity: false)
-        self.closedMenuRebuildTokens.removeAll(keepingCapacity: false)
+        self.closedMenuRebuildRequests.cancelAll()
     }
 
     func menuNeedsRefresh(_ menu: NSMenu) -> Bool {
