@@ -743,7 +743,7 @@ public struct AntigravityStatusProbe: Sendable {
     {
         let deadline = Date().addingTimeInterval(self.timeout)
         let processInfos = try await Self.detectProcessInfos(timeout: self.timeout, scope: self.processScope)
-        let result = await Self.fetchProcessSnapshots(processInfos: processInfos) { processInfo in
+        let result = try await Self.fetchProcessSnapshots(processInfos: processInfos) { processInfo in
             try await Self.fetch(
                 processInfo: processInfo,
                 timeout: self.timeout,

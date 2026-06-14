@@ -46,7 +46,7 @@ private final class AntigravityConcurrencyRecorder: @unchecked Sendable {
 
 struct AntigravityDeadlineTests {
     @Test
-    func `process candidates probe concurrently while preserving result order`() async {
+    func `process candidates probe concurrently while preserving result order`() async throws {
         let processInfos = [
             AntigravityStatusProbe.ProcessInfoResult(
                 pid: 1,
@@ -63,7 +63,9 @@ struct AntigravityDeadlineTests {
         ]
         let concurrency = AntigravityConcurrencyRecorder()
 
-        let result = await AntigravityStatusProbe.fetchProcessSnapshots(processInfos: processInfos) { processInfo in
+        let result = try await AntigravityStatusProbe.fetchProcessSnapshots(
+            processInfos: processInfos)
+        { processInfo in
             concurrency.begin()
             defer { concurrency.end() }
             if processInfo.pid == 1 {
@@ -83,7 +85,7 @@ struct AntigravityDeadlineTests {
     }
 
     @Test
-    func `process candidate transport error preserves url error identity`() async {
+    func `process candidate transport error preserves url error identity`() async throws {
         let processInfo = AntigravityStatusProbe.ProcessInfoResult(
             pid: 1,
             extensionPort: nil,
@@ -91,11 +93,41 @@ struct AntigravityDeadlineTests {
             csrfToken: "token",
             commandLine: "command")
 
-        let result = await AntigravityStatusProbe.fetchProcessSnapshots(processInfos: [processInfo]) { _ in
+        let result = try await AntigravityStatusProbe.fetchProcessSnapshots(processInfos: [processInfo]) { _ in
             throw URLError(.cannotConnectToHost)
         }
 
         #expect((result.lastError as? URLError)?.code == .cannotConnectToHost)
+    }
+
+    @Test
+    func `process candidate cancellation rejects partial success`() async {
+        let processInfos = [
+            AntigravityStatusProbe.ProcessInfoResult(
+                pid: 1,
+                extensionPort: nil,
+                extensionServerCSRFToken: nil,
+                csrfToken: "first",
+                commandLine: "first"),
+            AntigravityStatusProbe.ProcessInfoResult(
+                pid: 2,
+                extensionPort: nil,
+                extensionServerCSRFToken: nil,
+                csrfToken: "second",
+                commandLine: "second"),
+        ]
+
+        await #expect(throws: CancellationError.self) {
+            try await AntigravityStatusProbe.fetchProcessSnapshots(processInfos: processInfos) { processInfo in
+                if processInfo.pid == 2 {
+                    throw CancellationError()
+                }
+                return AntigravityStatusSnapshot(
+                    modelQuotas: [],
+                    accountEmail: "partial@example.com",
+                    accountPlan: nil)
+            }
+        }
     }
 
     @Test

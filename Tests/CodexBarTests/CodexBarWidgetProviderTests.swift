@@ -63,6 +63,10 @@ struct CodexBarWidgetProviderTests {
         #expect(rows.map(\.title) == ["Gemini Weekly", "Claude + GPT Session"])
         #expect(rows.compactMap(\.percentLeft) == [20, 5])
         #expect(WidgetUsageRow.smallWidgetRowLimit(for: entry) == 2)
+        #expect(WidgetUsageRow.mediumWidgetRowLimit(for: entry) == 3)
+        #expect(WidgetUsageRow.rows(
+            for: entry,
+            limit: WidgetUsageRow.mediumWidgetRowLimit(for: entry)).count == 3)
     }
 
     @Test

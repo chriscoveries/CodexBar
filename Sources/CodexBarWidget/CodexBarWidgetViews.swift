@@ -345,7 +345,10 @@ private struct SwitcherMediumUsageView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            ForEach(WidgetUsageRow.rows(for: self.entry)) { row in
+            ForEach(WidgetUsageRow.rows(
+                for: self.entry,
+                limit: WidgetUsageRow.mediumWidgetRowLimit(for: self.entry)))
+            { row in
                 UsageBarRow(
                     title: row.title,
                     percentLeft: row.percentLeft,
@@ -440,7 +443,10 @@ private struct MediumUsageView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HeaderView(provider: self.entry.provider, updatedAt: self.entry.updatedAt)
-            ForEach(WidgetUsageRow.rows(for: self.entry)) { row in
+            ForEach(WidgetUsageRow.rows(
+                for: self.entry,
+                limit: WidgetUsageRow.mediumWidgetRowLimit(for: self.entry)))
+            { row in
                 UsageBarRow(
                     title: row.title,
                     percentLeft: row.percentLeft,
@@ -512,6 +518,17 @@ struct WidgetUsageRow: Identifiable, Equatable {
     let percentLeft: Double?
 
     static func smallWidgetRowLimit(for entry: WidgetSnapshot.ProviderEntry) -> Int? {
+        self.antigravityQuotaSummaryRowLimit(for: entry, limit: 2)
+    }
+
+    static func mediumWidgetRowLimit(for entry: WidgetSnapshot.ProviderEntry) -> Int? {
+        self.antigravityQuotaSummaryRowLimit(for: entry, limit: 3)
+    }
+
+    private static func antigravityQuotaSummaryRowLimit(
+        for entry: WidgetSnapshot.ProviderEntry,
+        limit: Int) -> Int?
+    {
         guard entry.provider == .antigravity,
               entry.usageRows?.contains(where: {
                   $0.id.hasPrefix("antigravity-quota-summary-")
@@ -519,7 +536,7 @@ struct WidgetUsageRow: Identifiable, Equatable {
         else {
             return nil
         }
-        return 2
+        return limit
     }
 
     static func rows(for entry: WidgetSnapshot.ProviderEntry, limit: Int? = nil) -> [WidgetUsageRow] {

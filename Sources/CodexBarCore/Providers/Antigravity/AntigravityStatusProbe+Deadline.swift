@@ -43,7 +43,7 @@ extension AntigravityStatusProbe {
     static func fetchProcessSnapshots(
         processInfos: [ProcessInfoResult],
         fetch: @escaping @Sendable (ProcessInfoResult) async throws -> AntigravityStatusSnapshot)
-        async -> (snapshots: [AntigravityStatusSnapshot], lastError: Error?)
+        async throws -> (snapshots: [AntigravityStatusSnapshot], lastError: Error?)
     {
         let outcomes = await withTaskGroup(of: ProcessSnapshotFetchOutcome.self) { group in
             for (index, processInfo) in processInfos.enumerated() {
@@ -73,6 +73,9 @@ extension AntigravityStatusProbe {
             case let .success(_, snapshot):
                 snapshots.append(snapshot)
             case let .failure(_, pid, failure):
+                if case .cancellation = failure {
+                    throw CancellationError()
+                }
                 let error = failure.error
                 lastError = error
                 Self.processProbeLog.debug("Antigravity local process probe failed", metadata: [
