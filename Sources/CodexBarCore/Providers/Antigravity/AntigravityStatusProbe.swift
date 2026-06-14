@@ -851,26 +851,20 @@ public struct AntigravityStatusProbe: Sendable {
         return running ? "running" : nil
     }
 
-    // MARK: - CLI HTTPS Fetch
+    // MARK: - CLI Local Fetch
 
     /// Fetch usage data from a known set of local ports (discovered via
     /// ``AntigravityCLISession``'s ``pid``), without requiring a running
     /// ``language_server`` process or CSRF token.
     ///
-    /// The ``agy`` CLI exposes the same ``GetUserStatus`` gRPC-web endpoint on
-    /// its HTTPS port as the desktop ``language_server``. Unlike the desktop
-    /// endpoint, it does not require a CSRF token header.
+    /// The ``agy`` CLI exposes the same ``GetUserStatus`` gRPC-web endpoint as
+    /// the desktop ``language_server``. Unlike the desktop endpoint, it does
+    /// not require a CSRF token header.
     public func fetchFromPorts(_ ports: [Int], deadline: Date? = nil) async throws -> AntigravityStatusSnapshot {
         guard !ports.isEmpty else {
             throw AntigravityStatusProbeError.portDetectionFailed("no listening ports found")
         }
-        let endpoints = ports.map {
-            AntigravityConnectionEndpoint(
-                scheme: "https",
-                port: $0,
-                csrfToken: "",
-                source: .cliHTTPS)
-        }
+        let endpoints = Self.cliEndpoints(ports: ports)
         let context = RequestContext(endpoints: endpoints, timeout: self.timeout, deadline: deadline)
         return try await Self.fetchSnapshot(context: context)
     }
@@ -1293,12 +1287,14 @@ public struct AntigravityStatusProbe: Sendable {
         listeningPorts: [Int],
         languageServerCSRFToken: String) -> [AntigravityConnectionEndpoint]
     {
-        listeningPorts.map {
-            AntigravityConnectionEndpoint(
-                scheme: "https",
-                port: $0,
-                csrfToken: languageServerCSRFToken,
-                source: .languageServer)
+        listeningPorts.flatMap { port in
+            self.localProbeSchemes.map { scheme in
+                AntigravityConnectionEndpoint(
+                    scheme: scheme,
+                    port: port,
+                    csrfToken: languageServerCSRFToken,
+                    source: .languageServer)
+            }
         }
     }
 

@@ -135,10 +135,10 @@ struct AntigravityStatusFetchStrategy: ProviderFetchStrategy {
 }
 
 /// When the Antigravity 2.0 app is closed or unavailable, this strategy spawns
-/// or reuses ``agy`` and talks to the HTTPS localhost server embedded in that
-/// CLI process. ``agy`` is an interactive REPL, not a query command, so
-/// CodexBar never scrapes TUI output here; it only keeps the process alive long
-/// enough for the server to answer quota endpoints.
+/// or reuses ``agy`` and talks to the localhost server embedded in that CLI
+/// process. ``agy`` is an interactive REPL, not a query command, so CodexBar
+/// never scrapes TUI output here; it only keeps the process alive long enough
+/// for the server to answer quota endpoints.
 struct AntigravityCLIHTTPSFetchStrategy: ProviderFetchStrategy {
     static let sourceLabel = "cli"
     let id: String = "antigravity.cli-https"
@@ -153,14 +153,10 @@ struct AntigravityCLIHTTPSFetchStrategy: ProviderFetchStrategy {
     }
 
     func isAvailable(_ context: ProviderFetchContext) async -> Bool {
-        guard Self.supportsLocalhostServerTrust else { return false }
-        return BinaryLocator.resolveAntigravityBinary(env: context.env) != nil
+        BinaryLocator.resolveAntigravityBinary(env: context.env) != nil
     }
 
     func fetch(_ context: ProviderFetchContext) async throws -> ProviderFetchResult {
-        guard Self.supportsLocalhostServerTrust else {
-            throw AntigravityStatusProbeError.notRunning
-        }
         guard let binary = BinaryLocator.resolveAntigravityBinary(env: context.env) else {
             throw AntigravityStatusProbeError.notRunning
         }
@@ -170,14 +166,6 @@ struct AntigravityCLIHTTPSFetchStrategy: ProviderFetchStrategy {
             resetAfterFetch: Self.shouldResetSessionAfterFetch(context))
         try AntigravitySelectedAccountGuard.validate(result.usage, context: context)
         return result
-    }
-
-    private static var supportsLocalhostServerTrust: Bool {
-        #if os(Linux)
-        false
-        #else
-        true
-        #endif
     }
 
     private func fetchUsingWarmSession(
