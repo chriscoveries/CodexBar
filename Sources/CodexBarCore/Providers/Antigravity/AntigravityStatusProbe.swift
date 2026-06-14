@@ -756,32 +756,20 @@ public struct AntigravityStatusProbe: Sendable {
     {
         let deadline = Date().addingTimeInterval(self.timeout)
         let processInfos = try await Self.detectProcessInfos(timeout: self.timeout, scope: self.processScope)
-        var snapshots: [AntigravityStatusSnapshot] = []
-        var lastError: Error?
-
-        for processInfo in processInfos {
-            do {
-                let snapshot = try await Self.fetch(
-                    processInfo: processInfo,
-                    timeout: self.timeout,
-                    deadline: deadline)
-                snapshots.append(snapshot)
-            } catch {
-                lastError = error
-                Self.log.debug("Antigravity local process probe failed", metadata: [
-                    "pid": "\(processInfo.pid)",
-                    "error": error.localizedDescription,
-                ])
-            }
+        let result = await Self.fetchProcessSnapshots(processInfos: processInfos) { processInfo in
+            try await Self.fetch(
+                processInfo: processInfo,
+                timeout: self.timeout,
+                deadline: deadline)
         }
 
         if let bestSnapshot = Self.preferredLocalSnapshot(
-            snapshots,
+            result.snapshots,
             matchingAccountEmail: expectedAccountEmail)
         {
             return bestSnapshot
         }
-        throw lastError ?? AntigravityStatusProbeError.notRunning
+        throw result.lastError ?? AntigravityStatusProbeError.notRunning
     }
 
     public func fetchPlanInfoSummary() async throws -> AntigravityPlanInfoSummary? {

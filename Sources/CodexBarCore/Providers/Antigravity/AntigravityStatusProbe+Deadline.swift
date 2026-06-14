@@ -1,6 +1,61 @@
 import Foundation
 
 extension AntigravityStatusProbe {
+    private static let processProbeLog = CodexBarLog.logger(LogCategories.antigravity)
+
+    private enum ProcessSnapshotFetchOutcome {
+        case success(index: Int, snapshot: AntigravityStatusSnapshot)
+        case failure(index: Int, pid: Int, error: AntigravityStatusProbeError)
+    }
+
+    static func fetchProcessSnapshots(
+        processInfos: [ProcessInfoResult],
+        fetch: @escaping @Sendable (ProcessInfoResult) async throws -> AntigravityStatusSnapshot)
+        async -> (snapshots: [AntigravityStatusSnapshot], lastError: AntigravityStatusProbeError?)
+    {
+        let outcomes = await withTaskGroup(of: ProcessSnapshotFetchOutcome.self) { group in
+            for (index, processInfo) in processInfos.enumerated() {
+                group.addTask {
+                    do {
+                        return try await .success(index: index, snapshot: fetch(processInfo))
+                    } catch let error as AntigravityStatusProbeError {
+                        return .failure(index: index, pid: processInfo.pid, error: error)
+                    } catch {
+                        return .failure(
+                            index: index,
+                            pid: processInfo.pid,
+                            error: .apiError(error.localizedDescription))
+                    }
+                }
+            }
+
+            var ordered = [ProcessSnapshotFetchOutcome?](repeating: nil, count: processInfos.count)
+            for await outcome in group {
+                switch outcome {
+                case let .success(index, _), let .failure(index, _, _):
+                    ordered[index] = outcome
+                }
+            }
+            return ordered.compactMap(\.self)
+        }
+
+        var snapshots: [AntigravityStatusSnapshot] = []
+        var lastError: AntigravityStatusProbeError?
+        for outcome in outcomes {
+            switch outcome {
+            case let .success(_, snapshot):
+                snapshots.append(snapshot)
+            case let .failure(_, pid, error):
+                lastError = error
+                Self.processProbeLog.debug("Antigravity local process probe failed", metadata: [
+                    "pid": "\(pid)",
+                    "error": error.localizedDescription,
+                ])
+            }
+        }
+        return (snapshots, lastError)
+    }
+
     static func fetch(
         processInfo: ProcessInfoResult,
         timeout: TimeInterval,

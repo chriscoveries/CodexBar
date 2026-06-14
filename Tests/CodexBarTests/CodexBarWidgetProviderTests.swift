@@ -62,6 +62,31 @@ struct CodexBarWidgetProviderTests {
 
         #expect(rows.map(\.title) == ["Gemini Weekly", "Claude + GPT Session"])
         #expect(rows.compactMap(\.percentLeft) == [20, 5])
+        #expect(WidgetUsageRow.smallWidgetRowLimit(for: entry) == 2)
+    }
+
+    @Test
+    func `small widget preserves tertiary rows for other providers`() {
+        let entry = WidgetSnapshot.ProviderEntry(
+            provider: .cursor,
+            updatedAt: Date(),
+            primary: nil,
+            secondary: nil,
+            tertiary: nil,
+            usageRows: [
+                WidgetSnapshot.WidgetUsageRowSnapshot(id: "one", title: "One", percentLeft: 90),
+                WidgetSnapshot.WidgetUsageRowSnapshot(id: "two", title: "Two", percentLeft: 80),
+                WidgetSnapshot.WidgetUsageRowSnapshot(id: "three", title: "Three", percentLeft: 70),
+            ],
+            creditsRemaining: nil,
+            codeReviewRemainingPercent: nil,
+            tokenUsage: nil,
+            dailyUsage: [])
+
+        let limit = WidgetUsageRow.smallWidgetRowLimit(for: entry)
+
+        #expect(limit == nil)
+        #expect(WidgetUsageRow.rows(for: entry, limit: limit).map(\.id) == ["one", "two", "three"])
     }
 
     @Test

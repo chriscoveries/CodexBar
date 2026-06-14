@@ -321,7 +321,10 @@ private struct SwitcherSmallUsageView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ForEach(WidgetUsageRow.rows(for: self.entry, limit: 2)) { row in
+            ForEach(WidgetUsageRow.rows(
+                for: self.entry,
+                limit: WidgetUsageRow.smallWidgetRowLimit(for: self.entry)))
+            { row in
                 UsageBarRow(
                     title: row.title,
                     percentLeft: row.percentLeft,
@@ -411,7 +414,10 @@ private struct SmallUsageView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HeaderView(provider: self.entry.provider, updatedAt: self.entry.updatedAt)
-            ForEach(WidgetUsageRow.rows(for: self.entry, limit: 2)) { row in
+            ForEach(WidgetUsageRow.rows(
+                for: self.entry,
+                limit: WidgetUsageRow.smallWidgetRowLimit(for: self.entry)))
+            { row in
                 UsageBarRow(
                     title: row.title,
                     percentLeft: row.percentLeft,
@@ -504,6 +510,17 @@ struct WidgetUsageRow: Identifiable, Equatable {
     let id: String
     let title: String
     let percentLeft: Double?
+
+    static func smallWidgetRowLimit(for entry: WidgetSnapshot.ProviderEntry) -> Int? {
+        guard entry.provider == .antigravity,
+              entry.usageRows?.contains(where: {
+                  $0.id.hasPrefix("antigravity-quota-summary-")
+              }) == true
+        else {
+            return nil
+        }
+        return 2
+    }
 
     static func rows(for entry: WidgetSnapshot.ProviderEntry, limit: Int? = nil) -> [WidgetUsageRow] {
         let rows: [WidgetUsageRow]

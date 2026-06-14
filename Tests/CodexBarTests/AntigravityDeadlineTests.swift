@@ -19,7 +19,69 @@ private final class AntigravityTimeoutRecorder: @unchecked Sendable {
     }
 }
 
+private final class AntigravityConcurrencyRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var activeCount = 0
+    private var maximumActiveCount = 0
+
+    func begin() {
+        self.lock.withLock {
+            self.activeCount += 1
+            self.maximumActiveCount = max(self.maximumActiveCount, self.activeCount)
+        }
+    }
+
+    func end() {
+        self.lock.withLock {
+            self.activeCount -= 1
+        }
+    }
+
+    func maximum() -> Int {
+        self.lock.withLock {
+            self.maximumActiveCount
+        }
+    }
+}
+
 struct AntigravityDeadlineTests {
+    @Test
+    func `process candidates probe concurrently while preserving result order`() async {
+        let processInfos = [
+            AntigravityStatusProbe.ProcessInfoResult(
+                pid: 1,
+                extensionPort: nil,
+                extensionServerCSRFToken: nil,
+                csrfToken: "first",
+                commandLine: "first"),
+            AntigravityStatusProbe.ProcessInfoResult(
+                pid: 2,
+                extensionPort: nil,
+                extensionServerCSRFToken: nil,
+                csrfToken: "second",
+                commandLine: "second"),
+        ]
+        let concurrency = AntigravityConcurrencyRecorder()
+
+        let result = await AntigravityStatusProbe.fetchProcessSnapshots(processInfos: processInfos) { processInfo in
+            concurrency.begin()
+            defer { concurrency.end() }
+            if processInfo.pid == 1 {
+                try await Task.sleep(for: .milliseconds(120))
+            } else {
+                try await Task.sleep(for: .milliseconds(20))
+            }
+            return AntigravityStatusSnapshot(
+                modelQuotas: [],
+                accountEmail: "\(processInfo.pid)@example.com",
+                accountPlan: nil)
+        }
+
+        #expect(concurrency.maximum() == 2)
+        #expect(result.snapshots.map(\.accountEmail) == ["1@example.com", "2@example.com"])
+        #expect(result.lastError == nil)
+    }
+
     @Test
     func `shared deadline reduces later probe timeout`() async throws {
         let endpoints = [
