@@ -6,9 +6,11 @@
 - Menu bar: avoid a one-time visible menu rebuild after first-open background data arrives.
 - Settings: use high-contrast selected-content colors for provider sidebar text and icons.
 
+### Changed
+- Antigravity: prefer app and `agy` quota summaries, group usage into Gemini and Claude + GPT session/weekly pools, and preserve IDE and OAuth fallbacks. Thanks @Zihao-Qi!
+
 ### Fixed
 - Settings: make the cost history window directly editable by keyboard while preserving the existing stepper and 1–365 day bounds (fixes #1499). Thanks @kiranmagic7!
-
 ## 0.35.0 — 2026-06-14
 
 ### Added
