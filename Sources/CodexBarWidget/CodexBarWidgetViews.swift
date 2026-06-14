@@ -553,7 +553,7 @@ struct WidgetUsageRow: Identifiable, Equatable {
            limit == 2,
            rows.contains(where: { $0.id.hasPrefix("antigravity-quota-summary-") })
         {
-            return ["Gemini ", "Claude + GPT "].compactMap { titlePrefix in
+            var selected = ["Gemini ", "Claude + GPT "].compactMap { titlePrefix in
                 rows
                     .filter { $0.title.hasPrefix(titlePrefix) }
                     .min { lhs, rhs in
@@ -569,6 +569,24 @@ struct WidgetUsageRow: Identifiable, Equatable {
                         }
                     }
             }
+            let selectedIDs = Set(selected.map(\.id))
+            let fallbackRows = rows.enumerated()
+                .filter { !selectedIDs.contains($0.element.id) }
+                .sorted { lhs, rhs in
+                    switch (lhs.element.percentLeft, rhs.element.percentLeft) {
+                    case let (.some(left), .some(right)):
+                        left == right ? lhs.offset < rhs.offset : left < right
+                    case (.some, .none):
+                        true
+                    case (.none, .some):
+                        false
+                    case (.none, .none):
+                        lhs.offset < rhs.offset
+                    }
+                }
+                .map(\.element)
+            selected.append(contentsOf: fallbackRows.prefix(max(0, limit - selected.count)))
+            return selected
         }
         return Array(rows.prefix(max(0, limit)))
     }

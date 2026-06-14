@@ -1487,7 +1487,7 @@ public struct AntigravityStatusProbe: Sendable {
                 payload: RequestPayload(
                     path: self.getUserStatusPath,
                     body: self.defaultRequestBody()),
-                context: context,
+                context: self.legacyUserStatusRequestContext(from: context),
                 send: send,
                 parse: self.parseUserStatusResponse)
         } catch {
@@ -1499,6 +1499,16 @@ public struct AntigravityStatusProbe: Sendable {
                 send: send,
                 parse: self.parseCommandModelResponse)
         }
+    }
+
+    private static func legacyUserStatusRequestContext(from context: RequestContext) -> RequestContext {
+        guard let deadline = context.deadline else { return context }
+        let remaining = max(0, deadline.timeIntervalSinceNow)
+        let userStatusBudget = remaining / 2
+        return RequestContext(
+            endpoints: context.endpoints,
+            timeout: min(context.timeout, userStatusBudget),
+            deadline: Date().addingTimeInterval(userStatusBudget))
     }
 
     private static func quotaSummaryRequestContext(from context: RequestContext) -> RequestContext {

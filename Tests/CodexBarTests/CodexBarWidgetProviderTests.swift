@@ -122,6 +122,34 @@ struct CodexBarWidgetProviderTests {
     }
 
     @Test
+    func `small antigravity widget keeps nonstandard quota groups visible`() {
+        let entry = WidgetSnapshot.ProviderEntry(
+            provider: .antigravity,
+            updatedAt: Date(),
+            primary: nil,
+            secondary: nil,
+            tertiary: nil,
+            usageRows: [
+                WidgetSnapshot.WidgetUsageRowSnapshot(
+                    id: "antigravity-quota-summary-other-session",
+                    title: "Other Session",
+                    percentLeft: 70),
+                WidgetSnapshot.WidgetUsageRowSnapshot(
+                    id: "antigravity-quota-summary-other-weekly",
+                    title: "Other Weekly",
+                    percentLeft: 40),
+            ],
+            creditsRemaining: nil,
+            codeReviewRemainingPercent: nil,
+            tokenUsage: nil,
+            dailyUsage: [])
+
+        let rows = WidgetUsageRow.rows(for: entry, limit: 2)
+
+        #expect(rows.map(\.title) == ["Other Weekly", "Other Session"])
+    }
+
+    @Test
     func `provider choice supports alibaba`() {
         #expect(ProviderChoice(provider: .alibaba) == .alibaba)
         #expect(ProviderChoice.alibaba.provider == .alibaba)

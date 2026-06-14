@@ -253,7 +253,7 @@ struct UsageStoreSessionQuotaTransitionTests {
     }
 
     @Test
-    func `antigravity legacy session notification uses duration across family slots`() {
+    func `antigravity preserves session notifications for durationless legacy family lanes`() {
         let settings = self.makeSettings(suiteName: "UsageStoreSessionQuotaTransitionTests-antigravity-legacy-session")
         settings.refreshFrequency = .manual
         settings.statusChecksEnabled = false

@@ -179,6 +179,7 @@ extension UsageStore {
             [snapshot.primary, snapshot.secondary, snapshot.tertiary]
                 .compactMap(\.self)
                 .filter {
+                    // Legacy Antigravity family lanes historically drive session notifications.
                     $0.windowMinutes == windowMinutes
                         || (windowMinutes == 5 * 60 && $0.windowMinutes == nil)
                 }
