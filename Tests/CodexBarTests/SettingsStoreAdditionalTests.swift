@@ -7,7 +7,7 @@ import Testing
 struct SettingsStoreAdditionalTests {
     @Test
     @MainActor
-    func `antigravity two pool migration preserves explicit metric meaning`() {
+    func `antigravity two pool migration preserves released metric meaning`() {
         let primaryDefaults = UserDefaults(suiteName: #function + ".primary")!
         primaryDefaults.removePersistentDomain(forName: #function + ".primary")
         primaryDefaults.set(
@@ -41,6 +41,17 @@ struct SettingsStoreAdditionalTests {
         let tertiarySettings = SettingsStore(userDefaults: tertiaryDefaults)
 
         #expect(tertiarySettings.menuBarMetricPreference(for: .antigravity) == .primary)
+
+        let migratedDefaults = UserDefaults(suiteName: #function + ".migrated")!
+        migratedDefaults.removePersistentDomain(forName: #function + ".migrated")
+        migratedDefaults.set(
+            [UsageProvider.antigravity.rawValue: MenuBarMetricPreference.primary.rawValue],
+            forKey: "menuBarMetricPreferences")
+        migratedDefaults.set(true, forKey: "antigravityTwoPoolMetricPreferenceMigrated")
+
+        let migratedSettings = SettingsStore(userDefaults: migratedDefaults)
+
+        #expect(migratedSettings.menuBarMetricPreference(for: .antigravity) == .primary)
     }
 
     @Test

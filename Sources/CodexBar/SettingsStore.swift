@@ -478,6 +478,8 @@ extension SettingsStore {
         let migrationKey = "antigravityTwoPoolMetricPreferenceMigrated"
         guard !userDefaults.bool(forKey: migrationKey) else { return preferences }
 
+        // Tagged builds through v0.35 used primary=Claude, secondary=Gemini Pro,
+        // and tertiary=Gemini Flash. Remap those meanings once to the two-pool schema.
         var migrated = preferences
         switch MenuBarMetricPreference(rawValue: migrated[UsageProvider.antigravity.rawValue] ?? "") {
         case .primary:
