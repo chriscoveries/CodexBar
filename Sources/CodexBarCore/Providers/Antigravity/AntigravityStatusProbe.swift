@@ -1460,7 +1460,7 @@ public struct AntigravityStatusProbe: Sendable {
                 payload: RequestPayload(
                     path: self.quotaSummaryPath,
                     body: ["forceRefresh": true]),
-                context: context,
+                context: self.quotaSummaryRequestContext(from: context),
                 send: send,
                 parse: self.parseQuotaSummaryResponse)
             guard quotaSummary.quotaSummary?.groups.contains(where: { group in
@@ -1499,6 +1499,16 @@ public struct AntigravityStatusProbe: Sendable {
                 send: send,
                 parse: self.parseCommandModelResponse)
         }
+    }
+
+    private static func quotaSummaryRequestContext(from context: RequestContext) -> RequestContext {
+        guard let deadline = context.deadline else { return context }
+        let remaining = max(0, deadline.timeIntervalSinceNow)
+        let quotaSummaryBudget = remaining / 2
+        return RequestContext(
+            endpoints: context.endpoints,
+            timeout: min(context.timeout, quotaSummaryBudget),
+            deadline: Date().addingTimeInterval(quotaSummaryBudget))
     }
 
     private static func identityRequestContext(from context: RequestContext) -> RequestContext {

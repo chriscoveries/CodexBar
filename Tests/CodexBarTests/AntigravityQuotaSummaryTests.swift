@@ -185,6 +185,37 @@ struct AntigravityQuotaSummaryTests {
         ])
         #expect(usage.primary?.remainingPercent.rounded() == 90)
     }
+
+    @Test
+    func `quota summary timeout reserves deadline for legacy fallback`() async throws {
+        let endpoint = AntigravityStatusProbe.AntigravityConnectionEndpoint(
+            scheme: "https",
+            port: 64440,
+            csrfToken: "token",
+            source: .languageServer)
+        let paths = AntigravityQuotaSummaryPathRecorder()
+
+        let snapshot = try await AntigravityStatusProbe.fetchSnapshot(
+            context: AntigravityStatusProbe.RequestContext(
+                endpoints: [endpoint],
+                timeout: 1,
+                deadline: Date().addingTimeInterval(0.2)),
+            send: { payload, _, timeout in
+                paths.append(payload.path)
+                if payload.path.contains("RetrieveUserQuotaSummary") {
+                    try await Task.sleep(for: .seconds(timeout))
+                    throw AntigravityStatusProbeError.timedOut
+                }
+                return Data(antigravityUserStatusJSON().utf8)
+            })
+        let usage = try snapshot.toUsageSnapshot()
+
+        #expect(paths.snapshot() == [
+            "/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary",
+            "/exa.language_server_pb.LanguageServerService/GetUserStatus",
+        ])
+        #expect(usage.primary?.remainingPercent.rounded() == 90)
+    }
 }
 
 private func antigravityQuotaSummaryJSON() -> String {
