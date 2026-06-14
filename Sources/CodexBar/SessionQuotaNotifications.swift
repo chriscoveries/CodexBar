@@ -178,7 +178,10 @@ extension UsageStore {
         } else {
             [snapshot.primary, snapshot.secondary, snapshot.tertiary]
                 .compactMap(\.self)
-                .filter { $0.windowMinutes == windowMinutes }
+                .filter {
+                    $0.windowMinutes == windowMinutes
+                        || (windowMinutes == 5 * 60 && $0.windowMinutes == nil)
+                }
         }
         return windows.max { $0.usedPercent < $1.usedPercent }
     }

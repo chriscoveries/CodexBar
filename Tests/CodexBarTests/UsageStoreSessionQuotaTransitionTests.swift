@@ -796,12 +796,12 @@ struct UsageStoreSessionQuotaTransitionTests {
         UsageSnapshot(
             primary: RateWindow(
                 usedPercent: geminiUsed,
-                windowMinutes: 5 * 60,
+                windowMinutes: nil,
                 resetsAt: nil,
                 resetDescription: nil),
             secondary: RateWindow(
                 usedPercent: claudeUsed,
-                windowMinutes: 5 * 60,
+                windowMinutes: nil,
                 resetsAt: nil,
                 resetDescription: nil),
             updatedAt: Date())

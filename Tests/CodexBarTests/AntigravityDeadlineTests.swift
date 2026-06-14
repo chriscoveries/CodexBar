@@ -83,7 +83,7 @@ struct AntigravityDeadlineTests {
     }
 
     @Test
-    func `shared deadline reduces later probe timeout`() async throws {
+    func `shared deadline reserves time for later endpoint probes`() async throws {
         let endpoints = [
             AntigravityStatusProbe.AntigravityConnectionEndpoint(
                 scheme: "https",
@@ -106,7 +106,7 @@ struct AntigravityDeadlineTests {
             testConnectivity: { endpoint, timeout in
                 recorder.append(timeout)
                 if endpoint.port == 64001 {
-                    try? await Task.sleep(for: .milliseconds(80))
+                    try? await Task.sleep(for: .seconds(timeout))
                     return false
                 }
                 return true
@@ -115,7 +115,7 @@ struct AntigravityDeadlineTests {
         let timeouts = recorder.snapshot()
         #expect(resolved.port == 64002)
         #expect(timeouts.count == 2)
-        #expect(timeouts[1] < timeouts[0])
-        #expect(timeouts[1] < 0.18)
+        #expect(timeouts[0] < 0.12)
+        #expect(timeouts[1] > 0)
     }
 }

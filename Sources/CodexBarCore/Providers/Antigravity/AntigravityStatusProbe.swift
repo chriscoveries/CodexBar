@@ -1309,8 +1309,13 @@ public struct AntigravityStatusProbe: Sendable {
         testConnectivity: @escaping @Sendable (AntigravityConnectionEndpoint, TimeInterval) async -> Bool = Self
             .testEndpointConnectivity) async throws -> AntigravityConnectionEndpoint
     {
-        for endpoint in candidateEndpoints {
-            guard let attemptTimeout = timeoutForNextAttempt(timeout: timeout, deadline: deadline) else {
+        for (index, endpoint) in candidateEndpoints.enumerated() {
+            let remainingAttemptCount = candidateEndpoints.count - index
+            guard let attemptTimeout = timeoutForEndpointAttempt(
+                timeout: timeout,
+                deadline: deadline,
+                remainingAttemptCount: remainingAttemptCount)
+            else {
                 throw AntigravityStatusProbeError.timedOut
             }
             let ok = await testConnectivity(endpoint, attemptTimeout)
@@ -1325,6 +1330,17 @@ public struct AntigravityStatusProbe: Sendable {
             return fallback
         }
         throw AntigravityStatusProbeError.portDetectionFailed("no working API port found")
+    }
+
+    private static func timeoutForEndpointAttempt(
+        timeout: TimeInterval,
+        deadline: Date?,
+        remainingAttemptCount: Int) -> TimeInterval?
+    {
+        guard let deadline else { return timeout }
+        let remaining = deadline.timeIntervalSinceNow
+        guard remaining > 0 else { return nil }
+        return min(timeout, remaining / Double(max(1, remainingAttemptCount)))
     }
 
     static func fallbackProbePort(ports: [Int], extensionPort: Int?) -> Int? {
