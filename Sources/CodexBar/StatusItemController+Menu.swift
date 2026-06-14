@@ -161,22 +161,16 @@ extension StatusItemController {
             self.removeProviderSwitcherShortcutMonitor()
         }
 
-        self.cancelClosedMenuRebuild(menu)
         self.clearMergedSwitcherContentCache(for: menu)
         self.openMenus.removeValue(forKey: key)
-        self.menuRefreshTasks.removeValue(forKey: key)?.cancel()
-        self.openMenuRebuildTasks.removeValue(forKey: key)?.cancel()
-        self.openMenuRebuildRequests.cancel(for: key)
-        self.openMenuRebuildsClosingHostedSubviewMenus.remove(key)
-        if let highlightedView = self.highlightedMenuItems.removeValue(forKey: key)?.view {
-            (highlightedView as? MenuCardHighlighting)?.setHighlighted(false)
-        }
+        self.cancelMenuWork(key)
+        self.clearMenuHighlight(key)
 
         let isPersistentMenu = menu === self.mergedMenu ||
             menu === self.fallbackMenu ||
             self.providerMenus.values.contains { $0 === menu }
         if !isPersistentMenu {
-            self.clearTransientMenuTrackingState(key)
+            self.removeMenuTrackingState(key)
         } else if self.menuNeedsRefresh(menu) {
             self.handleClosedPersistentMenuNeedingRefresh(menu)
         }

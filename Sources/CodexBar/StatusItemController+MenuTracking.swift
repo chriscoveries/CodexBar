@@ -114,11 +114,33 @@ extension StatusItemController {
             UsageProvider.allCases.contains { self.store.isTokenRefreshInFlight(for: $0) }
     }
 
-    func clearTransientMenuTrackingState(_ key: ObjectIdentifier) {
+    func removeMenuTrackingState(_ key: ObjectIdentifier) {
         self.menuProviders.removeValue(forKey: key)
         self.menuSession.removeMenu(key)
         self.menuReadinessSignatures.removeValue(forKey: key)
         self.menuIdentitySignatures.removeValue(forKey: key)
+    }
+
+    func cancelMenuWork(_ key: ObjectIdentifier) {
+        self.menuRefreshTasks.removeValue(forKey: key)?.cancel()
+        self.closedMenuRebuildTasks.removeValue(forKey: key)?.cancel()
+        self.closedMenuRebuildRequests.cancel(for: key)
+        self.openMenuRebuildTasks.removeValue(forKey: key)?.cancel()
+        self.openMenuRebuildRequests.cancel(for: key)
+        self.openMenuRebuildsClosingHostedSubviewMenus.remove(key)
+    }
+
+    func clearMenuHighlight(_ key: ObjectIdentifier) {
+        if let highlightedView = self.highlightedMenuItems.removeValue(forKey: key)?.view {
+            (highlightedView as? MenuCardHighlighting)?.setHighlighted(false)
+        }
+    }
+
+    func removeMenuLifecycleState(_ key: ObjectIdentifier) {
+        self.openMenus.removeValue(forKey: key)
+        self.cancelMenuWork(key)
+        self.clearMenuHighlight(key)
+        self.removeMenuTrackingState(key)
     }
 
     func handleClosedPersistentMenuNeedingRefresh(_ menu: NSMenu) {
@@ -464,10 +486,7 @@ extension StatusItemController {
 
     private func removeOrphanedOpenMenuEntries(_ keys: [ObjectIdentifier]) {
         for key in keys {
-            self.openMenus.removeValue(forKey: key)
-            self.menuRefreshTasks.removeValue(forKey: key)?.cancel()
-            self.menuProviders.removeValue(forKey: key)
-            self.menuSession.removeMenu(key)
+            self.removeMenuLifecycleState(key)
         }
     }
 }

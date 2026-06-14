@@ -855,14 +855,11 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
     private func removeProviderStatusItem(for provider: UsageProvider) {
         if let menu = self.providerMenus.removeValue(forKey: provider) {
             let menuID = ObjectIdentifier(menu)
-            self.menuProviders.removeValue(forKey: menuID)
-            self.menuSession.removeMenu(menuID)
-            self.openMenus.removeValue(forKey: menuID)
-            self.menuRefreshTasks.removeValue(forKey: menuID)?.cancel()
-            self.openMenuRebuildTasks.removeValue(forKey: menuID)?.cancel()
-            self.openMenuRebuildRequests.cancel(for: menuID)
-            self.openMenuRebuildsClosingHostedSubviewMenus.remove(menuID)
-            self.highlightedMenuItems.removeValue(forKey: menuID)
+            if menuID == self.providerSwitcherShortcutMenuID {
+                self.removeProviderSwitcherShortcutMonitor()
+            }
+            self.clearMergedSwitcherContentCache(for: menu)
+            self.removeMenuLifecycleState(menuID)
         }
 
         guard let item = self.statusItems.removeValue(forKey: provider) else { return }

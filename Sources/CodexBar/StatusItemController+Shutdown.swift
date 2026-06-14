@@ -81,6 +81,8 @@ extension StatusItemController {
         self.measuredStandardMenuWidthCache.removeAll(keepingCapacity: false)
         self.mergedSwitcherContentCaches.removeAll(keepingCapacity: false)
         self.menuProviders.removeAll(keepingCapacity: false)
+        self.menuReadinessSignatures.removeAll(keepingCapacity: false)
+        self.menuIdentitySignatures.removeAll(keepingCapacity: false)
         self.providerMenus.removeAll(keepingCapacity: false)
         self.mergedMenu = nil
         self.fallbackMenu = nil
