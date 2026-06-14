@@ -45,11 +45,12 @@ extension StatusItemController {
     {
         let signature = self.menuAdjunctReadinessSignature()
         let menuKey = ObjectIdentifier(menu)
-        let menuRenderedCurrentSignature = self.menuVersions[menuKey] == self.menuContentVersion &&
+        let menuRenderedCurrentSignature =
+            self.menuSession.renderedVersion(for: menuKey) == self.menuSession.contentVersion &&
             self.menuReadinessSignatures[menuKey] == signature
         guard signature != self.lastMenuAdjunctReadinessSignature else {
             guard menuWasFreshBeforeOpen, !menuRenderedCurrentSignature else {
-                self.lastMenuAdjunctReadinessBaselineVersion = self.menuContentVersion
+                self.lastMenuAdjunctReadinessBaselineVersion = self.menuSession.contentVersion
                 return
             }
             guard !self.isMenuDataRefreshInFlight else { return }
@@ -79,7 +80,7 @@ extension StatusItemController {
 
     private func recordMenuAdjunctReadinessBaseline(_ signature: String) {
         self.lastMenuAdjunctReadinessSignature = signature
-        self.lastMenuAdjunctReadinessBaselineVersion = self.menuContentVersion
+        self.lastMenuAdjunctReadinessBaselineVersion = self.menuSession.contentVersion
     }
 
     private func rememberRootOpenHandledMenuObservation(signature: String) {

@@ -111,11 +111,7 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
     var statusItems: [UsageProvider: NSStatusItem] = [:]
     var lastMenuProvider: UsageProvider?
     var menuProviders: [ObjectIdentifier: UsageProvider] = [:]
-    var menuContentVersion: Int = 0
-    var latestRequiredMenuRebuildVersion: Int = 0
-    var latestDataOnlyMenuContentVersion: Int = 0
-    var latestStructuralMenuContentVersion: Int = 0
-    var menuVersions: [ObjectIdentifier: Int] = [:]
+    var menuSession = MenuSessionCoordinator<ObjectIdentifier>()
     var menuReadinessSignatures: [ObjectIdentifier: String] = [:]
     let hostedSubviewRenderSignatures = NSMapTable<NSMenu, NSString>.weakToStrongObjects()
     /// Live persistent Refresh rows, tracked weakly so they can be given in-place in-flight
@@ -135,14 +131,12 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
     var closedMenuRebuildTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
     var closedMenuRebuildTokens: [ObjectIdentifier: Int] = [:]
     var closedMenuRebuildTokenCounter = 0
-    var closedMenusDeferredUntilNextOpen: Set<ObjectIdentifier> = []
     var openMenuRebuildTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
     var openMenuRebuildTokens: [ObjectIdentifier: Int] = [:]
     var openMenuRebuildTokenCounter = 0
     var menuIdentitySignatures: [ObjectIdentifier: String] = [:]
     var codexAccountMenuProjectionRevalidationTask: Task<Void, Never>?
     var openMenuRebuildsClosingHostedSubviewMenus: Set<ObjectIdentifier> = []
-    var parentMenuRebuildsDeferredDuringTracking: Set<ObjectIdentifier> = []
     var deferredMenuInteractionRefreshProviders: Set<UsageProvider> = []
     var deferredMenuInteractionRefreshPending: Bool {
         !self.deferredMenuInteractionRefreshProviders.isEmpty
@@ -421,7 +415,7 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
                 metadata: ["keys": repairedStatusItemVisibilityKeys.joined(separator: ",")])
         }
         self.lastMenuAdjunctReadinessSignature = self.menuAdjunctReadinessSignature()
-        self.lastMenuAdjunctReadinessBaselineVersion = self.menuContentVersion
+        self.lastMenuAdjunctReadinessBaselineVersion = self.menuSession.contentVersion
         self.wireBindings()
         self.updateVisibility()
         self.updateIcons()
@@ -864,13 +858,12 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
         if let menu = self.providerMenus.removeValue(forKey: provider) {
             let menuID = ObjectIdentifier(menu)
             self.menuProviders.removeValue(forKey: menuID)
-            self.menuVersions.removeValue(forKey: menuID)
+            self.menuSession.removeMenu(menuID)
             self.openMenus.removeValue(forKey: menuID)
             self.menuRefreshTasks.removeValue(forKey: menuID)?.cancel()
             self.openMenuRebuildTasks.removeValue(forKey: menuID)?.cancel()
             self.openMenuRebuildTokens.removeValue(forKey: menuID)
             self.openMenuRebuildsClosingHostedSubviewMenus.remove(menuID)
-            self.parentMenuRebuildsDeferredDuringTracking.remove(menuID)
             self.highlightedMenuItems.removeValue(forKey: menuID)
         }
 
@@ -915,6 +908,41 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
         NotificationCenter.default.removeObserver(self)
     }
 }
+
+#if DEBUG
+extension StatusItemController {
+    var menuContentVersion: Int {
+        get { self.menuSession.contentVersion }
+        set { self.menuSession.replaceContentVersionForTesting(newValue) }
+    }
+
+    var latestRequiredMenuRebuildVersion: Int {
+        self.menuSession.latestRequiredRebuildVersion
+    }
+
+    var latestDataOnlyMenuContentVersion: Int {
+        self.menuSession.latestDataOnlyContentVersion
+    }
+
+    var latestStructuralMenuContentVersion: Int {
+        self.menuSession.latestStructuralContentVersion
+    }
+
+    var menuVersions: [ObjectIdentifier: Int] {
+        get { self.menuSession.renderedVersions }
+        set { self.menuSession.replaceRenderedVersionsForTesting(newValue) }
+    }
+
+    var closedMenusDeferredUntilNextOpen: Set<ObjectIdentifier> {
+        get { self.menuSession.deferredUntilNextOpen }
+        set { self.menuSession.replaceDeferredMenusForTesting(newValue) }
+    }
+
+    var parentMenuRebuildsDeferredDuringTracking: Set<ObjectIdentifier> {
+        self.menuSession.parentRebuildsDeferredDuringTracking
+    }
+}
+#endif
 
 #if DEBUG
 extension StatusItemController {

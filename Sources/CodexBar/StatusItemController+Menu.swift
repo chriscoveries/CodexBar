@@ -180,7 +180,7 @@ extension StatusItemController {
         } else if self.menuNeedsRefresh(menu) {
             self.handleClosedPersistentMenuNeedingRefresh(menu)
         }
-        self.parentMenuRebuildsDeferredDuringTracking.remove(key)
+        self.menuSession.clearParentRebuildDeferral(key)
         self.scheduleDeferredMenuInteractionRefreshIfNeeded()
         if wasMergedMenu {
             self.applyDeferredMergedIconRenderAfterTrackingIfNeeded()
@@ -443,7 +443,7 @@ extension StatusItemController {
                 selection: contentSelection,
                 contentStartIndex: self.providerSwitcherContentStartIndex(in: menu),
                 menuWidth: context.menuWidth,
-                contentVersion: self.menuContentVersion)
+                contentVersion: self.menuSession.contentVersion)
         }
     }
 
