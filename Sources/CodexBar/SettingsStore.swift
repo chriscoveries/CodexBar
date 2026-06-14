@@ -464,13 +464,32 @@ extension SettingsStore {
 
     private static func loadMenuBarMetricPreferences(userDefaults: UserDefaults) -> [String: String] {
         let storedPreferences = userDefaults.dictionary(forKey: "menuBarMetricPreferences") as? [String: String] ?? [:]
-        if !storedPreferences.isEmpty {
-            return storedPreferences
+        let preferences: [String: String] = if !storedPreferences.isEmpty {
+            storedPreferences
+        } else if let menuBarMetricRaw = userDefaults.string(forKey: "menuBarMetricPreference"),
+                  let legacyPreference = MenuBarMetricPreference(rawValue: menuBarMetricRaw)
+        {
+            Dictionary(
+                uniqueKeysWithValues: UsageProvider.allCases.map { ($0.rawValue, legacyPreference.rawValue) })
+        } else {
+            [:]
         }
-        guard let menuBarMetricRaw = userDefaults.string(forKey: "menuBarMetricPreference"),
-              let legacyPreference = MenuBarMetricPreference(rawValue: menuBarMetricRaw)
-        else { return [:] }
-        return Dictionary(uniqueKeysWithValues: UsageProvider.allCases.map { ($0.rawValue, legacyPreference.rawValue) })
+
+        let migrationKey = "antigravityTwoPoolMetricPreferenceMigrated"
+        guard !userDefaults.bool(forKey: migrationKey) else { return preferences }
+
+        var migrated = preferences
+        switch MenuBarMetricPreference(rawValue: migrated[UsageProvider.antigravity.rawValue] ?? "") {
+        case .primary:
+            migrated[UsageProvider.antigravity.rawValue] = MenuBarMetricPreference.secondary.rawValue
+        case .secondary:
+            migrated[UsageProvider.antigravity.rawValue] = MenuBarMetricPreference.primary.rawValue
+        case .automatic, .tertiary, .extraUsage, .average, .none:
+            break
+        }
+        userDefaults.set(migrated, forKey: "menuBarMetricPreferences")
+        userDefaults.set(true, forKey: migrationKey)
+        return migrated
     }
 
     private static func loadMultiAccountMenuLayoutRaw(userDefaults: UserDefaults) -> String {

@@ -567,7 +567,7 @@ struct WidgetUsageRow: Identifiable, Equatable {
         }
         guard let limit else { return rows }
         if entry.provider == .antigravity,
-           limit == 2,
+           limit >= 2,
            rows.contains(where: { $0.id.hasPrefix("antigravity-quota-summary-") })
         {
             var selected = ["Gemini ", "Claude + GPT "].compactMap { titlePrefix in

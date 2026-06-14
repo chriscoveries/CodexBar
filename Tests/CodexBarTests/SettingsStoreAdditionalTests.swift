@@ -6,6 +6,34 @@ import Testing
 @MainActor
 struct SettingsStoreAdditionalTests {
     @Test
+    @MainActor
+    func `antigravity two pool migration preserves explicit metric meaning`() {
+        let primaryDefaults = UserDefaults(suiteName: #function + ".primary")!
+        primaryDefaults.removePersistentDomain(forName: #function + ".primary")
+        primaryDefaults.set(
+            [UsageProvider.antigravity.rawValue: MenuBarMetricPreference.primary.rawValue],
+            forKey: "menuBarMetricPreferences")
+
+        let primarySettings = SettingsStore(userDefaults: primaryDefaults)
+
+        #expect(primarySettings.menuBarMetricPreference(for: .antigravity) == .secondary)
+        #expect(primaryDefaults.bool(forKey: "antigravityTwoPoolMetricPreferenceMigrated"))
+
+        let secondaryDefaults = UserDefaults(suiteName: #function + ".secondary")!
+        secondaryDefaults.removePersistentDomain(forName: #function + ".secondary")
+        secondaryDefaults.set(
+            [UsageProvider.antigravity.rawValue: MenuBarMetricPreference.secondary.rawValue],
+            forKey: "menuBarMetricPreferences")
+
+        let secondarySettings = SettingsStore(userDefaults: secondaryDefaults)
+
+        #expect(secondarySettings.menuBarMetricPreference(for: .antigravity) == .primary)
+
+        let reloadedSettings = SettingsStore(userDefaults: secondaryDefaults)
+        #expect(reloadedSettings.menuBarMetricPreference(for: .antigravity) == .primary)
+    }
+
+    @Test
     func `menu bar metric preference handles zai and average`() {
         let settings = Self.makeSettingsStore(suite: "SettingsStoreAdditionalTests-metric")
 

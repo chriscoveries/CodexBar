@@ -64,9 +64,14 @@ struct CodexBarWidgetProviderTests {
         #expect(rows.compactMap(\.percentLeft) == [20, 5])
         #expect(WidgetUsageRow.smallWidgetRowLimit(for: entry) == 2)
         #expect(WidgetUsageRow.mediumWidgetRowLimit(for: entry) == 3)
-        #expect(WidgetUsageRow.rows(
+        let mediumRows = WidgetUsageRow.rows(
             for: entry,
-            limit: WidgetUsageRow.mediumWidgetRowLimit(for: entry)).count == 3)
+            limit: WidgetUsageRow.mediumWidgetRowLimit(for: entry))
+        #expect(mediumRows.map(\.title) == [
+            "Gemini Weekly",
+            "Claude + GPT Session",
+            "Claude + GPT Weekly",
+        ])
     }
 
     @Test
