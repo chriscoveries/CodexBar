@@ -278,6 +278,30 @@ struct UsageStoreSessionQuotaTransitionTests {
     }
 
     @Test
+    func `antigravity snapshot mode change resets session notification baseline`() {
+        let settings = self.makeSettings(suiteName: "UsageStoreSessionQuotaTransitionTests-antigravity-mode-change")
+        settings.refreshFrequency = .manual
+        settings.statusChecksEnabled = false
+        settings.sessionQuotaNotificationsEnabled = true
+
+        let notifier = SessionQuotaNotifierSpy()
+        let store = UsageStore(
+            fetcher: UsageFetcher(),
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings,
+            sessionQuotaNotifier: notifier)
+
+        store.handleSessionQuotaTransition(
+            provider: .antigravity,
+            snapshot: self.antigravityQuotaSummarySnapshot(sessionUsed: 20, weeklyUsed: 20))
+        store.handleSessionQuotaTransition(
+            provider: .antigravity,
+            snapshot: self.antigravityLegacySnapshot(geminiUsed: 100, claudeUsed: 100))
+
+        #expect(notifier.posts.isEmpty)
+    }
+
+    @Test
     func `quota warning disabled does not post`() {
         let settings = self.makeSettings(suiteName: "UsageStoreSessionQuotaTransitionTests-warning-disabled")
         settings.refreshFrequency = .manual

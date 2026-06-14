@@ -83,6 +83,22 @@ struct AntigravityDeadlineTests {
     }
 
     @Test
+    func `process candidate transport error preserves url error identity`() async {
+        let processInfo = AntigravityStatusProbe.ProcessInfoResult(
+            pid: 1,
+            extensionPort: nil,
+            extensionServerCSRFToken: nil,
+            csrfToken: "token",
+            commandLine: "command")
+
+        let result = await AntigravityStatusProbe.fetchProcessSnapshots(processInfos: [processInfo]) { _ in
+            throw URLError(.cannotConnectToHost)
+        }
+
+        #expect((result.lastError as? URLError)?.code == .cannotConnectToHost)
+    }
+
+    @Test
     func `shared deadline reserves time for later endpoint probes`() async throws {
         let endpoints = [
             AntigravityStatusProbe.AntigravityConnectionEndpoint(

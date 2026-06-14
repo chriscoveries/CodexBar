@@ -139,7 +139,10 @@ extension UsageStore {
             guard let window = Self.antigravityWindow(snapshot: snapshot, windowMinutes: 5 * 60) else {
                 return nil
             }
-            return (window, .antigravityDuration)
+            let source: SessionQuotaWindowSource = Self.hasAntigravityQuotaSummaryWindows(snapshot: snapshot)
+                ? .antigravityQuotaSummary
+                : .antigravityLegacy
+            return (window, source)
         }
         if let primary = snapshot.primary, Self.isSessionWindow(primary) {
             return (primary, .primary)

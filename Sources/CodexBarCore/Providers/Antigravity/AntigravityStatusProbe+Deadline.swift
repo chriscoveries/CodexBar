@@ -3,28 +3,55 @@ import Foundation
 extension AntigravityStatusProbe {
     private static let processProbeLog = CodexBarLog.logger(LogCategories.antigravity)
 
+    private enum ProcessSnapshotFetchFailure {
+        case antigravity(AntigravityStatusProbeError)
+        case url(URLError)
+        case cancellation
+        case other(String)
+
+        init(_ error: Error) {
+            if let error = error as? AntigravityStatusProbeError {
+                self = .antigravity(error)
+            } else if let error = error as? URLError {
+                self = .url(error)
+            } else if error is CancellationError {
+                self = .cancellation
+            } else {
+                self = .other(error.localizedDescription)
+            }
+        }
+
+        var error: Error {
+            switch self {
+            case let .antigravity(error):
+                error
+            case let .url(error):
+                error
+            case .cancellation:
+                CancellationError()
+            case let .other(message):
+                AntigravityStatusProbeError.apiError(message)
+            }
+        }
+    }
+
     private enum ProcessSnapshotFetchOutcome {
         case success(index: Int, snapshot: AntigravityStatusSnapshot)
-        case failure(index: Int, pid: Int, error: AntigravityStatusProbeError)
+        case failure(index: Int, pid: Int, failure: ProcessSnapshotFetchFailure)
     }
 
     static func fetchProcessSnapshots(
         processInfos: [ProcessInfoResult],
         fetch: @escaping @Sendable (ProcessInfoResult) async throws -> AntigravityStatusSnapshot)
-        async -> (snapshots: [AntigravityStatusSnapshot], lastError: AntigravityStatusProbeError?)
+        async -> (snapshots: [AntigravityStatusSnapshot], lastError: Error?)
     {
         let outcomes = await withTaskGroup(of: ProcessSnapshotFetchOutcome.self) { group in
             for (index, processInfo) in processInfos.enumerated() {
                 group.addTask {
                     do {
                         return try await .success(index: index, snapshot: fetch(processInfo))
-                    } catch let error as AntigravityStatusProbeError {
-                        return .failure(index: index, pid: processInfo.pid, error: error)
                     } catch {
-                        return .failure(
-                            index: index,
-                            pid: processInfo.pid,
-                            error: .apiError(error.localizedDescription))
+                        return .failure(index: index, pid: processInfo.pid, failure: .init(error))
                     }
                 }
             }
@@ -40,12 +67,13 @@ extension AntigravityStatusProbe {
         }
 
         var snapshots: [AntigravityStatusSnapshot] = []
-        var lastError: AntigravityStatusProbeError?
+        var lastError: Error?
         for outcome in outcomes {
             switch outcome {
             case let .success(_, snapshot):
                 snapshots.append(snapshot)
-            case let .failure(_, pid, error):
+            case let .failure(_, pid, failure):
+                let error = failure.error
                 lastError = error
                 Self.processProbeLog.debug("Antigravity local process probe failed", metadata: [
                     "pid": "\(pid)",
