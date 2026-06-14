@@ -2,6 +2,8 @@
 
 ## 0.35.1 — Unreleased
 
+- Ollama: replace the bundled provider icon with the cleaner official mark while preserving native template tinting. Thanks @mattab178!
+
 ## 0.35.0 — 2026-06-14
 
 ### Added
