@@ -232,6 +232,75 @@ struct CodexBarTests {
     }
 
     @Test
+    func `copying rate windows preserves provider payloads`() {
+        let updatedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let mimoUsage = MiMoUsageSnapshot(
+            balance: 12.5,
+            currency: "USD",
+            tokenUsed: 25,
+            tokenLimit: 100,
+            tokenPercent: 0.25,
+            updatedAt: updatedAt)
+        let identity = ProviderIdentitySnapshot(
+            providerID: .codex,
+            accountEmail: "test@example.com",
+            accountOrganization: "Example",
+            loginMethod: "OAuth")
+        let snapshot = UsageSnapshot(
+            primary: nil,
+            secondary: nil,
+            tertiary: RateWindow(usedPercent: 30, windowMinutes: 60, resetsAt: nil, resetDescription: nil),
+            mimoUsage: mimoUsage,
+            cursorRequests: CursorRequestUsage(used: 10, limit: 50),
+            subscriptionExpiresAt: updatedAt.addingTimeInterval(100),
+            subscriptionRenewsAt: updatedAt.addingTimeInterval(200),
+            updatedAt: updatedAt,
+            identity: identity)
+
+        let copied = snapshot.with(
+            primary: RateWindow(usedPercent: 40, windowMinutes: 300, resetsAt: nil, resetDescription: nil),
+            secondary: RateWindow(usedPercent: 50, windowMinutes: 10080, resetsAt: nil, resetDescription: nil))
+
+        #expect(copied.primary?.usedPercent == 40)
+        #expect(copied.secondary?.usedPercent == 50)
+        #expect(copied.tertiary?.usedPercent == 30)
+        #expect(copied.mimoUsage?.balance == 12.5)
+        #expect(copied.cursorRequests?.used == 10)
+        #expect(copied.subscriptionExpiresAt == updatedAt.addingTimeInterval(100))
+        #expect(copied.subscriptionRenewsAt == updatedAt.addingTimeInterval(200))
+        #expect(copied.identity?.accountOrganization == "Example")
+    }
+
+    @Test
+    func `copying identity preserves provider payloads`() {
+        let updatedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let ampUsage = AmpUsageDetails(
+            individualCredits: 12.5,
+            workspaceBalances: [AmpWorkspaceBalance(name: "Team", remaining: 7.25)])
+        let snapshot = UsageSnapshot(
+            primary: nil,
+            secondary: nil,
+            ampUsage: ampUsage,
+            cursorRequests: CursorRequestUsage(used: 10, limit: 50),
+            subscriptionExpiresAt: updatedAt.addingTimeInterval(100),
+            subscriptionRenewsAt: updatedAt.addingTimeInterval(200),
+            updatedAt: updatedAt)
+        let identity = ProviderIdentitySnapshot(
+            providerID: .kilo,
+            accountEmail: "test@example.com",
+            accountOrganization: "Example",
+            loginMethod: "API")
+
+        let copied = snapshot.withIdentity(identity)
+
+        #expect(copied.ampUsage == ampUsage)
+        #expect(copied.cursorRequests?.used == 10)
+        #expect(copied.subscriptionExpiresAt == updatedAt.addingTimeInterval(100))
+        #expect(copied.subscriptionRenewsAt == updatedAt.addingTimeInterval(200))
+        #expect(copied.identity?.accountOrganization == "Example")
+    }
+
+    @Test
     func `copilot icon falls back to chat lane when selected budget is unavailable`() {
         let snapshot = UsageSnapshot(
             primary: RateWindow(usedPercent: 20, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
