@@ -756,7 +756,7 @@ final class UsageStore {
     enum SessionQuotaWindowSource: String {
         case primary
         case copilotSecondaryFallback
-        case antigravityQuotaSummary
+        case antigravityDuration
     }
 
     struct QuotaWarningStateKey: Hashable {
@@ -852,9 +852,9 @@ final class UsageStore {
         let accountDisplayName = self.quotaWarningAccountDisplayName(provider: provider, snapshot: snapshot)
         let primaryWindow: RateWindow?
         let secondaryWindow: RateWindow?
-        if provider == .antigravity, Self.hasAntigravityQuotaSummaryWindows(snapshot: snapshot) {
-            primaryWindow = Self.antigravityQuotaSummaryWindow(snapshot: snapshot, windowMinutes: 5 * 60)
-            secondaryWindow = Self.antigravityQuotaSummaryWindow(snapshot: snapshot, windowMinutes: 7 * 24 * 60)
+        if provider == .antigravity {
+            primaryWindow = Self.antigravityWindow(snapshot: snapshot, windowMinutes: 5 * 60)
+            secondaryWindow = Self.antigravityWindow(snapshot: snapshot, windowMinutes: 7 * 24 * 60)
         } else {
             primaryWindow = provider == .mimo ? nil : snapshot.primary
             secondaryWindow = provider == .mimo ? nil : snapshot.secondary

@@ -556,7 +556,18 @@ struct WidgetUsageRow: Identifiable, Equatable {
             return ["Gemini ", "Claude + GPT "].compactMap { titlePrefix in
                 rows
                     .filter { $0.title.hasPrefix(titlePrefix) }
-                    .min { ($0.percentLeft ?? 100) < ($1.percentLeft ?? 100) }
+                    .min { lhs, rhs in
+                        switch (lhs.percentLeft, rhs.percentLeft) {
+                        case let (.some(left), .some(right)):
+                            left < right
+                        case (.some, .none):
+                            true
+                        case (.none, .some):
+                            false
+                        case (.none, .none):
+                            false
+                        }
+                    }
             }
         }
         return Array(rows.prefix(max(0, limit)))
