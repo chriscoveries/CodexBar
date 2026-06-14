@@ -12,6 +12,8 @@ extension AntigravityStatusProbe {
         init(_ error: Error) {
             if let error = error as? AntigravityStatusProbeError {
                 self = .antigravity(error)
+            } else if let error = error as? URLError, error.code == .cancelled {
+                self = .cancellation
             } else if let error = error as? URLError {
                 self = .url(error)
             } else if error is CancellationError {

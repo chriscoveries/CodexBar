@@ -131,6 +131,36 @@ struct AntigravityDeadlineTests {
     }
 
     @Test
+    func `cancelled process request rejects partial success`() async {
+        let processInfos = [
+            AntigravityStatusProbe.ProcessInfoResult(
+                pid: 1,
+                extensionPort: nil,
+                extensionServerCSRFToken: nil,
+                csrfToken: "first",
+                commandLine: "first"),
+            AntigravityStatusProbe.ProcessInfoResult(
+                pid: 2,
+                extensionPort: nil,
+                extensionServerCSRFToken: nil,
+                csrfToken: "second",
+                commandLine: "second"),
+        ]
+
+        await #expect(throws: CancellationError.self) {
+            try await AntigravityStatusProbe.fetchProcessSnapshots(processInfos: processInfos) { processInfo in
+                if processInfo.pid == 2 {
+                    throw URLError(.cancelled)
+                }
+                return AntigravityStatusSnapshot(
+                    modelQuotas: [],
+                    accountEmail: "partial@example.com",
+                    accountPlan: nil)
+            }
+        }
+    }
+
+    @Test
     func `shared deadline reserves time for later endpoint probes`() async throws {
         let endpoints = [
             AntigravityStatusProbe.AntigravityConnectionEndpoint(

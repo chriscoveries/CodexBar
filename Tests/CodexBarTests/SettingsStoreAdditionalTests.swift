@@ -31,6 +31,16 @@ struct SettingsStoreAdditionalTests {
 
         let reloadedSettings = SettingsStore(userDefaults: secondaryDefaults)
         #expect(reloadedSettings.menuBarMetricPreference(for: .antigravity) == .primary)
+
+        let tertiaryDefaults = UserDefaults(suiteName: #function + ".tertiary")!
+        tertiaryDefaults.removePersistentDomain(forName: #function + ".tertiary")
+        tertiaryDefaults.set(
+            [UsageProvider.antigravity.rawValue: MenuBarMetricPreference.tertiary.rawValue],
+            forKey: "menuBarMetricPreferences")
+
+        let tertiarySettings = SettingsStore(userDefaults: tertiaryDefaults)
+
+        #expect(tertiarySettings.menuBarMetricPreference(for: .antigravity) == .primary)
     }
 
     @Test

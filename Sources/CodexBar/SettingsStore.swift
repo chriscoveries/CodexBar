@@ -484,7 +484,9 @@ extension SettingsStore {
             migrated[UsageProvider.antigravity.rawValue] = MenuBarMetricPreference.secondary.rawValue
         case .secondary:
             migrated[UsageProvider.antigravity.rawValue] = MenuBarMetricPreference.primary.rawValue
-        case .automatic, .tertiary, .extraUsage, .average, .none:
+        case .tertiary:
+            migrated[UsageProvider.antigravity.rawValue] = MenuBarMetricPreference.primary.rawValue
+        case .automatic, .extraUsage, .average, .none:
             break
         }
         userDefaults.set(migrated, forKey: "menuBarMetricPreferences")
