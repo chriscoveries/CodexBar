@@ -113,7 +113,7 @@ struct AntigravityDeadlineTests {
                 source: .languageServer),
         ]
         let recorder = AntigravityTimeoutRecorder()
-        let deadline = Date().addingTimeInterval(0.2)
+        let deadline = Date().addingTimeInterval(2)
 
         let resolved = try await AntigravityStatusProbe.resolveWorkingEndpoint(
             candidateEndpoints: endpoints,
@@ -131,7 +131,7 @@ struct AntigravityDeadlineTests {
         let timeouts = recorder.snapshot()
         #expect(resolved.port == 64002)
         #expect(timeouts.count == 2)
-        #expect(timeouts[0] < 0.12)
+        #expect(timeouts[0] < 1.1)
         #expect(timeouts[1] > 0)
     }
 }

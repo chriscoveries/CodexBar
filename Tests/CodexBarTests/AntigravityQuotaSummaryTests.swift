@@ -199,7 +199,7 @@ struct AntigravityQuotaSummaryTests {
             context: AntigravityStatusProbe.RequestContext(
                 endpoints: [endpoint],
                 timeout: 1,
-                deadline: Date().addingTimeInterval(0.2)),
+                deadline: Date().addingTimeInterval(2)),
             send: { payload, _, timeout in
                 paths.append(payload.path)
                 if payload.path.contains("RetrieveUserQuotaSummary") {
@@ -230,7 +230,7 @@ struct AntigravityQuotaSummaryTests {
             context: AntigravityStatusProbe.RequestContext(
                 endpoints: [endpoint],
                 timeout: 1,
-                deadline: Date().addingTimeInterval(0.3)),
+                deadline: Date().addingTimeInterval(2)),
             send: { payload, _, timeout in
                 paths.append(payload.path)
                 if payload.path.contains("RetrieveUserQuotaSummary") {

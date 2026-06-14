@@ -771,6 +771,13 @@ final class UsageStore {
         var source: SessionQuotaWindowSource?
     }
 
+    func postQuotaWarning(_ event: QuotaWarningEvent, provider: UsageProvider) {
+        self.sessionQuotaNotifier.postQuotaWarning(
+            event: event,
+            provider: provider,
+            soundEnabled: self.settings.quotaWarningSoundEnabled)
+    }
+
     func handleSessionQuotaTransition(provider: UsageProvider, snapshot: UsageSnapshot) {
         // Session quota notifications are tied to the primary session window. Copilot free plans can
         // expose only chat quota, so allow Copilot to fall back to secondary for transition tracking.

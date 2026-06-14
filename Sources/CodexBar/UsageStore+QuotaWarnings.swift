@@ -78,14 +78,13 @@ extension UsageStore {
             state.firedThresholds.formUnion(QuotaWarningNotificationLogic.firedThresholdsAfterWarning(
                 threshold: threshold,
                 thresholds: thresholds))
-            self.sessionQuotaNotifier.postQuotaWarning(
-                event: QuotaWarningEvent(
+            self.postQuotaWarning(
+                QuotaWarningEvent(
                     window: window,
                     threshold: threshold,
                     currentRemaining: currentRemaining,
                     accountDisplayName: accountDisplayName),
-                provider: provider,
-                soundEnabled: self.settings.quotaWarningSoundEnabled)
+                provider: provider)
         }
 
         state.lastRemaining = currentRemaining
