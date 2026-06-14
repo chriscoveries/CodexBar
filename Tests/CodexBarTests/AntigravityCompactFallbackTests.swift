@@ -48,4 +48,25 @@ struct AntigravityCompactFallbackTests {
         #expect(usage.secondary == nil)
         #expect(usage.extraRateWindows?.map(\.id) == ["MODEL_PLACEHOLDER_NEW"])
     }
+
+    @Test
+    func `fully unused local model remains available as compact fallback`() throws {
+        let snapshot = AntigravityStatusSnapshot(
+            modelQuotas: [
+                AntigravityModelQuota(
+                    label: "Experimental Model",
+                    modelId: "MODEL_PLACEHOLDER_NEW",
+                    remainingFraction: 1,
+                    resetTime: nil,
+                    resetDescription: nil),
+            ],
+            accountEmail: nil,
+            accountPlan: nil,
+            source: .local)
+
+        let usage = try snapshot.toUsageSnapshot()
+
+        #expect(usage.extraRateWindows?.map(\.id) == ["antigravity-compact-fallback-MODEL_PLACEHOLDER_NEW"])
+        #expect(usage.extraRateWindows?.map(\.window.usedPercent) == [0])
+    }
 }

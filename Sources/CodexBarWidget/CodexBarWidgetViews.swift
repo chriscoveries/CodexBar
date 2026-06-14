@@ -532,6 +532,16 @@ struct WidgetUsageRow: Identifiable, Equatable {
             rows = defaultRows.filter { $0.percentLeft != nil }
         }
         guard let limit else { return rows }
+        if entry.provider == .antigravity,
+           limit == 2,
+           rows.contains(where: { $0.id.hasPrefix("antigravity-quota-summary-") })
+        {
+            return ["Gemini ", "Claude + GPT "].compactMap { titlePrefix in
+                rows
+                    .filter { $0.title.hasPrefix(titlePrefix) }
+                    .min { ($0.percentLeft ?? 100) < ($1.percentLeft ?? 100) }
+            }
+        }
         return Array(rows.prefix(max(0, limit)))
     }
 }

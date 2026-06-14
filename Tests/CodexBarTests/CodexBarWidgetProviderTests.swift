@@ -28,6 +28,43 @@ struct CodexBarWidgetProviderTests {
     }
 
     @Test
+    func `small antigravity widget keeps one row per quota family`() {
+        let entry = WidgetSnapshot.ProviderEntry(
+            provider: .antigravity,
+            updatedAt: Date(),
+            primary: nil,
+            secondary: nil,
+            tertiary: nil,
+            usageRows: [
+                WidgetSnapshot.WidgetUsageRowSnapshot(
+                    id: "antigravity-quota-summary-gemini-session",
+                    title: "Gemini Session",
+                    percentLeft: 80),
+                WidgetSnapshot.WidgetUsageRowSnapshot(
+                    id: "antigravity-quota-summary-gemini-weekly",
+                    title: "Gemini Weekly",
+                    percentLeft: 20),
+                WidgetSnapshot.WidgetUsageRowSnapshot(
+                    id: "antigravity-quota-summary-third-party-session",
+                    title: "Claude + GPT Session",
+                    percentLeft: 5),
+                WidgetSnapshot.WidgetUsageRowSnapshot(
+                    id: "antigravity-quota-summary-third-party-weekly",
+                    title: "Claude + GPT Weekly",
+                    percentLeft: 60),
+            ],
+            creditsRemaining: nil,
+            codeReviewRemainingPercent: nil,
+            tokenUsage: nil,
+            dailyUsage: [])
+
+        let rows = WidgetUsageRow.rows(for: entry, limit: 2)
+
+        #expect(rows.map(\.title) == ["Gemini Weekly", "Claude + GPT Session"])
+        #expect(rows.compactMap(\.percentLeft) == [20, 5])
+    }
+
+    @Test
     func `provider choice supports alibaba`() {
         #expect(ProviderChoice(provider: .alibaba) == .alibaba)
         #expect(ProviderChoice.alibaba.provider == .alibaba)

@@ -576,7 +576,9 @@ public struct AntigravityStatusSnapshot: Sendable {
         }
 
         let distinctWindows = models
-            .filter(Self.shouldShowDistinctExtraWindow)
+            .filter {
+                $0.quota.modelId == compactFallbackModelID || Self.shouldShowDistinctExtraWindow($0)
+            }
             .sorted(by: Self.modelOrderPrecedes)
             .map { m in
                 NamedRateWindow(
