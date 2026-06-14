@@ -709,6 +709,36 @@ struct UsageStoreSessionQuotaTransitionTests {
     }
 
     @Test
+    func `antigravity quota warning mode change resets warning baseline`() {
+        let settings = self.makeSettings(suiteName: "UsageStoreSessionQuotaTransitionTests-warning-antigravity-mode")
+        settings.refreshFrequency = .manual
+        settings.statusChecksEnabled = false
+        settings.quotaWarningNotificationsEnabled = true
+        settings.quotaWarningThresholds = [50]
+        settings.setQuotaWarningWindowEnabled(.session, enabled: true)
+        settings.setQuotaWarningWindowEnabled(.weekly, enabled: true)
+
+        let notifier = SessionQuotaNotifierSpy()
+        let store = UsageStore(
+            fetcher: UsageFetcher(),
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings,
+            sessionQuotaNotifier: notifier)
+
+        store.handleQuotaWarningTransitions(
+            provider: .antigravity,
+            snapshot: self.antigravityQuotaSummarySnapshot(sessionUsed: 20, weeklyUsed: 20))
+        store.handleQuotaWarningTransitions(
+            provider: .antigravity,
+            snapshot: self.antigravityLegacySnapshot(geminiUsed: 80, claudeUsed: 40))
+
+        #expect(notifier.quotaWarningPosts.isEmpty)
+        let key = UsageStore.QuotaWarningStateKey(provider: .antigravity, window: .session)
+        #expect(store.quotaWarningState[key]?.lastRemaining == 20)
+        #expect(store.quotaWarningState[key]?.source == .antigravityLegacy)
+    }
+
+    @Test
     func `disabling quota warning window clears fired state`() {
         let settings = self
             .makeSettings(suiteName: "UsageStoreSessionQuotaTransitionTests-warning-disabled-clears-state")
