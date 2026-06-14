@@ -318,6 +318,70 @@ struct CodexBarTests {
     }
 
     @Test
+    func `copilot icon uses selected budget in show used mode`() {
+        let snapshot = UsageSnapshot(
+            primary: RateWindow(usedPercent: 20, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
+            secondary: RateWindow(usedPercent: 30, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
+            extraRateWindows: [
+                NamedRateWindow(
+                    id: "copilot-budget-agent",
+                    title: "Budget - Copilot Agent Premium Requests",
+                    window: RateWindow(usedPercent: 65, windowMinutes: nil, resetsAt: nil, resetDescription: nil)),
+            ],
+            updatedAt: Date())
+
+        let percents = IconRemainingResolver.resolvedPercents(
+            snapshot: snapshot,
+            style: .copilot,
+            showUsed: true,
+            secondaryOverrideWindowID: "copilot-budget-agent")
+
+        #expect(percents.primary == 20)
+        #expect(percents.secondary == 65)
+    }
+
+    @Test
+    func `warp icon preserves exhausted bonus layout in show used mode`() {
+        let snapshot = UsageSnapshot(
+            primary: RateWindow(usedPercent: 10, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
+            secondary: RateWindow(usedPercent: 100, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
+            updatedAt: Date())
+
+        let percents = IconRemainingResolver.resolvedPercents(
+            snapshot: snapshot,
+            style: .warp,
+            showUsed: true)
+
+        #expect(percents.primary == 10)
+        #expect(percents.secondary == 0)
+    }
+
+    @Test
+    func `warp icon keeps unused bonus lane visible in show used mode`() {
+        let snapshot = UsageSnapshot(
+            primary: RateWindow(usedPercent: 10, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
+            secondary: RateWindow(usedPercent: 0, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
+            updatedAt: Date())
+
+        let percents = IconRemainingResolver.resolvedPercents(
+            snapshot: snapshot,
+            style: .warp,
+            showUsed: true)
+
+        #expect(percents.primary == 10)
+        #expect(percents.secondary != nil)
+        #expect(percents.secondary ?? 1 < 0.01)
+    }
+
+    @Test
+    @MainActor
+    func `status icon accessibility uses percentage scale`() {
+        #expect(
+            StatusIconView.accessibilityPercentRemaining(50) ==
+                String(format: L("%d percent remaining"), 50))
+    }
+
+    @Test
     func `codex icon promotes weekly only window into primary display lane`() {
         let snapshot = UsageSnapshot(
             primary: nil,

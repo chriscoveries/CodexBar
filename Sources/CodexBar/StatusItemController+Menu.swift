@@ -1381,24 +1381,7 @@ extension StatusItemController {
                 secondaryOverrideWindowID: self.settings.copilotIconSecondaryWindowOverrideID(snapshot: $0))
         }
         let primary = resolved?.primary
-        var weekly = resolved?.secondary
-        if showUsed,
-           provider == .warp,
-           let remaining = snapshot?.secondary?.remainingPercent,
-           remaining <= 0
-        {
-            // Preserve Warp "no bonus/exhausted bonus" layout even in show-used mode.
-            weekly = 0
-        }
-        if showUsed,
-           provider == .warp,
-           let remaining = snapshot?.secondary?.remainingPercent,
-           remaining > 0,
-           weekly == 0
-        {
-            // In show-used mode, `0` means "unused", not "missing". Keep the weekly lane present.
-            weekly = 0.0001
-        }
+        let weekly = resolved?.secondary
         let creditsProjection = self.store.codexConsumerProjectionIfNeeded(
             for: provider,
             surface: .menuBar,
