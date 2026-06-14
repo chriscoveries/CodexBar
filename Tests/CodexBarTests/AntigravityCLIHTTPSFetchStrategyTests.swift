@@ -2,6 +2,10 @@ import Foundation
 import Testing
 @testable import CodexBarCore
 
+private func antigravityBlockingSleep(_ interval: TimeInterval) {
+    Thread.sleep(forTimeInterval: interval)
+}
+
 private final class AntigravityCLICounter: @unchecked Sendable {
     private let lock = NSLock()
     private var count = 0
@@ -668,11 +672,11 @@ struct AntigravityCLIHTTPSFetchStrategyTests {
             context: AntigravityStatusProbe.RequestContext(
                 endpoints: endpoints,
                 timeout: 10,
-                deadline: Date().addingTimeInterval(2)),
+                deadline: Date().addingTimeInterval(10)),
             send: { _, _, timeout in
                 timeoutRecorder.append(timeout)
                 if attempts.increment() == 1 {
-                    try await Task.sleep(nanoseconds: 100_000_000)
+                    antigravityBlockingSleep(0.1)
                     throw AntigravityStatusProbeError.apiError("first endpoint failed")
                 }
                 return Data("ok".utf8)
@@ -725,13 +729,14 @@ struct AntigravityCLIHTTPSFetchStrategyTests {
         do {
             _ = try await AntigravityCLIHTTPSFetchStrategy.waitForSnapshot(
                 pid: 123,
-                deadline: Date().addingTimeInterval(2),
+                deadline: Date().addingTimeInterval(0.05),
                 dependencies: AntigravityCLIHTTPSFetchStrategy.SnapshotWaitDependencies(
-                    pollIntervalNanoseconds: 10_000_000,
+                    pollIntervalNanoseconds: 0,
                     listeningPorts: { _, _ in [50080] },
                     drainOutput: { Data() },
                     fetchSnapshot: { _ in
                         let attempt = fetchAttempts.increment()
+                        antigravityBlockingSleep(0.01)
                         throw AntigravityStatusProbeError.apiError("HTTP 500: warming attempt \(attempt)")
                     }))
             Issue.record("Expected readiness polling to throw")

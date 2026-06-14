@@ -262,7 +262,10 @@ struct AntigravityCLIHTTPSFetchStrategy: ProviderFetchStrategy {
 
             let remainingNanoseconds = UInt64(max(0, deadline.timeIntervalSinceNow) * 1_000_000_000)
             guard remainingNanoseconds > 0 else { break }
-            try await Task.sleep(nanoseconds: min(dependencies.pollIntervalNanoseconds, remainingNanoseconds))
+            let sleepNanoseconds = min(dependencies.pollIntervalNanoseconds, remainingNanoseconds)
+            if sleepNanoseconds > 0 {
+                try await Task.sleep(nanoseconds: sleepNanoseconds)
+            }
         }
 
         try await Self.checkAuthenticationPrompt(dependencies)

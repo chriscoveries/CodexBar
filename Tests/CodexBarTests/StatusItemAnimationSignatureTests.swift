@@ -189,9 +189,7 @@ struct StatusItemAnimationSignatureTests {
         }
 
         store._setSnapshotForTesting(snapshot(usedPercent: 20), provider: .codex)
-        for _ in 0..<10 where controller.animationDriver != nil {
-            await Task.yield()
-        }
+        controller.updateIcons()
         #expect(controller.animationDriver == nil)
         controller.applyIcon(phase: nil)
         let initialSignature = try #require(controller.lastAppliedMergedIconRenderSignature)
@@ -203,16 +201,12 @@ struct StatusItemAnimationSignatureTests {
         #expect(controller.isMergedMenuOpen)
 
         store._setSnapshotForTesting(nil, provider: .codex)
-        for _ in 0..<10 where controller.animationDriver == nil {
-            await Task.yield()
-        }
+        controller.updateIcons()
         #expect(controller.animationDriver != nil)
         #expect(controller.deferredMergedIconRenderAfterTracking)
 
         store._setSnapshotForTesting(snapshot(usedPercent: 80), provider: .codex)
-        for _ in 0..<10 where controller.animationDriver != nil {
-            await Task.yield()
-        }
+        controller.updateIcons()
         #expect(controller.animationDriver == nil)
         #expect(controller.deferredMergedIconRenderAfterTracking)
         #expect(controller.lastAppliedMergedIconRenderSignature == initialSignature)

@@ -10,7 +10,7 @@ extension StatusItemController {
             return menuRefreshEnabledOverrideForTesting
         }
         #endif
-        return Self.menuRefreshEnabled
+        return self.menuRefreshEnabledForController
     }
 
     #if DEBUG

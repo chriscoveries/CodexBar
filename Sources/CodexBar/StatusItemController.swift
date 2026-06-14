@@ -105,6 +105,8 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
     let managedCodexAccountCoordinator: ManagedCodexAccountCoordinator
     let codexAccountPromotionCoordinator: CodexAccountPromotionCoordinator
     let statusBar: NSStatusBar
+    let menuCardRenderingEnabledForController: Bool
+    let menuRefreshEnabledForController: Bool
     var statusItem: NSStatusItem
     var statusItems: [UsageProvider: NSStatusItem] = [:]
     var lastMenuProvider: UsageProvider?
@@ -375,6 +377,8 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
             ManagedCodexAccountCoordinator(),
         codexAccountPromotionCoordinator: CodexAccountPromotionCoordinator? = nil,
         statusBar: NSStatusBar = .system,
+        menuCardRenderingEnabled: Bool = StatusItemController.menuCardRenderingEnabled,
+        menuRefreshEnabled: Bool = StatusItemController.menuRefreshEnabled,
         observeProviderConfigNotifications: Bool = !SettingsStore.isRunningTests)
     {
         if SettingsStore.isRunningTests {
@@ -398,6 +402,8 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
         self.lastSwitcherShowsIcons = settings.switcherShowsIcons
         self.lastObservedUsageBarsShowUsed = settings.usageBarsShowUsed
         self.lastSwitcherUsageBarsShowUsed = settings.usageBarsShowUsed
+        self.menuCardRenderingEnabledForController = menuCardRenderingEnabled
+        self.menuRefreshEnabledForController = menuRefreshEnabled
         let repairedStatusItemVisibilityKeys = MenuBarStatusItemDefaultsRepair
             .repairHiddenVisibilityDefaultsIfNeeded(defaults: settings.userDefaults)
         self.statusBar = statusBar
@@ -458,6 +464,8 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
         updater: UpdaterProviding,
         preferencesSelection: PreferencesSelection,
         statusBar: NSStatusBar = .system,
+        menuCardRenderingEnabled: Bool = StatusItemController.menuCardRenderingEnabled,
+        menuRefreshEnabled: Bool = StatusItemController.menuRefreshEnabled,
         observeProviderConfigNotifications: Bool = !SettingsStore.isRunningTests)
     {
         self.init(
@@ -469,6 +477,8 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
             managedCodexAccountCoordinator: ManagedCodexAccountCoordinator(),
             codexAccountPromotionCoordinator: nil,
             statusBar: statusBar,
+            menuCardRenderingEnabled: menuCardRenderingEnabled,
+            menuRefreshEnabled: menuRefreshEnabled,
             observeProviderConfigNotifications: observeProviderConfigNotifications)
     }
 

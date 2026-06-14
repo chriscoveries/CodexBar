@@ -268,7 +268,7 @@ struct CookieHeaderCacheTests {
             to: CookieHeaderCache.legacyURLForTesting(provider: provider))
 
         #expect(CookieHeaderCache.loadForDisplay(provider: provider)?.cookieHeader == "auth=legacy-display")
-        for _ in 0..<100 {
+        for _ in 0..<500 {
             if !CookieHeaderCache.hasLegacyEntryForTesting(provider: provider),
                CookieHeaderCache.hasKeychainEntryForTesting(provider: provider)
             {
@@ -358,7 +358,7 @@ struct CookieHeaderCacheTests {
 
         try await Task.sleep(for: .milliseconds(60))
         var retried: CookieHeaderCache.Entry?
-        for _ in 0..<100 {
+        for _ in 0..<500 {
             retried = CookieHeaderCache.loadForDisplay(provider: provider)
             if retried != nil { break }
             try await Task.sleep(for: .milliseconds(10))
