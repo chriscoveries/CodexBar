@@ -373,22 +373,9 @@ public struct AntigravityStatusSnapshot: Sendable {
     private static func rateWindow(for quota: AntigravityModelQuota) -> RateWindow {
         RateWindow(
             usedPercent: 100 - quota.remainingPercent,
-            windowMinutes: self.inferredWindowMinutes(resetTime: quota.resetTime),
+            windowMinutes: nil,
             resetsAt: quota.resetTime,
             resetDescription: quota.resetDescription)
-    }
-
-    private static func inferredWindowMinutes(resetTime: Date?) -> Int? {
-        guard let resetTime else { return nil }
-        let seconds = resetTime.timeIntervalSinceNow
-        guard seconds > 0 else { return nil }
-        if seconds <= 6 * 60 * 60 {
-            return 300
-        }
-        if seconds >= 6 * 24 * 60 * 60, seconds <= 8 * 24 * 60 * 60 {
-            return 10080
-        }
-        return nil
     }
 
     private static func modelOrderPrecedes(

@@ -1,7 +1,29 @@
+import Foundation
 import Testing
 @testable import CodexBarCore
 
 struct AntigravityCompactFallbackTests {
+    @Test
+    func `model quota reset proximity does not imply window duration`() throws {
+        let resetTime = Date().addingTimeInterval(2 * 60 * 60)
+        let snapshot = AntigravityStatusSnapshot(
+            modelQuotas: [
+                AntigravityModelQuota(
+                    label: "Gemini 3.1 Pro (Low)",
+                    modelId: "MODEL_PLACEHOLDER_M36",
+                    remainingFraction: 0.5,
+                    resetTime: resetTime,
+                    resetDescription: nil),
+            ],
+            accountEmail: nil,
+            accountPlan: nil)
+
+        let usage = try snapshot.toUsageSnapshot()
+
+        #expect(usage.primary?.windowMinutes == nil)
+        #expect(usage.primary?.resetsAt == resetTime)
+    }
+
     @Test
     func `local unclassified model remains available as compact fallback`() throws {
         let snapshot = AntigravityStatusSnapshot(
