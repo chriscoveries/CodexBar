@@ -1,12 +1,12 @@
 import Foundation
 
-enum BoundedTaskJoinOutcome<Value: Sendable> {
+package enum BoundedTaskJoinOutcome<Value: Sendable> {
     case value(Value)
     case failure(any Error)
     case timedOut
 }
 
-final class BoundedTaskJoin<Value: Sendable>: @unchecked Sendable {
+package final class BoundedTaskJoin<Value: Sendable>: @unchecked Sendable {
     private let lock = NSLock()
     private let sourceTask: Task<Value, Error>
     private var outcome: BoundedTaskJoinOutcome<Value>?
@@ -14,11 +14,11 @@ final class BoundedTaskJoin<Value: Sendable>: @unchecked Sendable {
     private var observerTask: Task<Void, Never>?
     private var timeoutTask: Task<Void, Never>?
 
-    init(sourceTask: Task<Value, Error>) {
+    package init(sourceTask: Task<Value, Error>) {
         self.sourceTask = sourceTask
     }
 
-    func value(joinGrace: Duration) async -> BoundedTaskJoinOutcome<Value> {
+    package func value(joinGrace: Duration) async -> BoundedTaskJoinOutcome<Value> {
         await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
                 self.lock.lock()

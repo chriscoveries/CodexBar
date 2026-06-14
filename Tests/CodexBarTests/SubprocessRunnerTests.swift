@@ -2,6 +2,12 @@ import Foundation
 import Testing
 @testable import CodexBarCore
 
+#if canImport(Darwin)
+import Darwin
+#else
+import Glibc
+#endif
+
 struct SubprocessRunnerTests {
     @Test
     func `reads large stdout without deadlock`() async throws {
@@ -14,6 +20,50 @@ struct SubprocessRunnerTests {
 
         #expect(result.stdout.count >= 1_000_000)
         #expect(result.stderr.isEmpty)
+    }
+
+    @Test
+    func `returns partial output when detached child keeps pipes open`() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codexbar-subprocess-drain-\(UUID().uuidString)", isDirectory: true)
+        let childPIDFile = root.appendingPathComponent("child.pid")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        defer {
+            if let text = try? String(contentsOf: childPIDFile, encoding: .utf8),
+               let childPID = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines))
+            {
+                _ = kill(childPID, SIGKILL)
+            }
+        }
+
+        var environment = ProcessInfo.processInfo.environment
+        environment["CODEXBAR_TEST_CHILD_PID_FILE"] = childPIDFile.path
+        let script = """
+        import os
+        import subprocess
+        import sys
+
+        child = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(5)"],
+            start_new_session=True,
+        )
+        with open(os.environ["CODEXBAR_TEST_CHILD_PID_FILE"], "w") as handle:
+            handle.write(str(child.pid))
+        print("parent-output", flush=True)
+        """
+
+        let start = Date()
+        let result = try await SubprocessRunner.run(
+            binary: "/usr/bin/python3",
+            arguments: ["-c", script],
+            environment: environment,
+            timeout: 5,
+            label: "detached-output-holder")
+        let elapsed = Date().timeIntervalSince(start)
+
+        #expect(result.stdout.contains("parent-output"))
+        #expect(elapsed < 3, "Output drain should not wait for the detached child, took \(elapsed)s")
     }
 
     /// Regression test for #474: a hung subprocess must be killed and throw `.timedOut`
