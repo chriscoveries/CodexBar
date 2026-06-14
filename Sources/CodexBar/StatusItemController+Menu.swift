@@ -1135,11 +1135,11 @@ extension StatusItemController {
         // provider fetch failed and needs a retry; periodic freshness is handled by the refresh timer.
         // AppKit menu tracking is modal, so starting provider refreshes while it is active can make the menu
         // feel frozen and can block keyboard focus from returning.
-        let providersNeedingRetry = self.delayedRefreshRetryProviders(for: menu).filter {
+        let providersNeedingRetryAtOpen = self.delayedRefreshRetryProviders(for: menu).filter {
             self.store.isStale(provider: $0) || self.store.snapshot(for: $0) == nil
         }
-        if !providersNeedingRetry.isEmpty {
-            self.deferMenuInteractionRefreshIfNeeded(providers: providersNeedingRetry)
+        if !providersNeedingRetryAtOpen.isEmpty {
+            self.deferMenuInteractionRefreshIfNeeded(providers: providersNeedingRetryAtOpen)
         }
         let key = ObjectIdentifier(menu)
         self.menuRefreshTasks[key]?.cancel()
@@ -1162,7 +1162,9 @@ extension StatusItemController {
             guard !retryProviders.isEmpty else {
                 self.clearSatisfiedDeferredMenuInteractionRefreshes(
                     for: self.delayedRefreshRetryProviders(for: menu))
-                if self.menuNeedsRefresh(menu) {
+                // Ordinary store changes intentionally stay queued until the next open. Rebuilding here
+                // made first-open work such as the storage scan flash the visible menu after 1.2 seconds.
+                if !providersNeedingRetryAtOpen.isEmpty, self.menuNeedsRefresh(menu) {
                     self.scheduleOpenMenuRebuildIfStillVisible(
                         menu,
                         provider: self.menuProvider(for: menu),

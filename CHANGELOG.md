@@ -3,6 +3,8 @@
 ## 0.35.1 — Unreleased
 
 - Ollama: replace the bundled provider icon with the cleaner official mark while preserving native template tinting. Thanks @mattab178!
+- Menu bar: avoid a one-time visible menu rebuild after first-open background data arrives.
+- Settings: use high-contrast selected-content colors for provider sidebar text and icons.
 
 ## 0.35.0 — 2026-06-14
 
