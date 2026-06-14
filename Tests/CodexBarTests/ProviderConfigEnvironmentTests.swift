@@ -63,6 +63,7 @@ struct ProviderConfigEnvironmentTests {
         #expect(ProviderTokenResolver.doubaoToken(environment: env) == "db-token")
     }
 
+    @Test
     func `applies API key override for moonshot`() {
         let config = ProviderConfig(id: .moonshot, apiKey: "moon-token")
         let env = ProviderConfigEnvironment.applyAPIKeyOverride(
