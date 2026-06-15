@@ -67,15 +67,14 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
         let stdoutWrite = stdoutPipe.fileHandleForWriting.fileDescriptor
         let stderrRead = stderrPipe.fileHandleForReading.fileDescriptor
         let stderrWrite = stderrPipe.fileHandleForWriting.fileDescriptor
-        let fileActionResults = [
+        var fileActionResults = [
             posix_spawn_file_actions_addopen(&fileActions, STDIN_FILENO, "/dev/null", O_RDONLY, 0),
             posix_spawn_file_actions_adddup2(&fileActions, stdoutWrite, STDOUT_FILENO),
             posix_spawn_file_actions_adddup2(&fileActions, stderrWrite, STDERR_FILENO),
-            posix_spawn_file_actions_addclose(&fileActions, stdoutRead),
-            posix_spawn_file_actions_addclose(&fileActions, stdoutWrite),
-            posix_spawn_file_actions_addclose(&fileActions, stderrRead),
-            posix_spawn_file_actions_addclose(&fileActions, stderrWrite),
         ]
+        for descriptor in Self.pipeDescriptorsToClose([stdoutRead, stdoutWrite, stderrRead, stderrWrite]) {
+            fileActionResults.append(posix_spawn_file_actions_addclose(&fileActions, descriptor))
+        }
         guard fileActionResults.allSatisfy({ $0 == 0 }) else {
             throw LaunchError.setupFailed("posix_spawn file actions")
         }
@@ -200,6 +199,10 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
 
     private static func signal(processGroup: pid_t, signal: Int32) {
         _ = kill(-processGroup, signal)
+    }
+
+    package static func pipeDescriptorsToClose(_ descriptors: [Int32]) -> [Int32] {
+        Array(Set(descriptors.filter { $0 > STDERR_FILENO })).sorted()
     }
 
     private static func exitStatus(from rawStatus: Int32) -> Int32 {
