@@ -67,11 +67,10 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
         static func holderPIDs(for pipes: Set<OutputPipeIdentity>) -> Set<pid_t> {
             guard !pipes.isEmpty else { return [] }
             #if canImport(Darwin)
-            return Set(self.allPIDs().filter { self.process(pid: $0, holdsAny: pipes) })
+            return Set(SpawnedProcessGroup.allProcessIDs().filter { self.process(pid: $0, holdsAny: pipes) })
             #else
             let targets = Set(pipes.map { "pipe:[\($0.inode)]" })
-            guard let entries = try? FileManager.default.contentsOfDirectory(atPath: "/proc") else { return [] }
-            return Set(entries.compactMap(pid_t.init).filter { pid in
+            return Set(SpawnedProcessGroup.allProcessIDs().filter { pid in
                 let directory = "/proc/\(pid)/fd"
                 guard let descriptors = try? FileManager.default.contentsOfDirectory(atPath: directory) else {
                     return false
@@ -88,22 +87,6 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
         }
 
         #if canImport(Darwin)
-        private static func allPIDs() -> [pid_t] {
-            let requiredBytes = proc_listpids(UInt32(PROC_ALL_PIDS), 0, nil, 0)
-            guard requiredBytes > 0 else { return [] }
-            let stride = MemoryLayout<pid_t>.stride
-            var pids = [pid_t](repeating: 0, count: Int(requiredBytes) / stride + 32)
-            let actualBytes = pids.withUnsafeMutableBytes { buffer in
-                proc_listpids(
-                    UInt32(PROC_ALL_PIDS),
-                    0,
-                    buffer.baseAddress,
-                    Int32(buffer.count))
-            }
-            guard actualBytes > 0 else { return [] }
-            return Array(pids.prefix(Int(actualBytes) / stride)).filter { $0 > 0 }
-        }
-
         private static func process(pid: pid_t, holdsAny pipes: Set<OutputPipeIdentity>) -> Bool {
             let requiredBytes = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, nil, 0)
             guard requiredBytes > 0 else { return false }
@@ -142,6 +125,41 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
         }
         #endif
     }
+
+    private static func allProcessIDs() -> [pid_t] {
+        #if canImport(Darwin)
+        return self.processIDs(type: UInt32(PROC_ALL_PIDS), typeInfo: 0)
+        #else
+        guard let entries = try? FileManager.default.contentsOfDirectory(atPath: "/proc") else { return [] }
+        return entries.compactMap(pid_t.init)
+        #endif
+    }
+
+    private static func processIDs(inProcessGroup processGroup: pid_t) -> [pid_t] {
+        #if canImport(Darwin)
+        return self.processIDs(type: UInt32(PROC_PGRP_ONLY), typeInfo: UInt32(bitPattern: processGroup))
+        #else
+        return self.allProcessIDs().filter { getpgid($0) == processGroup }
+        #endif
+    }
+
+    #if canImport(Darwin)
+    private static func processIDs(type: UInt32, typeInfo: UInt32) -> [pid_t] {
+        let requiredBytes = proc_listpids(type, typeInfo, nil, 0)
+        guard requiredBytes > 0 else { return [] }
+        let stride = MemoryLayout<pid_t>.stride
+        var pids = [pid_t](repeating: 0, count: Int(requiredBytes) / stride + 32)
+        let actualBytes = pids.withUnsafeMutableBytes { buffer in
+            proc_listpids(
+                type,
+                typeInfo,
+                buffer.baseAddress,
+                Int32(buffer.count))
+        }
+        guard actualBytes > 0 else { return [] }
+        return Array(pids.prefix(Int(actualBytes) / stride)).filter { $0 > 0 }
+    }
+    #endif
 
     package let pid: pid_t
     package let processGroup: pid_t
@@ -258,34 +276,28 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
         if self.isRunning {
             let killDeadline = Date().addingTimeInterval(max(0, grace))
             var processIdentities = self.currentResidualProcessIdentities(includeDescendants: true)
-            TTYProcessTreeTerminator.terminateProcessTree(
-                rootPID: self.pid,
-                processGroup: self.processGroup,
-                signal: SIGTERM,
-                knownDescendants: processIdentities.map(\.pid))
+            processIdentities.formUnion(self.currentProcessGroupMemberIdentities())
+            if let rootIdentity = TTYProcessTreeTerminator.processIdentity(for: self.pid) {
+                processIdentities.insert(rootIdentity)
+            }
+            Self.signal(processIdentities: processIdentities, signal: SIGTERM)
             _ = await self.waitForExit(timeout: max(0, killDeadline.timeIntervalSinceNow))
-            while Self.processGroupExists(self.processGroup)
-                || processIdentities.contains(where: TTYProcessTreeTerminator.isCurrent(_:)),
-                Date() < killDeadline
+            while processIdentities.contains(where: TTYProcessTreeTerminator.isCurrent(_:)),
+                  Date() < killDeadline
             {
                 try? await Task.sleep(for: .milliseconds(20))
             }
 
             processIdentities.formUnion(self.currentOutputPipeHolderIdentities())
-            let currentDescendants = processIdentities
-                .filter(TTYProcessTreeTerminator.isCurrent(_:))
-                .map(\.pid)
             if self.isRunning {
-                TTYProcessTreeTerminator.terminateProcessTree(
-                    rootPID: self.pid,
-                    processGroup: self.processGroup,
-                    signal: SIGKILL,
-                    knownDescendants: currentDescendants)
+                processIdentities.formUnion(self.currentResidualProcessIdentities(includeDescendants: true))
+                processIdentities.formUnion(self.currentProcessGroupMemberIdentities())
+                if let rootIdentity = TTYProcessTreeTerminator.processIdentity(for: self.pid) {
+                    processIdentities.insert(rootIdentity)
+                }
+                Self.signal(processIdentities: processIdentities, signal: SIGKILL)
                 _ = await self.waitForExit(timeout: grace)
             } else {
-                if Self.processGroupExists(self.processGroup) {
-                    Self.signal(processGroup: self.processGroup, signal: SIGKILL)
-                }
                 Self.signal(processIdentities: processIdentities, signal: SIGKILL)
             }
             _ = await self.waitForResidualProcessesExit(processIdentities, timeout: grace)
@@ -298,26 +310,30 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
     package func terminateResidualProcesses(grace: TimeInterval = 0.4) async {
         let deadline = Date().addingTimeInterval(max(0, grace))
         var processIdentities = self.currentOutputPipeHolderIdentities()
-        if Self.processGroupExists(self.processGroup) {
-            Self.signal(processGroup: self.processGroup, signal: SIGTERM)
+        if self.isRunning {
+            processIdentities.formUnion(self.currentResidualProcessIdentities(includeDescendants: true))
+            processIdentities.formUnion(self.currentProcessGroupMemberIdentities())
+            if let rootIdentity = TTYProcessTreeTerminator.processIdentity(for: self.pid) {
+                processIdentities.insert(rootIdentity)
+            }
         }
         Self.signal(processIdentities: processIdentities, signal: SIGTERM)
 
-        while Self.processGroupExists(self.processGroup)
-            || processIdentities.contains(where: TTYProcessTreeTerminator.isCurrent(_:))
-        {
+        while processIdentities.contains(where: TTYProcessTreeTerminator.isCurrent(_:)) {
             guard Date() < deadline else { break }
             try? await Task.sleep(for: .milliseconds(20))
         }
 
         processIdentities.formUnion(self.currentOutputPipeHolderIdentities())
-        guard Self.processGroupExists(self.processGroup)
-            || processIdentities.contains(where: TTYProcessTreeTerminator.isCurrent(_:))
-        else {
-            return
+        if self.isRunning {
+            processIdentities.formUnion(self.currentResidualProcessIdentities(includeDescendants: true))
+            processIdentities.formUnion(self.currentProcessGroupMemberIdentities())
+            if let rootIdentity = TTYProcessTreeTerminator.processIdentity(for: self.pid) {
+                processIdentities.insert(rootIdentity)
+            }
         }
-        if Self.processGroupExists(self.processGroup) {
-            Self.signal(processGroup: self.processGroup, signal: SIGKILL)
+        guard processIdentities.contains(where: TTYProcessTreeTerminator.isCurrent(_:)) else {
+            return
         }
         Self.signal(processIdentities: processIdentities, signal: SIGKILL)
         _ = await self.waitForResidualProcessesExit(processIdentities, timeout: grace)
@@ -352,15 +368,12 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
     {
         let deadline = Date().addingTimeInterval(max(0, timeout))
         while Date() < deadline {
-            guard Self.processGroupExists(self.processGroup)
-                || processIdentities.contains(where: TTYProcessTreeTerminator.isCurrent(_:))
-            else {
+            guard processIdentities.contains(where: TTYProcessTreeTerminator.isCurrent(_:)) else {
                 return true
             }
             try? await Task.sleep(for: .milliseconds(20))
         }
-        return !Self.processGroupExists(self.processGroup)
-            && !processIdentities.contains(where: TTYProcessTreeTerminator.isCurrent(_:))
+        return !processIdentities.contains(where: TTYProcessTreeTerminator.isCurrent(_:))
     }
 
     private func currentResidualProcessIdentities(
@@ -381,13 +394,32 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
         return Set(holderPIDs.subtracting(excludedPIDs).compactMap(TTYProcessTreeTerminator.processIdentity(for:)))
     }
 
+    private func currentProcessGroupMemberIdentities() -> Set<TTYProcessTreeTerminator.ProcessIdentity> {
+        guard self.isRunning,
+              let rootIdentity = TTYProcessTreeTerminator.processIdentity(for: self.pid),
+              TTYProcessTreeTerminator.isCurrent(rootIdentity)
+        else {
+            return []
+        }
+
+        let identities = Set(Self.processIDs(inProcessGroup: self.processGroup)
+            .compactMap { pid -> TTYProcessTreeTerminator.ProcessIdentity? in
+                guard pid != getpid(),
+                      let identity = TTYProcessTreeTerminator.processIdentity(for: pid),
+                      getpgid(pid) == self.processGroup,
+                      TTYProcessTreeTerminator.isCurrent(identity)
+                else {
+                    return nil
+                }
+                return identity
+            })
+        guard TTYProcessTreeTerminator.isCurrent(rootIdentity) else { return [] }
+        return identities
+    }
+
     private static func processGroupExists(_ processGroup: pid_t) -> Bool {
         errno = 0
         return kill(-processGroup, 0) == 0 || errno == EPERM
-    }
-
-    private static func signal(processGroup: pid_t, signal: Int32) {
-        _ = kill(-processGroup, signal)
     }
 
     private static func signal(
