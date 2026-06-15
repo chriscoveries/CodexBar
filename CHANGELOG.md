@@ -1,20 +1,26 @@
 # Changelog
 
-## 0.35.1 — Unreleased
+## 0.36.0 — 2026-06-15
 
 - Ollama: replace the bundled provider icon with the cleaner official mark while preserving native template tinting. Thanks @mattab178!
 - Menu bar: avoid a one-time visible menu rebuild after first-open background data arrives.
 - Settings: use high-contrast selected-content colors for provider sidebar text and icons.
 - Localization: align the app and website on the same 21-language catalog, adding Italian (#1248), Indonesian (#1513), Polish (#1253), Arabic, Persian, and Thai as selectable app languages, plus automatic website detection, persistent pickers, and right-to-left layouts for Arabic and Persian. Thanks @Yuxin-Qiao and @StevanusPangau!
 - Website: replace the remaining provider letter tiles with the canonical Devin, LiteLLM, and T3 Chat logos.
+- Website: keep localized mobile navigation, calls to action, package commands, and right-to-left layouts inside narrow viewports.
 
 ### Added
 - LiteLLM: add personal and team budget tracking from a configured virtual key and proxy URL (#1542). Thanks @hololee!
 
 ### Changed
 - Antigravity: prefer app and `agy` quota summaries, group usage into Gemini and Claude + GPT session/weekly pools, and preserve IDE and OAuth fallbacks. Thanks @Zihao-Qi!
+- Antigravity: show structured quota reset timestamps from the current `resetTime` field (#1553). Thanks @akunzai!
+- Configuration: honor absolute `XDG_CONFIG_HOME` paths while rejecting relative paths, preserving existing standard and legacy config precedence (#1562). Thanks @kiranmagic7!
 
 ### Fixed
+- Menu bar: preserve native AppKit image-row alignment when returning to cached provider content in the open merged menu (#1560). Thanks @Zihao-Qi!
+- Menu bar: defer hosted submenu reconstruction until an active refresh finishes so partial provider data cannot replace the visible menu (#1556). Thanks @Yuxin-Qiao!
+- Weekly pace: suppress the “Lasts until reset” label when the projected run-out risk is nonzero (#1561). Thanks @kiranmagic7!
 - Antigravity: retry transient `Text file busy` launch failures while the CLI executable is being replaced.
 - Antigravity: fall back to loopback HTTP for local CLI and language-server probes on Linux, where self-signed localhost TLS cannot be trusted (fixes #1508). Thanks @zodiacfireworks!
 - Codebuff: enforce the optional subscription grace period even when the transport ignores cancellation.
