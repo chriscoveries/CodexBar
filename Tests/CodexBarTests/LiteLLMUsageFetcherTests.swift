@@ -121,10 +121,12 @@ struct LiteLLMUsageFetcherTests {
     func `settings reader trims quoted environment values`() {
         let environment = [
             "LITELLM_API_KEY": " 'sk-test' ",
+            "LITELLM_MANAGEMENT_KEY": " 'sk-management' ",
             "LITELLM_BASE_URL": #" "https://litellm.example.com/v1" "#,
         ]
 
         #expect(LiteLLMSettingsReader.apiKey(environment: environment) == "sk-test")
+        #expect(LiteLLMSettingsReader.managementKey(environment: environment) == "sk-management")
         #expect(LiteLLMSettingsReader.baseURL(environment: environment)?
             .absoluteString == "https://litellm.example.com/v1")
     }
@@ -184,5 +186,92 @@ struct LiteLLMUsageFetcherTests {
         #expect(snapshot.userID == "user-123")
         let requests = await transport.requests()
         #expect(requests.count == 2)
+    }
+
+    @Test
+    func `fetch can authorize management requests with separate management key`() async throws {
+        let baseURL = try #require(URL(string: "https://litellm.example.com"))
+        let transport = ProviderHTTPTransportStub { request in
+            #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer sk-management")
+
+            let body: String
+            switch request.url?.path {
+            case "/key/info":
+                #expect(request.url?.query == "key=sk-target")
+                body = """
+                {
+                  "info": {
+                    "user_id": "user-123",
+                    "team_id": "team-456",
+                    "spend": 1
+                  }
+                }
+                """
+            case "/user/info":
+                #expect(request.url?.query == "user_id=user-123")
+                body = """
+                {
+                  "user_id": "user-123",
+                  "user_info": {
+                    "user_id": "user-123",
+                    "max_budget": 10,
+                    "spend": 1
+                  }
+                }
+                """
+            default:
+                Issue.record("unexpected LiteLLM request path: \(request.url?.path ?? "nil")")
+                body = "{}"
+            }
+
+            let url = try #require(request.url)
+            let response = try #require(HTTPURLResponse(
+                url: url,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil))
+            return (Data(body.utf8), response)
+        }
+
+        _ = try await LiteLLMUsageFetcher.fetchUsage(
+            apiKey: "sk-target",
+            managementKey: " sk-management\n",
+            baseURL: baseURL,
+            transport: transport)
+
+        let requests = await transport.requests()
+        #expect(requests.count == 2)
+    }
+
+    @Test
+    func `fetch surfaces insufficient management credentials`() async throws {
+        let baseURL = try #require(URL(string: "https://litellm.example.com"))
+        let transport = ProviderHTTPTransportStub { request in
+            #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer sk-management")
+            let url = try #require(request.url)
+            let response = try #require(HTTPURLResponse(
+                url: url,
+                statusCode: 401,
+                httpVersion: nil,
+                headerFields: nil))
+            return (Data(#"{"detail":"Unauthorized"}"#.utf8), response)
+        }
+
+        do {
+            _ = try await LiteLLMUsageFetcher.fetchUsage(
+                apiKey: "sk-target",
+                managementKey: "sk-management",
+                baseURL: baseURL,
+                transport: transport)
+            Issue.record("expected LiteLLMUsageError.apiError")
+        } catch let LiteLLMUsageError.apiError(message) {
+            #expect(message.contains("HTTP 401"))
+            #expect(message.contains("Unauthorized"))
+        } catch {
+            Issue.record("expected LiteLLMUsageError.apiError, got \(error)")
+        }
+
+        let requests = await transport.requests()
+        #expect(requests.count == 1)
     }
 }

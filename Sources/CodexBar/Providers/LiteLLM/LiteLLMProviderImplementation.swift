@@ -14,6 +14,7 @@ struct LiteLLMProviderImplementation: ProviderImplementation {
     @MainActor
     func observeSettings(_ settings: SettingsStore) {
         _ = settings.liteLLMAPIKey
+        _ = settings.liteLLMManagementKey
         _ = settings.liteLLMBaseURL
     }
 
@@ -28,11 +29,23 @@ struct LiteLLMProviderImplementation: ProviderImplementation {
         [
             ProviderSettingsFieldDescriptor(
                 id: "litellm-api-key",
-                title: "API key",
-                subtitle: "Stored in ~/.codexbar/config.json. Used for /key/info and /user/info.",
+                title: "Target API key",
+                subtitle: "LiteLLM virtual key to look up in /key/info. Used as Bearer auth when no management " +
+                    "key is set.",
                 kind: .secure,
                 placeholder: "sk-…",
                 binding: context.stringBinding(\.liteLLMAPIKey),
+                actions: [],
+                isVisible: nil,
+                onActivate: nil),
+            ProviderSettingsFieldDescriptor(
+                id: "litellm-management-key",
+                title: "Management key",
+                subtitle: "Optional. Bearer token for /key/info and /user/info when your LiteLLM proxy requires " +
+                    "admin auth.",
+                kind: .secure,
+                placeholder: "sk-…",
+                binding: context.stringBinding(\.liteLLMManagementKey),
                 actions: [],
                 isVisible: nil,
                 onActivate: nil),

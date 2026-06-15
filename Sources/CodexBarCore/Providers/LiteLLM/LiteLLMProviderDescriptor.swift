@@ -56,7 +56,10 @@ struct LiteLLMAPIFetchStrategy: ProviderFetchStrategy {
         guard let baseURL = LiteLLMSettingsReader.baseURL(environment: context.env) else {
             throw LiteLLMUsageError.missingBaseURL
         }
-        let usage = try await LiteLLMUsageFetcher.fetchUsage(apiKey: apiKey, baseURL: baseURL)
+        let usage = try await LiteLLMUsageFetcher.fetchUsage(
+            apiKey: apiKey,
+            managementKey: LiteLLMSettingsReader.managementKey(environment: context.env),
+            baseURL: baseURL)
         return self.makeResult(
             usage: usage.toUsageSnapshot(),
             sourceLabel: "api")

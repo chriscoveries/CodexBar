@@ -81,6 +81,19 @@ struct ConfigValidationTests {
     }
 
     @Test
+    func `allows LiteLLM management secret key`() {
+        var config = CodexBarConfig.makeDefault()
+        config.setProviderConfig(ProviderConfig(
+            id: .litellm,
+            apiKey: "sk-target",
+            secretKey: "sk-management",
+            enterpriseHost: "https://litellm.example.com"))
+        let issues = CodexBarConfigValidator.validate(config)
+
+        #expect(!issues.contains(where: { $0.provider == .litellm && $0.code == "secret_key_unused" }))
+    }
+
+    @Test
     func `allows OpenAI API project workspace ID`() {
         var config = CodexBarConfig.makeDefault()
         config.setProviderConfig(ProviderConfig(id: .openai, workspaceID: "proj_abc"))

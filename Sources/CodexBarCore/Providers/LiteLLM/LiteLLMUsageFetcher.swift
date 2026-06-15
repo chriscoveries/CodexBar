@@ -228,6 +228,7 @@ public struct LiteLLMUsageFetcher: Sendable {
 
     public static func fetchUsage(
         apiKey: String,
+        managementKey: String? = nil,
         baseURL: URL,
         transport: any ProviderHTTPTransport = ProviderHTTPClient.shared,
         updatedAt: Date = Date()) async throws -> LiteLLMUsageSnapshot
@@ -236,13 +237,17 @@ public struct LiteLLMUsageFetcher: Sendable {
         guard !cleanedAPIKey.isEmpty else {
             throw LiteLLMUsageError.missingCredentials
         }
+        let cleanedManagementKey = managementKey?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty ?? cleanedAPIKey
 
         let keyInfo = try await self.fetchKeyInfo(
             apiKey: cleanedAPIKey,
+            managementKey: cleanedManagementKey,
             baseURL: baseURL,
             transport: transport)
         let userUsage = try await self.fetchUserInfo(
-            apiKey: cleanedAPIKey,
+            managementKey: cleanedManagementKey,
             baseURL: baseURL,
             userID: keyInfo.userID,
             transport: transport,
@@ -281,10 +286,13 @@ public struct LiteLLMUsageFetcher: Sendable {
 
     private static func fetchKeyInfo(
         apiKey: String,
+        managementKey: String,
         baseURL: URL,
         transport: any ProviderHTTPTransport) async throws -> LiteLLMKeyInfoSnapshot
     {
-        let request = self.request(url: self.keyInfoURL(baseURL: baseURL, apiKey: apiKey), apiKey: apiKey)
+        let request = self.request(
+            url: self.keyInfoURL(baseURL: baseURL, apiKey: apiKey),
+            managementKey: managementKey)
         let response = try await transport.response(for: request)
         guard (200..<300).contains(response.statusCode) else {
             throw LiteLLMUsageError.apiError("HTTP \(response.statusCode): \(Self.responseSummary(response.data))")
@@ -293,13 +301,15 @@ public struct LiteLLMUsageFetcher: Sendable {
     }
 
     private static func fetchUserInfo(
-        apiKey: String,
+        managementKey: String,
         baseURL: URL,
         userID: String,
         transport: any ProviderHTTPTransport,
         updatedAt: Date) async throws -> LiteLLMUsageSnapshot
     {
-        let request = self.request(url: self.userInfoURL(baseURL: baseURL, userID: userID), apiKey: apiKey)
+        let request = self.request(
+            url: self.userInfoURL(baseURL: baseURL, userID: userID),
+            managementKey: managementKey)
         let response = try await transport.response(for: request)
         guard (200..<300).contains(response.statusCode) else {
             throw LiteLLMUsageError.apiError("HTTP \(response.statusCode): \(Self.responseSummary(response.data))")
@@ -307,10 +317,10 @@ public struct LiteLLMUsageFetcher: Sendable {
         return try self.parseUserInfo(data: response.data, updatedAt: updatedAt)
     }
 
-    private static func request(url: URL, apiKey: String) -> URLRequest {
+    private static func request(url: URL, managementKey: String) -> URLRequest {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(managementKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         return request
     }
@@ -433,6 +443,12 @@ public struct LiteLLMUsageFetcher: Sendable {
         String(bytes: data.prefix(500), encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             ?? ""
+    }
+}
+
+extension String {
+    fileprivate var nilIfEmpty: String? {
+        self.isEmpty ? nil : self
     }
 }
 
