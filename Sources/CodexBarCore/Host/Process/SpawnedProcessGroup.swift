@@ -264,8 +264,9 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
                 signal: SIGTERM,
                 knownDescendants: processIdentities.map(\.pid))
             _ = await self.waitForExit(timeout: max(0, killDeadline.timeIntervalSinceNow))
-            while processIdentities.contains(where: TTYProcessTreeTerminator.isCurrent(_:)),
-                  Date() < killDeadline
+            while Self.processGroupExists(self.processGroup)
+                || processIdentities.contains(where: TTYProcessTreeTerminator.isCurrent(_:)),
+                Date() < killDeadline
             {
                 try? await Task.sleep(for: .milliseconds(20))
             }
@@ -282,10 +283,12 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
                     knownDescendants: currentDescendants)
                 _ = await self.waitForExit(timeout: grace)
             } else {
-                for pid in currentDescendants {
-                    kill(pid, SIGKILL)
+                if Self.processGroupExists(self.processGroup) {
+                    Self.signal(processGroup: self.processGroup, signal: SIGKILL)
                 }
+                Self.signal(processIdentities: processIdentities, signal: SIGKILL)
             }
+            _ = await self.waitForResidualProcessesExit(processIdentities, timeout: grace)
             return self.terminationStatus
         }
         await self.terminateResidualProcesses(grace: grace)

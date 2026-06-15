@@ -96,6 +96,135 @@ struct SpawnedProcessGroupTests {
     }
 
     @Test
+    func `termination kills reparented process group members after root exit`() async throws {
+        let childPIDFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codexbar-process-group-member-\(UUID().uuidString).pid")
+        defer { try? FileManager.default.removeItem(at: childPIDFile) }
+
+        let script = """
+        import os
+        import signal
+        import sys
+        import time
+
+        intermediate = os.fork()
+        if intermediate == 0:
+            child = os.fork()
+            if child > 0:
+                os._exit(0)
+            os.close(1)
+            os.close(2)
+            signal.signal(signal.SIGTERM, signal.SIG_IGN)
+            with open(sys.argv[1], "w") as handle:
+                handle.write(str(os.getpid()))
+            time.sleep(30)
+            os._exit(0)
+
+        os.waitpid(intermediate, 0)
+        time.sleep(30)
+        """
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        let process = try SpawnedProcessGroup.launch(
+            binary: "/usr/bin/python3",
+            arguments: ["-c", script, childPIDFile.path],
+            environment: ProcessInfo.processInfo.environment,
+            stdoutPipe: stdoutPipe,
+            stderrPipe: stderrPipe)
+
+        var childPID: pid_t?
+        for _ in 0..<100 {
+            if let text = try? String(contentsOf: childPIDFile, encoding: .utf8) {
+                childPID = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines))
+                break
+            }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let reparentedPID = try #require(childPID)
+        defer { _ = kill(reparentedPID, SIGKILL) }
+
+        await process.terminate(grace: 0.2)
+
+        #expect(kill(reparentedPID, 0) == -1)
+    }
+
+    @Test
+    func `termination gives reparented process group members grace`() async throws {
+        let childPIDFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codexbar-process-group-grace-\(UUID().uuidString).pid")
+        let termReceivedFile = childPIDFile.appendingPathExtension("term")
+        let gracefulExitFile = childPIDFile.appendingPathExtension("graceful")
+        defer {
+            try? FileManager.default.removeItem(at: childPIDFile)
+            try? FileManager.default.removeItem(at: termReceivedFile)
+            try? FileManager.default.removeItem(at: gracefulExitFile)
+        }
+
+        let script = """
+        import os
+        import signal
+        import sys
+        import time
+
+        intermediate = os.fork()
+        if intermediate == 0:
+            child = os.fork()
+            if child > 0:
+                os._exit(0)
+            os.close(1)
+            os.close(2)
+            def handle_term(_signal, _frame):
+                with open(sys.argv[2], "w") as handle:
+                    handle.write("term")
+                time.sleep(0.1)
+                with open(sys.argv[3], "w") as handle:
+                    handle.write("graceful")
+                os._exit(0)
+            signal.signal(signal.SIGTERM, handle_term)
+            signal.pthread_sigmask(signal.SIG_UNBLOCK, {signal.SIGTERM})
+            with open(sys.argv[1], "w") as handle:
+                handle.write(str(os.getpid()))
+            time.sleep(30)
+            os._exit(0)
+
+        os.waitpid(intermediate, 0)
+        time.sleep(30)
+        """
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        let process = try SpawnedProcessGroup.launch(
+            binary: "/usr/bin/python3",
+            arguments: ["-c", script, childPIDFile.path, termReceivedFile.path, gracefulExitFile.path],
+            environment: ProcessInfo.processInfo.environment,
+            stdoutPipe: stdoutPipe,
+            stderrPipe: stderrPipe)
+
+        var childPID: pid_t?
+        for _ in 0..<100 {
+            if let text = try? String(contentsOf: childPIDFile, encoding: .utf8) {
+                childPID = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines))
+                break
+            }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let reparentedPID = try #require(childPID)
+        defer { _ = kill(reparentedPID, SIGKILL) }
+        for _ in 0..<100
+            where TTYProcessTreeTerminator.descendantPIDs(of: process.pid).contains(reparentedPID)
+        {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(!TTYProcessTreeTerminator.descendantPIDs(of: process.pid).contains(reparentedPID))
+        #expect(getpgid(reparentedPID) == process.processGroup)
+
+        await process.terminate(grace: 0.3)
+
+        #expect(FileManager.default.fileExists(atPath: termReceivedFile.path))
+        #expect(FileManager.default.fileExists(atPath: gracefulExitFile.path))
+        #expect(kill(reparentedPID, 0) == -1)
+    }
+
+    @Test
     func `normal exit cleans a session escaped output holder`() async throws {
         let childPIDFile = FileManager.default.temporaryDirectory
             .appendingPathComponent("codexbar-process-holder-\(UUID().uuidString).pid")
