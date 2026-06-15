@@ -93,6 +93,36 @@ struct LiteLLMUsageFetcherTests {
     }
 
     @Test
+    func `preserves personal spend when no budget is configured`() throws {
+        let json = """
+        {
+          "user_id": "user-123",
+          "user_info": {
+            "user_id": "user-123",
+            "max_budget": null,
+            "spend": 12.5
+          }
+        }
+        """
+
+        let parsed = try LiteLLMUsageFetcher._parseUserInfoForTesting(
+            Data(json.utf8),
+            keyInfo: LiteLLMKeyInfoSnapshot(
+                userID: "user-123",
+                teamID: nil,
+                keyName: "personal-key",
+                spendUSD: 12.5,
+                expiresAt: nil),
+            updatedAt: Date(timeIntervalSince1970: 1))
+
+        let snapshot = parsed.toUsageSnapshot()
+        #expect(snapshot.primary == nil)
+        #expect(snapshot.providerCost?.used == 12.5)
+        #expect(snapshot.providerCost?.limit == 0)
+        #expect(snapshot.providerCost?.period == "Personal spend")
+    }
+
+    @Test
     func `parses key info identity for user lookup`() throws {
         let json = """
         {
@@ -117,6 +147,25 @@ struct LiteLLMUsageFetcherTests {
     }
 
     @Test
+    func `parses team-only key info without user identity`() throws {
+        let json = """
+        {
+          "info": {
+            "key_name": "team-service-key",
+            "spend": 25.0,
+            "team_id": "team-456"
+          }
+        }
+        """
+
+        let parsed = try LiteLLMUsageFetcher._parseKeyInfoForTesting(Data(json.utf8))
+
+        #expect(parsed.userID == nil)
+        #expect(parsed.teamID == "team-456")
+        #expect(parsed.keyName == "team-service-key")
+    }
+
+    @Test
     func `management urls accept root or v1 base urls`() throws {
         let root = try #require(URL(string: "https://litellm.example.com"))
         let versioned = try #require(URL(string: "https://litellm.example.com/v1"))
@@ -134,6 +183,10 @@ struct LiteLLMUsageFetcherTests {
             LiteLLMUsageFetcher
                 ._userInfoURLForTesting(baseURL: nestedVersioned, userID: "user-123")
                 .absoluteString == "https://gateway.example.com/litellm/user/info?user_id=user-123")
+        #expect(
+            LiteLLMUsageFetcher
+                ._teamInfoURLForTesting(baseURL: nestedVersioned, teamID: "team-456")
+                .absoluteString == "https://gateway.example.com/litellm/team/info?team_id=team-456")
     }
 
     @Test
@@ -201,6 +254,79 @@ struct LiteLLMUsageFetcherTests {
             transport: transport)
 
         #expect(snapshot.userID == "user-123")
+        let requests = await transport.requests()
+        #expect(requests.count == 2)
+    }
+
+    @Test
+    func `fetches team usage for team-only virtual keys`() async throws {
+        let baseURL = try #require(URL(string: "https://litellm.example.com/v1"))
+        let transport = ProviderHTTPTransportStub { request in
+            #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer sk-team")
+
+            let path = request.url?.path
+            let query = request.url?.query
+            let body: String
+            switch path {
+            case "/key/info":
+                #expect(query == nil)
+                body = """
+                {
+                  "info": {
+                    "key_name": "team-service-key",
+                    "team_id": "team-456",
+                    "spend": 25
+                  }
+                }
+                """
+            case "/team/info":
+                #expect(query == "team_id=team-456")
+                body = """
+                {
+                  "team_id": "team-456",
+                  "team_info": {
+                    "team_id": "team-456",
+                    "team_alias": "platform",
+                    "max_budget": 100,
+                    "spend": 25,
+                    "budget_duration": "30d",
+                    "budget_reset_at": "2026-07-01T00:00:00Z"
+                  }
+                }
+                """
+            default:
+                Issue.record("unexpected LiteLLM request path: \(path ?? "nil")")
+                body = "{}"
+            }
+
+            let url = try #require(request.url)
+            let response = try #require(HTTPURLResponse(
+                url: url,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil))
+            return (Data(body.utf8), response)
+        }
+
+        let snapshot = try await LiteLLMUsageFetcher.fetchUsage(
+            apiKey: "sk-team",
+            baseURL: baseURL,
+            transport: transport,
+            updatedAt: Date(timeIntervalSince1970: 1))
+
+        #expect(snapshot.userID == nil)
+        #expect(snapshot.teamUsage?.id == "team-456")
+        #expect(snapshot.teamUsage?.alias == "platform")
+        #expect(snapshot.teamUsage?.spendUSD == 25)
+        #expect(snapshot.teamUsage?.budgetUSD == 100)
+
+        let usage = snapshot.toUsageSnapshot()
+        #expect(usage.primary == nil)
+        #expect(usage.secondary?.usedPercent == 25)
+        #expect(usage.providerCost?.used == 25)
+        #expect(usage.providerCost?.limit == 100)
+        #expect(usage.providerCost?.period == "Team budget")
+
         let requests = await transport.requests()
         #expect(requests.count == 2)
     }
