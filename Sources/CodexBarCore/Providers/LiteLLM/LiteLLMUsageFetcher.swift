@@ -18,7 +18,7 @@ public enum LiteLLMUsageError: LocalizedError, Sendable {
         case .missingBaseURL:
             "Missing LiteLLM base URL. Set enterpriseHost in ~/.codexbar/config.json or LITELLM_BASE_URL."
         case .missingUserID:
-            "LiteLLM key info did not include a user_id."
+            "LiteLLM key info did not include a user_id or team_id."
         case .invalidURL:
             "LiteLLM URL is invalid."
         case let .apiError(message):
@@ -30,13 +30,13 @@ public enum LiteLLMUsageError: LocalizedError, Sendable {
 }
 
 public struct LiteLLMKeyInfoSnapshot: Codable, Sendable, Equatable {
-    public let userID: String
+    public let userID: String?
     public let teamID: String?
     public let keyName: String?
     public let spendUSD: Double
     public let expiresAt: Date?
 
-    public init(userID: String, teamID: String?, keyName: String?, spendUSD: Double, expiresAt: Date?) {
+    public init(userID: String?, teamID: String?, keyName: String?, spendUSD: Double, expiresAt: Date?) {
         self.userID = userID
         self.teamID = teamID
         self.keyName = keyName
@@ -46,7 +46,7 @@ public struct LiteLLMKeyInfoSnapshot: Codable, Sendable, Equatable {
 }
 
 public struct LiteLLMUsageSnapshot: Codable, Sendable, Equatable {
-    public let userID: String
+    public let userID: String?
     public let accountEmail: String?
     public let personalSpendUSD: Double
     public let personalBudgetUSD: Double?
@@ -80,15 +80,7 @@ public struct LiteLLMUsageSnapshot: Codable, Sendable, Equatable {
                 description: Self.teamDescription(team))
         }
 
-        let providerCost = self.personalBudgetUSD.map {
-            ProviderCostSnapshot(
-                used: self.personalSpendUSD,
-                limit: $0,
-                currencyCode: "USD",
-                period: "Personal budget",
-                resetsAt: self.personalResetAt,
-                updatedAt: self.updatedAt)
-        }
+        let providerCost = self.providerCostSnapshot()
 
         return UsageSnapshot(
             primary: primary,
@@ -129,6 +121,34 @@ public struct LiteLLMUsageSnapshot: Codable, Sendable, Equatable {
             return "\(label): \(UsageFormatter.usdString(team.spendUSD))"
         }
         return "\(label): \(UsageFormatter.usdString(team.spendUSD)) / \(UsageFormatter.usdString(budget))"
+    }
+
+    private func providerCostSnapshot() -> ProviderCostSnapshot? {
+        let spend: Double
+        let budget: Double?
+        let period: String
+        let resetsAt: Date?
+
+        if self.userID == nil, let team = self.teamUsage {
+            spend = team.spendUSD
+            budget = team.budgetUSD
+            period = (team.budgetUSD ?? 0) > 0 ? "Team budget" : "Team spend"
+            resetsAt = team.resetAt
+        } else {
+            spend = self.personalSpendUSD
+            budget = self.personalBudgetUSD
+            period = (self.personalBudgetUSD ?? 0) > 0 ? "Personal budget" : "Personal spend"
+            resetsAt = self.personalResetAt
+        }
+
+        guard spend > 0 || (budget ?? 0) > 0 else { return nil }
+        return ProviderCostSnapshot(
+            used: spend,
+            limit: max(0, budget ?? 0),
+            currencyCode: "USD",
+            period: period,
+            resetsAt: resetsAt,
+            updatedAt: self.updatedAt)
     }
 }
 
@@ -215,6 +235,34 @@ private struct LiteLLMUserInfoResponse: Decodable {
     }
 }
 
+private struct LiteLLMTeamInfoResponse: Decodable {
+    struct TeamInfo: Decodable {
+        let teamAlias: String?
+        let teamID: String?
+        let maxBudget: Double?
+        let spend: Double?
+        let budgetResetAt: String?
+        let budgetDuration: String?
+
+        private enum CodingKeys: String, CodingKey {
+            case teamAlias = "team_alias"
+            case teamID = "team_id"
+            case maxBudget = "max_budget"
+            case spend
+            case budgetResetAt = "budget_reset_at"
+            case budgetDuration = "budget_duration"
+        }
+    }
+
+    let teamID: String?
+    let teamInfo: TeamInfo
+
+    private enum CodingKeys: String, CodingKey {
+        case teamID = "team_id"
+        case teamInfo = "team_info"
+    }
+}
+
 public struct LiteLLMUsageFetcher: Sendable {
     public init() {}
 
@@ -233,12 +281,23 @@ public struct LiteLLMUsageFetcher: Sendable {
             apiKey: cleanedAPIKey,
             baseURL: baseURL,
             transport: transport)
-        return try await self.fetchUserInfo(
-            apiKey: cleanedAPIKey,
-            baseURL: baseURL,
-            keyInfo: keyInfo,
-            transport: transport,
-            updatedAt: updatedAt)
+        if keyInfo.userID != nil {
+            return try await self.fetchUserInfo(
+                apiKey: cleanedAPIKey,
+                baseURL: baseURL,
+                keyInfo: keyInfo,
+                transport: transport,
+                updatedAt: updatedAt)
+        }
+        if keyInfo.teamID != nil {
+            return try await self.fetchTeamInfo(
+                apiKey: cleanedAPIKey,
+                baseURL: baseURL,
+                keyInfo: keyInfo,
+                transport: transport,
+                updatedAt: updatedAt)
+        }
+        throw LiteLLMUsageError.missingUserID
     }
 
     public static func _parseUserInfoForTesting(
@@ -253,12 +312,24 @@ public struct LiteLLMUsageFetcher: Sendable {
         try self.parseKeyInfo(data: data)
     }
 
+    public static func _parseTeamInfoForTesting(
+        _ data: Data,
+        keyInfo: LiteLLMKeyInfoSnapshot,
+        updatedAt: Date) throws -> LiteLLMUsageSnapshot
+    {
+        try self.parseTeamInfo(data: data, keyInfo: keyInfo, updatedAt: updatedAt)
+    }
+
     public static func _keyInfoURLForTesting(baseURL: URL) -> URL {
         self.keyInfoURL(baseURL: baseURL)
     }
 
     public static func _userInfoURLForTesting(baseURL: URL, userID: String) -> URL {
         self.userInfoURL(baseURL: baseURL, userID: userID)
+    }
+
+    public static func _teamInfoURLForTesting(baseURL: URL, teamID: String) -> URL {
+        self.teamInfoURL(baseURL: baseURL, teamID: teamID)
     }
 
     private static func fetchKeyInfo(
@@ -284,14 +355,37 @@ public struct LiteLLMUsageFetcher: Sendable {
         transport: any ProviderHTTPTransport,
         updatedAt: Date) async throws -> LiteLLMUsageSnapshot
     {
+        guard let userID = keyInfo.userID else {
+            throw LiteLLMUsageError.parseFailed("/user/info requested without a user_id")
+        }
         let request = self.request(
-            url: self.userInfoURL(baseURL: baseURL, userID: keyInfo.userID),
+            url: self.userInfoURL(baseURL: baseURL, userID: userID),
             apiKey: apiKey)
         let response = try await transport.response(for: request)
         guard (200..<300).contains(response.statusCode) else {
             throw LiteLLMUsageError.apiError("HTTP \(response.statusCode): \(Self.responseSummary(response.data))")
         }
         return try self.parseUserInfo(data: response.data, keyInfo: keyInfo, updatedAt: updatedAt)
+    }
+
+    private static func fetchTeamInfo(
+        apiKey: String,
+        baseURL: URL,
+        keyInfo: LiteLLMKeyInfoSnapshot,
+        transport: any ProviderHTTPTransport,
+        updatedAt: Date) async throws -> LiteLLMUsageSnapshot
+    {
+        guard let teamID = keyInfo.teamID else {
+            throw LiteLLMUsageError.parseFailed("/team/info requested without a team_id")
+        }
+        let request = self.request(
+            url: self.teamInfoURL(baseURL: baseURL, teamID: teamID),
+            apiKey: apiKey)
+        let response = try await transport.response(for: request)
+        guard (200..<300).contains(response.statusCode) else {
+            throw LiteLLMUsageError.apiError("HTTP \(response.statusCode): \(Self.responseSummary(response.data))")
+        }
+        return try self.parseTeamInfo(data: response.data, keyInfo: keyInfo, updatedAt: updatedAt)
     }
 
     private static func request(url: URL, apiKey: String) -> URLRequest {
@@ -314,6 +408,12 @@ public struct LiteLLMUsageFetcher: Sendable {
             pathComponents: ["user", "info"])
     }
 
+    private static func teamInfoURL(baseURL: URL, teamID: String) -> URL {
+        self.managementBaseURL(baseURL).appending(
+            queryItems: [URLQueryItem(name: "team_id", value: teamID)],
+            pathComponents: ["team", "info"])
+    }
+
     private static func managementBaseURL(_ baseURL: URL) -> URL {
         let path = baseURL.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard path.split(separator: "/").last == "v1" else { return baseURL }
@@ -327,12 +427,14 @@ public struct LiteLLMUsageFetcher: Sendable {
     private static func parseKeyInfo(data: Data) throws -> LiteLLMKeyInfoSnapshot {
         do {
             let decoded = try JSONDecoder().decode(LiteLLMKeyInfoResponse.self, from: data)
-            guard let userID = decoded.info.userID, !userID.isEmpty else {
+            let userID = self.nonEmpty(decoded.info.userID)
+            let teamID = self.nonEmpty(decoded.info.teamID)
+            guard userID != nil || teamID != nil else {
                 throw LiteLLMUsageError.missingUserID
             }
             return LiteLLMKeyInfoSnapshot(
                 userID: userID,
-                teamID: decoded.info.teamID,
+                teamID: teamID,
                 keyName: decoded.info.keyName,
                 spendUSD: decoded.info.spend ?? 0,
                 expiresAt: self.parseDate(decoded.info.expires))
@@ -350,8 +452,11 @@ public struct LiteLLMUsageFetcher: Sendable {
     {
         do {
             let decoded = try JSONDecoder().decode(LiteLLMUserInfoResponse.self, from: data)
+            guard let expectedUserID = keyInfo.userID else {
+                throw LiteLLMUsageError.parseFailed("/user/info requested without a user_id")
+            }
             if let responseUserID = decoded.userInfo.userID ?? decoded.userID,
-               responseUserID != keyInfo.userID
+               responseUserID != expectedUserID
             {
                 throw LiteLLMUsageError.parseFailed("user_id did not match /key/info")
             }
@@ -363,7 +468,7 @@ public struct LiteLLMUsageFetcher: Sendable {
             let team = self.preferredTeam(from: decoded.teams, keyTeamID: keyInfo.teamID)
 
             return LiteLLMUsageSnapshot(
-                userID: keyInfo.userID,
+                userID: expectedUserID,
                 accountEmail: accountEmail,
                 personalSpendUSD: decoded.userInfo.spend ?? 0,
                 personalBudgetUSD: decoded.userInfo.maxBudget,
@@ -377,6 +482,46 @@ public struct LiteLLMUsageFetcher: Sendable {
                         resetAt: self.parseDate($0.budgetResetAt),
                         budgetDuration: $0.budgetDuration)
                 },
+                keyName: keyInfo.keyName,
+                keyExpiresAt: keyInfo.expiresAt,
+                updatedAt: updatedAt)
+        } catch let error as LiteLLMUsageError {
+            throw error
+        } catch {
+            throw LiteLLMUsageError.parseFailed(error.localizedDescription)
+        }
+    }
+
+    private static func parseTeamInfo(
+        data: Data,
+        keyInfo: LiteLLMKeyInfoSnapshot,
+        updatedAt: Date) throws -> LiteLLMUsageSnapshot
+    {
+        do {
+            let decoded = try JSONDecoder().decode(LiteLLMTeamInfoResponse.self, from: data)
+            guard let expectedTeamID = keyInfo.teamID else {
+                throw LiteLLMUsageError.parseFailed("/team/info requested without a team_id")
+            }
+            if let responseTeamID = self.firstNonEmpty(decoded.teamInfo.teamID, decoded.teamID),
+               responseTeamID != expectedTeamID
+            {
+                throw LiteLLMUsageError.parseFailed("team_id did not match /key/info")
+            }
+
+            let team = decoded.teamInfo
+            return LiteLLMUsageSnapshot(
+                userID: nil,
+                accountEmail: nil,
+                personalSpendUSD: 0,
+                personalBudgetUSD: nil,
+                personalResetAt: nil,
+                teamUsage: LiteLLMUsageSnapshot.TeamUsage(
+                    id: expectedTeamID,
+                    alias: team.teamAlias,
+                    spendUSD: team.spend ?? 0,
+                    budgetUSD: team.maxBudget,
+                    resetAt: self.parseDate(team.budgetResetAt),
+                    budgetDuration: team.budgetDuration),
                 keyName: keyInfo.keyName,
                 keyExpiresAt: keyInfo.expiresAt,
                 updatedAt: updatedAt)
@@ -415,6 +560,10 @@ public struct LiteLLMUsageFetcher: Sendable {
         values.lazy
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .first { !$0.isEmpty }
+    }
+
+    private static func nonEmpty(_ value: String?) -> String? {
+        self.firstNonEmpty(value)
     }
 
     private static func responseSummary(_ data: Data) -> String {

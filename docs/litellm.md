@@ -36,11 +36,13 @@ The provider calls:
 
 1. `GET /key/info` to discover the authenticated key's `user_id` and `team_id`.
 2. `GET /user/info?user_id=<user_id>` to read personal spend, budget, and teams.
+3. For team-only keys without a `user_id`, `GET /team/info?team_id=<team_id>` to read team spend and budget.
 
-Both requests use `Authorization: Bearer <apiKey>`. CodexBar does not request or store a LiteLLM master key.
+All requests use `Authorization: Bearer <apiKey>`. CodexBar does not request or store a LiteLLM master key.
 
-The primary menu bar value uses `user_info.spend / user_info.max_budget`. If the authenticated key has a team and that
-team is present in `/user/info`, its budget is shown as the secondary window.
+Personal usage is shown as the primary window. If the authenticated key has a team, its exact matching team budget is
+shown as the secondary window and becomes the automatic menu bar metric because that budget is enforced for the key.
+Spend remains visible as an API-spend row when LiteLLM does not configure a budget.
 
 ## Security
 
