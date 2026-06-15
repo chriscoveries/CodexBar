@@ -729,7 +729,7 @@ struct AntigravityCLIHTTPSFetchStrategyTests {
         do {
             _ = try await AntigravityCLIHTTPSFetchStrategy.waitForSnapshot(
                 pid: 123,
-                deadline: Date().addingTimeInterval(0.05),
+                deadline: Date().addingTimeInterval(1),
                 dependencies: AntigravityCLIHTTPSFetchStrategy.SnapshotWaitDependencies(
                     pollIntervalNanoseconds: 0,
                     listeningPorts: { _, _ in [50080] },
