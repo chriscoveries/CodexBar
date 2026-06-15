@@ -1076,3 +1076,6 @@
 "Clear" = "Duidelijk";
 "No matching providers" = "Geen overeenkomende aanbieders";
 "Search providers" = "Zoekaanbieders";
+"language_arabic" = "العربية";
+"language_persian" = "فارسی";
+"language_thai" = "ไทย";

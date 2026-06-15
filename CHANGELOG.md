@@ -5,7 +5,7 @@
 - Ollama: replace the bundled provider icon with the cleaner official mark while preserving native template tinting. Thanks @mattab178!
 - Menu bar: avoid a one-time visible menu rebuild after first-open background data arrives.
 - Settings: use high-contrast selected-content colors for provider sidebar text and icons.
-- Localization: add Italian (#1248), Indonesian (#1513), and Polish (#1253) as selectable app languages, plus automatic website language detection, a persistent 21-language picker, and right-to-left layouts for Arabic and Persian. Thanks @Yuxin-Qiao and @StevanusPangau!
+- Localization: align the app and website on the same 21-language catalog, adding Italian (#1248), Indonesian (#1513), Polish (#1253), Arabic, Persian, and Thai as selectable app languages, plus automatic website detection, persistent pickers, and right-to-left layouts for Arabic and Persian. Thanks @Yuxin-Qiao and @StevanusPangau!
 
 ### Added
 - LiteLLM: add personal and team budget tracking from a configured virtual key and proxy URL (#1542). Thanks @hololee!
