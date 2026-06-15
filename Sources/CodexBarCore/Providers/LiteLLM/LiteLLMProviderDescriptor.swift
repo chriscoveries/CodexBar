@@ -14,7 +14,7 @@ public enum LiteLLMProviderDescriptor {
                 opusLabel: nil,
                 supportsOpus: false,
                 supportsCredits: false,
-                creditsHint: "Reads spend and budget from LiteLLM /user/info.",
+                creditsHint: "Reads spend and budget from LiteLLM key, user, and team info endpoints.",
                 toggleTitle: "Show LiteLLM usage",
                 cliName: "litellm",
                 defaultEnabled: false,
