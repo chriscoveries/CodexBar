@@ -27,6 +27,11 @@ struct LiteLLMUsageFetcherTests {
           },
           "keys": [
             {
+              "key_name": "sk-...OTHER",
+              "user_id": "user-123",
+              "team_id": "team-other"
+            },
+            {
               "key_name": "sk-...IAAw",
               "spend": 212.3537162499998,
               "expires": "2026-09-11T00:12:55.950000+00:00",
@@ -35,6 +40,12 @@ struct LiteLLMUsageFetcherTests {
             }
           ],
           "teams": [
+            {
+              "team_alias": "unrelated",
+              "team_id": "team-other",
+              "max_budget": 5.0,
+              "spend": 4.0
+            },
             {
               "team_alias": "ai",
               "team_id": "team-456",
@@ -49,6 +60,12 @@ struct LiteLLMUsageFetcherTests {
 
         let parsed = try LiteLLMUsageFetcher._parseUserInfoForTesting(
             Data(json.utf8),
+            keyInfo: LiteLLMKeyInfoSnapshot(
+                userID: "user-123",
+                teamID: "team-456",
+                keyName: "sk-...IAAw",
+                spendUSD: 212.3537162499998,
+                expiresAt: Date(timeIntervalSince1970: 2)),
             updatedAt: Date(timeIntervalSince1970: 1))
 
         #expect(parsed.userID == "user-123")
@@ -58,6 +75,8 @@ struct LiteLLMUsageFetcherTests {
         #expect(parsed.teamUsage?.alias == "ai")
         #expect(parsed.teamUsage?.spendUSD == 215.3245658499998)
         #expect(parsed.teamUsage?.budgetUSD == 1000)
+        #expect(parsed.keyName == "sk-...IAAw")
+        #expect(parsed.keyExpiresAt == Date(timeIntervalSince1970: 2))
 
         let snapshot = parsed.toUsageSnapshot()
         #expect(snapshot.identity?.providerID == .litellm)
@@ -105,12 +124,12 @@ struct LiteLLMUsageFetcherTests {
 
         #expect(
             LiteLLMUsageFetcher
-                ._keyInfoURLForTesting(baseURL: root, apiKey: "sk-test")
-                .absoluteString == "https://litellm.example.com/key/info?key=sk-test")
+                ._keyInfoURLForTesting(baseURL: root)
+                .absoluteString == "https://litellm.example.com/key/info")
         #expect(
             LiteLLMUsageFetcher
-                ._keyInfoURLForTesting(baseURL: versioned, apiKey: "sk-test")
-                .absoluteString == "https://litellm.example.com/key/info?key=sk-test")
+                ._keyInfoURLForTesting(baseURL: versioned)
+                .absoluteString == "https://litellm.example.com/key/info")
         #expect(
             LiteLLMUsageFetcher
                 ._userInfoURLForTesting(baseURL: nestedVersioned, userID: "user-123")
@@ -121,12 +140,10 @@ struct LiteLLMUsageFetcherTests {
     func `settings reader trims quoted environment values`() {
         let environment = [
             "LITELLM_API_KEY": " 'sk-test' ",
-            "LITELLM_MANAGEMENT_KEY": " 'sk-management' ",
             "LITELLM_BASE_URL": #" "https://litellm.example.com/v1" "#,
         ]
 
         #expect(LiteLLMSettingsReader.apiKey(environment: environment) == "sk-test")
-        #expect(LiteLLMSettingsReader.managementKey(environment: environment) == "sk-management")
         #expect(LiteLLMSettingsReader.baseURL(environment: environment)?
             .absoluteString == "https://litellm.example.com/v1")
     }
@@ -142,7 +159,7 @@ struct LiteLLMUsageFetcherTests {
             let body: String
             switch path {
             case "/key/info":
-                #expect(query == "key=sk-test")
+                #expect(query == nil)
                 body = """
                 {
                   "info": {
@@ -189,65 +206,10 @@ struct LiteLLMUsageFetcherTests {
     }
 
     @Test
-    func `fetch can authorize management requests with separate management key`() async throws {
+    func `fetch surfaces rejected virtual key`() async throws {
         let baseURL = try #require(URL(string: "https://litellm.example.com"))
         let transport = ProviderHTTPTransportStub { request in
-            #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer sk-management")
-
-            let body: String
-            switch request.url?.path {
-            case "/key/info":
-                #expect(request.url?.query == "key=sk-target")
-                body = """
-                {
-                  "info": {
-                    "user_id": "user-123",
-                    "team_id": "team-456",
-                    "spend": 1
-                  }
-                }
-                """
-            case "/user/info":
-                #expect(request.url?.query == "user_id=user-123")
-                body = """
-                {
-                  "user_id": "user-123",
-                  "user_info": {
-                    "user_id": "user-123",
-                    "max_budget": 10,
-                    "spend": 1
-                  }
-                }
-                """
-            default:
-                Issue.record("unexpected LiteLLM request path: \(request.url?.path ?? "nil")")
-                body = "{}"
-            }
-
-            let url = try #require(request.url)
-            let response = try #require(HTTPURLResponse(
-                url: url,
-                statusCode: 200,
-                httpVersion: nil,
-                headerFields: nil))
-            return (Data(body.utf8), response)
-        }
-
-        _ = try await LiteLLMUsageFetcher.fetchUsage(
-            apiKey: "sk-target",
-            managementKey: " sk-management\n",
-            baseURL: baseURL,
-            transport: transport)
-
-        let requests = await transport.requests()
-        #expect(requests.count == 2)
-    }
-
-    @Test
-    func `fetch surfaces insufficient management credentials`() async throws {
-        let baseURL = try #require(URL(string: "https://litellm.example.com"))
-        let transport = ProviderHTTPTransportStub { request in
-            #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer sk-management")
+            #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer sk-target")
             let url = try #require(request.url)
             let response = try #require(HTTPURLResponse(
                 url: url,
@@ -260,7 +222,6 @@ struct LiteLLMUsageFetcherTests {
         do {
             _ = try await LiteLLMUsageFetcher.fetchUsage(
                 apiKey: "sk-target",
-                managementKey: "sk-management",
                 baseURL: baseURL,
                 transport: transport)
             Issue.record("expected LiteLLMUsageError.apiError")

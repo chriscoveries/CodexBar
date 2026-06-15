@@ -244,11 +244,6 @@ public enum ProviderConfigEnvironment {
         {
             env[key] = baseURL
         }
-        if provider == .litellm,
-           let managementKey = config?.sanitizedSecretKey
-        {
-            env[LiteLLMSettingsReader.managementKeyEnvironmentKey] = managementKey
-        }
         return env
     }
 

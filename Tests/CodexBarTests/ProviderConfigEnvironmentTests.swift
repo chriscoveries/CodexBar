@@ -142,7 +142,6 @@ struct ProviderConfigEnvironmentTests {
         let config = ProviderConfig(
             id: .litellm,
             apiKey: "litellm-token",
-            secretKey: "litellm-management-token",
             enterpriseHost: "https://litellm.example.com/v1")
         let env = ProviderConfigEnvironment.applyProviderConfigOverrides(
             base: [:],
@@ -150,7 +149,6 @@ struct ProviderConfigEnvironmentTests {
             config: config)
 
         #expect(env[LiteLLMSettingsReader.apiKeyEnvironmentKey] == "litellm-token")
-        #expect(env[LiteLLMSettingsReader.managementKeyEnvironmentKey] == "litellm-management-token")
         #expect(env[LiteLLMSettingsReader.baseURLEnvironmentKey] == "https://litellm.example.com/v1")
         #expect(ProviderTokenResolver.liteLLMToken(environment: env) == "litellm-token")
     }

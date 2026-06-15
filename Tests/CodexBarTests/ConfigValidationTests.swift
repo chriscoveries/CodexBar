@@ -81,16 +81,15 @@ struct ConfigValidationTests {
     }
 
     @Test
-    func `allows LiteLLM management secret key`() {
+    func `allows LiteLLM endpoint`() {
         var config = CodexBarConfig.makeDefault()
         config.setProviderConfig(ProviderConfig(
             id: .litellm,
-            apiKey: "sk-target",
-            secretKey: "sk-management",
+            apiKey: "sk-test",
             enterpriseHost: "https://litellm.example.com"))
         let issues = CodexBarConfigValidator.validate(config)
 
-        #expect(!issues.contains(where: { $0.provider == .litellm && $0.code == "secret_key_unused" }))
+        #expect(!issues.contains(where: { $0.provider == .litellm && $0.code == "enterprise_host_unused" }))
     }
 
     @Test

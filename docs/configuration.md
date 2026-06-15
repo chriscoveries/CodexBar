@@ -129,16 +129,13 @@ LLM Proxy also needs a base URL. Set `enterpriseHost` in config or `LLM_PROXY_BA
 }
 ```
 
-LiteLLM also needs a base URL. Set `enterpriseHost` in config or `LITELLM_BASE_URL` in the process environment. If
-your proxy requires a management/admin key for `/key/info` and `/user/info`, set `secretKey` or
-`LITELLM_MANAGEMENT_KEY`; otherwise the provider uses `apiKey` for both target lookup and Bearer auth:
+LiteLLM also needs a base URL. Set `enterpriseHost` in config or `LITELLM_BASE_URL` in the process environment:
 
 ```json
 {
   "id": "litellm",
   "enabled": true,
   "apiKey": "<REDACTED>",
-  "secretKey": "<OPTIONAL_MANAGEMENT_KEY>",
   "enterpriseHost": "https://litellm.example.com"
 }
 ```

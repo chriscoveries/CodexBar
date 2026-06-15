@@ -14,18 +14,6 @@ extension SettingsStore {
         }
     }
 
-    var liteLLMManagementKey: String {
-        get {
-            self.configSnapshot.providerConfig(for: .litellm)?.sanitizedSecretKey ?? ""
-        }
-        set {
-            self.updateProviderConfig(provider: .litellm) { entry in
-                entry.secretKey = self.normalizedConfigValue(newValue)
-            }
-            self.logSecretUpdate(provider: .litellm, field: "managementKey", value: newValue)
-        }
-    }
-
     var liteLLMBaseURL: String {
         get {
             self.configSnapshot.providerConfig(for: .litellm)?.sanitizedEnterpriseHost ?? ""

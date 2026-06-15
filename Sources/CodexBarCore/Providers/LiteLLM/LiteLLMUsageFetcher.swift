@@ -35,6 +35,14 @@ public struct LiteLLMKeyInfoSnapshot: Codable, Sendable, Equatable {
     public let keyName: String?
     public let spendUSD: Double
     public let expiresAt: Date?
+
+    public init(userID: String, teamID: String?, keyName: String?, spendUSD: Double, expiresAt: Date?) {
+        self.userID = userID
+        self.teamID = teamID
+        self.keyName = keyName
+        self.spendUSD = spendUSD
+        self.expiresAt = expiresAt
+    }
 }
 
 public struct LiteLLMUsageSnapshot: Codable, Sendable, Equatable {
@@ -178,20 +186,6 @@ private struct LiteLLMUserInfoResponse: Decodable {
         }
     }
 
-    struct Key: Decodable {
-        let keyName: String?
-        let expires: String?
-        let userID: String?
-        let teamID: String?
-
-        private enum CodingKeys: String, CodingKey {
-            case keyName = "key_name"
-            case expires
-            case userID = "user_id"
-            case teamID = "team_id"
-        }
-    }
-
     struct Team: Decodable {
         let teamAlias: String?
         let teamID: String
@@ -212,13 +206,11 @@ private struct LiteLLMUserInfoResponse: Decodable {
 
     let userID: String?
     let userInfo: UserInfo
-    let keys: [Key]?
     let teams: [Team]?
 
     private enum CodingKeys: String, CodingKey {
         case userID = "user_id"
         case userInfo = "user_info"
-        case keys
         case teams
     }
 }
@@ -228,7 +220,6 @@ public struct LiteLLMUsageFetcher: Sendable {
 
     public static func fetchUsage(
         apiKey: String,
-        managementKey: String? = nil,
         baseURL: URL,
         transport: any ProviderHTTPTransport = ProviderHTTPClient.shared,
         updatedAt: Date = Date()) async throws -> LiteLLMUsageSnapshot
@@ -237,47 +228,33 @@ public struct LiteLLMUsageFetcher: Sendable {
         guard !cleanedAPIKey.isEmpty else {
             throw LiteLLMUsageError.missingCredentials
         }
-        let cleanedManagementKey = managementKey?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .nilIfEmpty ?? cleanedAPIKey
 
         let keyInfo = try await self.fetchKeyInfo(
             apiKey: cleanedAPIKey,
-            managementKey: cleanedManagementKey,
             baseURL: baseURL,
             transport: transport)
-        let userUsage = try await self.fetchUserInfo(
-            managementKey: cleanedManagementKey,
+        return try await self.fetchUserInfo(
+            apiKey: cleanedAPIKey,
             baseURL: baseURL,
-            userID: keyInfo.userID,
+            keyInfo: keyInfo,
             transport: transport,
             updatedAt: updatedAt)
-
-        if userUsage.keyName != nil || userUsage.keyExpiresAt != nil {
-            return userUsage
-        }
-        return LiteLLMUsageSnapshot(
-            userID: userUsage.userID,
-            accountEmail: userUsage.accountEmail,
-            personalSpendUSD: userUsage.personalSpendUSD,
-            personalBudgetUSD: userUsage.personalBudgetUSD,
-            personalResetAt: userUsage.personalResetAt,
-            teamUsage: userUsage.teamUsage,
-            keyName: keyInfo.keyName,
-            keyExpiresAt: keyInfo.expiresAt,
-            updatedAt: userUsage.updatedAt)
     }
 
-    public static func _parseUserInfoForTesting(_ data: Data, updatedAt: Date) throws -> LiteLLMUsageSnapshot {
-        try self.parseUserInfo(data: data, updatedAt: updatedAt)
+    public static func _parseUserInfoForTesting(
+        _ data: Data,
+        keyInfo: LiteLLMKeyInfoSnapshot,
+        updatedAt: Date) throws -> LiteLLMUsageSnapshot
+    {
+        try self.parseUserInfo(data: data, keyInfo: keyInfo, updatedAt: updatedAt)
     }
 
     public static func _parseKeyInfoForTesting(_ data: Data) throws -> LiteLLMKeyInfoSnapshot {
         try self.parseKeyInfo(data: data)
     }
 
-    public static func _keyInfoURLForTesting(baseURL: URL, apiKey: String) -> URL {
-        self.keyInfoURL(baseURL: baseURL, apiKey: apiKey)
+    public static func _keyInfoURLForTesting(baseURL: URL) -> URL {
+        self.keyInfoURL(baseURL: baseURL)
     }
 
     public static func _userInfoURLForTesting(baseURL: URL, userID: String) -> URL {
@@ -286,13 +263,13 @@ public struct LiteLLMUsageFetcher: Sendable {
 
     private static func fetchKeyInfo(
         apiKey: String,
-        managementKey: String,
         baseURL: URL,
         transport: any ProviderHTTPTransport) async throws -> LiteLLMKeyInfoSnapshot
     {
+        // Virtual keys may read their own metadata; omit ?key= to avoid requiring or exposing a master key.
         let request = self.request(
-            url: self.keyInfoURL(baseURL: baseURL, apiKey: apiKey),
-            managementKey: managementKey)
+            url: self.keyInfoURL(baseURL: baseURL),
+            apiKey: apiKey)
         let response = try await transport.response(for: request)
         guard (200..<300).contains(response.statusCode) else {
             throw LiteLLMUsageError.apiError("HTTP \(response.statusCode): \(Self.responseSummary(response.data))")
@@ -301,34 +278,34 @@ public struct LiteLLMUsageFetcher: Sendable {
     }
 
     private static func fetchUserInfo(
-        managementKey: String,
+        apiKey: String,
         baseURL: URL,
-        userID: String,
+        keyInfo: LiteLLMKeyInfoSnapshot,
         transport: any ProviderHTTPTransport,
         updatedAt: Date) async throws -> LiteLLMUsageSnapshot
     {
         let request = self.request(
-            url: self.userInfoURL(baseURL: baseURL, userID: userID),
-            managementKey: managementKey)
+            url: self.userInfoURL(baseURL: baseURL, userID: keyInfo.userID),
+            apiKey: apiKey)
         let response = try await transport.response(for: request)
         guard (200..<300).contains(response.statusCode) else {
             throw LiteLLMUsageError.apiError("HTTP \(response.statusCode): \(Self.responseSummary(response.data))")
         }
-        return try self.parseUserInfo(data: response.data, updatedAt: updatedAt)
+        return try self.parseUserInfo(data: response.data, keyInfo: keyInfo, updatedAt: updatedAt)
     }
 
-    private static func request(url: URL, managementKey: String) -> URLRequest {
+    private static func request(url: URL, apiKey: String) -> URLRequest {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
-        request.setValue("Bearer \(managementKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         return request
     }
 
-    private static func keyInfoURL(baseURL: URL, apiKey: String) -> URL {
-        self.managementBaseURL(baseURL).appending(
-            queryItems: [URLQueryItem(name: "key", value: apiKey)],
-            pathComponents: ["key", "info"])
+    private static func keyInfoURL(baseURL: URL) -> URL {
+        self.managementBaseURL(baseURL)
+            .appendingPathComponent("key")
+            .appendingPathComponent("info")
     }
 
     private static func userInfoURL(baseURL: URL, userID: String) -> URL {
@@ -366,23 +343,27 @@ public struct LiteLLMUsageFetcher: Sendable {
         }
     }
 
-    private static func parseUserInfo(data: Data, updatedAt: Date) throws -> LiteLLMUsageSnapshot {
+    private static func parseUserInfo(
+        data: Data,
+        keyInfo: LiteLLMKeyInfoSnapshot,
+        updatedAt: Date) throws -> LiteLLMUsageSnapshot
+    {
         do {
             let decoded = try JSONDecoder().decode(LiteLLMUserInfoResponse.self, from: data)
-            let userID = decoded.userInfo.userID ?? decoded.userID
-            guard let userID, !userID.isEmpty else {
-                throw LiteLLMUsageError.missingUserID
+            if let responseUserID = decoded.userInfo.userID ?? decoded.userID,
+               responseUserID != keyInfo.userID
+            {
+                throw LiteLLMUsageError.parseFailed("user_id did not match /key/info")
             }
 
             let accountEmail = self.firstNonEmpty(
                 decoded.userInfo.userEmail,
                 decoded.userInfo.userAlias,
                 decoded.userInfo.metadata?.preferredUsername)
-            let key = decoded.keys?.first { $0.userID == userID } ?? decoded.keys?.first
-            let team = self.preferredTeam(from: decoded.teams, keyTeamID: key?.teamID)
+            let team = self.preferredTeam(from: decoded.teams, keyTeamID: keyInfo.teamID)
 
             return LiteLLMUsageSnapshot(
-                userID: userID,
+                userID: keyInfo.userID,
                 accountEmail: accountEmail,
                 personalSpendUSD: decoded.userInfo.spend ?? 0,
                 personalBudgetUSD: decoded.userInfo.maxBudget,
@@ -396,8 +377,8 @@ public struct LiteLLMUsageFetcher: Sendable {
                         resetAt: self.parseDate($0.budgetResetAt),
                         budgetDuration: $0.budgetDuration)
                 },
-                keyName: key?.keyName,
-                keyExpiresAt: self.parseDate(key?.expires),
+                keyName: keyInfo.keyName,
+                keyExpiresAt: keyInfo.expiresAt,
                 updatedAt: updatedAt)
         } catch let error as LiteLLMUsageError {
             throw error
@@ -410,11 +391,8 @@ public struct LiteLLMUsageFetcher: Sendable {
         from teams: [LiteLLMUserInfoResponse.Team]?,
         keyTeamID: String?) -> LiteLLMUserInfoResponse.Team?
     {
-        guard let teams else { return nil }
-        if let keyTeamID, let match = teams.first(where: { $0.teamID == keyTeamID }) {
-            return match
-        }
-        return teams.first
+        guard let teams, let keyTeamID else { return nil }
+        return teams.first(where: { $0.teamID == keyTeamID })
     }
 
     private static func parseDate(_ raw: String?) -> Date? {
@@ -443,12 +421,6 @@ public struct LiteLLMUsageFetcher: Sendable {
         String(bytes: data.prefix(500), encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             ?? ""
-    }
-}
-
-extension String {
-    fileprivate var nilIfEmpty: String? {
-        self.isEmpty ? nil : self
     }
 }
 
