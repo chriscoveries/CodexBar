@@ -501,6 +501,7 @@ public struct KiroStatusProbe: Sendable {
         if !stdoutCapture.reachedEOF || !stderrCapture.reachedEOF {
             await process.terminateResidualProcesses()
         }
+        await process.finish()
         guard let terminationStatus = process.terminationStatus else {
             throw KiroStatusProbeError.timeout
         }

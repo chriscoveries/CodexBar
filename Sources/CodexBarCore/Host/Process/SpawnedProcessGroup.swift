@@ -21,17 +21,45 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
     }
 
     private final class TerminationState: @unchecked Sendable {
-        private let lock = NSLock()
+        private let condition = NSCondition()
+        private var exitObserved = false
+        private var reapRequested = false
         private var status: Int32?
 
+        var hasObservedExit: Bool {
+            self.condition.withLock { self.exitObserved }
+        }
+
         var value: Int32? {
-            self.lock.withLock { self.status }
+            self.condition.withLock { self.status }
+        }
+
+        func observeExit() {
+            self.condition.withLock {
+                self.exitObserved = true
+                self.condition.broadcast()
+            }
+        }
+
+        func requestReap() {
+            self.condition.withLock {
+                self.reapRequested = true
+                self.condition.broadcast()
+            }
+        }
+
+        func waitForReapRequest(timeout: TimeInterval) {
+            let deadline = Date().addingTimeInterval(timeout)
+            self.condition.lock()
+            while !self.reapRequested, self.condition.wait(until: deadline) {}
+            self.condition.unlock()
         }
 
         func resolve(_ status: Int32) {
-            self.lock.withLock {
+            self.condition.withLock {
                 guard self.status == nil else { return }
                 self.status = status
+                self.condition.broadcast()
             }
         }
     }
@@ -222,6 +250,9 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
         for descriptor in Self.pipeDescriptorsToClose([stdoutRead, stdoutWrite, stderrRead, stderrWrite]) {
             fileActionResults.append(posix_spawn_file_actions_addclose(&fileActions, descriptor))
         }
+        #if !canImport(Darwin)
+        fileActionResults.append(posix_spawn_file_actions_addclosefrom_np(&fileActions, STDERR_FILENO + 1))
+        #endif
         guard fileActionResults.allSatisfy({ $0 == 0 }) else {
             throw LaunchError.setupFailed("posix_spawn file actions")
         }
@@ -278,7 +309,7 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
     }
 
     package var isRunning: Bool {
-        self.termination.value == nil
+        !self.termination.hasObservedExit
     }
 
     package var terminationStatus: Int32? {
@@ -307,9 +338,9 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
             }
 
             processIdentities.formUnion(self.currentResidualProcessIdentities(includeDescendants: false))
+            processIdentities.formUnion(self.currentProcessGroupMemberIdentities())
             if self.isRunning {
                 processIdentities.formUnion(self.currentResidualProcessIdentities(includeDescendants: true))
-                processIdentities.formUnion(self.currentProcessGroupMemberIdentities())
                 if let rootIdentity = TTYProcessTreeTerminator.processIdentity(for: self.pid) {
                     processIdentities.insert(rootIdentity)
                 }
@@ -319,18 +350,20 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
                 Self.signal(processIdentities: processIdentities, signal: SIGKILL)
             }
             _ = await self.waitForResidualProcessesExit(processIdentities, timeout: grace)
+            await self.finish()
             return self.terminationStatus
         }
         await self.terminateResidualProcesses(grace: grace)
+        await self.finish()
         return self.terminationStatus
     }
 
     package func terminateResidualProcesses(grace: TimeInterval = 0.4) async {
         let deadline = Date().addingTimeInterval(max(0, grace))
         var processIdentities = self.currentResidualProcessIdentities(includeDescendants: false)
+        processIdentities.formUnion(self.currentProcessGroupMemberIdentities())
         if self.isRunning {
             processIdentities.formUnion(self.currentResidualProcessIdentities(includeDescendants: true))
-            processIdentities.formUnion(self.currentProcessGroupMemberIdentities())
             if let rootIdentity = TTYProcessTreeTerminator.processIdentity(for: self.pid) {
                 processIdentities.insert(rootIdentity)
             }
@@ -343,9 +376,9 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
         }
 
         processIdentities.formUnion(self.currentResidualProcessIdentities(includeDescendants: false))
+        processIdentities.formUnion(self.currentProcessGroupMemberIdentities())
         if self.isRunning {
             processIdentities.formUnion(self.currentResidualProcessIdentities(includeDescendants: true))
-            processIdentities.formUnion(self.currentProcessGroupMemberIdentities())
             if let rootIdentity = TTYProcessTreeTerminator.processIdentity(for: self.pid) {
                 processIdentities.insert(rootIdentity)
             }
@@ -355,6 +388,11 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
         }
         Self.signal(processIdentities: processIdentities, signal: SIGKILL)
         _ = await self.waitForResidualProcessesExit(processIdentities, timeout: grace)
+    }
+
+    package func finish() async {
+        self.termination.requestReap()
+        _ = await self.waitForTerminationStatus(timeout: 1)
     }
 
     private func startWaiter() {
@@ -369,6 +407,7 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
                 waitResult = waitid(P_PID, id_t(pid), &info, WEXITED | WNOWAIT)
             } while waitResult == -1 && errno == EINTR
             guard waitResult == 0 else {
+                termination.observeExit()
                 termination.resolve(1)
                 return
             }
@@ -376,7 +415,9 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
             // The exited root remains unreaped here, so its PID cannot yet be reused as
             // an unrelated process-group ID.
             observedProcessGroupMembers.formUnion(
-                Self.processGroupMemberIdentities(processGroup: processGroup))
+                Self.processGroupMemberIdentities(processGroup: processGroup, excluding: pid))
+            termination.observeExit()
+            termination.waitForReapRequest(timeout: 30)
 
             var rawStatus: Int32 = 0
             var result: pid_t
@@ -390,6 +431,14 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
     }
 
     private func waitForExit(timeout: TimeInterval) async -> Int32? {
+        let deadline = Date().addingTimeInterval(max(0, timeout))
+        while self.isRunning, Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        return self.terminationStatus
+    }
+
+    private func waitForTerminationStatus(timeout: TimeInterval) async -> Int32? {
         let deadline = Date().addingTimeInterval(max(0, timeout))
         while self.terminationStatus == nil, Date() < deadline {
             try? await Task.sleep(for: .milliseconds(20))
@@ -431,38 +480,51 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
     }
 
     private func currentProcessGroupMemberIdentities() -> Set<TTYProcessTreeTerminator.ProcessIdentity> {
-        guard self.isRunning,
-              let rootIdentity = self.rootIdentity
+        if self.termination.hasObservedExit, self.termination.value == nil {
+            let identities = Self.processGroupMemberIdentities(
+                processGroup: self.processGroup,
+                excluding: self.pid)
+            self.observedProcessGroupMembers.formUnion(identities)
+            return identities
+        }
+
+        guard let rootIdentity = self.rootIdentity
         else {
             return []
         }
 
         let identities = Self.processGroupMemberIdentities(
             processGroup: self.processGroup,
-            rootIdentity: rootIdentity)
+            rootIdentity: rootIdentity,
+            excluding: self.pid)
         self.observedProcessGroupMembers.formUnion(identities)
         return identities
     }
 
     private static func processGroupMemberIdentities(
         processGroup: pid_t,
-        rootIdentity: TTYProcessTreeTerminator.ProcessIdentity)
+        rootIdentity: TTYProcessTreeTerminator.ProcessIdentity,
+        excluding excludedPID: pid_t)
         -> Set<TTYProcessTreeTerminator.ProcessIdentity>
     {
         guard TTYProcessTreeTerminator.isCurrent(rootIdentity) else { return [] }
 
-        let identities = Self.processGroupMemberIdentities(processGroup: processGroup)
+        let identities = Self.processGroupMemberIdentities(
+            processGroup: processGroup,
+            excluding: excludedPID)
         guard TTYProcessTreeTerminator.isCurrent(rootIdentity) else { return [] }
         return identities
     }
 
     private static func processGroupMemberIdentities(
-        processGroup: pid_t)
+        processGroup: pid_t,
+        excluding excludedPID: pid_t)
         -> Set<TTYProcessTreeTerminator.ProcessIdentity>
     {
         Set(self.processIDs(inProcessGroup: processGroup)
             .compactMap { pid -> TTYProcessTreeTerminator.ProcessIdentity? in
                 guard pid != getpid(),
+                      pid != excludedPID,
                       let identity = TTYProcessTreeTerminator.processIdentity(for: pid),
                       getpgid(pid) == processGroup,
                       TTYProcessTreeTerminator.isCurrent(identity)
