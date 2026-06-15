@@ -7,6 +7,7 @@
 - Settings: use high-contrast selected-content colors for provider sidebar text and icons.
 - Localization: add Italian as a selectable app language (#1248). Thanks @Yuxin-Qiao!
 - Localization: add Indonesian as a selectable app language (#1513). Thanks @StevanusPangau!
+- Localization: add Polish as a selectable app language (#1253). Thanks @Yuxin-Qiao!
 
 ### Changed
 - Antigravity: prefer app and `agy` quota summaries, group usage into Gemini and Claude + GPT session/weekly pools, and preserve IDE and OAuth fallbacks. Thanks @Zihao-Qi!

@@ -22,6 +22,7 @@ struct LocalizationLanguageCatalogTests {
         "language_korean",
         "language_turkish",
         "language_indonesian",
+        "language_polish",
     ]
 
     @Test
@@ -52,6 +53,12 @@ struct LocalizationLanguageCatalogTests {
     func `app language catalog includes Indonesian`() {
         #expect(AppLanguage.allCases.contains(.indonesian))
         #expect(AppLanguage.indonesian.rawValue == "id")
+    }
+
+    @Test
+    func `app language catalog includes Polish`() {
+        #expect(AppLanguage.allCases.contains(.polish))
+        #expect(AppLanguage.polish.rawValue == "pl")
     }
 
     @Test
@@ -282,6 +289,25 @@ struct LocalizationLanguageCatalogTests {
             locale: Locale(identifier: "id_ID"),
             arguments: [30])
         #expect(daysLabel == "30 hari")
+    }
+
+    @Test
+    func `polish localization matches English catalog and includes current UI labels`() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let resourcesURL = root.appendingPathComponent("Sources/CodexBar/Resources")
+        let enURL = resourcesURL.appendingPathComponent("en.lproj/Localizable.strings")
+        let plURL = resourcesURL.appendingPathComponent("pl.lproj/Localizable.strings")
+        let english = try #require(NSDictionary(contentsOf: enURL) as? [String: String])
+        let polish = try #require(NSDictionary(contentsOf: plURL) as? [String: String])
+
+        #expect(Set(polish.keys) == Set(english.keys))
+        #expect(polish["Individual credits"] == "Kredyty indywidualne")
+        #expect(polish["Workspace"] == "Obszar roboczy")
+        #expect(polish["display_mode_reset_time"] == "Godzina resetu")
+        #expect(polish["display_mode_reset_time_desc"]?.contains("↻ 15:56") == true)
     }
 
     @Test
