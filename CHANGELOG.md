@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.36.1 — Unreleased
+
+### Added
+- Poe: add current point balance and recent points history from a configured API key (#1191). Thanks @Yuxin-Qiao!
+
 ## 0.36.0 — 2026-06-16
 
 - Ollama: replace the bundled provider icon with the cleaner official mark while preserving native template tinting. Thanks @mattab178!
@@ -11,7 +16,6 @@
 
 ### Added
 - LiteLLM: add personal and team budget tracking from a configured virtual key and proxy URL (#1542). Thanks @hololee!
-- Poe: add current point balance and recent points history from a configured API key (#1191). Thanks @Yuxin-Qiao!
 
 ### Changed
 - Antigravity: prefer app and `agy` quota summaries, group usage into Gemini and Claude + GPT session/weekly pools, and preserve IDE and OAuth fallbacks. Thanks @Zihao-Qi!
