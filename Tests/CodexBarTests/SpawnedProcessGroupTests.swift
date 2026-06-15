@@ -456,8 +456,11 @@ struct SpawnedProcessGroupTests {
             try await Task.sleep(for: .milliseconds(20))
         }
         let heartbeatBefore = try String(contentsOf: heartbeatFile, encoding: .utf8)
-        try await Task.sleep(for: .milliseconds(100))
-        let heartbeatWhileRunning = try String(contentsOf: heartbeatFile, encoding: .utf8)
+        var heartbeatWhileRunning = heartbeatBefore
+        for _ in 0..<100 where heartbeatWhileRunning == heartbeatBefore {
+            try await Task.sleep(for: .milliseconds(20))
+            heartbeatWhileRunning = try String(contentsOf: heartbeatFile, encoding: .utf8)
+        }
         #expect(heartbeatWhileRunning != heartbeatBefore)
 
         await process.terminateResidualProcesses(grace: 0.2)
