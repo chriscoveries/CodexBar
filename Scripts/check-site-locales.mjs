@@ -12,12 +12,21 @@ const expectedCodes = [
   "vi", "nl", "tr", "uk", "id", "pl", "fa", "th", "ca", "sv",
 ];
 const catalogCodes = localeCatalog.map((locale) => locale.code);
+const appLanguageSource = fs.readFileSync(
+  path.join(repoRoot, "Sources/CodexBar/PreferencesGeneralPane.swift"),
+  "utf8",
+);
 
 assertEqual(catalogCodes, expectedCodes, "locale catalog");
 assertEqual(
   localeCatalog.filter((locale) => locale.direction === "rtl").map((locale) => locale.code),
   ["ar", "fa"],
   "RTL locale catalog");
+const appCatalogCodes = [...appLanguageSource.matchAll(/case \w+ = "([^"]+)"/g)]
+  .map((match) => match[1])
+  .filter(Boolean)
+  .map((code) => ({ "zh-Hans": "zh-CN", "zh-Hant": "zh-TW", ja: "ja-JP" })[code] ?? code);
+assertEqual(appCatalogCodes, expectedCodes, "app language catalog");
 
 const englishKeys = Object.keys(localeMessages.en).sort();
 for (const locale of localeCatalog) {
@@ -47,7 +56,7 @@ for (const code of catalogCodes) {
   assert(indexHtml.includes(`href="https://codexbar.app/?lang=${code}"`), `missing hreflang URL for ${code}`);
 }
 
-console.log(`site locales OK: ${catalogCodes.length} locales, ${englishKeys.length} messages`);
+console.log(`app/site locales OK: ${catalogCodes.length} locales, ${englishKeys.length} site messages`);
 
 function tokens(value) {
   return [...value.matchAll(/\{([^}]+)\}/g)].map((match) => match[1]).sort();
