@@ -388,7 +388,7 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
             account: fetcher.loadAccountInfo(),
             updater: DisabledUpdaterController(),
             preferencesSelection: PreferencesSelection(),
-            statusBar: self.makeStatusBarForTesting())
+            statusBar: testStatusBar())
         defer { controller.releaseStatusItemsForTesting() }
 
         let menu = controller.makeMenu(for: .claude)
@@ -442,7 +442,7 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
             account: fetcher.loadAccountInfo(),
             updater: DisabledUpdaterController(),
             preferencesSelection: PreferencesSelection(),
-            statusBar: self.makeStatusBarForTesting())
+            statusBar: testStatusBar())
         defer { controller.releaseStatusItemsForTesting() }
 
         let menu = controller.makeMenu(for: .claude)
