@@ -63,6 +63,23 @@ private final class AntigravityCLITimeoutRecorder: @unchecked Sendable {
     }
 }
 
+private final class AntigravityCLITestClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var date: Date
+
+    init(date: Date) {
+        self.date = date
+    }
+
+    func now() -> Date {
+        self.lock.lock()
+        let value = self.date
+        self.date = self.date.addingTimeInterval(1)
+        self.lock.unlock()
+        return value
+    }
+}
+
 private final class AntigravityCLIOutputSequence: @unchecked Sendable {
     private let lock = NSLock()
     private var values: [Data]
@@ -725,24 +742,26 @@ struct AntigravityCLIHTTPSFetchStrategyTests {
     @Test
     func `cli HTTPS reports last readiness error when ports never become usable`() async {
         let fetchAttempts = AntigravityCLICounter()
+        let start = Date(timeIntervalSinceReferenceDate: 0)
+        let clock = AntigravityCLITestClock(date: start)
 
         do {
             _ = try await AntigravityCLIHTTPSFetchStrategy.waitForSnapshot(
                 pid: 123,
-                deadline: Date().addingTimeInterval(1),
+                deadline: start.addingTimeInterval(5),
                 dependencies: AntigravityCLIHTTPSFetchStrategy.SnapshotWaitDependencies(
                     pollIntervalNanoseconds: 0,
                     listeningPorts: { _, _ in [50080] },
                     drainOutput: { Data() },
                     fetchSnapshot: { _ in
                         let attempt = fetchAttempts.increment()
-                        antigravityBlockingSleep(0.01)
                         throw AntigravityStatusProbeError.apiError("HTTP 500: warming attempt \(attempt)")
-                    }))
+                    },
+                    now: { clock.now() }))
             Issue.record("Expected readiness polling to throw")
         } catch let AntigravityStatusProbeError.apiError(message) {
-            #expect(fetchAttempts.value > 1)
-            #expect(message == "HTTP 500: warming attempt \(fetchAttempts.value)")
+            #expect(fetchAttempts.value == 2)
+            #expect(message == "HTTP 500: warming attempt 2")
         } catch {
             Issue.record("Expected apiError, got \(error)")
         }
