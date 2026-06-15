@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.36.0 — 2026-06-15
+## 0.36.0 — 2026-06-16
 
 - Ollama: replace the bundled provider icon with the cleaner official mark while preserving native template tinting. Thanks @mattab178!
 - Menu bar: avoid a one-time visible menu rebuild after first-open background data arrives.
