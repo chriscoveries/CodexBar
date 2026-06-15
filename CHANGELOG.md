@@ -9,6 +9,9 @@
 - Localization: add Indonesian as a selectable app language (#1513). Thanks @StevanusPangau!
 - Localization: add Polish as a selectable app language (#1253). Thanks @Yuxin-Qiao!
 
+### Added
+- LiteLLM: add personal and team budget tracking from a configured virtual key and proxy URL (#1542). Thanks @hololee!
+
 ### Changed
 - Antigravity: prefer app and `agy` quota summaries, group usage into Gemini and Claude + GPT session/weekly pools, and preserve IDE and OAuth fallbacks. Thanks @Zihao-Qi!
 
