@@ -56,6 +56,13 @@ for (const code of catalogCodes) {
   assert(indexHtml.includes(`href="https://codexbar.app/?lang=${code}"`), `missing hreflang URL for ${code}`);
 }
 
+const providerCards = [...indexHtml.matchAll(/<a class="provider([^"]*)"[^>]*>([\s\S]*?)<\/a>/g)];
+for (const [, classes, body] of providerCards) {
+  if (!classes.split(/\s+/).includes("add")) {
+    assert(body.includes('class="chip-logo'), "provider cards must use logo assets instead of text placeholders");
+  }
+}
+
 console.log(`app/site locales OK: ${catalogCodes.length} locales, ${englishKeys.length} site messages`);
 
 function tokens(value) {
