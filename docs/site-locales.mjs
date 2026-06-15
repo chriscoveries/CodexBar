@@ -453,9 +453,9 @@ export const localeMessages = {
     "clipboard.copied": "복사됨"
   },
   "de": {
-    "meta.title": "CodexBar – jedes AI-Codierungslimit in Ihrer Menüleiste",
-    "meta.description": "Eine kleine macOS-Menüleisten-App, die die Nutzungsfenster, Credits, Kosten und Zurücksetzungen von AI-Coding-Anbietern bei 50 Anbietern verfolgt – Codex, OpenAI, Claude, Cursor, Gemini, Copilot, LiteLLM und mehr.",
-    "meta.ogDescription": "Verfolgen Sie Nutzungsfenster, Guthaben und Zurücksetzungen bei 50 KI-Codierungsanbietern über Ihre macOS-Menüleiste.",
+    "meta.title": "CodexBar – alle Limits Ihrer KI-Coding-Tools in der Menüleiste",
+    "meta.description": "Eine kleine macOS-Menüleisten-App, die Nutzungslimits, Guthaben, Kosten und Resets von 50 KI-Coding-Anbietern im Blick behält – Codex, OpenAI, Claude, Cursor, Gemini, Copilot, LiteLLM und mehr.",
+    "meta.ogDescription": "Nutzungslimits, Guthaben und Resets von 50 KI-Coding-Anbietern direkt in Ihrer macOS-Menüleiste.",
     "nav.primary": "Primär",
     "nav.language": "Sprache",
     "nav.docs": "Dokumente",
@@ -463,8 +463,8 @@ export const localeMessages = {
     "nav.download": "Herunterladen",
     "theme.toLight": "Wechseln Sie zum Lichtthema",
     "theme.toDark": "Wechseln Sie zum dunklen Thema",
-    "hero.prefix": "Jedes KI-Codierungslimit,",
-    "hero.accent": "in Ihrer Menüleiste.",
+    "hero.prefix": "Alle Limits Ihrer KI-Coding-Tools –",
+    "hero.accent": "direkt in Ihrer Menüleiste.",
     "hero.description": "CodexBar verfolgt Nutzungsfenster, Guthaben und Reset-Countdowns bei den Anbietern, für die Sie tatsächlich bezahlen – jeweils ein Statuselement oder sie werden zu einem zusammengeführt.",
     "hero.download": "Herunterladen für macOS",
     "hero.fineprint": "Kostenlos und Open Source · macOS 14+ · Universell auf GitHub Releases · Apple Silicon über Homebrew",
