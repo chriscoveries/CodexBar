@@ -138,6 +138,22 @@ struct ProviderConfigEnvironmentTests {
     }
 
     @Test
+    func `applies LiteLLM config overrides`() {
+        let config = ProviderConfig(
+            id: .litellm,
+            apiKey: "litellm-token",
+            enterpriseHost: "https://litellm.example.com/v1")
+        let env = ProviderConfigEnvironment.applyProviderConfigOverrides(
+            base: [:],
+            provider: .litellm,
+            config: config)
+
+        #expect(env[LiteLLMSettingsReader.apiKeyEnvironmentKey] == "litellm-token")
+        #expect(env[LiteLLMSettingsReader.baseURLEnvironmentKey] == "https://litellm.example.com/v1")
+        #expect(ProviderTokenResolver.liteLLMToken(environment: env) == "litellm-token")
+    }
+
+    @Test
     func `openai config override uses preferred admin key environment`() {
         let config = ProviderConfig(id: .openai, apiKey: "config-openai-token")
         let env = ProviderConfigEnvironment.applyAPIKeyOverride(
