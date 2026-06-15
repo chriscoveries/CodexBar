@@ -16,6 +16,7 @@ struct LocalizationLanguageCatalogTests {
         "language_french",
         "language_dutch",
         "language_ukrainian",
+        "language_italian",
         "language_vietnamese",
         "language_japanese",
         "language_korean",
@@ -38,6 +39,12 @@ struct LocalizationLanguageCatalogTests {
     func `app language catalog includes Turkish`() {
         #expect(AppLanguage.allCases.contains(.turkish))
         #expect(AppLanguage.turkish.rawValue == "tr")
+    }
+
+    @Test
+    func `app language catalog includes Italian`() {
+        #expect(AppLanguage.allCases.contains(.italian))
+        #expect(AppLanguage.italian.rawValue == "it")
     }
 
     @Test
@@ -165,6 +172,66 @@ struct LocalizationLanguageCatalogTests {
             locale: Locale(identifier: "tr_TR"),
             arguments: ["45%"])
         #expect(miniMaxLabel == "45% kullanıldı")
+    }
+
+    @Test
+    func `italian localization matches English catalog and includes current UI labels`() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let resourcesURL = root.appendingPathComponent("Sources/CodexBar/Resources")
+        let enURL = resourcesURL.appendingPathComponent("en.lproj/Localizable.strings")
+        let itURL = resourcesURL.appendingPathComponent("it.lproj/Localizable.strings")
+        let english = try #require(NSDictionary(contentsOf: enURL) as? [String: String])
+        let italian = try #require(NSDictionary(contentsOf: itURL) as? [String: String])
+
+        #expect(Set(italian.keys) == Set(english.keys))
+        #expect(italian["Individual credits"] == "Crediti individuali")
+        #expect(italian["Workspace"] == "Spazio di lavoro")
+        #expect(italian["display_mode_reset_time"] == "Ora di reimpostazione")
+        #expect(italian["display_mode_reset_time_desc"]?.contains("↻ 15:56") == true)
+        #expect(italian["ory_session_…=…; csrftoken=…"] == "ory_session_…=…; csrftoken=…")
+        #expect(italian["quota_warning_notifications_subtitle"]?.contains("scende sotto") == true)
+
+        let intentionallyUnchanged: Set<String> = [
+            "Account",
+            "Build",
+            "Chrome",
+            "Cookie: ...",
+            "Cookie: …",
+            "Deployment",
+            "Email",
+            "Endpoint",
+            "Gemini Flash",
+            "GitHub",
+            "Google OAuth",
+            "No",
+            "Oasis-Token",
+            "Password",
+            "Provider",
+            "Token",
+            "language_italian",
+            "link_email",
+            "link_github",
+            "ory_session_…=…; csrftoken=…",
+        ]
+        let unchanged = Set(english.keys.filter { italian[$0] == english[$0] })
+        #expect(unchanged == intentionallyUnchanged)
+
+        let warningFormat = try #require(italian["quota_warning_notification_body"])
+        let warning = String(
+            format: warningFormat,
+            locale: Locale(identifier: "it_IT"),
+            arguments: ["20%", 15, "settimanale"])
+        #expect(warning == "Rimane 20%. Hai raggiunto la soglia di avviso del 15% per la quota settimanale.")
+
+        let titleFormat = try #require(italian["quota_warning_notification_title"])
+        let title = String(
+            format: titleFormat,
+            locale: Locale(identifier: "it_IT"),
+            arguments: ["Codex", "settimanale"])
+        #expect(title == "Quota settimanale di Codex quasi esaurita")
     }
 
     @Test
