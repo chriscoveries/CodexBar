@@ -36,6 +36,21 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
         }
     }
 
+    private final class ProcessIdentityState: @unchecked Sendable {
+        private let lock = NSLock()
+        private var identities: Set<TTYProcessTreeTerminator.ProcessIdentity> = []
+
+        var value: Set<TTYProcessTreeTerminator.ProcessIdentity> {
+            self.lock.withLock { self.identities }
+        }
+
+        func formUnion(_ identities: Set<TTYProcessTreeTerminator.ProcessIdentity>) {
+            self.lock.withLock {
+                self.identities.formUnion(identities)
+            }
+        }
+    }
+
     private struct OutputPipeIdentity: Hashable {
         #if canImport(Darwin)
         let firstHandle: UInt64
@@ -164,6 +179,7 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
     package let pid: pid_t
     package let processGroup: pid_t
     private let termination = TerminationState()
+    private let preReapProcessGroupMembers = ProcessIdentityState()
     private let outputPipes: Set<OutputPipeIdentity>
 
     private init(pid: pid_t, outputPipes: Set<OutputPipeIdentity>) {
@@ -276,6 +292,7 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
         if self.isRunning {
             let killDeadline = Date().addingTimeInterval(max(0, grace))
             var processIdentities = self.currentResidualProcessIdentities(includeDescendants: true)
+            processIdentities.formUnion(self.preReapProcessGroupMembers.value)
             processIdentities.formUnion(self.currentProcessGroupMemberIdentities())
             if let rootIdentity = TTYProcessTreeTerminator.processIdentity(for: self.pid) {
                 processIdentities.insert(rootIdentity)
@@ -289,6 +306,7 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
             }
 
             processIdentities.formUnion(self.currentOutputPipeHolderIdentities())
+            processIdentities.formUnion(self.preReapProcessGroupMembers.value)
             if self.isRunning {
                 processIdentities.formUnion(self.currentResidualProcessIdentities(includeDescendants: true))
                 processIdentities.formUnion(self.currentProcessGroupMemberIdentities())
@@ -310,6 +328,7 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
     package func terminateResidualProcesses(grace: TimeInterval = 0.4) async {
         let deadline = Date().addingTimeInterval(max(0, grace))
         var processIdentities = self.currentOutputPipeHolderIdentities()
+        processIdentities.formUnion(self.preReapProcessGroupMembers.value)
         if self.isRunning {
             processIdentities.formUnion(self.currentResidualProcessIdentities(includeDescendants: true))
             processIdentities.formUnion(self.currentProcessGroupMemberIdentities())
@@ -325,6 +344,7 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
         }
 
         processIdentities.formUnion(self.currentOutputPipeHolderIdentities())
+        processIdentities.formUnion(self.preReapProcessGroupMembers.value)
         if self.isRunning {
             processIdentities.formUnion(self.currentResidualProcessIdentities(includeDescendants: true))
             processIdentities.formUnion(self.currentProcessGroupMemberIdentities())
@@ -343,6 +363,10 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
         let pid = self.pid
         let termination = self.termination
         DispatchQueue.global(qos: .userInitiated).async {
+            if Self.waitForExitWithoutReaping(pid) {
+                self.preReapProcessGroupMembers.formUnion(self.processGroupMemberIdentities())
+            }
+
             var rawStatus: Int32 = 0
             var result: pid_t
             repeat {
@@ -352,6 +376,15 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
             let status = result == pid ? Self.exitStatus(from: rawStatus) : 1
             termination.resolve(status)
         }
+    }
+
+    private static func waitForExitWithoutReaping(_ pid: pid_t) -> Bool {
+        var signalInfo = siginfo_t()
+        var result: Int32
+        repeat {
+            result = waitid(P_PID, id_t(pid), &signalInfo, WEXITED | WNOWAIT)
+        } while result == -1 && errno == EINTR
+        return result == 0
     }
 
     private func waitForExit(timeout: TimeInterval) async -> Int32? {
@@ -402,7 +435,14 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
             return []
         }
 
-        let identities = Set(Self.processIDs(inProcessGroup: self.processGroup)
+        let identities = self.processGroupMemberIdentities()
+        guard TTYProcessTreeTerminator.isCurrent(rootIdentity) else { return [] }
+        return identities
+    }
+
+    private func processGroupMemberIdentities() -> Set<TTYProcessTreeTerminator.ProcessIdentity> {
+        // The waiter calls this after WNOWAIT, while the unreaped root still prevents PID/PGID reuse.
+        Set(Self.processIDs(inProcessGroup: self.processGroup)
             .compactMap { pid -> TTYProcessTreeTerminator.ProcessIdentity? in
                 guard pid != getpid(),
                       let identity = TTYProcessTreeTerminator.processIdentity(for: pid),
@@ -413,8 +453,6 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
                 }
                 return identity
             })
-        guard TTYProcessTreeTerminator.isCurrent(rootIdentity) else { return [] }
-        return identities
     }
 
     private static func processGroupExists(_ processGroup: pid_t) -> Bool {

@@ -267,4 +267,51 @@ struct SpawnedProcessGroupTests {
 
         #expect(kill(childPID, 0) == -1)
     }
+
+    @Test
+    func `normal exit cleans a same group helper without output pipes`() async throws {
+        let childPIDFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codexbar-process-group-normal-exit-\(UUID().uuidString).pid")
+        defer { try? FileManager.default.removeItem(at: childPIDFile) }
+
+        let script = """
+        import os
+        import signal
+        import sys
+        import time
+
+        child = os.fork()
+        if child == 0:
+            os.close(1)
+            os.close(2)
+            signal.signal(signal.SIGTERM, signal.SIG_IGN)
+            with open(sys.argv[1], "w") as handle:
+                handle.write(str(os.getpid()))
+            time.sleep(30)
+            os._exit(0)
+
+        os._exit(0)
+        """
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        let process = try SpawnedProcessGroup.launch(
+            binary: "/usr/bin/python3",
+            arguments: ["-c", script, childPIDFile.path],
+            environment: ProcessInfo.processInfo.environment,
+            stdoutPipe: stdoutPipe,
+            stderrPipe: stderrPipe)
+
+        while process.isRunning {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let childPIDText = try String(contentsOf: childPIDFile, encoding: .utf8)
+        let childPID = try #require(pid_t(childPIDText.trimmingCharacters(in: .whitespacesAndNewlines)))
+        defer { _ = kill(childPID, SIGKILL) }
+        #expect(kill(childPID, 0) == 0)
+        #expect(getpgid(childPID) == process.processGroup)
+
+        await process.terminateResidualProcesses(grace: 0.2)
+
+        #expect(kill(childPID, 0) == -1)
+    }
 }

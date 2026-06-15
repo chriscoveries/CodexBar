@@ -165,6 +165,50 @@ struct KiroStatusProbeTests {
     }
 
     @Test
+    func `run command cleans a same group helper after normal exit`() async throws {
+        let childPIDFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codexbar-kiro-normal-exit-\(UUID().uuidString).pid")
+        let cliURL = try self.makeCLI(
+            """
+            #!/usr/bin/python3
+            import os
+            import signal
+            import sys
+            import time
+
+            child = os.fork()
+            if child == 0:
+                os.close(1)
+                os.close(2)
+                signal.signal(signal.SIGTERM, signal.SIG_IGN)
+                with open(sys.argv[1], "w") as handle:
+                    handle.write(str(os.getpid()))
+                time.sleep(30)
+                os._exit(0)
+
+            while not os.path.exists(sys.argv[1]):
+                time.sleep(0.01)
+            print("parent complete", flush=True)
+            os._exit(0)
+            """)
+        defer {
+            try? FileManager.default.removeItem(at: cliURL.deletingLastPathComponent())
+            try? FileManager.default.removeItem(at: childPIDFile)
+        }
+
+        let probe = KiroStatusProbe(cliBinaryResolver: { cliURL.path })
+        let result = try await probe.runCommand(arguments: [childPIDFile.path], timeout: 2)
+
+        #expect(result.terminationStatus == 0)
+        #expect(result.stdout.contains("parent complete"))
+
+        let childPIDText = try String(contentsOf: childPIDFile, encoding: .utf8)
+        let childPID = try #require(pid_t(childPIDText.trimmingCharacters(in: .whitespacesAndNewlines)))
+        defer { _ = kill(childPID, SIGKILL) }
+        #expect(kill(childPID, 0) == -1)
+    }
+
+    @Test
     func `run command preserves completed no-output failure status`() async throws {
         let cliURL = try self.makeCLI(
             """
