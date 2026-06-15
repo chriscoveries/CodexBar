@@ -8,6 +8,7 @@
 - Localization: add Italian as a selectable app language (#1248). Thanks @Yuxin-Qiao!
 - Localization: add Indonesian as a selectable app language (#1513). Thanks @StevanusPangau!
 - Localization: add Polish as a selectable app language (#1253). Thanks @Yuxin-Qiao!
+- Website: add automatic language detection and a persistent 21-language picker, including right-to-left layouts for Arabic and Persian.
 
 ### Added
 - LiteLLM: add personal and team budget tracking from a configured virtual key and proxy URL (#1542). Thanks @hololee!

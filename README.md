@@ -139,6 +139,7 @@ show an incident indicator.
 - Refresh cadence presets (manual, 1m, 2m, 5m, 15m).
 - Bundled CLI (`codexbar`) for scripts and CI (including `codexbar cost --provider codex`, `claude`, or `both` for local cost usage); macOS and Linux CLI builds available.
 - WidgetKit widgets for supported providers.
+- Localized website with automatic language detection, a persistent picker, and 21 languages including RTL support.
 - Optional session quota notifications and weekly-reset confetti.
 - Privacy-first: on-device parsing by default; browser cookies are opt-in and reused (no passwords stored).
 
