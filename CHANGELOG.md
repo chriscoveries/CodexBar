@@ -13,6 +13,7 @@
 - Antigravity: retry transient `Text file busy` launch failures while the CLI executable is being replaced.
 - Antigravity: fall back to loopback HTTP for local CLI and language-server probes on Linux, where self-signed localhost TLS cannot be trusted (fixes #1508). Thanks @zodiacfireworks!
 - Codebuff: enforce the optional subscription grace period even when the transport ignores cancellation.
+- Copilot: show the shared quota reset date for limited premium and chat usage windows. Thanks @Zihao-Qi!
 - Codex: keep managed login timeouts bounded while preserving captured output when detached helpers retain stdout or stderr.
 - Claude: keep segmented multi-account menus scoped to the selected account while its refresh is in flight (fixes #1527).
 - Command Code: keep showing available credits after the bounded optional subscription grace, including when the transport ignores cancellation (fixes #1131).
