@@ -66,6 +66,41 @@ public struct CostUsageFetcher: Sendable {
             scannerOptions: self.scannerOptionsOverride())
     }
 
+    public func loadCachedCodexLocalProjectUsageSnapshot(
+        now: Date = Date(),
+        codexHomePath: String? = nil,
+        historyDays: Int = 30) async -> CodexLocalProjectUsageSnapshot?
+    {
+        await Self.loadCachedCodexLocalProjectUsageSnapshot(
+            now: now,
+            codexHomePath: codexHomePath,
+            historyDays: historyDays,
+            scannerOptions: self.scannerOptionsOverride())
+    }
+
+    public func loadCodexLocalProjectUsageSnapshot(
+        now: Date = Date(),
+        forceRefresh: Bool = false,
+        codexHomePath: String? = nil,
+        historyDays: Int = 30,
+        progress: (@Sendable (CodexLocalProjectUsageIndexProgress) -> Void)? = nil)
+        async throws -> CodexLocalProjectUsageSnapshot
+    {
+        try await Self.loadCodexLocalProjectUsageSnapshot(
+            now: now,
+            forceRefresh: forceRefresh,
+            codexHomePath: codexHomePath,
+            historyDays: historyDays,
+            progress: progress,
+            scannerOptions: self.scannerOptionsOverride())
+    }
+
+    public func clearCachedCodexLocalProjectUsageSnapshot(codexHomePath: String? = nil) async {
+        await Self.clearCachedCodexLocalProjectUsageSnapshot(
+            codexHomePath: codexHomePath,
+            scannerOptions: self.scannerOptionsOverride())
+    }
+
     public func loadTokenSnapshot(
         provider: UsageProvider,
         environment: [String: String] = ProcessInfo.processInfo.environment,
@@ -569,6 +604,77 @@ public struct CostUsageFetcher: Sendable {
         default:
             return false
         }
+    }
+
+    static func loadCachedCodexLocalProjectUsageSnapshot(
+        now: Date = Date(),
+        codexHomePath: String? = nil,
+        historyDays: Int = 30,
+        scannerOptions overrideScannerOptions: CostUsageScanner.Options? = nil) async -> CodexLocalProjectUsageSnapshot?
+    {
+        let cachedSnapshot: CodexLocalProjectUsageSnapshot?? = try? await CostUsageScanExecutor.run { _ in
+            let options = Self.codexLocalScannerOptions(
+                codexHomePath: codexHomePath,
+                overrideScannerOptions: overrideScannerOptions)
+            return CodexLocalProjectUsageIndexer.cachedSnapshot(
+                now: now,
+                historyDays: historyDays,
+                options: CodexLocalProjectUsageIndexer.Options(scannerOptions: options))
+        }
+        return cachedSnapshot.flatMap(\.self)
+    }
+
+    static func loadCodexLocalProjectUsageSnapshot(
+        now: Date = Date(),
+        forceRefresh: Bool = false,
+        codexHomePath: String? = nil,
+        historyDays: Int = 30,
+        progress: (@Sendable (CodexLocalProjectUsageIndexProgress) -> Void)? = nil,
+        scannerOptions overrideScannerOptions: CostUsageScanner
+            .Options? = nil) async throws -> CodexLocalProjectUsageSnapshot
+    {
+        let options = Self.codexLocalScannerOptions(
+            codexHomePath: codexHomePath,
+            overrideScannerOptions: overrideScannerOptions)
+        let scanOptions = options
+        return try await CostUsageScanExecutor.run { checkCancellation in
+            try CodexLocalProjectUsageIndexer.loadSnapshot(
+                now: now,
+                historyDays: historyDays,
+                forceRefresh: forceRefresh,
+                options: CodexLocalProjectUsageIndexer.Options(scannerOptions: scanOptions),
+                progress: progress,
+                checkCancellation: checkCancellation)
+        }
+    }
+
+    static func clearCachedCodexLocalProjectUsageSnapshot(
+        codexHomePath: String? = nil,
+        scannerOptions overrideScannerOptions: CostUsageScanner.Options? = nil) async
+    {
+        _ = try? await CostUsageScanExecutor.run { _ in
+            let options = Self.codexLocalScannerOptions(
+                codexHomePath: codexHomePath,
+                overrideScannerOptions: overrideScannerOptions)
+            // The legacy JSON cache may still exist on development builds. Clear it
+            // alongside the owned sidecar, never the Codex cache or state database.
+            CodexLocalProjectUsageIndexStore(cacheRoot: options.cacheRoot).clear()
+            CodexWorkspaceUsageSidecar(cacheRoot: options.cacheRoot).clear()
+        }
+    }
+
+    private static func codexLocalScannerOptions(
+        codexHomePath: String?,
+        overrideScannerOptions: CostUsageScanner.Options?) -> CostUsageScanner.Options
+    {
+        var options = overrideScannerOptions ?? CostUsageScanner.Options()
+        if let codexHomePath = codexHomePath?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !codexHomePath.isEmpty
+        {
+            options.codexSessionsRoot = URL(fileURLWithPath: codexHomePath, isDirectory: true)
+                .appendingPathComponent("sessions", isDirectory: true)
+        }
+        return CodexLocalDataScope.resolve(options: options).applying(to: options)
     }
 
     private static func loadBedrockDailyReport(

@@ -2456,8 +2456,9 @@ enum CostUsageScanner {
                 observeTimestamp(metadata.timestamp)
                 observeCwd(metadata.cwd)
                 observeTitle(metadata.title)
-                if let model = sanitizedString(metadata.model) {
-                    currentModel = model
+                if let model = metadata.model {
+                    // An explicitly blank context clears stale model evidence; an omitted field preserves it.
+                    currentModel = sanitizedString(model)
                 }
             case .interAgentCommunication:
                 break
