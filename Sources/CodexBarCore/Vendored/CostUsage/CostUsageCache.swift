@@ -147,6 +147,7 @@ struct CostUsageFileUsage: Codable {
     var projectPath: String?
     var canonicalProjectPath: String?
     var codexCostCacheComplete: Bool?
+    var codexSession: CostUsageCodexSessionMetadata?
     var codexCostNanos: [String: [String: Int64]]?
     var codexPrioritySurchargeNanos: [String: [String: Int64]]?
     var codexStandardCostNanos: [String: [String: Int64]]?
@@ -156,6 +157,52 @@ struct CostUsageFileUsage: Codable {
     var codexTurnIDs: [String]?
     var codexRows: [CostUsageScanner.CodexUsageRow]?
     var claudeRows: [CostUsageScanner.ClaudeUsageRow]?
+}
+
+struct CostUsageCodexSessionMetadata: Codable, Equatable {
+    var sessionId: String?
+    var forkedFromId: String?
+    var cwd: String?
+    var title: String?
+    var startedAtUnixMs: Int64?
+    var latestActivityUnixMs: Int64?
+
+    var isEmpty: Bool {
+        self.sessionId == nil
+            && self.forkedFromId == nil
+            && self.cwd == nil
+            && self.title == nil
+            && self.startedAtUnixMs == nil
+            && self.latestActivityUnixMs == nil
+    }
+
+    func merging(_ newer: CostUsageCodexSessionMetadata) -> CostUsageCodexSessionMetadata {
+        CostUsageCodexSessionMetadata(
+            sessionId: newer.sessionId ?? self.sessionId,
+            forkedFromId: newer.forkedFromId ?? self.forkedFromId,
+            cwd: newer.cwd ?? self.cwd,
+            title: newer.title ?? self.title,
+            startedAtUnixMs: Self.earlier(self.startedAtUnixMs, newer.startedAtUnixMs),
+            latestActivityUnixMs: Self.later(self.latestActivityUnixMs, newer.latestActivityUnixMs))
+    }
+
+    private static func earlier(_ lhs: Int64?, _ rhs: Int64?) -> Int64? {
+        switch (lhs, rhs) {
+        case let (lhs?, rhs?): min(lhs, rhs)
+        case let (lhs?, nil): lhs
+        case let (nil, rhs?): rhs
+        case (nil, nil): nil
+        }
+    }
+
+    private static func later(_ lhs: Int64?, _ rhs: Int64?) -> Int64? {
+        switch (lhs, rhs) {
+        case let (lhs?, rhs?): max(lhs, rhs)
+        case let (lhs?, nil): lhs
+        case let (nil, rhs?): rhs
+        case (nil, nil): nil
+        }
+    }
 }
 
 struct CostUsageCodexTotals: Codable, Equatable {

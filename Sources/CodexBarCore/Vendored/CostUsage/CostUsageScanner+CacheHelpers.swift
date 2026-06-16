@@ -291,6 +291,7 @@ extension CostUsageScanner {
         projectPath: String? = nil,
         canonicalProjectPath: String? = nil,
         codexCostCacheComplete: Bool? = true,
+        codexSession: CostUsageCodexSessionMetadata? = nil,
         codexCostNanos: [String: [String: Int64]]? = nil,
         codexPrioritySurchargeNanos: [String: [String: Int64]]? = nil,
         codexStandardCostNanos: [String: [String: Int64]]? = nil,
@@ -321,6 +322,7 @@ extension CostUsageScanner {
             projectPath: projectPath,
             canonicalProjectPath: canonicalProjectPath,
             codexCostCacheComplete: codexCostCacheComplete,
+            codexSession: codexSession,
             codexCostNanos: codexCostNanos,
             codexPrioritySurchargeNanos: codexPrioritySurchargeNanos,
             codexStandardCostNanos: codexStandardCostNanos,
@@ -1018,7 +1020,16 @@ extension CostUsageScanner {
         if delta.forkedFromId != nil {
             return false
         }
-        let sessionId = delta.sessionId ?? cached.sessionId
+        let migrated = Self.codexFileUsageWithCostCache(cached, context: context)
+        let cachedSessionMetadata = migrated.codexSession ?? CostUsageCodexSessionMetadata(
+            sessionId: migrated.sessionId,
+            forkedFromId: migrated.forkedFromId,
+            cwd: nil,
+            title: nil,
+            startedAtUnixMs: nil,
+            latestActivityUnixMs: nil)
+        let codexSession = cachedSessionMetadata.merging(delta.codexSession)
+        let sessionId = codexSession.sessionId ?? delta.sessionId ?? cached.sessionId
         let projectPath = delta.projectPath ?? cached.projectPath
         let canonicalProjectPath = delta.projectPath.map {
             context.resources.projectPathResolver.canonicalProjectPath(for: $0)
@@ -1046,7 +1057,6 @@ extension CostUsageScanner {
             fileIdentity: input.metadata.path,
             state: &state)
 
-        let migrated = Self.codexFileUsageWithCostCache(cached, context: context)
         let migratedCached = sessionAlreadyContributed
             ? Self.codexFileUsageByFilteringRows(migrated, rows: retainedCachedRows, context: context)
             : migrated
@@ -1087,9 +1097,10 @@ extension CostUsageScanner {
             hasInterleavedTotals: delta.hasInterleavedTotals,
             lastCodexTurnID: delta.lastCodexTurnID,
             sessionId: sessionId,
-            forkedFromId: delta.forkedFromId ?? migratedCached.forkedFromId,
+            forkedFromId: codexSession.forkedFromId ?? delta.forkedFromId ?? migratedCached.forkedFromId,
             projectPath: projectPath,
             canonicalProjectPath: canonicalProjectPath,
+            codexSession: codexSession.isEmpty ? nil : codexSession,
             codexCostNanos: Self.codexMergedCostMap(
                 migratedCached.codexCostNanos,
                 deltaRows: uniqueRows,
@@ -1145,7 +1156,15 @@ extension CostUsageScanner {
             parentSessionId: parsed.forkedFromId,
             dependsOnParentTotals: parsed.dependsOnParentTotals,
             inheritedResolver: context.resources.inheritedResolver)
-        let sessionId = parsed.sessionId ?? input.cached?.sessionId
+        let cachedSessionMetadata = input.cached?.codexSession ?? CostUsageCodexSessionMetadata(
+            sessionId: input.cached?.sessionId,
+            forkedFromId: input.cached?.forkedFromId,
+            cwd: nil,
+            title: nil,
+            startedAtUnixMs: nil,
+            latestActivityUnixMs: nil)
+        let parsedCodexSession = cachedSessionMetadata.merging(parsed.codexSession)
+        let sessionId = parsedCodexSession.sessionId ?? parsed.sessionId ?? input.cached?.sessionId
         let projectPath = parsed.projectPath ?? input.cached?.projectPath
         let canonicalProjectPath = parsed.projectPath.map {
             context.resources.projectPathResolver.canonicalProjectPath(for: $0)
@@ -1188,10 +1207,11 @@ extension CostUsageScanner {
             hasInterleavedTotals: parsed.hasInterleavedTotals,
             lastCodexTurnID: parsed.lastCodexTurnID,
             sessionId: sessionId,
-            forkedFromId: parsed.forkedFromId,
+            forkedFromId: parsedCodexSession.forkedFromId ?? parsed.forkedFromId,
             forkBaselineDependencyKey: forkBaselineDependencyKey,
             projectPath: projectPath,
             canonicalProjectPath: canonicalProjectPath,
+            codexSession: parsedCodexSession.isEmpty ? nil : parsedCodexSession,
             codexCostNanos: Self.mergeCostMaps(
                 context.dropDeferredCodexRows
                     ? nil
