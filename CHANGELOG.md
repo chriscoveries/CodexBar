@@ -1,11 +1,14 @@
 # Changelog
 
-## 0.36.1 — Unreleased
+## 0.36.1 — 2026-06-16
 
 ### Added
 - Poe: add current point balance and recent points history from a configured API key (#1191). Thanks @Yuxin-Qiao!
 - Chutes: add subscription, quota-window, and pay-as-you-go usage tracking from a configured API key (#1496). Thanks @mvanhorn!
 - Zed: add plan, edit-prediction quota, billing-cycle, and overdue-invoice tracking from the signed-in editor Keychain session (#1517). Thanks @enesteve0!
+
+### Changed
+- Website: add Poe, Chutes, and Zed to the provider gallery with matching icons and setup documentation.
 
 ## 0.36.0 — 2026-06-16
 

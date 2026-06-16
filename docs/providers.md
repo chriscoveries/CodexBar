@@ -406,6 +406,12 @@ headers, source selection, provider ordering, and token accounts are stored in `
 - History failures are non-fatal; the current balance remains available.
 - Details: `docs/poe.md`.
 
+## Chutes
+- API key from config or `CHUTES_API_KEY`.
+- Reads subscription usage first, then fills missing rolling, monthly, or pay-as-you-go quota data from the quota APIs.
+- Uses Chutes' management API at `https://api.chutes.ai`; `CHUTES_API_URL` can override it with an HTTPS endpoint.
+- Details: `docs/chutes.md`.
+
 ## StepFun
 - Username/password login or manual Oasis-Token.
 - Reads Step Plan 5-hour and weekly rate-limit windows from `platform.stepfun.com`.

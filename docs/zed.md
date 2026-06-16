@@ -28,7 +28,9 @@ Authorization: {user_id} {access_token}
 | Account | Zed user ID (string) |
 | Secret | Access token (UTF-8 bytes) |
 
-CodexBar uses `KeychainNoUIQuery` for non-interactive reads. If Zed has never been signed in, or CodexBar lacks Keychain access, the provider reports **Not signed in to Zed**.
+CodexBar requests a non-interactive Keychain read. Existing Zed items can still carry an access-control list that makes
+macOS show a SecurityAgent prompt the first time CodexBar reads them. Choose **Always Allow** to avoid repeat prompts. If
+Zed has never been signed in, or access is denied, the provider reports **Not signed in to Zed**.
 
 ### Settings override
 
