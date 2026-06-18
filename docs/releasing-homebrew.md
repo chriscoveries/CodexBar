@@ -27,7 +27,7 @@ If dispatch fails or is rate-limited, update the files manually.
 In `../homebrew-tap`, update the cask at `Casks/codexbar.rb`:
 - `url` points at the GitHub release asset: `.../releases/download/v<version>/CodexBar-macos-universal-<version>.zip`
 - Update `sha256` to match that zip.
-- Keep `depends_on arch: :arm64` and `depends_on macos: ">= :sonoma"` (CodexBar is macOS 14+).
+- Keep `depends_on macos: ">= :sonoma"` (CodexBar is macOS 14+). Do not add an architecture restriction; the app zip is universal.
 
 ## 2b) Manual formula update
 In `../homebrew-tap`, update the formula at `Formula/codexbar.rb`:
