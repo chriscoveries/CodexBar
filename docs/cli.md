@@ -20,7 +20,8 @@ Use it when you need usage numbers in scripts, CI, or dashboards without UI.
 - Homebrew formula (Linux today): `brew install steipete/tap/codexbar`.
 - Download release tarballs from GitHub Releases:
   - macOS: `CodexBarCLI-v<tag>-macos-arm64.tar.gz`, `CodexBarCLI-v<tag>-macos-x86_64.tar.gz`
-  - Linux: `CodexBarCLI-v<tag>-linux-aarch64.tar.gz`, `CodexBarCLI-v<tag>-linux-x86_64.tar.gz`
+  - Linux (glibc): `CodexBarCLI-v<tag>-linux-aarch64.tar.gz`, `CodexBarCLI-v<tag>-linux-x86_64.tar.gz`
+  - Linux (static musl): `CodexBarCLI-v<tag>-linux-musl-aarch64.tar.gz`, `CodexBarCLI-v<tag>-linux-musl-x86_64.tar.gz`
 - Extract and run `./codexbar` (symlink) or `./CodexBarCLI`.
 
 ```
