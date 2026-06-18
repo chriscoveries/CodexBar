@@ -4,6 +4,7 @@
 
 ### Added
 - Codex agents: add a read-only `codexbar` skill for bounded, redacted provider usage JSON. Thanks @coygeek!
+- Display: add a Hide critters option for plain menu bar quota capsules. Thanks @elijahfriedman!
 
 ### Changed
 - Linux CLI: add musl source compatibility for static Linux SDK builds. Thanks @Yuxin-Qiao!
