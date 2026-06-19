@@ -186,7 +186,8 @@ extension UsageMenuCardView.Model {
         case let (current?, candidate?):
             current.title == candidate.title &&
                 (current.percentUsed == nil) == (candidate.percentUsed == nil) &&
-                (current.percentLine == nil) == (candidate.percentLine == nil)
+                (current.percentLine == nil) == (candidate.percentLine == nil) &&
+                (current.personalSpendLine == nil) == (candidate.personalSpendLine == nil)
         default:
             false
         }

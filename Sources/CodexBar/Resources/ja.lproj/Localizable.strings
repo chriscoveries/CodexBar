@@ -807,6 +807,7 @@
 "API spend" = "API 支出";
 "Extra usage" = "追加使用量";
 "Quota usage" = "クォータ使用量";
+"Your spend" = "あなたの支出";
 "%.0f%% used" = "%.0f%% 使用済み";
 "Usage history (today)" = "使用履歴（今日）";
 "Usage history (%d days)" = "使用履歴（%d日間）";

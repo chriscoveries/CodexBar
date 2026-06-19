@@ -920,6 +920,7 @@
 "Changelog" = "Ändringslogg";
 "Deployment" = "Distribution";
 "Quota usage" = "Kvotanvändning";
+"Your spend" = "Din utgift";
 "No system account" = "Inget systemkonto";
 "Stored in ~/.codexbar/config.json. Requires an Anthropic Admin API key." = "Sparas i ~/.codexbar/config.json. Kräver en Anthropic Admin API-nyckel.";
 "AWS region. Can also be set with AWS_REGION." = "AWS-region. Kan även anges med AWS_REGION.";

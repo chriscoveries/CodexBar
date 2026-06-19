@@ -788,6 +788,7 @@
 "API spend" = "API 支出";
 "Extra usage" = "额外用量";
 "Quota usage" = "配额用量";
+"Your spend" = "您的支出";
 "%.0f%% used" = "已使用 %.0f%%";
 "Usage history (today)" = "用量记录（今天）";
 "Usage history (%d days)" = "用量记录（%d 天）";

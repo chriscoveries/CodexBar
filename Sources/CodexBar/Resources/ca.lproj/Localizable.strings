@@ -690,6 +690,7 @@
 "API spend" = "Despesa d'API";
 "Extra usage" = "Ús addicional";
 "Quota usage" = "Ús de quota";
+"Your spend" = "La teva despesa";
 "%.0f%% used" = "%.0f%% usat";
 "Usage history (today)" = "Historial d'ús (avui)";
 "Usage history (%d days)" = "Historial d'ús (%d dies)";

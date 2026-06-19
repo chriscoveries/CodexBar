@@ -806,6 +806,7 @@
 "API spend" = "API chi tiêu";
 "Extra usage" = "Thêm Mức sử dụng";
 "Quota usage" = "Hạn mức Mức sử dụng";
+"Your spend" = "Chi tiêu của bạn";
 "%.0f%% used" = "%.0f%% đã sử dụng";
 "Usage history (today)" = "Mức sử dụng lịch sử (hôm nay)";
 "Usage history (%d days)" = "Mức sử dụng lịch sử ( %d ngày)";

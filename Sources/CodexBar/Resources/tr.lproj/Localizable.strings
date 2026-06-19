@@ -808,6 +808,7 @@
 "API spend" = "API harcaması";
 "Extra usage" = "Ekstra kullanım";
 "Quota usage" = "Kota kullanımı";
+"Your spend" = "Harcamanız";
 "%.0f%% used" = "%%%.0f kullanıldı";
 "Usage history (today)" = "Kullanım geçmişi (bugün)";
 "Usage history (%d days)" = "Kullanım geçmişi (%d gün)";

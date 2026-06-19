@@ -780,6 +780,7 @@
 "API spend" = "API 지출";
 "Extra usage" = "추가 사용량";
 "Quota usage" = "할당량 사용량";
+"Your spend" = "개인 지출";
 "%.0f%% used" = "%.0f%% 사용됨";
 "Usage history (today)" = "사용 기록(오늘)";
 "Usage history (%d days)" = "사용 기록(%d일)";

@@ -812,6 +812,7 @@
 "API spend" = "Wydatki API";
 "Extra usage" = "Dodatkowe użycie";
 "Quota usage" = "Wykorzystanie limitu";
+"Your spend" = "Twoje wydatki";
 "%.0f%% used" = "wykorzystano %.0f%%";
 "Usage history (today)" = "Historia użycia (dzisiaj)";
 "Usage history (%d days)" = "Historia użycia (%d dni)";

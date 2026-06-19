@@ -812,6 +812,7 @@
 "API spend" = "Pengeluaran API";
 "Extra usage" = "Penggunaan ekstra";
 "Quota usage" = "Penggunaan kuota";
+"Your spend" = "Pengeluaran Anda";
 "%.0f%% used" = "%.0f%% terpakai";
 "Usage history (today)" = "Riwayat penggunaan (hari ini)";
 "Usage history (%d days)" = "Riwayat penggunaan (%d hari)";
