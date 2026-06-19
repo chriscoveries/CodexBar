@@ -686,14 +686,15 @@ public struct KiroStatusProbe: Sendable {
         var matchedNewFormat = false
 
         // Parse plan name from "| KIRO FREE" or similar (legacy format)
-        if let planMatch = text.range(of: #"\|\s*(KIRO\s+\w+)"#, options: .regularExpression) {
+        // Horizontal whitespace only ([ \t]) so the match cannot bridge a newline into the next line.
+        if let planMatch = text.range(of: #"\|[ \t]*(KIRO[ \t]+\w+)"#, options: .regularExpression) {
             let raw = String(text[planMatch]).replacingOccurrences(of: "|", with: "")
             planName = raw.trimmingCharacters(in: .whitespaces)
         }
 
         // Parse plan name from "Estimated Usage | resets on 2026-06-01 | KIRO FREE" (kiro-cli 2.x)
         if let estimatedMatch = text.range(
-            of: #"Estimated Usage\s*\|[^\n|]*\|\s*([A-Z][A-Z0-9 ]+)"#,
+            of: #"Estimated Usage[ \t]*\|[^\n|]*\|[ \t]*([A-Z][A-Z0-9 ]+)"#,
             options: .regularExpression)
         {
             let line = String(text[estimatedMatch])
@@ -705,7 +706,7 @@ public struct KiroStatusProbe: Sendable {
         }
 
         // Parse plan name from "Plan: Q Developer Pro" (new format, kiro-cli 1.24+)
-        if let newPlanMatch = text.range(of: #"Plan:\s*(.+)"#, options: .regularExpression) {
+        if let newPlanMatch = text.range(of: #"Plan:[ \t]*(.+)"#, options: .regularExpression) {
             let line = String(text[newPlanMatch])
             let planLine = line.replacingOccurrences(of: "Plan:", with: "").trimmingCharacters(in: .whitespaces)
             if let firstLine = planLine.split(separator: "\n").first {
