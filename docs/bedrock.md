@@ -1,9 +1,9 @@
 ---
-summary: "AWS Bedrock provider: Cost Explorer credentials, budget tracking, and usage display."
+summary: "AWS Bedrock provider: Cost Explorer spend, CloudWatch Claude activity, credentials, and budgets."
 read_when:
   - Setting up AWS Bedrock usage tracking
-  - Debugging Bedrock Cost Explorer fetches
-  - Updating Bedrock credentials, region, or budget handling
+  - Debugging Bedrock Cost Explorer or CloudWatch fetches
+  - Updating Bedrock credentials, region, budget, or activity handling
 ---
 
 # AWS Bedrock provider
