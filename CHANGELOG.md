@@ -7,6 +7,7 @@
 - Mistral: add Vibe monthly-plan usage and menu bar metric selection. Thanks @lfmundim!
 - Linux CLI: publish static musl release tarballs for x86_64 and aarch64. Thanks @Yuxin-Qiao!
 - Documentation: add safe troubleshooting for browser Keychain prompts that persist after uninstall. Thanks @Yuxin-Qiao!
+- Diagnostics: report provider-neutral usage confidence and mark fully decoded Codex OAuth windows exact. Thanks @Yuxin-Qiao!
 - Codex agents: add a read-only `codexbar` skill for bounded, redacted provider usage JSON. Thanks @coygeek!
 - Display: add a Hide critters option for plain menu bar quota capsules. Thanks @elijahfriedman!
 
