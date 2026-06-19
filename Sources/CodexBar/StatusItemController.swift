@@ -10,6 +10,10 @@ protocol StatusItemControlling: AnyObject {
     func openMenuFromShortcut()
     func runLoginFlowFromSettings(provider: UsageProvider) async
     func celebrationOriginPoint(for provider: UsageProvider?) -> CGPoint?
+    func trimRebuildableCachesForMemoryPressure() -> MemoryPressureCacheTrimSummary
+    #if DEBUG
+    func seedRebuildableCachesForMemoryPressureProof()
+    #endif
     func prepareForAppShutdown()
 }
 
@@ -17,6 +21,14 @@ extension StatusItemControlling {
     func celebrationOriginPoint(for provider: UsageProvider?) -> CGPoint? {
         nil
     }
+
+    func trimRebuildableCachesForMemoryPressure() -> MemoryPressureCacheTrimSummary {
+        MemoryPressureCacheTrimSummary()
+    }
+
+    #if DEBUG
+    func seedRebuildableCachesForMemoryPressureProof() {}
+    #endif
 
     func prepareForAppShutdown() {}
 }
