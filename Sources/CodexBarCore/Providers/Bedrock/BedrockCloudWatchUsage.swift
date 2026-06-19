@@ -155,10 +155,42 @@ enum BedrockCloudWatchUsageFetcher {
     }
 
     private static func endpoint(region: String, override: String?) throws -> URL {
-        if let override = BedrockSettingsReader.cleaned(override), let url = URL(string: override) {
+        if override != nil {
+            guard let override = BedrockSettingsReader.cleaned(override),
+                  let components = URLComponents(string: override),
+                  let scheme = components.scheme?.lowercased(),
+                  scheme == "http" || scheme == "https",
+                  components.host?.isEmpty == false,
+                  let url = components.url
+            else {
+                throw BedrockUsageError.cloudWatchParseFailed("invalid endpoint override")
+            }
             return url
         }
-        guard let url = URL(string: "https://monitoring.\(region).amazonaws.com") else {
+        guard region.range(
+            of: #"^[a-z0-9]+(?:-[a-z0-9]+)+-[0-9]+$"#,
+            options: .regularExpression) != nil
+        else {
+            throw BedrockUsageError.cloudWatchParseFailed("invalid region endpoint")
+        }
+        // Match the CloudWatch partition suffixes published by the AWS SDK endpoint resolver.
+        let suffix = switch region {
+        case let region where region.hasPrefix("cn-"):
+            "amazonaws.com.cn"
+        case let region where region.hasPrefix("eusc-"):
+            "amazonaws.eu"
+        case let region where region.hasPrefix("us-iso-"):
+            "c2s.ic.gov"
+        case let region where region.hasPrefix("us-isob-"):
+            "sc2s.sgov.gov"
+        case let region where region.hasPrefix("eu-isoe-"):
+            "cloud.adc-e.uk"
+        case let region where region.hasPrefix("us-isof-"):
+            "csp.hci.ic.gov"
+        default:
+            "amazonaws.com"
+        }
+        guard let url = URL(string: "https://monitoring.\(region).\(suffix)") else {
             throw BedrockUsageError.cloudWatchParseFailed("invalid region endpoint")
         }
         return url

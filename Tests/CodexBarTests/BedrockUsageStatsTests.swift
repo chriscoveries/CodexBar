@@ -505,6 +505,63 @@ struct BedrockUsageStatsTests {
         #expect(usage.updatedAt == now)
     }
 
+    @Test
+    func `cloudwatch invalid override fails closed without transport`() async throws {
+        let capture = BedrockRequestCapture()
+        let transport = ProviderHTTPTransportHandler { request in
+            capture.append(request)
+            throw URLError(.badURL)
+        }
+
+        for override in ["   ", "not-an-absolute-url"] {
+            await #expect(throws: BedrockUsageError.cloudWatchParseFailed("invalid endpoint override")) {
+                try await BedrockCloudWatchUsageFetcher.fetch(
+                    credentials: Self.testCredentials,
+                    region: "us-east-1",
+                    now: Date(timeIntervalSince1970: 1_750_000_000),
+                    endpointOverride: override,
+                    transport: transport)
+            }
+        }
+        #expect(capture.requests.isEmpty)
+    }
+
+    @Test
+    func `cloudwatch resolves AWS partition endpoints`() async throws {
+        let capture = BedrockRequestCapture()
+        let transport = ProviderHTTPTransportHandler { request in
+            capture.append(request)
+            let requestURL = try #require(request.url)
+            let response = try #require(HTTPURLResponse(
+                url: requestURL,
+                statusCode: 200,
+                httpVersion: "HTTP/1.1",
+                headerFields: nil))
+            return (Data(#"{"MetricDataResults":[]}"#.utf8), response)
+        }
+        let cases = [
+            ("us-east-1", "monitoring.us-east-1.amazonaws.com"),
+            ("us-gov-west-1", "monitoring.us-gov-west-1.amazonaws.com"),
+            ("cn-north-1", "monitoring.cn-north-1.amazonaws.com.cn"),
+            ("eusc-de-east-1", "monitoring.eusc-de-east-1.amazonaws.eu"),
+            ("us-iso-east-1", "monitoring.us-iso-east-1.c2s.ic.gov"),
+            ("us-isob-east-1", "monitoring.us-isob-east-1.sc2s.sgov.gov"),
+            ("eu-isoe-west-1", "monitoring.eu-isoe-west-1.cloud.adc-e.uk"),
+            ("us-isof-south-1", "monitoring.us-isof-south-1.csp.hci.ic.gov"),
+        ]
+
+        for (region, _) in cases {
+            _ = try await BedrockCloudWatchUsageFetcher.fetch(
+                credentials: Self.testCredentials,
+                region: region,
+                now: Date(timeIntervalSince1970: 1_750_000_000),
+                endpointOverride: nil,
+                transport: transport)
+        }
+
+        #expect(capture.requests.compactMap(\.url?.host) == cases.map(\.1))
+    }
+
     private static let testCredentials = BedrockAWSSigner.Credentials(
         accessKeyID: "AKIATEST",
         secretAccessKey: "testSecret",
