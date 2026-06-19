@@ -244,6 +244,7 @@ extension StatusItemController {
         let showUsed = self.settings.usageBarsShowUsed
         let showBrandPercent = self.settings.menuBarShowsBrandIconWithPercent
         let primaryProvider = self.primaryProviderForUnifiedIcon()
+        let resolverStyle = self.store.style(for: primaryProvider)
         let snapshot = self.store.snapshot(for: primaryProvider)
         let warningFlash = self.quotaWarningFlashActive(provider: primaryProvider)
 
@@ -252,8 +253,9 @@ extension StatusItemController {
         let resolved = snapshot.map {
             IconRemainingResolver.resolvedPercents(
                 snapshot: $0,
-                style: style,
+                style: resolverStyle,
                 showUsed: showUsed,
+                renderingStyle: style,
                 secondaryOverrideWindowID: self.settings.copilotIconSecondaryWindowOverrideID(snapshot: $0))
         }
         var primary = resolved?.primary
