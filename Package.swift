@@ -52,9 +52,9 @@ let package = Package(
     ],
     targets: {
         var targets: [Target] = [
+            // Host pkg-config paths contaminate cross-musl links; the module map supplies sqlite3 linkage.
             .systemLibrary(
                 name: "CSQLite3",
-                pkgConfig: "sqlite3",
                 providers: [
                     .apt(["libsqlite3-dev"]),
                     .brew(["sqlite3"]),
