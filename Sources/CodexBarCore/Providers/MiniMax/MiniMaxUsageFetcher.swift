@@ -177,7 +177,7 @@ public struct MiniMaxUsageFetcher: Sendable {
         do {
             snapshot = try MiniMaxUsageParser.parseCodingPlanRemains(data: response.data, now: now)
         } catch let error as MiniMaxUsageError {
-            throw error
+            throw self.normalizedAPITokenError(error)
         } catch {
             throw MiniMaxUsageError.parseFailed(error.localizedDescription)
         }
@@ -185,6 +185,12 @@ public struct MiniMaxUsageFetcher: Sendable {
             Self.log.debug("MiniMax multi-service response detected: \(services.count) services")
         }
         return snapshot
+    }
+
+    private static func normalizedAPITokenError(_ error: MiniMaxUsageError) -> MiniMaxUsageError {
+        guard case let .apiError(message) = error else { return error }
+        let normalizedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalizedMessage == "invalid api key" ? .invalidCredentials : error
     }
 
     private static func shouldTryLegacyAPIEndpoint(after error: MiniMaxUsageError) -> Bool {
