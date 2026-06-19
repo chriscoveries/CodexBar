@@ -921,3 +921,56 @@ struct UsageStoreHighestUsageTests {
             updatedAt: Date())
     }
 }
+
+extension UsageStoreHighestUsageTests {
+    @Test
+    func `explicit antigravity metric remains authoritative for highest usage`() {
+        let settings = SettingsStore(
+            configStore: testConfigStore(suiteName: "UsageStoreHighestUsageTests-antigravity-explicit"),
+            zaiTokenStore: NoopZaiTokenStore(),
+            syntheticTokenStore: NoopSyntheticTokenStore())
+        settings.refreshFrequency = .manual
+        settings.statusChecksEnabled = false
+        settings.setMenuBarMetricPreference(.secondary, for: .antigravity)
+
+        let registry = ProviderRegistry.shared
+        if let codexMeta = registry.metadata[.codex] {
+            settings.setProviderEnabled(provider: .codex, metadata: codexMeta, enabled: true)
+        }
+        if let antigravityMeta = registry.metadata[.antigravity] {
+            settings.setProviderEnabled(provider: .antigravity, metadata: antigravityMeta, enabled: true)
+        }
+
+        let store = UsageStore(
+            fetcher: UsageFetcher(),
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings)
+        store._setSnapshotForTesting(
+            UsageSnapshot(
+                primary: RateWindow(usedPercent: 80, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
+                secondary: nil,
+                updatedAt: Date()),
+            provider: .codex)
+        let antigravity = self.antigravityQuotaSummarySnapshot(
+            geminiSessionUsed: 10,
+            geminiWeeklyUsed: 20,
+            otherSessionUsed: 95,
+            otherWeeklyUsed: 90)
+            .with(
+                primary: RateWindow(usedPercent: 10, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
+                secondary: RateWindow(usedPercent: 95, windowMinutes: nil, resetsAt: nil, resetDescription: nil))
+        store._setSnapshotForTesting(antigravity, provider: .antigravity)
+
+        var highest = store.providerWithHighestUsage()
+        #expect(highest?.provider == .antigravity)
+        #expect(highest?.usedPercent == 95)
+
+        store._setSnapshotForTesting(
+            antigravity.with(
+                primary: antigravity.primary,
+                secondary: RateWindow(usedPercent: 100, windowMinutes: nil, resetsAt: nil, resetDescription: nil)),
+            provider: .antigravity)
+        highest = store.providerWithHighestUsage()
+        #expect(highest?.provider == .codex)
+    }
+}
