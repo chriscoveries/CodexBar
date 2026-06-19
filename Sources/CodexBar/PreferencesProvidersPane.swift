@@ -20,7 +20,12 @@ struct ProvidersPane: View {
     @State private var selectedProvider: UsageProvider?
 
     private var providers: [UsageProvider] {
-        self.settings.orderedProviders()
+        guard self.settings.providersSortedAlphabetically else {
+            return self.settings.orderedProviders()
+        }
+        return CodexBarConfig.alphabeticalProviderOrder(enablement: { provider in
+            self.settings.isProviderEnabled(provider: provider, metadata: self.store.metadata(for: provider))
+        })
     }
 
     private var filteredProviders: [UsageProvider] {
@@ -60,8 +65,11 @@ struct ProvidersPane: View {
                 subtitle: { provider in self.providerSidebarSubtitle(provider) },
                 searchText: self.$providerSearchText,
                 selection: self.$selectedProvider,
+                sortAlphabetically: Binding(
+                    get: { self.settings.providersSortedAlphabetically },
+                    set: { self.settings.providersSortedAlphabetically = $0 }),
                 moveProviders: { fromOffsets, toOffset in
-                    self.settings.moveProvider(fromOffsets: fromOffsets, toOffset: toOffset)
+                    self.moveProviders(fromOffsets: fromOffsets, toOffset: toOffset)
                 })
 
             if let provider = self.selectedVisibleProvider {
@@ -175,6 +183,11 @@ struct ProvidersPane: View {
             displayName(provider).localizedCaseInsensitiveContains(trimmedQuery)
                 || provider.rawValue.localizedCaseInsensitiveContains(trimmedQuery)
         }
+    }
+
+    func moveProviders(fromOffsets: IndexSet, toOffset: Int) {
+        guard !self.settings.providersSortedAlphabetically else { return }
+        self.settings.moveProvider(fromOffsets: fromOffsets, toOffset: toOffset)
     }
 
     private func ensureSelection() {
