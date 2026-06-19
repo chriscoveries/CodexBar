@@ -232,10 +232,14 @@ enum BedrockUsageFetcher {
         environment: [String: String]) async throws -> Data
     {
         let ceRegion = "us-east-1"
-        let baseURL: URL = if let override = environment[BedrockSettingsReader.apiURLKey],
-                              let url = URL(string: BedrockSettingsReader.cleaned(override) ?? "")
-        {
-            url
+        let baseURL: URL = if environment[BedrockSettingsReader.apiURLKey] != nil {
+            if let override = BedrockSettingsReader.cleaned(environment[BedrockSettingsReader.apiURLKey]),
+               let url = ProviderEndpointOverrideValidator().validatedURLAllowingLoopbackHTTP(override)
+            {
+                url
+            } else {
+                throw BedrockUsageError.parseFailed("invalid endpoint override")
+            }
         } else {
             URL(string: "https://ce.\(ceRegion).amazonaws.com")!
         }

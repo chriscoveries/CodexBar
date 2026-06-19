@@ -192,6 +192,31 @@ struct BedrockUsageStatsTests {
     }
 
     @Test
+    func `cost explorer rejects remote HTTP override before transport`() async throws {
+        let registered = URLProtocol.registerClass(BedrockStubURLProtocol.self)
+        defer {
+            if registered {
+                URLProtocol.unregisterClass(BedrockStubURLProtocol.self)
+            }
+            BedrockStubURLProtocol.handler = nil
+        }
+        let capture = BedrockRequestCapture()
+        BedrockStubURLProtocol.handler = { request in
+            capture.append(request)
+            throw URLError(.badURL)
+        }
+
+        await #expect(throws: BedrockUsageError.parseFailed("invalid endpoint override")) {
+            try await BedrockUsageFetcher.fetchUsage(
+                credentials: Self.testCredentials,
+                region: "us-east-1",
+                budget: nil,
+                environment: [BedrockSettingsReader.apiURLKey: "http://bedrock.test"])
+        }
+        #expect(capture.requests.isEmpty)
+    }
+
+    @Test
     func `cost explorer pagination aggregates monthly total`() async throws {
         let registered = URLProtocol.registerClass(BedrockStubURLProtocol.self)
         defer {
@@ -513,7 +538,7 @@ struct BedrockUsageStatsTests {
             throw URLError(.badURL)
         }
 
-        for override in ["   ", "not-an-absolute-url"] {
+        for override in ["   ", "not-an-absolute-url", "http://cloudwatch.test"] {
             await #expect(throws: BedrockUsageError.cloudWatchParseFailed("invalid endpoint override")) {
                 try await BedrockCloudWatchUsageFetcher.fetch(
                     credentials: Self.testCredentials,
@@ -524,6 +549,37 @@ struct BedrockUsageStatsTests {
             }
         }
         #expect(capture.requests.isEmpty)
+    }
+
+    @Test
+    func `cloudwatch allows HTTP only for loopback overrides`() async throws {
+        let capture = BedrockRequestCapture()
+        let transport = ProviderHTTPTransportHandler { request in
+            capture.append(request)
+            let requestURL = try #require(request.url)
+            let response = try #require(HTTPURLResponse(
+                url: requestURL,
+                statusCode: 200,
+                httpVersion: "HTTP/1.1",
+                headerFields: nil))
+            return (Data(#"{"MetricDataResults":[]}"#.utf8), response)
+        }
+        let overrides = [
+            "http://localhost:8080",
+            "http://127.42.0.1:8080",
+            "http://[::1]:8080",
+        ]
+
+        for endpointOverride in overrides {
+            _ = try await BedrockCloudWatchUsageFetcher.fetch(
+                credentials: Self.testCredentials,
+                region: "us-east-1",
+                now: Date(timeIntervalSince1970: 1_750_000_000),
+                endpointOverride: endpointOverride,
+                transport: transport)
+        }
+
+        #expect(capture.requests.compactMap(\.url?.absoluteString) == overrides)
     }
 
     @Test

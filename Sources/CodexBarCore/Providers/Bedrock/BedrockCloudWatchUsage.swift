@@ -157,11 +157,8 @@ enum BedrockCloudWatchUsageFetcher {
     private static func endpoint(region: String, override: String?) throws -> URL {
         if override != nil {
             guard let override = BedrockSettingsReader.cleaned(override),
-                  let components = URLComponents(string: override),
-                  let scheme = components.scheme?.lowercased(),
-                  scheme == "http" || scheme == "https",
-                  components.host?.isEmpty == false,
-                  let url = components.url
+                  let url = ProviderEndpointOverrideValidator()
+                      .validatedURLAllowingLoopbackHTTP(override)
             else {
                 throw BedrockUsageError.cloudWatchParseFailed("invalid endpoint override")
             }

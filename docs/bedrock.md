@@ -69,8 +69,8 @@ tracking continue unchanged.
 - Claude activity: rolling 14-day input tokens, output tokens, and requests from the configured region's `AWS/Bedrock`
   CloudWatch metrics. Other model families are excluded.
 - Budget: `CODEXBAR_BEDROCK_BUDGET`, when set to a positive dollar amount.
-- Test override: `CODEXBAR_BEDROCK_API_URL` replaces the Cost Explorer endpoint.
-- Test override: `CODEXBAR_BEDROCK_CLOUDWATCH_API_URL` replaces the CloudWatch endpoint.
+- Test override: `CODEXBAR_BEDROCK_API_URL` replaces the Cost Explorer endpoint; use HTTPS or loopback HTTP.
+- Test override: `CODEXBAR_BEDROCK_CLOUDWATCH_API_URL` replaces the CloudWatch endpoint; use HTTPS or loopback HTTP.
 
 ## Display
 
