@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.36.2 — Unreleased
+## 0.37.0 — 2026-06-19
 
 ### Added
 - Widgets: add single-window and combined burn-down charts for Codex and Claude session/weekly limits. Thanks @jamesjlopez!
