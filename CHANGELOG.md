@@ -2,6 +2,9 @@
 
 ## 0.37.1 — Unreleased
 
+### Fixed
+- Memory pressure: avoid actor-isolation crashes when system callbacks arrive on a utility queue. Thanks @Zihao-Qi!
+
 ## 0.37.0 — 2026-06-19
 
 ### Added
