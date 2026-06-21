@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.37.1 — Unreleased
+## 0.37.1 — 2026-06-21
 
 ### Fixed
 - Menu: align provider usage-card spacing with the Overview layout. Thanks @Zihao-Qi!
