@@ -474,6 +474,7 @@ extension SettingsStore {
             quotaWarningSessionEnabled: quotaWarnings.sessionEnabled,
             quotaWarningWeeklyEnabled: quotaWarnings.weeklyEnabled,
             quotaWarningSoundEnabled: quotaWarnings.soundEnabled,
+            quotaWarningOnScreenAlertEnabled: quotaWarnings.onScreenAlertEnabled,
             quotaWarningMarkersVisible: quotaWarningMarkersVisible,
             weeklyProgressWorkDays: weeklyProgressWorkDays,
             usageBarsShowUsed: usageBarsShowUsed,
@@ -606,6 +607,7 @@ extension SettingsStore {
         var sessionEnabled: Bool
         var weeklyEnabled: Bool
         var soundEnabled: Bool
+        var onScreenAlertEnabled: Bool
     }
 
     private static func loadQuotaWarningDefaults(userDefaults: UserDefaults) -> LoadedQuotaWarningDefaults {
@@ -644,6 +646,12 @@ extension SettingsStore {
             userDefaults.set(true, forKey: "quotaWarningSoundEnabled")
         }
 
+        let onScreenAlertDefault = userDefaults.object(forKey: "quotaWarningOnScreenAlertEnabled") as? Bool
+        let onScreenAlertEnabled = onScreenAlertDefault ?? false
+        if Self.isRunningTests, onScreenAlertDefault == nil {
+            userDefaults.set(false, forKey: "quotaWarningOnScreenAlertEnabled")
+        }
+
         return LoadedQuotaWarningDefaults(
             notificationsEnabled: notificationsEnabled,
             thresholdsRaw: thresholdsRaw,
@@ -651,7 +659,8 @@ extension SettingsStore {
             weeklyThresholdsRaw: weeklyThresholdsRaw,
             sessionEnabled: sessionEnabled,
             weeklyEnabled: weeklyEnabled,
-            soundEnabled: soundEnabled)
+            soundEnabled: soundEnabled,
+            onScreenAlertEnabled: onScreenAlertEnabled)
     }
 }
 

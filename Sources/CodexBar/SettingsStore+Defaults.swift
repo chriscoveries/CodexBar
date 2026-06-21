@@ -183,6 +183,14 @@ extension SettingsStore {
         }
     }
 
+    var quotaWarningOnScreenAlertEnabled: Bool {
+        get { self.defaultsState.quotaWarningOnScreenAlertEnabled }
+        set {
+            self.defaultsState.quotaWarningOnScreenAlertEnabled = newValue
+            self.userDefaults.set(newValue, forKey: "quotaWarningOnScreenAlertEnabled")
+        }
+    }
+
     var quotaWarningMarkersVisible: Bool {
         get { self.defaultsState.quotaWarningMarkersVisible }
         set {

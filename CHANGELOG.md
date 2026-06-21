@@ -4,6 +4,7 @@
 
 ### Added
 - Menu: add an opt-in setting to refresh provider usage whenever the menu opens without changing the periodic refresh clock. Thanks @dstier-git!
+- Quota warnings: optionally show a centered on-screen text alert when a session or weekly threshold is crossed, toggleable alongside the notification sound. Thanks @SAASEmpiree!
 
 ### Fixed
 - Claude web usage: bound stale requests so Auto can reach CLI fallback instead of hanging indefinitely.

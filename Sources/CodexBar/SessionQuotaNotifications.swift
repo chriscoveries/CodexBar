@@ -199,12 +199,17 @@ extension UsageStore {
 @MainActor
 protocol SessionQuotaNotifying: AnyObject {
     func post(transition: SessionQuotaTransition, provider: UsageProvider, badge: NSNumber?)
-    func postQuotaWarning(event: QuotaWarningEvent, provider: UsageProvider, soundEnabled: Bool)
+    func postQuotaWarning(
+        event: QuotaWarningEvent,
+        provider: UsageProvider,
+        soundEnabled: Bool,
+        onScreenAlertEnabled: Bool)
 }
 
 @MainActor
 final class SessionQuotaNotifier: SessionQuotaNotifying {
     private let logger = CodexBarLog.logger(LogCategories.sessionQuotaNotifications)
+    private lazy var alertOverlay = QuotaWarningAlertOverlayController()
 
     init() {}
 
@@ -224,7 +229,12 @@ final class SessionQuotaNotifier: SessionQuotaNotifying {
         AppNotifications.shared.post(idPrefix: idPrefix, title: title, body: body, badge: badge)
     }
 
-    func postQuotaWarning(event: QuotaWarningEvent, provider: UsageProvider, soundEnabled: Bool = true) {
+    func postQuotaWarning(
+        event: QuotaWarningEvent,
+        provider: UsageProvider,
+        soundEnabled: Bool = true,
+        onScreenAlertEnabled: Bool = false)
+    {
         let providerName = ProviderDescriptorRegistry.descriptor(for: provider).metadata.displayName
         let threshold = event.threshold
         let copy = QuotaWarningNotificationLogic.notificationCopy(
@@ -237,6 +247,9 @@ final class SessionQuotaNotifier: SessionQuotaNotifying {
         self.logger.info("enqueuing", metadata: ["prefix": idPrefix])
         if soundEnabled {
             (NSSound(named: "Glass") ?? NSSound(named: "Ping"))?.play()
+        }
+        if onScreenAlertEnabled {
+            self.alertOverlay.show(title: copy.title, message: copy.body)
         }
         NotificationCenter.default.post(
             name: .codexbarQuotaWarningDidPost,

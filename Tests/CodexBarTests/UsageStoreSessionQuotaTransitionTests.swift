@@ -21,14 +21,24 @@ struct UsageStoreSessionQuotaTransitionTests {
         private(set) var quotaWarningPosts: [(
             event: QuotaWarningEvent,
             provider: UsageProvider,
-            soundEnabled: Bool)] = []
+            soundEnabled: Bool,
+            onScreenAlertEnabled: Bool)] = []
 
         func post(transition: SessionQuotaTransition, provider: UsageProvider, badge _: NSNumber?) {
             self.posts.append((transition: transition, provider: provider))
         }
 
-        func postQuotaWarning(event: QuotaWarningEvent, provider: UsageProvider, soundEnabled: Bool) {
-            self.quotaWarningPosts.append((event: event, provider: provider, soundEnabled: soundEnabled))
+        func postQuotaWarning(
+            event: QuotaWarningEvent,
+            provider: UsageProvider,
+            soundEnabled: Bool,
+            onScreenAlertEnabled: Bool)
+        {
+            self.quotaWarningPosts.append((
+                event: event,
+                provider: provider,
+                soundEnabled: soundEnabled,
+                onScreenAlertEnabled: onScreenAlertEnabled))
         }
     }
 
