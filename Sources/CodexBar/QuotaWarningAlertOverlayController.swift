@@ -58,6 +58,9 @@ final class QuotaWarningAlertOverlayController {
 
         self.dismissalTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(Self.overlayLifetime))
+            // A newer alert cancels this task in `show()`; bail out so we don't
+            // tear down the replacement overlay that took our place.
+            guard !Task.isCancelled else { return }
             self?.dismiss()
         }
     }
