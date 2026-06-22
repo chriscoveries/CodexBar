@@ -3,6 +3,30 @@
     <channel>
         <title>CodexBar</title>
         <item>
+            <title>0.37.2</title>
+            <pubDate>Mon, 22 Jun 2026 10:42:03 +0100</pubDate>
+            <link>https://raw.githubusercontent.com/steipete/CodexBar/main/appcast.xml</link>
+            <sparkle:version>92</sparkle:version>
+            <sparkle:shortVersionString>0.37.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[<h2>CodexBar 0.37.2</h2>
+<h3>Added</h3>
+<ul>
+<li>Diagnostics: write redacted provider reports to a file with platform and app-version context. Thanks @Yuxin-Qiao!</li>
+<li>CLI server: report the startup build version from <code>/health</code> so clients can detect stale helper processes after updates. Thanks @enieuwy!</li>
+</ul>
+<h3>Fixed</h3>
+<ul>
+<li>Claude: pause background CLI usage probes briefly after rate limiting while keeping manual refresh available. Thanks @kiranmagic7!</li>
+<li>Codex OAuth: publish refreshed <code>auth.json</code> credentials with private file permissions already applied. Thanks @Hinotoi-agent!</li>
+<li>Provider endpoints: reject unsafe Deepgram, z.ai, and Xiaomi MiMo overrides before attaching credentials. Thanks @Hinotoi-agent!</li>
+<li>Azure OpenAI: reject unsafe endpoint overrides before attaching API keys while keeping invalid configurations visible with an actionable error. Thanks @Hinotoi-agent!</li>
+</ul>
+<p><a href="https://github.com/steipete/CodexBar/blob/main/CHANGELOG.md">View full changelog</a></p>
+]]></description>
+            <enclosure url="https://github.com/steipete/CodexBar/releases/download/v0.37.2/CodexBar-macos-universal-0.37.2.zip" length="41869351" type="application/octet-stream" sparkle:edSignature="R3cjc1hHRfLmvefG7/vueDXPPMGEWztAcu8MWU56wzFTisA18y4XvZV2qokxM/F47qiJUr3TseAgDevafnbPBQ=="/>
+        </item>
+        <item>
             <title>0.37.1</title>
             <pubDate>Mon, 22 Jun 2026 00:16:24 +0100</pubDate>
             <link>https://raw.githubusercontent.com/steipete/CodexBar/main/appcast.xml</link>
@@ -110,32 +134,6 @@
 <p><a href="https://github.com/steipete/CodexBar/blob/main/CHANGELOG.md">View full changelog</a></p>
 ]]></description>
             <enclosure url="https://github.com/steipete/CodexBar/releases/download/v0.37.0/CodexBar-macos-universal-0.37.0.zip" length="41769771" type="application/octet-stream" sparkle:edSignature="xAjgJ8Pxk52Tyq/n5VBkHmnvsofbKtXb58RAcNZuUo84adBGg988OWuB0O/fbZd9u7qXI0/X5kSXgKwq5/YvAA=="/>
-        </item>
-        <item>
-            <title>0.36.1</title>
-            <pubDate>Tue, 16 Jun 2026 00:47:04 -0400</pubDate>
-            <link>https://raw.githubusercontent.com/steipete/CodexBar/main/appcast.xml</link>
-            <sparkle:version>88</sparkle:version>
-            <sparkle:shortVersionString>0.36.1</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <description><![CDATA[<h2>CodexBar 0.36.1</h2>
-<h3>Added</h3>
-<ul>
-<li>Poe: add current point balance and recent points history from a configured API key (#1191). Thanks @Yuxin-Qiao!</li>
-<li>Chutes: add subscription, quota-window, and pay-as-you-go usage tracking from a configured API key (#1496). Thanks @mvanhorn!</li>
-<li>Zed: add plan, edit-prediction quota, billing-cycle, and overdue-invoice tracking from the signed-in editor Keychain session (#1517). Thanks @enesteve0!</li>
-</ul>
-<h3>Changed</h3>
-<ul>
-<li>Website: add Poe, Chutes, and Zed to the provider gallery with matching icons and setup documentation.</li>
-</ul>
-<h3>Fixed</h3>
-<ul>
-<li>Provider switcher: use a continuous menu background instead of a separate light-mode tinted band. Thanks @Zihao-Qi!</li>
-</ul>
-<p><a href="https://github.com/steipete/CodexBar/blob/main/CHANGELOG.md">View full changelog</a></p>
-]]></description>
-            <enclosure url="https://github.com/steipete/CodexBar/releases/download/v0.36.1/CodexBar-macos-universal-0.36.1.zip" length="51172568" type="application/octet-stream" sparkle:edSignature="tW74GvKbgGuT4yWPU0os8hHsdyxNM01x0bB8bn3lzOB3WwIF910tYK399egTbtB0sn38/s4ywBq3g7VIhT6+Bw=="/>
         </item>
         <item>
             <title>0.14.0</title>
