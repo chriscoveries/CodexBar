@@ -82,7 +82,7 @@ struct CLIServeConfigSnapshot {
     let cacheToken: String
 }
 
-private struct ServeRuntime: Sendable {
+private struct ServeRuntime {
     let configStore: CodexBarConfigStore
     let cache: CLIServeResponseCache
     let refreshInterval: TimeInterval
