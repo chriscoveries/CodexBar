@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.37.2 — Unreleased
+## 0.37.2 — 2026-06-22
 
 ### Added
 - Diagnostics: write redacted provider reports to a file with platform and app-version context. Thanks @Yuxin-Qiao!
