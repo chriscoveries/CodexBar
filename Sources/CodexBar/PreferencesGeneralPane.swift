@@ -154,7 +154,8 @@ struct GeneralPane: View {
                                 }
                                 .toggleStyle(.checkbox)
 
-                                Text(L("Cursor only: total all-time spend instead of the window above. Slower to load."))
+                                Text(
+                                    L("Cursor only: total all-time spend instead of the window above. Slower to load."))
                                     .font(.footnote)
                                     .foregroundStyle(.tertiary)
                                     .fixedSize(horizontal: false, vertical: true)
