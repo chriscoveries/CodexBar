@@ -48,7 +48,6 @@ public struct CostUsageFetcher: Sendable {
         allowVertexClaudeFallback: Bool = false,
         codexHomePath: String? = nil,
         historyDays: Int = 30,
-        fetchAllHistory: Bool = false,
         cursorCookieHeaderOverride: String? = nil,
         refreshPricingInBackground: Bool = true) async throws -> CostUsageTokenSnapshot
     {
@@ -60,7 +59,6 @@ public struct CostUsageFetcher: Sendable {
             allowVertexClaudeFallback: allowVertexClaudeFallback,
             codexHomePath: codexHomePath,
             historyDays: historyDays,
-            fetchAllHistory: fetchAllHistory,
             cursorCookieHeaderOverride: cursorCookieHeaderOverride,
             refreshPricingInBackground: refreshPricingInBackground,
             scannerOptions: self.scannerOptionsOverride())
@@ -101,7 +99,6 @@ public struct CostUsageFetcher: Sendable {
         allowVertexClaudeFallback: Bool = false,
         codexHomePath: String? = nil,
         historyDays: Int = 30,
-        fetchAllHistory: Bool = false,
         cursorCookieHeaderOverride: String? = nil,
         refreshPricingInBackground: Bool = true,
         scannerOptions overrideScannerOptions: CostUsageScanner.Options? = nil,
@@ -133,9 +130,8 @@ public struct CostUsageFetcher: Sendable {
         if provider == .cursor {
             return try await Self.loadCursorTokenSnapshot(
                 now: now,
-                since: fetchAllHistory ? nil : since,
+                since: since,
                 historyDays: clampedHistoryDays,
-                fetchAllHistory: fetchAllHistory,
                 cookieHeaderOverride: cursorCookieHeaderOverride)
         }
         #endif
@@ -313,15 +309,12 @@ public struct CostUsageFetcher: Sendable {
 
     #if os(macOS)
     /// Fetch Cursor's per-day token-cost plus its Cursor-metered total via the cookie-authenticated
-    /// dashboard API, reusing the same session resolution as the Cursor status probe.
-    ///
-    /// With `fetchAllHistory`, the window is the full account history, so the windowed totals are
-    /// themselves the all-time figures and the display label switches to "All time".
+    /// dashboard API, reusing the same session resolution as the Cursor status probe. Like Codex and
+    /// Claude, the report covers the rolling `historyDays` window.
     private static func loadCursorTokenSnapshot(
         now: Date,
         since: Date?,
         historyDays: Int,
-        fetchAllHistory: Bool,
         cookieHeaderOverride: String? = nil) async throws -> CostUsageTokenSnapshot
     {
         let probe = CursorStatusProbe(browserDetection: BrowserDetection())
@@ -329,14 +322,12 @@ public struct CostUsageFetcher: Sendable {
             since: since,
             until: now,
             cookieHeaderOverride: cookieHeaderOverride)
-        let historyLabel = fetchAllHistory ? "All time" : nil
         return Self.tokenSnapshot(
             from: report.daily,
             now: now,
             historyDays: historyDays,
             useCurrentLocalDayForSession: false,
-            meteredCostUSD: report.meteredCostUSD,
-            historyLabel: historyLabel)
+            meteredCostUSD: report.meteredCostUSD)
     }
     #endif
 

@@ -36,7 +36,6 @@ extension CodexBarCLI {
         let forceRefresh = values.flags.contains("refresh")
         let useColor = Self.shouldUseColor(noColor: values.flags.contains("noColor"), format: format)
         let historyDays = Self.decodeCostHistoryDays(from: values)
-        let fetchAllHistory = values.flags.contains("all")
 
         let fetcher = CostUsageFetcher()
         var sections: [String] = []
@@ -51,7 +50,6 @@ extension CodexBarCLI {
                     provider: provider,
                     forceRefresh: forceRefresh,
                     historyDays: historyDays,
-                    fetchAllHistory: fetchAllHistory,
                     refreshPricingInBackground: false)
                 switch format {
                 case .text:
@@ -272,9 +270,6 @@ struct CostOptions: CommanderParsable {
 
     @Option(name: .long("days"), help: "Cost history window in days (1...365)")
     var days: Int?
-
-    @Flag(name: .long("all"), help: "Fetch full cost history instead of the --days window (Cursor only)")
-    var all: Bool = false
 }
 
 struct CostPayload: Encodable {

@@ -148,18 +148,6 @@ struct GeneralPane: View {
                                     .font(.footnote)
                                     .foregroundStyle(.tertiary)
 
-                                Toggle(isOn: self.$settings.cursorFetchAllCostHistory) {
-                                    Text(L("Fetch full Cursor cost history"))
-                                        .font(.footnote)
-                                }
-                                .toggleStyle(.checkbox)
-
-                                Text(
-                                    L("Cursor only: total all-time spend instead of the window above. Slower to load."))
-                                    .font(.footnote)
-                                    .foregroundStyle(.tertiary)
-                                    .fixedSize(horizontal: false, vertical: true)
-
                                 self.costStatusLine(provider: .claude)
                                 self.costStatusLine(provider: .codex)
                                 self.costStatusLine(provider: .cursor)
@@ -237,7 +225,9 @@ struct GeneralPane: View {
     private func costStatusLine(provider: UsageProvider) -> some View {
         let name = ProviderDescriptorRegistry.descriptor(for: provider).metadata.displayName
 
-        guard provider == .claude || provider == .codex else {
+        // Any provider whose descriptor reports token-cost support gets a real status line; only
+        // providers that genuinely cannot report cost fall through to "unsupported".
+        guard ProviderDescriptorRegistry.descriptor(for: provider).tokenCost.supportsTokenCost else {
             return Text(String(format: L("cost_status_unsupported"), name))
                 .font(.footnote)
                 .foregroundStyle(.tertiary)

@@ -81,7 +81,6 @@ extension UsageStore {
         _ = self.settings.usageBarsShowUsed
         _ = self.settings.costUsageEnabled
         _ = self.settings.costUsageHistoryDays
-        _ = self.settings.cursorFetchAllCostHistory
         _ = self.settings.randomBlinkEnabled
         _ = self.settings.configRevision
         for implementation in ProviderCatalog.all {
@@ -1505,8 +1504,6 @@ extension UsageStore {
 
         let now = Date()
         let historyDays = self.settings.costUsageHistoryDays
-        // Cursor can pull its full account history (all-time) instead of the rolling window.
-        let fetchAllHistory = provider == .cursor && self.settings.cursorFetchAllCostHistory
         // Cursor cost reuses the status cookie policy: a Manual source forwards the manual header so
         // cost and status share the same session; other sources fall back to auto resolution.
         let cursorCookieSource = self.settings.cursorCookieSource
@@ -1516,7 +1513,7 @@ extension UsageStore {
         let costScope = self.tokenCostScope(for: provider)
         let cursorScopeSuffix = provider == .cursor ? "|cursorCookie=\(cursorCookieSource.rawValue)" : ""
         let costScopeSignature =
-            "\(costScope.signature)|historyDays=\(historyDays)|fetchAll=\(fetchAllHistory)\(cursorScopeSuffix)"
+            "\(costScope.signature)|historyDays=\(historyDays)\(cursorScopeSuffix)"
         if !force,
            let last = self.lastTokenFetchAt[provider],
            self.lastTokenFetchScope[provider] == costScopeSignature,
@@ -1568,7 +1565,6 @@ extension UsageStore {
                         allowVertexClaudeFallback: !self.isEnabled(.claude),
                         codexHomePath: costScope.codexHomePath,
                         historyDays: historyDays,
-                        fetchAllHistory: fetchAllHistory,
                         cursorCookieHeaderOverride: cursorCookieHeaderOverride)
                 }
                 group.addTask {
