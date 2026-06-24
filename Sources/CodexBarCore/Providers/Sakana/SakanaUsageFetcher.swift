@@ -145,13 +145,10 @@ public enum SakanaUsageFetcher {
         html: String,
         timeZone: TimeZone) -> SakanaUsageSnapshot.QuotaWindow?
     {
-        let escaped = NSRegularExpression.escapedPattern(for: label)
-        let pattern = "<p[^>]*>\\s*\(escaped)\\s*</p>\\s*"
-            + "([\\s\\S]*?)"
-            + "<p[^>]*>\\s*([0-9]+(?:\\.[0-9]+)?)% used\\s*</p>"
-        guard let match = self.firstMatch(pattern: pattern, in: html),
-              let windowBody = self.capture(1, in: html, match: match),
-              let percentText = self.capture(2, in: html, match: match),
+        guard let windowBody = self.windowBody(label: label, html: html),
+              let percentText = self.capture(
+                  pattern: #"<p[^>]*>\s*([0-9]+(?:\.[0-9]+)?)% used\s*</p>"#,
+                  in: windowBody),
               let percent = Double(percentText)
         else {
             return nil
@@ -162,6 +159,34 @@ public enum SakanaUsageFetcher {
         return SakanaUsageSnapshot.QuotaWindow(
             usedPercent: min(100, max(0, percent)),
             resetsAt: resetText.flatMap { self.parseResetDate($0, timeZone: timeZone) })
+    }
+
+    private static func windowBody(label: String, html: String) -> String? {
+        let escaped = NSRegularExpression.escapedPattern(for: label)
+        let labelPattern = "<p[^>]*>\\s*\(escaped)\\s*</p>"
+        guard let labelMatch = self.firstMatch(pattern: labelPattern, in: html),
+              let bodyStart = Range(labelMatch.range, in: html)?.upperBound
+        else {
+            return nil
+        }
+
+        let bodyStartOffset = NSMaxRange(labelMatch.range)
+        let bodyEnd = self.windowBoundary(after: bodyStartOffset, in: html) ?? html.endIndex
+        let body = html[bodyStart..<bodyEnd].trimmingCharacters(in: .whitespacesAndNewlines)
+        return body.isEmpty ? nil : String(body)
+    }
+
+    private static func windowBoundary(after offset: Int, in html: String) -> String.Index? {
+        let boundaryPattern =
+            #"<p[^>]*>\s*(?:5-hour|Weekly)\s*</p>|<div[^>]*data-slot=(?:"card"|'card'|"card-title"|'card-title')[^>]*>"#
+        guard let regex = try? NSRegularExpression(pattern: boundaryPattern, options: [.caseInsensitive]) else {
+            return nil
+        }
+        let nsRange = NSRange(location: offset, length: max(0, (html as NSString).length - offset))
+        guard let match = regex.firstMatch(in: html, options: [], range: nsRange) else {
+            return nil
+        }
+        return Range(match.range, in: html)?.lowerBound
     }
 
     private static func parsePlanName(_ html: String) -> String? {

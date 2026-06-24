@@ -78,6 +78,20 @@ struct SakanaUsageFetcherTests {
         #expect(usage.secondary?.resetsAt == Self.date(year: 2026, month: 6, day: 29, hour: 8, minute: 0))
     }
 
+    @Test
+    func `missing window percent does not read next quota window`() throws {
+        let html = Self.billingHTML.replacing(
+            "<p class=\"text-muted-foreground text-sm\">92% used</p>",
+            with: "")
+        let usage = try SakanaUsageFetcher.parseBillingHTML(
+            html,
+            timeZone: Self.shanghaiTimeZone).toUsageSnapshot()
+
+        #expect(usage.primary == nil)
+        #expect(usage.secondary?.usedPercent == 32)
+        #expect(usage.secondary?.windowMinutes == 10080)
+    }
+
     private static let shanghaiTimeZone = TimeZone(identifier: "Asia/Shanghai")!
 
     private static func date(year: Int, month: Int, day: Int, hour: Int, minute: Int) -> Date? {
