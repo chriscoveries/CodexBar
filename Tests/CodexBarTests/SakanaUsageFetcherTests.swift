@@ -17,10 +17,11 @@ struct SakanaUsageFetcherTests {
         #expect(usage.primary?.usedPercent == 92)
         #expect(usage.primary?.windowMinutes == 300)
         #expect(usage.primary?.resetsAt == Self.date(year: 2026, month: 6, day: 23, hour: 22, minute: 53))
-        #expect(usage.primary?.resetDescription == "92% used")
+        #expect(usage.primary?.resetDescription == nil)
         #expect(usage.secondary?.usedPercent == 32)
         #expect(usage.secondary?.windowMinutes == 10080)
         #expect(usage.secondary?.resetsAt == Self.date(year: 2026, month: 6, day: 29, hour: 8, minute: 0))
+        #expect(usage.secondary?.resetDescription == nil)
         #expect(usage.identity?.providerID == .sakana)
         #expect(usage.identity?.loginMethod == "Standard $20/mo")
         #expect(usage.updatedAt == now)
@@ -47,6 +48,17 @@ struct SakanaUsageFetcherTests {
         #expect(throws: SakanaUsageError.parseFailed("Usage limit windows were not found.")) {
             _ = try SakanaUsageFetcher.parseBillingHTML("<main>Billing</main>")
         }
+    }
+
+    @Test
+    func `unparsed reset date does not become reset description`() throws {
+        let usage = try SakanaUsageFetcher.parseBillingHTML(
+            Self.billingHTML.replacing("June 23, 2026 at 10:53 PM", with: "soon-ish"),
+            timeZone: Self.shanghaiTimeZone).toUsageSnapshot()
+
+        #expect(usage.primary?.usedPercent == 92)
+        #expect(usage.primary?.resetsAt == nil)
+        #expect(usage.primary?.resetDescription == nil)
     }
 
     private static let shanghaiTimeZone = TimeZone(identifier: "Asia/Shanghai")!

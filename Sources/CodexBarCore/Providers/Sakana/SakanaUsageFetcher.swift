@@ -40,14 +40,14 @@ public struct SakanaUsageSnapshot: Sendable {
                 usedPercent: window.usedPercent,
                 windowMinutes: 5 * 60,
                 resetsAt: window.resetsAt,
-                resetDescription: "\(Self.formatPercent(window.usedPercent))% used")
+                resetDescription: nil)
         }
         let secondary = self.weekly.map { window in
             RateWindow(
                 usedPercent: window.usedPercent,
                 windowMinutes: 7 * 24 * 60,
                 resetsAt: window.resetsAt,
-                resetDescription: "\(Self.formatPercent(window.usedPercent))% used")
+                resetDescription: nil)
         }
         let planLabel = [self.planName, self.priceLabel]
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -66,14 +66,6 @@ public struct SakanaUsageSnapshot: Sendable {
             providerCost: nil,
             updatedAt: self.updatedAt,
             identity: identity)
-    }
-
-    private static func formatPercent(_ percent: Double) -> String {
-        let rounded = (percent * 100).rounded() / 100
-        if rounded.rounded() == rounded {
-            return String(Int(rounded))
-        }
-        return String(format: "%.2f", rounded)
     }
 }
 
