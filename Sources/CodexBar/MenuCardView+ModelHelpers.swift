@@ -682,7 +682,7 @@ extension UsageMenuCardView.Model {
         let afterNextRegen = showUsed ? max(0, 100 - afterNextRegenRemaining) : afterNextRegenRemaining
         let suffix = showUsed ? L("used after next regen") : L("after next regen")
         let ticksToFull = max(0, cost.used) / nextRegenAmount
-        let left = String(format: "%.0f%% %@", afterNextRegen, suffix)
+        let left = "\(UsageFormatter.percentLabel(afterNextRegen)) \(suffix)"
         let right = if ticksToFull <= 0.1 {
             L("Near full")
         } else if ticksToFull < 1.5 {
@@ -709,7 +709,7 @@ extension UsageMenuCardView.Model {
         let afterNextRegenRemaining = min(100, window.remainingPercent + nextRegenPercent)
         let afterNextRegen = showUsed ? max(0, 100 - afterNextRegenRemaining) : afterNextRegenRemaining
         let suffix = showUsed ? L("used after next regen") : L("after next regen")
-        let left = String(format: "%.0f%% %@", afterNextRegen, suffix)
+        let left = "\(UsageFormatter.percentLabel(afterNextRegen)) \(suffix)"
 
         let missingPercent = max(0, window.usedPercent)
         let ticksToFull = missingPercent / nextRegenPercent

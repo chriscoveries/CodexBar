@@ -44,6 +44,27 @@ struct UsageFormatterTests {
     }
 
     @Test
+    func `percent labels distinguish true zero from positive values below one`() {
+        #expect(UsageFormatter.percentLabel(-1) == "0%")
+        #expect(UsageFormatter.percentLabel(0) == "0%")
+        #expect(UsageFormatter.percentLabel(0.01) == "<1%")
+        #expect(UsageFormatter.percentLabel(0.5) == "<1%")
+        #expect(UsageFormatter.percentLabel(0.96) == "<1%")
+        #expect(UsageFormatter.percentLabel(1) == "1%")
+        #expect(UsageFormatter.percentLabel(101) == "100%")
+    }
+
+    @Test
+    func `usage line preserves sub one distinction with localized suffixes`() {
+        UsageFormatter.clearLocalizationProvider()
+        UsageFormatter.clearLocaleProvider()
+
+        #expect(UsageFormatter.usageLine(remaining: 0, used: 0, showUsed: true) == "0% used")
+        #expect(UsageFormatter.usageLine(remaining: 99.51, used: 0.49, showUsed: true) == "<1% used")
+        #expect(UsageFormatter.usageLine(remaining: 0.49, used: 99.51, showUsed: false) == "<1% left")
+    }
+
+    @Test
     func `usage line respects injected localization provider`() {
         UsageFormatter.setLocalizationProvider { key in
             switch key {

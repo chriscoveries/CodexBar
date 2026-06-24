@@ -936,6 +936,17 @@ struct StatusItemAnimationTests {
     }
 
     @Test
+    func `menu bar display text distinguishes true zero from positive values below one`() {
+        let zero = RateWindow(usedPercent: 0, windowMinutes: nil, resetsAt: nil, resetDescription: nil)
+        let subOne = RateWindow(usedPercent: 0.49, windowMinutes: nil, resetsAt: nil, resetDescription: nil)
+        let nearlyFull = RateWindow(usedPercent: 99.51, windowMinutes: nil, resetsAt: nil, resetDescription: nil)
+
+        #expect(MenuBarDisplayText.percentText(window: zero, showUsed: true) == "0%")
+        #expect(MenuBarDisplayText.percentText(window: subOne, showUsed: true) == "<1%")
+        #expect(MenuBarDisplayText.percentText(window: nearlyFull, showUsed: false) == "<1%")
+    }
+
+    @Test
     func `menu bar display text formats codex combined percent lanes`() {
         let sessionWindow = RateWindow(usedPercent: 7, windowMinutes: 300, resetsAt: nil, resetDescription: nil)
         let weeklyWindow = RateWindow(usedPercent: 18, windowMinutes: 10080, resetsAt: nil, resetDescription: nil)

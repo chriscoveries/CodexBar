@@ -5,6 +5,55 @@ import Testing
 
 struct CursorMenuCardModelTests {
     @Test
+    func `provider cost distinguishes true zero from positive usage below one percent`() throws {
+        let now = Date(timeIntervalSince1970: 0)
+        let metadata = try #require(ProviderDefaults.metadata[.cursor])
+
+        func percentLine(used: Double) -> String? {
+            let snapshot = UsageSnapshot(
+                primary: nil,
+                secondary: nil,
+                providerCost: ProviderCostSnapshot(
+                    used: used,
+                    limit: 100,
+                    currencyCode: "USD",
+                    updatedAt: now),
+                updatedAt: now)
+            return UsageMenuCardView.Model.make(.init(
+                provider: .cursor,
+                metadata: metadata,
+                snapshot: snapshot,
+                credits: nil,
+                creditsError: nil,
+                dashboard: nil,
+                dashboardError: nil,
+                tokenSnapshot: nil,
+                tokenError: nil,
+                account: AccountInfo(email: nil, plan: nil),
+                isRefreshing: false,
+                lastError: nil,
+                usageBarsShowUsed: true,
+                resetTimeDisplayStyle: .countdown,
+                tokenCostUsageEnabled: false,
+                showOptionalCreditsAndExtraUsage: true,
+                hidePersonalInfo: false,
+                now: now))
+                .providerCost?.percentLine
+        }
+
+        #expect(percentLine(used: 0) == "0% used")
+        #expect(percentLine(used: 0.49) == "<1% used")
+    }
+
+    @Test
+    func `provider cost preserves localized percent placement`() {
+        #expect(UsageMenuCardView.Model.localizedUsedPercentLine(0, format: "used %.0f%%") == "used 0%")
+        #expect(UsageMenuCardView.Model.localizedUsedPercentLine(0.49, format: "used %.0f%%") == "used <1%")
+        #expect(UsageMenuCardView.Model.localizedUsedPercentLine(50, format: "%%%.0f used") == "%50 used")
+        #expect(UsageMenuCardView.Model.localizedUsedPercentLine(0.49, format: "%%%.0f used") == "%<1 used")
+    }
+
+    @Test
     func `team pool shows personal spend and changes height fingerprint`() throws {
         let now = Date(timeIntervalSince1970: 0)
         let metadata = try #require(ProviderDefaults.metadata[.cursor])

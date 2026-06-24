@@ -216,6 +216,30 @@ struct MiMoProviderTests {
     }
 
     @Test
+    func `token plan preserves sub one usage for menu card labels`() throws {
+        let now = Date(timeIntervalSince1970: 1_742_771_200)
+        let metadata = try #require(ProviderDefaults.metadata[.mimo])
+        let usage = MiMoUsageSnapshot(
+            balance: 25.51,
+            currency: "USD",
+            planCode: "standard",
+            tokenUsed: 980_000,
+            tokenLimit: 200_000_000,
+            tokenPercent: 0.0049,
+            updatedAt: now)
+            .toUsageSnapshot()
+
+        let model = Self.makeMenuCardModel(
+            snapshot: usage,
+            metadata: metadata,
+            now: now,
+            usageBarsShowUsed: true)
+
+        #expect(abs((usage.primary?.usedPercent ?? .nan) - 0.49) < 0.0001)
+        #expect(model.metrics.first?.percentLabel == "<1% used")
+    }
+
+    @Test
     func `menu card shows balance as status text with and without token plan`() throws {
         let now = Date(timeIntervalSince1970: 1_742_771_200)
         let metadata = try #require(ProviderDefaults.metadata[.mimo])
@@ -673,6 +697,7 @@ extension MiMoProviderTests {
             zaiTokenStore: NoopZaiTokenStore(),
             syntheticTokenStore: NoopSyntheticTokenStore())
         settings.statusChecksEnabled = false
+        settings.usageBarsShowUsed = true
 
         let store = UsageStore(
             fetcher: UsageFetcher(environment: [:]),
@@ -682,9 +707,9 @@ extension MiMoProviderTests {
             balance: 25.51,
             currency: "USD",
             planCode: "standard",
-            tokenUsed: 10,
-            tokenLimit: 100,
-            tokenPercent: 0.1,
+            tokenUsed: 980_000,
+            tokenLimit: 200_000_000,
+            tokenPercent: 0.0049,
             updatedAt: Date(timeIntervalSince1970: 1_742_771_200))
             .toUsageSnapshot()
         store._setSnapshotForTesting(snapshot, provider: .mimo)
@@ -703,8 +728,9 @@ extension MiMoProviderTests {
                 return text
             }
 
-        #expect(lines.contains("10 / 100 Credits"))
-        #expect(!lines.contains("Resets 10 / 100 Credits"))
+        #expect(lines.contains("Credits: <1% used"))
+        #expect(lines.contains("980,000 / 200,000,000 Credits"))
+        #expect(!lines.contains("Resets 980,000 / 200,000,000 Credits"))
     }
 
     @Test
@@ -1091,7 +1117,8 @@ extension MiMoProviderTests {
     private static func makeMenuCardModel(
         snapshot: UsageSnapshot,
         metadata: ProviderMetadata,
-        now: Date) -> UsageMenuCardView.Model
+        now: Date,
+        usageBarsShowUsed: Bool = false) -> UsageMenuCardView.Model
     {
         UsageMenuCardView.Model.make(.init(
             provider: .mimo,
@@ -1106,7 +1133,7 @@ extension MiMoProviderTests {
             account: AccountInfo(email: nil, plan: nil),
             isRefreshing: false,
             lastError: nil,
-            usageBarsShowUsed: false,
+            usageBarsShowUsed: usageBarsShowUsed,
             resetTimeDisplayStyle: .countdown,
             tokenCostUsageEnabled: false,
             showOptionalCreditsAndExtraUsage: true,

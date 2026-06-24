@@ -304,8 +304,21 @@ extension UsageMenuCardView.Model {
             title: title,
             percentUsed: percentUsed,
             spendLine: "\(periodLabel): \(used) / \(limit)",
-            percentLine: String(format: L("%.0f%% used"), min(100, max(0, percentUsed))),
+            percentLine: self.localizedUsedPercentLine(percentUsed),
             personalSpendLine: personalSpendLine)
+    }
+
+    static func localizedUsedPercentLine(
+        _ percent: Double,
+        format: String = L("%.0f%% used")) -> String
+    {
+        let clamped = min(100, max(0, percent))
+        let label = UsageFormatter.percentLabel(clamped)
+        guard label == "<1%" else { return String(format: format, clamped) }
+
+        let stringFormat = format.replacingOccurrences(of: "%.0f", with: "%@")
+        guard stringFormat != format else { return label }
+        return String(format: stringFormat, String(label.dropLast()))
     }
 
     private static func localizedPeriodLabel(_ label: String) -> String {

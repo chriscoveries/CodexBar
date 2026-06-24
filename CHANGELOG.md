@@ -6,6 +6,7 @@
 - z.ai: support saved token-account team usage with account-scoped organization and project metadata. Thanks @zqbake!
 
 ### Fixed
+- Usage percentages: distinguish positive usage below 1% from true zero across menu and menu-bar labels. Thanks @Max0633!
 - Mistral: restore Vibe monthly-plan usage by forwarding only required console session cookies. Thanks @lfmundim!
 
 ## 0.37.3 — 2026-06-23
