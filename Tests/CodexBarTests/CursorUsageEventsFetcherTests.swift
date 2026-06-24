@@ -184,8 +184,9 @@ struct CursorUsageEventsFetcherTests {
         let secondEvent = #"""
         {"timestamp":"1700003600000","model":"gpt-5","tokenUsage":{"inputTokens":10,"outputTokens":5,"cacheWriteTokens":0,"cacheReadTokens":0,"totalCents":50},"chargedCents":4}
         """#
+        // 1_700_005_400_000 is 2023-11-14T23:43:20Z: a distinct event still inside the same UTC day.
         let thirdEvent = #"""
-        {"timestamp":"1700007200000","model":"gpt-5","tokenUsage":{"inputTokens":1,"outputTokens":1,"cacheWriteTokens":0,"cacheReadTokens":0,"totalCents":25},"chargedCents":8}
+        {"timestamp":"1700005400000","model":"gpt-5","tokenUsage":{"inputTokens":1,"outputTokens":1,"cacheWriteTokens":0,"cacheReadTokens":0,"totalCents":25},"chargedCents":8}
         """#
 
         let transport = ProviderHTTPTransportStub { request in

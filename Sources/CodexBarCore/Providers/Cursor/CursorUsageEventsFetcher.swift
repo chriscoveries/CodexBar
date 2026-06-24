@@ -27,7 +27,7 @@ struct CursorUsageEventsPage: Decodable, Sendable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.totalUsageEventsCount = try? container.decode(Int.self, forKey: .totalUsageEventsCount)
+        self.totalUsageEventsCount = CursorEventNumber.int64(container, .totalUsageEventsCount).map { Int($0) }
         self.usageEventsDisplay =
             (try? container.decode([CursorUsageEvent].self, forKey: .usageEventsDisplay)) ?? []
     }
