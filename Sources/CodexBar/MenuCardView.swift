@@ -87,6 +87,24 @@ struct UsageMenuCardView: View {
             let hintLine: String?
             let errorLine: String?
             let errorCopyText: String?
+
+            /// Explicit initializer so `meteredLine` defaults to nil: callers that predate the
+            /// Cursor-metered line (and providers that never report it) keep their call sites.
+            init(
+                sessionLine: String,
+                monthLine: String,
+                meteredLine: String? = nil,
+                hintLine: String?,
+                errorLine: String?,
+                errorCopyText: String?)
+            {
+                self.sessionLine = sessionLine
+                self.monthLine = monthLine
+                self.meteredLine = meteredLine
+                self.hintLine = hintLine
+                self.errorLine = errorLine
+                self.errorCopyText = errorCopyText
+            }
         }
 
         struct ProviderCostSection {
