@@ -1490,14 +1490,33 @@ extension UsageStore {
             return
         }
 
+        // Cursor cost honors the same cookie policy as status: when the user set the cookie source
+        // to Off, skip the network fetch entirely (mirrors CursorProviderDescriptor.checkStatus).
+        if provider == .cursor, self.settings.cursorCookieSource == .off {
+            self.tokenSnapshots.removeValue(forKey: provider)
+            self.tokenErrors[provider] = nil
+            self.tokenFailureGates[provider]?.reset()
+            self.lastTokenFetchAt.removeValue(forKey: provider)
+            self.lastTokenFetchScope.removeValue(forKey: provider)
+            return
+        }
+
         guard !self.tokenRefreshInFlight.contains(provider) else { return }
 
         let now = Date()
         let historyDays = self.settings.costUsageHistoryDays
         // Cursor can pull its full account history (all-time) instead of the rolling window.
         let fetchAllHistory = provider == .cursor && self.settings.cursorFetchAllCostHistory
+        // Cursor cost reuses the status cookie policy: a Manual source forwards the manual header so
+        // cost and status share the same session; other sources fall back to auto resolution.
+        let cursorCookieSource = self.settings.cursorCookieSource
+        let cursorCookieHeaderOverride: String? = provider == .cursor && cursorCookieSource == .manual
+            ? CookieHeaderNormalizer.normalize(self.settings.cursorCookieHeader)
+            : nil
         let costScope = self.tokenCostScope(for: provider)
-        let costScopeSignature = "\(costScope.signature)|historyDays=\(historyDays)|fetchAll=\(fetchAllHistory)"
+        let cursorScopeSuffix = provider == .cursor ? "|cursorCookie=\(cursorCookieSource.rawValue)" : ""
+        let costScopeSignature =
+            "\(costScope.signature)|historyDays=\(historyDays)|fetchAll=\(fetchAllHistory)\(cursorScopeSuffix)"
         if !force,
            let last = self.lastTokenFetchAt[provider],
            self.lastTokenFetchScope[provider] == costScopeSignature,
@@ -1549,7 +1568,8 @@ extension UsageStore {
                         allowVertexClaudeFallback: !self.isEnabled(.claude),
                         codexHomePath: costScope.codexHomePath,
                         historyDays: historyDays,
-                        fetchAllHistory: fetchAllHistory)
+                        fetchAllHistory: fetchAllHistory,
+                        cursorCookieHeaderOverride: cursorCookieHeaderOverride)
                 }
                 group.addTask {
                     try await Task.sleep(nanoseconds: UInt64(timeoutSeconds * 1_000_000_000))

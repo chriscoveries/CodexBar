@@ -49,6 +49,7 @@ public struct CostUsageFetcher: Sendable {
         codexHomePath: String? = nil,
         historyDays: Int = 30,
         fetchAllHistory: Bool = false,
+        cursorCookieHeaderOverride: String? = nil,
         refreshPricingInBackground: Bool = true) async throws -> CostUsageTokenSnapshot
     {
         try await Self.loadTokenSnapshot(
@@ -60,6 +61,7 @@ public struct CostUsageFetcher: Sendable {
             codexHomePath: codexHomePath,
             historyDays: historyDays,
             fetchAllHistory: fetchAllHistory,
+            cursorCookieHeaderOverride: cursorCookieHeaderOverride,
             refreshPricingInBackground: refreshPricingInBackground,
             scannerOptions: self.scannerOptionsOverride())
     }
@@ -100,6 +102,7 @@ public struct CostUsageFetcher: Sendable {
         codexHomePath: String? = nil,
         historyDays: Int = 30,
         fetchAllHistory: Bool = false,
+        cursorCookieHeaderOverride: String? = nil,
         refreshPricingInBackground: Bool = true,
         scannerOptions overrideScannerOptions: CostUsageScanner.Options? = nil,
         piScannerOptions overridePiScannerOptions: PiSessionCostScanner
@@ -132,7 +135,8 @@ public struct CostUsageFetcher: Sendable {
                 now: now,
                 since: fetchAllHistory ? nil : since,
                 historyDays: clampedHistoryDays,
-                fetchAllHistory: fetchAllHistory)
+                fetchAllHistory: fetchAllHistory,
+                cookieHeaderOverride: cursorCookieHeaderOverride)
         }
         #endif
 
@@ -317,10 +321,14 @@ public struct CostUsageFetcher: Sendable {
         now: Date,
         since: Date?,
         historyDays: Int,
-        fetchAllHistory: Bool) async throws -> CostUsageTokenSnapshot
+        fetchAllHistory: Bool,
+        cookieHeaderOverride: String? = nil) async throws -> CostUsageTokenSnapshot
     {
         let probe = CursorStatusProbe(browserDetection: BrowserDetection())
-        let report = try await probe.fetchCostReport(since: since, until: now)
+        let report = try await probe.fetchCostReport(
+            since: since,
+            until: now,
+            cookieHeaderOverride: cookieHeaderOverride)
         let historyLabel = fetchAllHistory ? "All time" : nil
         return Self.tokenSnapshot(
             from: report.daily,
