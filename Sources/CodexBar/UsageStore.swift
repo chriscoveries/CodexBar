@@ -81,6 +81,7 @@ extension UsageStore {
         _ = self.settings.usageBarsShowUsed
         _ = self.settings.costUsageEnabled
         _ = self.settings.costUsageHistoryDays
+        _ = self.settings.cursorFetchAllCostHistory
         _ = self.settings.randomBlinkEnabled
         _ = self.settings.configRevision
         for implementation in ProviderCatalog.all {
@@ -1493,8 +1494,10 @@ extension UsageStore {
 
         let now = Date()
         let historyDays = self.settings.costUsageHistoryDays
+        // Cursor can pull its full account history (all-time) instead of the rolling window.
+        let fetchAllHistory = provider == .cursor && self.settings.cursorFetchAllCostHistory
         let costScope = self.tokenCostScope(for: provider)
-        let costScopeSignature = "\(costScope.signature)|historyDays=\(historyDays)"
+        let costScopeSignature = "\(costScope.signature)|historyDays=\(historyDays)|fetchAll=\(fetchAllHistory)"
         if !force,
            let last = self.lastTokenFetchAt[provider],
            self.lastTokenFetchScope[provider] == costScopeSignature,
@@ -1545,7 +1548,8 @@ extension UsageStore {
                         forceRefresh: force,
                         allowVertexClaudeFallback: !self.isEnabled(.claude),
                         codexHomePath: costScope.codexHomePath,
-                        historyDays: historyDays)
+                        historyDays: historyDays,
+                        fetchAllHistory: fetchAllHistory)
                 }
                 group.addTask {
                     try await Task.sleep(nanoseconds: UInt64(timeoutSeconds * 1_000_000_000))

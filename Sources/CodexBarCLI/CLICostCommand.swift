@@ -3,7 +3,7 @@ import Commander
 import Foundation
 
 extension CodexBarCLI {
-    private static let costSupportedProviders: Set<UsageProvider> = [.claude, .codex]
+    private static let costSupportedProviders: Set<UsageProvider> = [.claude, .codex, .cursor]
 
     static func runCost(_ values: ParsedValues) async {
         let output = CLIOutputPreferences.from(values: values)
@@ -21,9 +21,13 @@ extension CodexBarCLI {
             }
         }
         guard !providers.isEmpty else {
+            let supportedNames = Self.costSupportedProviders
+                .map { ProviderDescriptorRegistry.descriptor(for: $0).metadata.displayName }
+                .sorted()
+                .joined(separator: ", ")
             Self.exit(
                 code: .failure,
-                message: "Error: cost is only supported for Claude and Codex.",
+                message: "Error: cost is only supported for \(supportedNames).",
                 output: output,
                 kind: .args)
         }
@@ -32,6 +36,7 @@ extension CodexBarCLI {
         let forceRefresh = values.flags.contains("refresh")
         let useColor = Self.shouldUseColor(noColor: values.flags.contains("noColor"), format: format)
         let historyDays = Self.decodeCostHistoryDays(from: values)
+        let fetchAllHistory = values.flags.contains("all")
 
         let fetcher = CostUsageFetcher()
         var sections: [String] = []
@@ -40,11 +45,13 @@ extension CodexBarCLI {
 
         for provider in providers {
             do {
-                // Cost usage is local-only; it does not require web/CLI provider fetches.
+                // Claude/Codex cost comes from local logs; Cursor cost is fetched from its
+                // cookie-authenticated dashboard API via the shared session resolution.
                 let snapshot = try await fetcher.loadTokenSnapshot(
                     provider: provider,
                     forceRefresh: forceRefresh,
                     historyDays: historyDays,
+                    fetchAllHistory: fetchAllHistory,
                     refreshPricingInBackground: false)
                 switch format {
                 case .text:
@@ -98,8 +105,17 @@ extension CodexBarCLI {
             "\(historyLabel): \(monthCost) · \($0) tokens"
         } ?? "\(historyLabel): \(monthCost)"
 
+        // Plan-metered spend over the same window (what Cursor actually deducts), shown
+        // alongside the API-rate estimate. Only providers like Cursor report it.
+        let meteredLine: String? = snapshot.meteredCostUSD.map {
+            let amount = UsageFormatter.currencyString($0, currencyCode: snapshot.currencyCode)
+            return "Cursor-metered: \(amount) (\(historyLabel.lowercased()))"
+        }
+
         let hintLine = UsageFormatter.costEstimateHint(provider: provider)
-        return [header, todayLine, monthLine, hintLine].joined(separator: "\n")
+        return [header, todayLine, monthLine, meteredLine, hintLine]
+            .compactMap(\.self)
+            .joined(separator: "\n")
     }
 
     private static func costHeaderLine(_ header: String, useColor: Bool) -> String {
@@ -136,7 +152,7 @@ extension CodexBarCLI {
 
         return CostPayload(
             provider: provider.rawValue,
-            source: "local",
+            source: provider == .cursor ? "web" : "local",
             updatedAt: snapshot?.updatedAt ?? (error == nil ? nil : Date()),
             currencyCode: snapshot?.currencyCode,
             sessionTokens: snapshot?.sessionTokens,
@@ -144,6 +160,7 @@ extension CodexBarCLI {
             historyDays: snapshot?.historyDays,
             last30DaysTokens: snapshot?.last30DaysTokens,
             last30DaysCostUSD: snapshot?.last30DaysCostUSD,
+            meteredCostUSD: snapshot?.meteredCostUSD,
             daily: daily,
             totals: snapshot.flatMap(Self.costTotals(from:)),
             error: error.map { Self.makeErrorPayload($0) })
@@ -255,6 +272,9 @@ struct CostOptions: CommanderParsable {
 
     @Option(name: .long("days"), help: "Cost history window in days (1...365)")
     var days: Int?
+
+    @Flag(name: .long("all"), help: "Fetch full cost history instead of the --days window (Cursor only)")
+    var all: Bool = false
 }
 
 struct CostPayload: Encodable {
@@ -267,6 +287,7 @@ struct CostPayload: Encodable {
     let historyDays: Int?
     let last30DaysTokens: Int?
     let last30DaysCostUSD: Double?
+    let meteredCostUSD: Double?
     let daily: [CostDailyEntryPayload]
     let totals: CostTotalsPayload?
     let error: ProviderErrorPayload?
@@ -281,6 +302,7 @@ struct CostPayload: Encodable {
         historyDays: Int?,
         last30DaysTokens: Int?,
         last30DaysCostUSD: Double?,
+        meteredCostUSD: Double? = nil,
         daily: [CostDailyEntryPayload],
         totals: CostTotalsPayload?,
         error: ProviderErrorPayload?)
@@ -294,6 +316,7 @@ struct CostPayload: Encodable {
         self.historyDays = historyDays
         self.last30DaysTokens = last30DaysTokens
         self.last30DaysCostUSD = last30DaysCostUSD
+        self.meteredCostUSD = meteredCostUSD
         self.daily = daily
         self.totals = totals
         self.error = error

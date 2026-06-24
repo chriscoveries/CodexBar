@@ -321,6 +321,16 @@ extension SettingsStore {
         }
     }
 
+    /// When enabled, Cursor cost fetches the full account history (all-time) instead of the
+    /// `costUsageHistoryDays` window. Cursor-only; other providers ignore it.
+    var cursorFetchAllCostHistory: Bool {
+        get { self.defaultsState.cursorFetchAllCostHistory }
+        set {
+            self.defaultsState.cursorFetchAllCostHistory = newValue
+            self.userDefaults.set(newValue, forKey: "cursorFetchAllCostHistory")
+        }
+    }
+
     var hidePersonalInfo: Bool {
         get { self.defaultsState.hidePersonalInfo }
         set {

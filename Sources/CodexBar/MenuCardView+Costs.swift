@@ -107,10 +107,17 @@ extension UsageMenuCardView.Model {
             }
             return "\(windowLabel): \(monthCost)"
         }()
+        // Plan-metered spend over the same window (what the provider actually deducts);
+        // only providers that report it (currently Cursor) populate `meteredCostUSD`.
+        let meteredLine: String? = snapshot.meteredCostUSD.map {
+            let amount = UsageFormatter.currencyString($0, currencyCode: snapshot.currencyCode)
+            return String(format: L("Cursor-metered: %@ (%@)"), amount, windowLabel.lowercased())
+        }
         let err = (error?.isEmpty ?? true) ? nil : error
         return TokenUsageSection(
             sessionLine: sessionLine,
             monthLine: monthLine,
+            meteredLine: meteredLine,
             hintLine: Self.tokenUsageHint(provider: provider),
             errorLine: err,
             errorCopyText: (error?.isEmpty ?? true) ? nil : error)

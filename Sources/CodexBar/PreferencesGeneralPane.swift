@@ -148,8 +148,20 @@ struct GeneralPane: View {
                                     .font(.footnote)
                                     .foregroundStyle(.tertiary)
 
+                                Toggle(isOn: self.$settings.cursorFetchAllCostHistory) {
+                                    Text(L("Fetch full Cursor cost history"))
+                                        .font(.footnote)
+                                }
+                                .toggleStyle(.checkbox)
+
+                                Text(L("Cursor only: total all-time spend instead of the window above. Slower to load."))
+                                    .font(.footnote)
+                                    .foregroundStyle(.tertiary)
+                                    .fixedSize(horizontal: false, vertical: true)
+
                                 self.costStatusLine(provider: .claude)
                                 self.costStatusLine(provider: .codex)
+                                self.costStatusLine(provider: .cursor)
                             }
                         }
                     }

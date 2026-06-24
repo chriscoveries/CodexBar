@@ -377,6 +377,7 @@ extension SettingsStore {
         let costUsageEnabled = userDefaults.object(forKey: "tokenCostUsageEnabled") as? Bool ?? false
         let rawCostUsageHistoryDays = userDefaults.object(forKey: "tokenCostUsageHistoryDays") as? Int ?? 30
         let costUsageHistoryDays = max(1, min(365, rawCostUsageHistoryDays))
+        let cursorFetchAllCostHistory = userDefaults.object(forKey: "cursorFetchAllCostHistory") as? Bool ?? false
         let hidePersonalInfo = userDefaults.object(forKey: "hidePersonalInfo") as? Bool ?? false
         let randomBlinkEnabled = userDefaults.object(forKey: "randomBlinkEnabled") as? Bool ?? false
         let confettiOnWeeklyLimitResetsEnabled = userDefaults.object(
@@ -451,6 +452,7 @@ extension SettingsStore {
             copilotIconSecondaryWindowIDRaw: copilotIconSecondaryWindowIDRaw,
             costUsageEnabled: costUsageEnabled,
             costUsageHistoryDays: costUsageHistoryDays,
+            cursorFetchAllCostHistory: cursorFetchAllCostHistory,
             hidePersonalInfo: hidePersonalInfo,
             randomBlinkEnabled: randomBlinkEnabled,
             confettiOnWeeklyLimitResetsEnabled: confettiOnWeeklyLimitResetsEnabled,
