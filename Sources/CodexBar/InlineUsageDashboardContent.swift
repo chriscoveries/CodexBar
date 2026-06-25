@@ -177,6 +177,11 @@ extension UsageMenuCardView.Model {
         {
             return Self.openRouterInlineDashboard(usage)
         }
+        if input.provider == .crossmodel,
+           let usage = input.snapshot?.crossModelUsage
+        {
+            return Self.crossModelInlineDashboard(usage)
+        }
         if input.provider == .zai,
            let modelUsage = input.snapshot?.zaiUsage?.modelUsage
         {
@@ -422,6 +427,43 @@ extension UsageMenuCardView.Model {
             ],
             points: points,
             detailLines: details)
+    }
+
+    private static func crossModelInlineDashboard(_ usage: CrossModelUsageSnapshot) -> InlineUsageDashboardModel? {
+        let periodValues: [(String, String, Double?)] = [
+            ("day", L("Today"), usage.daily?.costUSD),
+            ("week", L("Week"), usage.weekly?.costUSD),
+            ("month", L("Month"), usage.monthly?.costUSD),
+        ]
+        let points = periodValues.compactMap { id, label, value -> InlineUsageDashboardModel.Point? in
+            guard let value else { return nil }
+            return InlineUsageDashboardModel.Point(
+                id: id,
+                label: label,
+                value: value,
+                accessibilityValue: "\(label): \(Self.openRouterCurrencyString(value))")
+        }
+        guard !points.isEmpty else { return nil }
+        return InlineUsageDashboardModel(
+            accessibilityLabel: L("CrossModel API spend trend"),
+            valueStyle: .currencyUSD,
+            kpis: [
+                .init(title: L("Balance"), value: Self.openRouterCurrencyString(usage.balanceUSD), emphasis: true),
+                .init(
+                    title: L("Today"),
+                    value: usage.daily.map { Self.openRouterCurrencyString($0.costUSD) } ?? "—",
+                    emphasis: false),
+                .init(
+                    title: L("Week"),
+                    value: usage.weekly.map { Self.openRouterCurrencyString($0.costUSD) } ?? "—",
+                    emphasis: false),
+                .init(
+                    title: L("Month"),
+                    value: usage.monthly.map { Self.openRouterCurrencyString($0.costUSD) } ?? "—",
+                    emphasis: false),
+            ],
+            points: points,
+            detailLines: [])
     }
 
     private static func openRouterInlineDashboard(_ usage: OpenRouterUsageSnapshot) -> InlineUsageDashboardModel? {

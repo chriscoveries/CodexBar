@@ -675,6 +675,12 @@ extension StatusItemController {
         {
             return UsageFormatter.usdString(balance)
         }
+        if provider == .crossmodel,
+           self.settings.menuBarMetricPreference(for: provider, snapshot: snapshot) == .automatic,
+           let balance = snapshot?.crossModelUsage?.balanceUSD
+        {
+            return UsageFormatter.usdString(balance)
+        }
         if provider == .opencodego,
            let balance = Self.openCodeGoZenBalanceDisplayText(snapshot: snapshot)
         {

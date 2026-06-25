@@ -1128,3 +1128,4 @@
 "byte_unit_megabytes" = "เมกะไบต์";
 "byte_unit_gigabyte" = "กิกะไบต์";
 "byte_unit_gigabytes" = "กิกะไบต์";
+"CrossModel API spend trend" = "แนวโน้มค่าใช้จ่ายของ CrossModel API";
