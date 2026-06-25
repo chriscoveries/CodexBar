@@ -1154,9 +1154,8 @@ extension UsageStore {
                 case .gemini, .antigravity, .opencode, .opencodego, .alibabatokenplan, .factory, .copilot, .devin,
                      .vertexai, .kilo, .kiro, .kimi, .kimik2, .moonshot, .jetbrains, .perplexity, .mimo, .doubao,
                      .sakana, .abacus, .mistral, .codebuff, .crof, .windsurf, .venice, .manus, .commandcode, .qoder,
-                     .stepfun,
-                     .bedrock, .grok, .groq, .t3chat, .llmproxy, .litellm, .zed, .deepgram, .poe, .chutes,
-                     .clawrouter, .wayfinder, .sub2api, .zenmux:
+                     .stepfun, .bedrock, .grok, .groq, .t3chat, .llmproxy, .litellm, .zed, .deepgram, .poe, .chutes,
+                     .neuralwatt, .clawrouter, .wayfinder, .sub2api, .zenmux:
                     return unimplementedDebugLogMessages[provider] ?? "Debug log not yet implemented"
                 }
             }
