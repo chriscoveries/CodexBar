@@ -29,13 +29,9 @@ extension CodexBarCLI {
             }
         }
         guard !providers.isEmpty else {
-            let supportedNames = Self.costSupportedProviders
-                .map { ProviderDescriptorRegistry.descriptor(for: $0).metadata.displayName }
-                .sorted()
-                .joined(separator: ", ")
             Self.exit(
                 code: .failure,
-                message: "Error: cost is only supported for \(supportedNames).",
+                message: "Error: cost is only supported for \(Self.costSupportedProviderNames()).",
                 output: output,
                 kind: .args)
         }
@@ -55,24 +51,20 @@ extension CodexBarCLI {
         var exitCode: ExitCode = .success
 
         for provider in providers {
-            if provider == .cursor, cursorCookieSettings?.cookieSource == .off {
+            if Self.cursorCostShouldSkip(provider, settings: cursorCookieSettings) {
                 if !output.jsonOnly {
                     Self.writeStderr("Cursor cost skipped: cookie source is set to Off.\n")
                 }
                 continue
             }
             do {
-                let cursorCookieHeaderOverride: String? =
-                    provider == .cursor && cursorCookieSettings?.cookieSource == .manual
-                        ? CookieHeaderNormalizer.normalize(cursorCookieSettings?.manualCookieHeader)
-                        : nil
                 // Claude/Codex cost comes from local logs; Cursor cost is fetched from its
                 // cookie-authenticated dashboard API via the shared session resolution.
                 let snapshot = try await fetcher.loadTokenSnapshot(
                     provider: provider,
                     forceRefresh: forceRefresh,
                     historyDays: historyDays,
-                    cursorCookieHeaderOverride: cursorCookieHeaderOverride,
+                    cursorCookieHeaderOverride: Self.cursorCostHeaderOverride(provider, settings: cursorCookieSettings),
                     refreshPricingInBackground: false)
                 switch format {
                 case .text:
@@ -257,9 +249,18 @@ extension CodexBarCLI {
         return max(1, min(365, parsed))
     }
 
+    /// Human-readable list of providers that support a cost report, used by both `cost` and serve.
+    static func costSupportedProviderNames() -> String {
+        Self.costSupportedProviders
+            .map { ProviderDescriptorRegistry.descriptor(for: $0).metadata.displayName }
+            .sorted()
+            .joined(separator: ", ")
+    }
+
     /// Resolve the configured Cursor cookie settings (source + manual header) the same way the CLI
     /// usage path does, so Cursor cost honors Off/Manual instead of always auto-resolving a session.
-    private static func cursorCookieSettings(
+    /// Shared by `cost` and the serve `/cost` route.
+    static func cursorCookieSettings(
         config: CodexBarConfig,
         providers: [UsageProvider]) -> ProviderSettingsSnapshot.CursorProviderSettings?
     {
@@ -269,6 +270,23 @@ extension CodexBarCLI {
         else { return nil }
         let account = (try? context.resolvedAccounts(for: .cursor))?.first
         return context.settingsSnapshot(for: .cursor, account: account)?.cursor
+    }
+
+    /// Whether a Cursor cost fetch must be skipped because the user set the cookie source to Off.
+    static func cursorCostShouldSkip(
+        _ provider: UsageProvider,
+        settings: ProviderSettingsSnapshot.CursorProviderSettings?) -> Bool
+    {
+        provider == .cursor && settings?.cookieSource == .off
+    }
+
+    /// Manual cookie header to forward for a Cursor cost fetch, or nil for auto/non-cursor sources.
+    static func cursorCostHeaderOverride(
+        _ provider: UsageProvider,
+        settings: ProviderSettingsSnapshot.CursorProviderSettings?) -> String?
+    {
+        guard provider == .cursor, settings?.cookieSource == .manual else { return nil }
+        return CookieHeaderNormalizer.normalize(settings?.manualCookieHeader)
     }
 }
 
