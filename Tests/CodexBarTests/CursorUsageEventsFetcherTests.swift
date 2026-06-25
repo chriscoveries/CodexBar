@@ -142,6 +142,31 @@ struct CursorUsageEventsFetcherTests {
         #expect(CursorUsageEventsFetcher.meteredCostUSD(from: events) == nil)
     }
 
+    // MARK: - Snapshot
+
+    @Test
+    func `session cost tracks the current local day, not the latest entry`() throws {
+        // Cursor labels the session line "Today", so a stale latest day must not leak into it. This
+        // mirrors loadCursorTokenSnapshot, which builds the snapshot with current-local-day semantics.
+        let calendar = Calendar.current
+        let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 5, day: 18, hour: 12)))
+        let twoDaysAgo = try #require(calendar.date(byAdding: .day, value: -2, to: now))
+        let event = Self.event(
+            timestampMS: Int64(twoDaysAgo.timeIntervalSince1970 * 1000),
+            model: "claude-4.5-sonnet",
+            input: 100,
+            output: 50,
+            totalCents: 150)
+
+        let report = CursorUsageEventsFetcher.makeDailyReport(from: [event], calendar: calendar)
+        let snapshot = CostUsageFetcher.tokenSnapshot(from: report, now: now, useCurrentLocalDayForSession: true)
+
+        // No usage today -> session is zero, while the window total still reflects the older day.
+        #expect(snapshot.sessionCostUSD == 0)
+        #expect(snapshot.sessionTokens == 0)
+        #expect(Self.approxEqual(snapshot.last30DaysCostUSD, 1.5))
+    }
+
     // MARK: - Decoding
 
     @Test

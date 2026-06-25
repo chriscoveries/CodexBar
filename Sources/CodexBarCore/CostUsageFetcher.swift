@@ -310,7 +310,8 @@ public struct CostUsageFetcher: Sendable {
     #if os(macOS)
     /// Fetch Cursor's per-day token-cost plus its Cursor-metered total via the cookie-authenticated
     /// dashboard API, reusing the same session resolution as the Cursor status probe. Like Codex and
-    /// Claude, the report covers the rolling `historyDays` window.
+    /// Claude, the report covers the rolling `historyDays` window and the session line is tied to the
+    /// current local day (so a stale latest entry is never labeled as Today).
     private static func loadCursorTokenSnapshot(
         now: Date,
         since: Date?,
@@ -326,7 +327,7 @@ public struct CostUsageFetcher: Sendable {
             from: report.daily,
             now: now,
             historyDays: historyDays,
-            useCurrentLocalDayForSession: false,
+            useCurrentLocalDayForSession: true,
             meteredCostUSD: report.meteredCostUSD)
     }
     #endif
