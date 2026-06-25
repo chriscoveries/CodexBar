@@ -319,8 +319,12 @@ public struct CostUsageFetcher: Sendable {
         cookieHeaderOverride: String? = nil) async throws -> CostUsageTokenSnapshot
     {
         let probe = CursorStatusProbe(browserDetection: BrowserDetection())
+        // `since` arrives as the current instant N-1 days back; snap it to the local day boundary so
+        // the dashboard query keeps the full first day (and all of today for a 1-day window) instead
+        // of filtering out earlier events at the same time-of-day.
+        let windowStart = since.map { Calendar.current.startOfDay(for: $0) }
         let report = try await probe.fetchCostReport(
-            since: since,
+            since: windowStart,
             until: now,
             cookieHeaderOverride: cookieHeaderOverride)
         return Self.tokenSnapshot(
