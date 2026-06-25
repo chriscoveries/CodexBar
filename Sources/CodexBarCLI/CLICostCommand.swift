@@ -3,7 +3,15 @@ import Commander
 import Foundation
 
 extension CodexBarCLI {
-    private static let costSupportedProviders: Set<UsageProvider> = [.claude, .codex, .cursor]
+    private static let costSupportedProviders: Set<UsageProvider> = {
+        #if os(macOS)
+        [.claude, .codex, .cursor]
+        #else
+        // Cursor cost relies on the macOS-only dashboard fetch path; `supportsTokenSnapshot(.cursor)`
+        // is false elsewhere, so don't advertise Cursor cost where it can only fail.
+        [.claude, .codex]
+        #endif
+    }()
 
     static func runCost(_ values: ParsedValues) async {
         let output = CLIOutputPreferences.from(values: values)
@@ -36,6 +44,10 @@ extension CodexBarCLI {
         let forceRefresh = values.flags.contains("refresh")
         let useColor = Self.shouldUseColor(noColor: values.flags.contains("noColor"), format: format)
         let historyDays = Self.decodeCostHistoryDays(from: values)
+        // Cursor cost reuses the same cookie-source policy as usage fetches: skip the fetch when the
+        // user set Cursor cookies to Off, and forward the Manual header so the dashboard request uses
+        // the configured session instead of auto-resolving a different one.
+        let cursorCookieSettings = Self.cursorCookieSettings(config: config, providers: providers)
 
         let fetcher = CostUsageFetcher()
         var sections: [String] = []
@@ -43,13 +55,24 @@ extension CodexBarCLI {
         var exitCode: ExitCode = .success
 
         for provider in providers {
+            if provider == .cursor, cursorCookieSettings?.cookieSource == .off {
+                if !output.jsonOnly {
+                    Self.writeStderr("Cursor cost skipped: cookie source is set to Off.\n")
+                }
+                continue
+            }
             do {
+                let cursorCookieHeaderOverride: String? =
+                    provider == .cursor && cursorCookieSettings?.cookieSource == .manual
+                        ? CookieHeaderNormalizer.normalize(cursorCookieSettings?.manualCookieHeader)
+                        : nil
                 // Claude/Codex cost comes from local logs; Cursor cost is fetched from its
                 // cookie-authenticated dashboard API via the shared session resolution.
                 let snapshot = try await fetcher.loadTokenSnapshot(
                     provider: provider,
                     forceRefresh: forceRefresh,
                     historyDays: historyDays,
+                    cursorCookieHeaderOverride: cursorCookieHeaderOverride,
                     refreshPricingInBackground: false)
                 switch format {
                 case .text:
@@ -232,6 +255,20 @@ extension CodexBarCLI {
               let parsed = Int(raw)
         else { return 30 }
         return max(1, min(365, parsed))
+    }
+
+    /// Resolve the configured Cursor cookie settings (source + manual header) the same way the CLI
+    /// usage path does, so Cursor cost honors Off/Manual instead of always auto-resolving a session.
+    private static func cursorCookieSettings(
+        config: CodexBarConfig,
+        providers: [UsageProvider]) -> ProviderSettingsSnapshot.CursorProviderSettings?
+    {
+        guard providers.contains(.cursor) else { return nil }
+        let selection = TokenAccountCLISelection(label: nil, index: nil, allAccounts: false)
+        guard let context = try? TokenAccountCLIContext(selection: selection, config: config, verbose: false)
+        else { return nil }
+        let account = (try? context.resolvedAccounts(for: .cursor))?.first
+        return context.settingsSnapshot(for: .cursor, account: account)?.cursor
     }
 }
 
