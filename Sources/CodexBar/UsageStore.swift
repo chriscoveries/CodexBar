@@ -1004,6 +1004,7 @@ extension UsageStore {
         let openAIDebugContext = self.openAIAPIKeyDebugContext(processEnvironment: processEnvironment)
         let azureOpenAIDebugContext = self.azureOpenAIAPIKeyDebugContext(processEnvironment: processEnvironment)
         let openRouterDebugContext = self.openRouterAPIKeyDebugContext(processEnvironment: processEnvironment)
+        let crossModelDebugContext = self.crossModelAPIKeyDebugContext(processEnvironment: processEnvironment)
         let elevenLabsDebugContext = self.elevenLabsAPIKeyDebugContext(processEnvironment: processEnvironment)
         let deepSeekHasEnvToken = DeepSeekSettingsReader.apiKey(environment: processEnvironment) != nil
         let deepSeekHasTokenAccount = self.settings.selectedTokenAccount(for: .deepseek) != nil
@@ -1107,10 +1108,7 @@ extension UsageStore {
                 case .openrouter:
                     return Self.apiKeyDebugLine(openRouterDebugContext)
                 case .crossmodel:
-                    let resolution = ProviderTokenResolver.crossModelResolution()
-                    let hasAny = resolution != nil
-                    let source = resolution?.source.rawValue ?? "none"
-                    return "CROSSMODEL_API_KEY=\(hasAny ? "present" : "missing") source=\(source)"
+                    return Self.apiKeyDebugLine(crossModelDebugContext)
                 case .elevenlabs:
                     return Self.apiKeyDebugLine(elevenLabsDebugContext)
                 case .warp:
@@ -1297,6 +1295,20 @@ extension UsageStore {
             resolution: ProviderTokenResolver.openRouterResolution(environment: environment),
             configToken: config?.sanitizedAPIKey,
             hasEnvToken: OpenRouterSettingsReader.apiToken(environment: processEnvironment) != nil,
+            hasTokenAccount: false)
+    }
+
+    private func crossModelAPIKeyDebugContext(processEnvironment: [String: String]) -> APIKeyDebugContext {
+        let config = self.settings.providerConfig(for: .crossmodel)
+        let environment = ProviderConfigEnvironment.applyAPIKeyOverride(
+            base: processEnvironment,
+            provider: .crossmodel,
+            config: config)
+        return APIKeyDebugContext(
+            label: "CROSSMODEL_API_KEY",
+            resolution: ProviderTokenResolver.crossModelResolution(environment: environment),
+            configToken: config?.sanitizedAPIKey,
+            hasEnvToken: CrossModelSettingsReader.apiToken(environment: processEnvironment) != nil,
             hasTokenAccount: false)
     }
 
