@@ -307,6 +307,14 @@ public struct CostUsageFetcher: Sendable {
             environment: environment)
     }
 
+    /// Snap a Cursor window start to the local day boundary so the dashboard query keeps full days.
+    /// `since` arrives as the current instant N-1 days back, so a 1-day window would otherwise become
+    /// an empty exact-instant range; snapping to 00:00 keeps all of today (and the first day's early
+    /// hours for wider windows).
+    static func cursorWindowStart(_ since: Date?, calendar: Calendar = .current) -> Date? {
+        since.map { calendar.startOfDay(for: $0) }
+    }
+
     #if os(macOS)
     /// Fetch Cursor's per-day token-cost plus its Cursor-metered total via the cookie-authenticated
     /// dashboard API, reusing the same session resolution as the Cursor status probe. Like Codex and
@@ -322,7 +330,7 @@ public struct CostUsageFetcher: Sendable {
         // `since` arrives as the current instant N-1 days back; snap it to the local day boundary so
         // the dashboard query keeps the full first day (and all of today for a 1-day window) instead
         // of filtering out earlier events at the same time-of-day.
-        let windowStart = since.map { Calendar.current.startOfDay(for: $0) }
+        let windowStart = Self.cursorWindowStart(since)
         let report = try await probe.fetchCostReport(
             since: windowStart,
             until: now,
