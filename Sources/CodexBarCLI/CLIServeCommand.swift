@@ -758,16 +758,23 @@ extension CodexBarCLI {
 
         let providers = Self.costProviders(from: selection)
         guard !providers.isEmpty else {
-            return Self.serveError(status: .badRequest, message: "cost is only supported for Claude and Codex")
+            return Self.serveError(
+                status: .badRequest,
+                message: "cost is only supported for \(Self.costSupportedProviderNames())")
         }
 
+        // Cursor cost honors the same cookie policy here as the `cost` command: skip when the source
+        // is Off and forward the Manual header so served data matches the configured session.
+        let cursorCookieSettings = Self.cursorCookieSettings(config: config, providers: providers)
         let fetcher = CostUsageFetcher()
         var payload: [CostPayload] = []
         for provider in providers {
+            if Self.cursorCostShouldSkip(provider, settings: cursorCookieSettings) { continue }
             do {
                 let snapshot = try await fetcher.loadTokenSnapshot(
                     provider: provider,
-                    forceRefresh: false)
+                    forceRefresh: false,
+                    cursorCookieHeaderOverride: Self.cursorCostHeaderOverride(provider, settings: cursorCookieSettings))
                 payload.append(Self.makeCostPayload(provider: provider, snapshot: snapshot, error: nil))
             } catch {
                 payload.append(Self.makeCostPayload(provider: provider, snapshot: nil, error: error))
