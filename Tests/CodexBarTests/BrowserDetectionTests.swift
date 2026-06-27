@@ -16,12 +16,18 @@ struct BrowserDetectionTests {
         return BrowserDetection(
             homeDirectory: homeDirectory,
             cacheTTL: 0,
+            now: Date.init,
             fileExists: { path in
-                installedAppPaths.contains(path) || FileManager.default.fileExists(atPath: path)
+                if path.hasSuffix(".app") {
+                    return installedAppPaths.contains(path)
+                }
+                return FileManager.default.fileExists(atPath: path)
             },
             directoryContents: { path in
                 try? FileManager.default.contentsOfDirectory(atPath: path)
-            })
+            },
+            applicationURLs: { _ in [] },
+            profileAccessIssue: { _ in nil })
     }
 
     @Test(.disabled(
