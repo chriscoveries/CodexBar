@@ -568,9 +568,13 @@ extension CostUsageScanner {
         return rows.count
     }
 
-    static func codexUsageRowKey(sessionId: String?, row: CodexUsageRow) -> String {
+    static func codexUsageRowKey(
+        sessionId: String?,
+        fileIdentity: String? = nil,
+        row: CodexUsageRow) -> String
+    {
         [
-            sessionId ?? "",
+            sessionId.map { "session:\($0)" } ?? "file:\(fileIdentity ?? "")",
             row.turnID ?? "",
             row.eventIndex.map(String.init) ?? "",
             row.day,
@@ -584,12 +588,13 @@ extension CostUsageScanner {
     static func uniqueCodexRows(
         rows: [CodexUsageRow],
         sessionId: String?,
+        fileIdentity: String,
         state: inout CodexScanState) -> [CodexUsageRow]
     {
         var unique: [CodexUsageRow] = []
         var acceptedKeys = Set<String>()
         for row in rows {
-            let key = Self.codexUsageRowKey(sessionId: sessionId, row: row)
+            let key = Self.codexUsageRowKey(sessionId: sessionId, fileIdentity: fileIdentity, row: row)
             if !state.seenCodexUsageRowKeys.contains(key) {
                 unique.append(row)
                 acceptedKeys.insert(key)
@@ -602,10 +607,14 @@ extension CostUsageScanner {
     static func rememberCodexRows(
         _ rows: [CodexUsageRow],
         sessionId: String?,
+        fileIdentity: String,
         state: inout CodexScanState)
     {
         for row in rows {
-            state.seenCodexUsageRowKeys.insert(self.codexUsageRowKey(sessionId: sessionId, row: row))
+            state.seenCodexUsageRowKeys.insert(self.codexUsageRowKey(
+                sessionId: sessionId,
+                fileIdentity: fileIdentity,
+                row: row))
         }
     }
 
@@ -627,7 +636,13 @@ extension CostUsageScanner {
         context: CodexFileScanContext) -> CostUsageFileUsage
     {
         var days = Self.fileDaysOutsideScanWindow(usage.days, range: context.range)
-        Self.mergeFileDays(existing: &days, delta: Self.codexFileDays(rows: rows))
+        let rowsInScanWindow = rows.filter {
+            CostUsageDayRange.isInRange(
+                dayKey: $0.day,
+                since: context.range.scanSinceKey,
+                until: context.range.scanUntilKey)
+        }
+        Self.mergeFileDays(existing: &days, delta: Self.codexFileDays(rows: rowsInScanWindow))
         let splitMaps = Self.codexModeSplitMaps(
             rows: rows,
             range: context.range,
@@ -810,7 +825,11 @@ extension CostUsageScanner {
                 state.contributingSessionIds.insert(sessionId)
             }
         }
-        Self.rememberCodexRows(rows, sessionId: session.id, state: &state)
+        Self.rememberCodexRows(
+            rows,
+            sessionId: session.id,
+            fileIdentity: input.metadata.path,
+            state: &state)
         if let fileId = input.metadata.fileId {
             state.seenFileIds.insert(fileId)
         }
@@ -839,7 +858,11 @@ extension CostUsageScanner {
         }
         if sessionAlreadyContributed {
             guard !cachedRows.isEmpty else { return false }
-            let uniqueRows = Self.uniqueCodexRows(rows: cachedRows, sessionId: cached.sessionId, state: &state)
+            let uniqueRows = Self.uniqueCodexRows(
+                rows: cachedRows,
+                sessionId: cached.sessionId,
+                fileIdentity: input.metadata.path,
+                state: &state)
             guard !uniqueRows.isEmpty else {
                 Self.dropCachedCodexFile(path: input.metadata.path, cached: cached, cache: &cache)
                 return true
@@ -919,7 +942,11 @@ extension CostUsageScanner {
             return false
         }
         let sessionId = delta.sessionId ?? cached.sessionId
-        let uniqueRows = Self.uniqueCodexRows(rows: delta.rows, sessionId: sessionId, state: &state)
+        let uniqueRows = Self.uniqueCodexRows(
+            rows: delta.rows,
+            sessionId: sessionId,
+            fileIdentity: input.metadata.path,
+            state: &state)
         if let sessionId, state.contributingSessionIds.contains(sessionId), uniqueRows.isEmpty {
             Self.dropCachedCodexFile(path: input.metadata.path, cached: cached, cache: &cache)
             return true
@@ -1004,7 +1031,11 @@ extension CostUsageScanner {
             inheritedTotalsResolver: context.resources.inheritedResolver.inheritedTotals(for:atOrBefore:),
             checkCancellation: context.checkCancellation)
         let sessionId = parsed.sessionId ?? input.cached?.sessionId
-        let uniqueRows = Self.uniqueCodexRows(rows: parsed.rows, sessionId: sessionId, state: &state)
+        let uniqueRows = Self.uniqueCodexRows(
+            rows: parsed.rows,
+            sessionId: sessionId,
+            fileIdentity: input.metadata.path,
+            state: &state)
         if let sessionId, state.contributingSessionIds.contains(sessionId), uniqueRows.isEmpty {
             cache.files.removeValue(forKey: input.metadata.path)
             return
