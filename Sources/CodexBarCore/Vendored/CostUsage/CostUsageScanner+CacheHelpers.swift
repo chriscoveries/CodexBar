@@ -947,6 +947,11 @@ extension CostUsageScanner {
             return false
         }
         let sessionId = delta.sessionId ?? cached.sessionId
+        Self.rememberCodexRows(
+            cached.codexRows ?? [],
+            sessionId: sessionId,
+            fileIdentity: input.metadata.path,
+            state: &state)
         let uniqueRows = Self.uniqueCodexRows(
             rows: delta.rows,
             sessionId: sessionId,

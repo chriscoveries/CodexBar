@@ -1639,8 +1639,6 @@ struct CostUsageScannerBreakdownTests {
                 turnContext,
                 firstTurn,
                 firstUsage,
-                secondTurn,
-                secondUsage,
             ]))
 
         var options = CostUsageScanner.Options(
@@ -1655,9 +1653,21 @@ struct CostUsageScannerBreakdownTests {
             until: day,
             now: day,
             options: options)
-        #expect(first.data.first?.inputTokens == 30)
-        #expect(first.data.first?.cacheReadTokens == 600)
-        #expect(first.data.first?.outputTokens == 6)
+        #expect(first.data.first?.inputTokens == 10)
+        #expect(first.data.first?.cacheReadTokens == 100)
+        #expect(first.data.first?.outputTokens == 1)
+
+        _ = try env.writeCodexSessionFile(
+            day: day,
+            filename: "active-warm-cache.jsonl",
+            contents: env.jsonl([
+                sessionMeta,
+                turnContext,
+                firstTurn,
+                firstUsage,
+                secondTurn,
+                secondUsage,
+            ]))
 
         let dayKey = CostUsageScanner.CostUsageDayRange.dayKey(from: day)
         _ = try env.writeCodexArchivedSessionFile(
