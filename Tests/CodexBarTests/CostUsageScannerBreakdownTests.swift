@@ -1548,6 +1548,108 @@ struct CostUsageScannerBreakdownTests {
     }
 
     @Test
+    func `codex warm cache rechecks active archive row overlap`() throws {
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+
+        let day = try env.makeLocalNoon(year: 2026, month: 6, day: 28)
+        let iso0 = env.isoString(for: day)
+        let iso1 = env.isoString(for: day.addingTimeInterval(1))
+        let iso2 = env.isoString(for: day.addingTimeInterval(2))
+        let iso3 = env.isoString(for: day.addingTimeInterval(3))
+        let model = "openai/gpt-5.5"
+        let sessionMeta: [String: Any] = [
+            "type": "session_meta",
+            "payload": [
+                "session_id": "sess-warm-cache-active-archive",
+            ],
+        ]
+        let turnContext = self.codexTurnContext(timestamp: iso0, model: model)
+        let firstTurn: [String: Any] = [
+            "type": "event_msg",
+            "timestamp": iso1,
+            "payload": ["type": "task_started", "turn_id": "turn-a"],
+        ]
+        let firstUsage = self.codexTokenCount(
+            timestamp: iso1,
+            model: model,
+            last: (input: 10, cached: 100, output: 1))
+        let secondTurn: [String: Any] = [
+            "type": "event_msg",
+            "timestamp": iso2,
+            "payload": ["type": "task_started", "turn_id": "turn-b"],
+        ]
+        let secondUsage = self.codexTokenCount(
+            timestamp: iso2,
+            model: model,
+            last: (input: 20, cached: 500, output: 5))
+        let thirdTurn: [String: Any] = [
+            "type": "event_msg",
+            "timestamp": iso3,
+            "payload": ["type": "task_started", "turn_id": "turn-c"],
+        ]
+        let thirdUsage = self.codexTokenCount(
+            timestamp: iso3,
+            model: model,
+            last: (input: 5, cached: 50, output: 2))
+
+        _ = try env.writeCodexSessionFile(
+            day: day,
+            filename: "active-warm-cache.jsonl",
+            contents: env.jsonl([
+                sessionMeta,
+                turnContext,
+                firstTurn,
+                firstUsage,
+                secondTurn,
+                secondUsage,
+            ]))
+
+        var options = CostUsageScanner.Options(
+            codexSessionsRoot: env.codexSessionsRoot,
+            claudeProjectsRoots: nil,
+            cacheRoot: env.cacheRoot)
+        options.refreshMinIntervalSeconds = 0
+
+        let first = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day,
+            options: options)
+        #expect(first.data.first?.inputTokens == 30)
+        #expect(first.data.first?.cacheReadTokens == 600)
+        #expect(first.data.first?.outputTokens == 6)
+
+        let dayKey = CostUsageScanner.CostUsageDayRange.dayKey(from: day)
+        _ = try env.writeCodexArchivedSessionFile(
+            filename: "rollout-\(dayKey)T12-00-00-warm-cache.jsonl",
+            contents: env.jsonl([
+                sessionMeta,
+                turnContext,
+                firstTurn,
+                firstUsage,
+                secondTurn,
+                secondUsage,
+                thirdTurn,
+                thirdUsage,
+            ]))
+
+        let second = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day.addingTimeInterval(1),
+            options: options)
+
+        #expect(second.data.count == 1)
+        #expect(second.data[0].inputTokens == 35)
+        #expect(second.data[0].cacheReadTokens == 650)
+        #expect(second.data[0].outputTokens == 8)
+        #expect(second.data[0].totalTokens == 43)
+    }
+
+    @Test
     func `codex daily report includes long lived sessions stored under older date partitions`() throws {
         let env = try CostUsageTestEnvironment()
         defer { env.cleanup() }
