@@ -337,17 +337,12 @@ extension CostUsageScanner {
     {
         guard let rows = usage.codexRows, !rows.isEmpty else { return usage }
         var migratedRows: [CodexUsageRow] = []
-        var retainedRows: [CodexUsageRow] = []
-        for row in rows {
-            if CostUsageDayRange.isInRange(
-                dayKey: row.day,
-                since: context.range.scanSinceKey,
-                until: context.range.scanUntilKey)
-            {
-                migratedRows.append(row)
-            } else {
-                retainedRows.append(row)
-            }
+        for row in rows where CostUsageDayRange.isInRange(
+            dayKey: row.day,
+            since: context.range.scanSinceKey,
+            until: context.range.scanUntilKey)
+        {
+            migratedRows.append(row)
         }
         guard !migratedRows.isEmpty else { return usage }
 
@@ -386,7 +381,7 @@ extension CostUsageScanner {
             usage.codexPriorityTokens,
             splitMaps.priorityTokens)
         updated.codexTurnIDs = Self.mergeCodexTurnIDs(usage.codexTurnIDs, rows: migratedRows)
-        updated.codexRows = retainedRows.isEmpty ? nil : retainedRows
+        updated.codexRows = rows
         return updated
     }
 

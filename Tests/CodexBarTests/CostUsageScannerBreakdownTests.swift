@@ -700,7 +700,7 @@ struct CostUsageScannerBreakdownTests {
         let expectedCost = 10.0 * 2.5e-6
         #expect(abs((report.summary?.totalCostUSD ?? 0) - expectedCost) < 0.000_000_001)
         let migratedUsage = try #require(CostUsageCacheIO.load(provider: .codex, cacheRoot: env.cacheRoot).files[path])
-        #expect(migratedUsage.codexRows == nil)
+        #expect(migratedUsage.codexRows?.map(\.eventIndex) == [0, 1])
         #expect(migratedUsage.codexCostNanos?[dayKey]?[normalizedModel] == originalCostNanos)
         #expect(migratedUsage.codexCostNanos?[dayKey]?[addedModel] == Int64((10.0 * 5e-6 * 1_000_000_000).rounded()))
         #expect(migratedUsage.codexStandardTokens?[dayKey]?[normalizedModel] == 10)
