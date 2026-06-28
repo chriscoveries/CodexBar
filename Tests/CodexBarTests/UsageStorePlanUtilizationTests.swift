@@ -1062,6 +1062,43 @@ struct UsageStorePlanUtilizationTests {
 
     @MainActor
     @Test
+    func `session quota celebration posts for generic provider session lane`() async {
+        let store = Self.makeStore()
+        let accountLabel = "zai-session-reset-org"
+        let recorder = SessionLimitResetEventRecorder(provider: .zai, accountLabel: accountLabel)
+        defer { recorder.invalidate() }
+
+        let before = UsageSnapshot(
+            primary: RateWindow(usedPercent: 30, windowMinutes: 10080, resetsAt: nil, resetDescription: nil),
+            secondary: RateWindow(usedPercent: 88, windowMinutes: 300, resetsAt: nil, resetDescription: nil),
+            updatedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            identity: ProviderIdentitySnapshot(
+                providerID: .zai,
+                accountEmail: nil,
+                accountOrganization: accountLabel,
+                loginMethod: "pro"))
+        let after = UsageSnapshot(
+            primary: RateWindow(usedPercent: 30, windowMinutes: 10080, resetsAt: nil, resetDescription: nil),
+            secondary: RateWindow(usedPercent: 0, windowMinutes: 300, resetsAt: nil, resetDescription: nil),
+            updatedAt: Date(timeIntervalSince1970: 1_700_003_600),
+            identity: ProviderIdentitySnapshot(
+                providerID: .zai,
+                accountEmail: nil,
+                accountOrganization: accountLabel,
+                loginMethod: "pro"))
+
+        await store.recordPlanUtilizationHistorySample(provider: .zai, snapshot: before, now: before.updatedAt)
+        await store.recordPlanUtilizationHistorySample(provider: .zai, snapshot: after, now: after.updatedAt)
+
+        let events = recorder.events
+        #expect(events.count == 1)
+        #expect(events[0].provider == .zai)
+        #expect(events[0].accountLabel == accountLabel)
+        #expect(events[0].usedPercent == 0)
+    }
+
+    @MainActor
+    @Test
     func `generic provider weekly lane is persisted to provider history json`() async throws {
         let store = Self.makeStore()
         store.settings.historicalTrackingEnabled = true
@@ -1091,13 +1128,17 @@ struct UsageStorePlanUtilizationTests {
 
         let histories = store.planUtilizationHistory(for: .zai)
         #expect(findSeries(histories, name: .weekly, windowMinutes: 10080)?.entries.map(\.usedPercent) == [42, 58])
+        // The 5-hour secondary window is now surfaced as a session lane alongside weekly.
+        #expect(findSeries(histories, name: .session, windowMinutes: 300)?.entries.map(\.usedPercent) == [15, 25])
 
         let providerURL = try #require(store.planUtilizationHistoryStore.directoryURL?
             .appendingPathComponent("zai.json", isDirectory: false))
         var persistedBuckets: PlanUtilizationHistoryBuckets?
         for _ in 0..<20 {
             persistedBuckets = store.planUtilizationHistoryStore.load()[.zai]
-            if persistedBuckets?.histories(for: persistedBuckets?.preferredAccountKey).flatMap(\.entries).count == 2 {
+            let weeklyEntries = persistedBuckets?.histories(for: persistedBuckets?.preferredAccountKey)
+                .first { $0.name == .weekly }?.entries.count
+            if weeklyEntries == 2 {
                 break
             }
             try await Task.sleep(nanoseconds: 50_000_000)
@@ -1105,8 +1146,7 @@ struct UsageStorePlanUtilizationTests {
         #expect(FileManager.default.fileExists(atPath: providerURL.path))
         let persisted = try #require(persistedBuckets)
         #expect(persisted.histories(for: persisted.preferredAccountKey)
-            .flatMap(\.entries)
-            .map(\.usedPercent) == [42, 58])
+            .first { $0.name == .weekly }?.entries.map(\.usedPercent) == [42, 58])
     }
 
     @MainActor

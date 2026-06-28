@@ -8,6 +8,12 @@ extension UsageStore {
     private nonisolated static let weeklyWindowMinutes = 7 * 24 * 60
     private nonisolated static let planUtilizationUnscopedPreferredKey = "__unscoped__"
     private nonisolated static let claudeOAuthPlanUtilizationAccountKeyPrefix = "__claude_oauth__:"
+    private nonisolated static let sessionWindowMinutesRange = 295...305
+
+    private nonisolated static func isSessionWindow(_ windowMinutes: Int?) -> Bool {
+        guard let windowMinutes else { return false }
+        return self.sessionWindowMinutesRange.contains(windowMinutes)
+    }
 
     struct LimitResetDetectorState: Codable, Equatable {
         let wasAboveThreshold: Bool
@@ -473,6 +479,22 @@ extension UsageStore {
                     resetsAt: window.resetsAt))
         }
 
+        // Providers whose session lanes are not modeled explicitly above still expose a
+        // 5-hour session window through the standard or extra rate windows. Surface it so
+        // session-limit reset detection (and its confetti) works for them too.
+        func appendGenericSessionWindow() {
+            let standardSessionWindow = [snapshot.primary, snapshot.secondary, snapshot.tertiary]
+                .compactMap(\.self)
+                .first { Self.isSessionWindow($0.windowMinutes) }
+            let extraSessionWindow = snapshot.extraRateWindows?
+                .lazy
+                .first { $0.usageKnown && Self.isSessionWindow($0.window.windowMinutes) }?
+                .window
+            if let sessionWindow = standardSessionWindow ?? extraSessionWindow {
+                appendWindow(sessionWindow, name: .session)
+            }
+        }
+
         switch provider {
         case .codex:
             let projection = self.codexConsumerProjection(
@@ -502,6 +524,7 @@ extension UsageStore {
                     appendWindow(window, name: .weekly)
                 }
             }
+            appendGenericSessionWindow()
         default:
             let standardWeeklyWindow = [snapshot.primary, snapshot.secondary, snapshot.tertiary]
                 .compactMap(\.self)
@@ -513,6 +536,7 @@ extension UsageStore {
             if let weeklyWindow = standardWeeklyWindow ?? extraWeeklyWindow {
                 appendWindow(weeklyWindow, name: .weekly)
             }
+            appendGenericSessionWindow()
         }
 
         return samplesByKey.values.sorted { lhs, rhs in
