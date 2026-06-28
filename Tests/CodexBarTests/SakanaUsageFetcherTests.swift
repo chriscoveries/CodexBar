@@ -59,6 +59,20 @@ struct SakanaUsageFetcherTests {
     }
 
     @Test
+    func `fetch classifies blocked login redirect as login required`() async throws {
+        let transport = try SakanaScriptedTransport(
+            statusCode: 302,
+            body: "",
+            headers: ["Location": #require(URL(string: "https://auth.sakana.ai/login")).absoluteString])
+
+        await #expect(throws: SakanaUsageError.loginRequired) {
+            _ = try await SakanaUsageFetcher.fetchUsage(
+                cookieHeader: "session=expired",
+                session: transport)
+        }
+    }
+
+    @Test
     func `fetch does not expose error response body`() async {
         let transport = SakanaScriptedTransport(statusCode: 500, body: "private account response")
 
@@ -82,7 +96,16 @@ struct SakanaUsageFetcherTests {
             .replacing("92% used", with: "101% used")
             .replacing("32% used", with: "999% used")
 
-        #expect(throws: SakanaUsageError.parseFailed("Usage limit windows were not found.")) {
+        #expect(throws: SakanaUsageError.parseFailed("Invalid 5-hour usage percentage.")) {
+            _ = try SakanaUsageFetcher.parseBillingHTML(html)
+        }
+    }
+
+    @Test
+    func `invalid primary percentage rejects otherwise valid weekly response`() {
+        let html = Self.billingHTML.replacing("92% used", with: "101% used")
+
+        #expect(throws: SakanaUsageError.parseFailed("Invalid 5-hour usage percentage.")) {
             _ = try SakanaUsageFetcher.parseBillingHTML(html)
         }
     }
@@ -116,17 +139,14 @@ struct SakanaUsageFetcherTests {
     }
 
     @Test
-    func `missing window percent does not read next quota window`() throws {
+    func `missing window percent rejects response without reading next quota window`() {
         let html = Self.billingHTML.replacing(
             "<p class=\"text-muted-foreground text-sm\">92% used</p>",
             with: "")
-        let usage = try SakanaUsageFetcher.parseBillingHTML(
-            html,
-            timeZone: Self.shanghaiTimeZone).toUsageSnapshot()
 
-        #expect(usage.primary == nil)
-        #expect(usage.secondary?.usedPercent == 32)
-        #expect(usage.secondary?.windowMinutes == 10080)
+        #expect(throws: SakanaUsageError.parseFailed("Invalid 5-hour usage percentage.")) {
+            _ = try SakanaUsageFetcher.parseBillingHTML(html, timeZone: Self.shanghaiTimeZone)
+        }
     }
 
     private static let shanghaiTimeZone = TimeZone(identifier: "Asia/Shanghai")!
@@ -169,12 +189,19 @@ private actor SakanaScriptedTransport: ProviderHTTPTransport {
     private let statusCode: Int
     private let body: String
     private let responseURL: URL?
+    private let headers: [String: String]
     private var capturedRequest: CapturedRequest?
 
-    init(statusCode: Int, body: String, responseURL: URL? = nil) {
+    init(
+        statusCode: Int,
+        body: String,
+        responseURL: URL? = nil,
+        headers: [String: String] = [:])
+    {
         self.statusCode = statusCode
         self.body = body
         self.responseURL = responseURL
+        self.headers = headers
     }
 
     func lastCapturedRequest() -> CapturedRequest? {
@@ -191,7 +218,7 @@ private actor SakanaScriptedTransport: ProviderHTTPTransport {
             url: self.responseURL ?? request.url!,
             statusCode: self.statusCode,
             httpVersion: "HTTP/1.1",
-            headerFields: [:])!
+            headerFields: self.headers)!
         return (Data(self.body.utf8), response)
     }
 }

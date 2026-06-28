@@ -118,7 +118,7 @@ public enum SakanaUsageFetcher {
 
         let transport = transportOverride ?? self.defaultTransport
         let response = try await transport.response(for: request)
-        if response.statusCode == 401 || response.statusCode == 403 {
+        if response.statusCode == 401 || response.statusCode == 403 || (300..<400).contains(response.statusCode) {
             throw SakanaUsageError.loginRequired
         }
         guard response.response.url?.scheme?.lowercased() == "https",
@@ -140,8 +140,8 @@ public enum SakanaUsageFetcher {
         now: Date = Date(),
         timeZone: TimeZone = .current) throws -> SakanaUsageSnapshot
     {
-        let fiveHour = self.parseWindow(label: "5-hour", html: html, timeZone: timeZone)
-        let weekly = self.parseWindow(label: "Weekly", html: html, timeZone: timeZone)
+        let fiveHour = try self.parseWindow(label: "5-hour", html: html, timeZone: timeZone)
+        let weekly = try self.parseWindow(label: "Weekly", html: html, timeZone: timeZone)
         guard fiveHour != nil || weekly != nil else {
             throw SakanaUsageError.parseFailed("Usage limit windows were not found.")
         }
@@ -156,17 +156,17 @@ public enum SakanaUsageFetcher {
     private static func parseWindow(
         label: String,
         html: String,
-        timeZone: TimeZone) -> SakanaUsageSnapshot.QuotaWindow?
+        timeZone: TimeZone) throws -> SakanaUsageSnapshot.QuotaWindow?
     {
-        guard let windowBody = self.windowBody(label: label, html: html),
-              let percentText = self.capture(
-                  pattern: #"<p[^>]*>\s*([0-9]+(?:\.[0-9]+)?)% used\s*</p>"#,
-                  in: windowBody),
-              let percent = Double(percentText),
-              percent.isFinite,
-              (0...100).contains(percent)
+        guard let windowBody = self.windowBody(label: label, html: html) else { return nil }
+        guard let percentText = self.capture(
+            pattern: #"<p[^>]*>\s*([0-9]+(?:\.[0-9]+)?)% used\s*</p>"#,
+            in: windowBody),
+            let percent = Double(percentText),
+            percent.isFinite,
+            (0...100).contains(percent)
         else {
-            return nil
+            throw SakanaUsageError.parseFailed("Invalid \(label) usage percentage.")
         }
         let resetText = self.capture(
             pattern: #"<p[^>]*>\s*Resets on ([^<]+?)\s*</p>"#,
