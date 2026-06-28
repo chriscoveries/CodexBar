@@ -1762,18 +1762,19 @@ struct CostUsageScannerBreakdownTests {
             filename: "active-narrow-warm-overlap.jsonl",
             contents: env.jsonl([sessionMeta, turnContext, sharedTurn, sharedUsage]))
         let dayKey = CostUsageScanner.CostUsageDayRange.dayKey(from: day)
+        let archiveRows = [
+            sessionMeta,
+            turnContext,
+            sharedTurn,
+            sharedUsage,
+            olderTurn,
+            olderUsage,
+            currentTurn,
+            currentUsage,
+        ]
         let archiveURL = try env.writeCodexArchivedSessionFile(
             filename: "rollout-\(dayKey)T12-00-00-narrow-warm-overlap.jsonl",
-            contents: env.jsonl([
-                sessionMeta,
-                turnContext,
-                sharedTurn,
-                sharedUsage,
-                olderTurn,
-                olderUsage,
-                currentTurn,
-                currentUsage,
-            ]))
+            contents: env.jsonl(archiveRows))
 
         var options = CostUsageScanner.Options(
             codexSessionsRoot: env.codexSessionsRoot,
@@ -1788,6 +1789,14 @@ struct CostUsageScannerBreakdownTests {
             now: day,
             options: options)
         #expect(wide.summary?.totalTokens == 39)
+
+        let appendedTurnWithoutUsage: [String: Any] = [
+            "type": "event_msg",
+            "timestamp": env.isoString(for: day.addingTimeInterval(4)),
+            "payload": ["type": "task_started", "turn_id": "turn-without-usage"],
+        ]
+        try env.jsonl(archiveRows + [appendedTurnWithoutUsage])
+            .write(to: archiveURL, atomically: true, encoding: .utf8)
 
         let narrow = CostUsageScanner.loadDailyReport(
             provider: .codex,

@@ -947,23 +947,43 @@ extension CostUsageScanner {
             return false
         }
         let sessionId = delta.sessionId ?? cached.sessionId
-        Self.rememberCodexRows(
-            cached.codexRows ?? [],
-            sessionId: sessionId,
-            fileIdentity: input.metadata.path,
-            state: &state)
+        let sessionAlreadyContributed = sessionId.map { state.contributingSessionIds.contains($0) } ?? false
+        let cachedRows = cached.codexRows ?? []
+        let retainedCachedRows: [CodexUsageRow]
+        if sessionAlreadyContributed {
+            retainedCachedRows = Self.uniqueCodexRows(
+                rows: cachedRows,
+                sessionId: sessionId,
+                fileIdentity: input.metadata.path,
+                state: &state)
+        } else {
+            Self.rememberCodexRows(
+                cachedRows,
+                sessionId: sessionId,
+                fileIdentity: input.metadata.path,
+                state: &state)
+            retainedCachedRows = cachedRows
+        }
         let uniqueRows = Self.uniqueCodexRows(
             rows: delta.rows,
             sessionId: sessionId,
             fileIdentity: input.metadata.path,
             state: &state)
-        if let sessionId, state.contributingSessionIds.contains(sessionId), uniqueRows.isEmpty {
+
+        let migrated = Self.codexFileUsageWithCostCache(cached, context: context)
+        let migratedCached = sessionAlreadyContributed
+            ? Self.codexFileUsageByFilteringRows(migrated, rows: retainedCachedRows, context: context)
+            : migrated
+        if sessionAlreadyContributed, migratedCached.days.isEmpty, uniqueRows.isEmpty {
             Self.dropCachedCodexFile(path: input.metadata.path, cached: cached, cache: &cache)
             return true
         }
         let uniqueDays = Self.codexFileDays(rows: uniqueRows)
 
-        let migratedCached = Self.codexFileUsageWithCostCache(cached, context: context)
+        if sessionAlreadyContributed {
+            Self.applyFileDays(cache: &cache, fileDays: cached.days, sign: -1)
+            Self.applyFileDays(cache: &cache, fileDays: migratedCached.days, sign: 1)
+        }
         if !uniqueDays.isEmpty {
             Self.applyFileDays(cache: &cache, fileDays: uniqueDays, sign: 1)
         }
