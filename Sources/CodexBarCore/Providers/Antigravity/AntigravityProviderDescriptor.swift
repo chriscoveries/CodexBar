@@ -187,6 +187,37 @@ struct AntigravityCLIHTTPSFetchStrategy: ProviderFetchStrategy {
         idleWindow: TimeInterval?,
         resetAfterFetch: Bool) async throws -> ProviderFetchResult
     {
+        try await self.fetchUsingWarmSession(
+            binary: binary,
+            idleWindow: idleWindow,
+            resetAfterFetch: resetAfterFetch,
+            spawnFetch: { binary, idleWindow, resetAfterFetch in
+                try await self.fetchBySpawning(
+                    binary: binary,
+                    idleWindow: idleWindow,
+                    resetAfterFetch: resetAfterFetch)
+            })
+    }
+
+    /// Testable core of the CLI fetch. The `spawnFetch` seam isolates the spawn
+    /// path so callers (and tests) can substitute or observe it.
+    func fetchUsingWarmSession(
+        binary: String,
+        idleWindow: TimeInterval?,
+        resetAfterFetch: Bool,
+        spawnFetch: @Sendable (String, TimeInterval?, Bool) async throws -> ProviderFetchResult)
+        async throws -> ProviderFetchResult
+    {
+        try await spawnFetch(binary, idleWindow, resetAfterFetch)
+    }
+
+    /// Spawn (or reuse CodexBar's own warm) `agy` session and wait for the CLI
+    /// HTTPS endpoint to report ready. This is the original behavior, unchanged.
+    private func fetchBySpawning(
+        binary: String,
+        idleWindow: TimeInterval?,
+        resetAfterFetch: Bool) async throws -> ProviderFetchResult
+    {
         let session = AntigravityCLISession.shared
         let pid = try await session.beginProbe(binary: binary, idleWindow: idleWindow)
         let deadline = Date().addingTimeInterval(5.0)
