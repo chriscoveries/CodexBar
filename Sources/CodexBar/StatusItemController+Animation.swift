@@ -1014,6 +1014,15 @@ extension StatusItemController {
         guard provider == .codex || provider == .claude,
               self.settings.menuBarMetricPreference(for: provider, snapshot: snapshot) == .primaryAndSecondary
         else { return nil }
+        // A Claude account that only exposes an enterprise/extra-usage spend limit has no real
+        // session/weekly lanes; defer to the resolver's spend-limit routing instead of rendering an
+        // empty or 0% placeholder lane under the combined metric.
+        if provider == .claude,
+           let snapshot,
+           MenuBarMetricWindowResolver.claudeSpendLimitWindow(snapshot: snapshot) != nil
+        {
+            return nil
+        }
         let session = projection?.rateWindow(for: .session)
             ?? Self.rateWindow(in: snapshot, matchingCadenceMinutes: Self.sessionWindowMinutes)
         let weekly = projection?.rateWindow(for: .weekly)

@@ -1439,6 +1439,60 @@ struct StatusItemAnimationTests {
     }
 
     @Test
+    func `claude combined menu bar metric shows spend limit for a spend-limit-only account`() {
+        // A Claude account that only exposes an enterprise/extra-usage spend limit has no real
+        // session/weekly lanes (here a 0% 5h placeholder + a spend limit). With Session + Weekly selected,
+        // it must surface the spend-limit usage, not the meaningless "5h 0%" placeholder lane.
+        let settings = SettingsStore(
+            configStore: testConfigStore(suiteName: "StatusItemAnimationTests-claude-combined-spend-limit"),
+            zaiTokenStore: NoopZaiTokenStore(),
+            syntheticTokenStore: NoopSyntheticTokenStore())
+        settings.statusChecksEnabled = false
+        settings.refreshFrequency = .manual
+        settings.mergeIcons = true
+        settings.selectedMenuProvider = .claude
+        settings.menuBarDisplayMode = .percent
+        settings.usageBarsShowUsed = true
+        settings.setMenuBarMetricPreference(.primaryAndSecondary, for: .claude)
+
+        let registry = ProviderRegistry.shared
+        if let claudeMeta = registry.metadata[.claude] {
+            settings.setProviderEnabled(provider: .claude, metadata: claudeMeta, enabled: true)
+        }
+
+        let fetcher = UsageFetcher()
+        let store = UsageStore(fetcher: fetcher, browserDetection: BrowserDetection(cacheTTL: 0), settings: settings)
+        let controller = StatusItemController(
+            store: store,
+            settings: settings,
+            account: fetcher.loadAccountInfo(),
+            updater: DisabledUpdaterController(),
+            preferencesSelection: PreferencesSelection(),
+            statusBar: self.makeStatusBarForTesting())
+        defer { controller.releaseStatusItemsForTesting() }
+
+        let now = Date()
+        let snapshot = UsageSnapshot(
+            primary: RateWindow(usedPercent: 0, windowMinutes: 300, resetsAt: nil, resetDescription: nil),
+            secondary: nil,
+            providerCost: ProviderCostSnapshot(
+                used: 45,
+                limit: 100,
+                currencyCode: "USD",
+                period: "Spend limit",
+                updatedAt: now),
+            updatedAt: now)
+        store._setSnapshotForTesting(snapshot, provider: .claude)
+        store._setErrorForTesting(nil, provider: .claude)
+
+        let displayText = controller.menuBarDisplayText(for: .claude, snapshot: snapshot)
+
+        // Spend-limit usage (45% of the cap), not the "5h 0%" placeholder lane.
+        #expect(displayText == "45%")
+        #expect(displayText?.contains("5h") == false)
+    }
+
+    @Test
     func `codex menu bar pace does not fall back to session when weekly projection is unavailable`() {
         let settings = SettingsStore(
             configStore: testConfigStore(suiteName: "StatusItemAnimationTests-codex-no-weekly-pace"),

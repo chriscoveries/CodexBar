@@ -37,6 +37,12 @@ enum MenuBarMetricWindowResolver {
                 snapshot: snapshot,
                 lanes: Self.secondaryOrder(for: provider))
         case .primaryAndSecondary:
+            // Claude accounts that only expose an enterprise/extra-usage spend limit have no real
+            // session/weekly lanes; surface the spend limit (as `.automatic` does) instead of an empty
+            // or 0% placeholder lane.
+            if provider == .claude, let spendLimit = Self.claudeSpendLimitWindow(snapshot: snapshot) {
+                return spendLimit
+            }
             return Self.mostConstrainedWindow(
                 primary: snapshot.primary,
                 secondary: snapshot.secondary,
@@ -142,11 +148,8 @@ enum MenuBarMetricWindowResolver {
                 secondary: snapshot.secondary,
                 tertiary: snapshot.tertiary)
         }
-        if provider == .claude,
-           Self.shouldUseClaudeSpendLimit(providerCost: snapshot.providerCost, snapshot: snapshot),
-           let extraUsage = Self.extraUsageWindow(snapshot: snapshot)
-        {
-            return extraUsage
+        if provider == .claude, let spendLimit = Self.claudeSpendLimitWindow(snapshot: snapshot) {
+            return spendLimit
         }
         return snapshot.primary ?? snapshot.secondary
     }
@@ -242,6 +245,17 @@ enum MenuBarMetricWindowResolver {
 
         return ([total].compactMap(\.self) + usableSubquotaWindows)
             .max(by: { $0.usedPercent < $1.usedPercent })
+    }
+
+    /// The Claude spend-limit window when the account only exposes an enterprise/extra-usage spend limit
+    /// and has no real session/weekly quota lanes (`primary` nil, a `.spendLimit` window, or a 0% 5h
+    /// placeholder). Lets the automatic and combined metrics surface the spend limit instead of an empty
+    /// or 0% placeholder lane. Returns nil for accounts that expose genuine quota lanes.
+    static func claudeSpendLimitWindow(snapshot: UsageSnapshot) -> RateWindow? {
+        guard self.shouldUseClaudeSpendLimit(providerCost: snapshot.providerCost, snapshot: snapshot) else {
+            return nil
+        }
+        return self.extraUsageWindow(snapshot: snapshot)
     }
 
     private static func shouldUseClaudeSpendLimit(
