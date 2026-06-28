@@ -47,7 +47,7 @@ extension UsageStore {
     {
         let effectivePreference = self.settings.menuBarMetricPreference(for: provider, snapshot: snapshot)
         guard metricPercent >= 100 else { return false }
-        if provider == .codex, effectivePreference == .primaryAndSecondary {
+        if provider == .codex || provider == .claude, effectivePreference == .primaryAndSecondary {
             let percents = [snapshot.primary?.usedPercent, snapshot.secondary?.usedPercent].compactMap(\.self)
             guard !percents.isEmpty else { return true }
             return percents.allSatisfy { $0 >= 100 }
