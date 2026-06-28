@@ -465,7 +465,7 @@ extension StatusItemController {
             surface: .liveCard)
         let hasCreditsHistory = codexProjection?.hasCreditsHistory == true
         let hasUsageBreakdown = codexProjection?.hasUsageBreakdown == true
-        let hasCostHistory = self.settings.isCostUsageEffectivelyEnabled(for: currentProvider) &&
+        let hasCostHistory = self.settings.costSummaryShowsSubmenu(for: currentProvider) &&
             (self.store.tokenSnapshot(for: currentProvider)?.daily.isEmpty == false)
         let canShowBuyCredits = self.settings.showOptionalCreditsAndExtraUsage &&
             codexProjection?.canShowBuyCredits == true
@@ -631,8 +631,8 @@ extension StatusItemController {
 
         guard let model = self.menuCardModel(for: context.selectedProvider) else { return false }
         let renderedModel = self.menuCardRefreshMonitor.model(for: model.provider, fallback: model)
-        if context.openAIContext.hasOpenAIWebMenuItems || self
-            .hasOpenAIAPIUsageSubmenu(provider: context.currentProvider)
+        if context.openAIContext.hasOpenAIWebMenuItems ||
+            self.hasProviderNativeCostHistorySubmenu(provider: context.currentProvider)
         {
             let webItems = OpenAIWebMenuItems(
                 hasUsageBreakdown: context.openAIContext.hasUsageBreakdown,
@@ -1443,6 +1443,9 @@ extension StatusItemController {
         if provider == .openai {
             return self.makeOpenAIAPIUsageSubmenu(provider: provider, width: width)
         }
+        if UsageStore.tokenCostRequiresProviderSnapshot(provider) {
+            return self.makeCostHistorySubmenu(provider: provider, width: width)
+        }
         if provider == .zai {
             return self.makeZaiUsageDetailsSubmenu(snapshot: snapshot)
         }
@@ -1535,6 +1538,11 @@ extension StatusItemController {
 
     private func hasOpenAIAPIUsageSubmenu(provider: UsageProvider) -> Bool {
         provider == .openai && self.tokenSnapshotForCostHistorySubmenu(provider: provider)?.daily.isEmpty == false
+    }
+
+    private func hasProviderNativeCostHistorySubmenu(provider: UsageProvider) -> Bool {
+        UsageStore.tokenCostRequiresProviderSnapshot(provider) &&
+            self.tokenSnapshotForCostHistorySubmenu(provider: provider)?.daily.isEmpty == false
     }
 
     func makeStorageBreakdownSubmenu(provider: UsageProvider, width: CGFloat? = nil) -> NSMenu? {

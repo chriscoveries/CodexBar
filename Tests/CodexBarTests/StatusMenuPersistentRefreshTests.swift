@@ -644,6 +644,7 @@ struct StatusMenuPersistentRefreshTests {
     func `refresh monitor preserves tracked layout when token error appears`() throws {
         let settings = self.makeSettings()
         settings.costUsageEnabled = true
+        settings.costSummaryDisplayStyle = .both
         let controller = self.makeController(settings: settings)
         controller.store._setTokenSnapshotForTesting(Self.makeTokenSnapshot(), provider: .claude)
         let fallback = try #require(controller.menuCardModel(for: .claude))
@@ -659,6 +660,7 @@ struct StatusMenuPersistentRefreshTests {
     func `refresh monitor preserves tracked layout when token error text changes`() throws {
         let settings = self.makeSettings()
         settings.costUsageEnabled = true
+        settings.costSummaryDisplayStyle = .both
         let controller = self.makeController(settings: settings)
         controller.store._setTokenSnapshotForTesting(Self.makeTokenSnapshot(), provider: .claude)
         controller.store._setTokenErrorForTesting("Old token usage error", provider: .claude)
@@ -981,7 +983,9 @@ struct StatusMenuPersistentRefreshTests {
         #expect(recorder.settingsCount == 1)
         #expect(recorder.quitCount == 1)
     }
+}
 
+extension StatusMenuPersistentRefreshTests {
     private func keyEvent(_ characters: String, keyCode: UInt16) throws -> NSEvent {
         try #require(NSEvent.keyEvent(
             with: .keyDown,
@@ -995,9 +999,7 @@ struct StatusMenuPersistentRefreshTests {
             isARepeat: false,
             keyCode: keyCode))
     }
-}
 
-extension StatusMenuPersistentRefreshTests {
     @Test
     func `refresh row metrics match tuned native-style values`() {
         let metrics = PersistentRefreshRowMetrics.defaults
