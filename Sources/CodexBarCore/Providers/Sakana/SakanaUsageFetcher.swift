@@ -72,7 +72,7 @@ public struct SakanaUsageSnapshot: Sendable {
 public enum SakanaUsageError: LocalizedError, Sendable, Equatable {
     case missingCookie
     case loginRequired
-    case apiError(Int, String)
+    case apiError(Int)
     case parseFailed(String)
 
     public var errorDescription: String? {
@@ -81,8 +81,8 @@ public enum SakanaUsageError: LocalizedError, Sendable, Equatable {
             "Missing Sakana cookie header (SAKANA_COOKIE)."
         case .loginRequired:
             "Sakana login is required."
-        case let .apiError(code, message):
-            "Sakana billing fetch failed (\(code)): \(message)"
+        case let .apiError(code):
+            "Sakana billing fetch failed (HTTP \(code))."
         case let .parseFailed(message):
             "Failed to parse Sakana billing page: \(message)"
         }
@@ -91,10 +91,17 @@ public enum SakanaUsageError: LocalizedError, Sendable, Equatable {
 
 public enum SakanaUsageFetcher {
     private static let billingURL = URL(string: "https://console.sakana.ai/billing")!
+    private static let defaultTransport: ProviderHTTPClient = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpCookieStorage = nil
+        configuration.httpShouldSetCookies = false
+        let session = ProviderHTTPClient.redirectGuardedSession(configuration: configuration)
+        return ProviderHTTPClient(session: session)
+    }()
 
     public static func fetchUsage(
         cookieHeader: String,
-        session transport: any ProviderHTTPTransport = ProviderHTTPClient.shared,
+        session transportOverride: (any ProviderHTTPTransport)? = nil,
         timeout: TimeInterval = 15,
         now: Date = Date()) async throws -> SakanaUsageSnapshot
     {
@@ -106,15 +113,21 @@ public enum SakanaUsageFetcher {
         request.httpMethod = "GET"
         request.timeoutInterval = timeout
         request.setValue("text/html,application/xhtml+xml", forHTTPHeaderField: "Accept")
+        request.setValue("en-US,en;q=0.9", forHTTPHeaderField: "Accept-Language")
         request.setValue(cookieHeader, forHTTPHeaderField: "Cookie")
 
+        let transport = transportOverride ?? self.defaultTransport
         let response = try await transport.response(for: request)
         if response.statusCode == 401 || response.statusCode == 403 {
             throw SakanaUsageError.loginRequired
         }
+        guard response.response.url?.scheme?.lowercased() == "https",
+              response.response.url?.host?.lowercased() == self.billingURL.host?.lowercased()
+        else {
+            throw SakanaUsageError.loginRequired
+        }
         guard response.statusCode == 200 else {
-            let body = String(data: response.data.prefix(200), encoding: .utf8) ?? ""
-            throw SakanaUsageError.apiError(response.statusCode, body)
+            throw SakanaUsageError.apiError(response.statusCode)
         }
         guard let html = String(data: response.data, encoding: .utf8), !html.isEmpty else {
             throw SakanaUsageError.parseFailed("Billing page response was empty.")
@@ -149,7 +162,9 @@ public enum SakanaUsageFetcher {
               let percentText = self.capture(
                   pattern: #"<p[^>]*>\s*([0-9]+(?:\.[0-9]+)?)% used\s*</p>"#,
                   in: windowBody),
-              let percent = Double(percentText)
+              let percent = Double(percentText),
+              percent.isFinite,
+              (0...100).contains(percent)
         else {
             return nil
         }
@@ -157,7 +172,7 @@ public enum SakanaUsageFetcher {
             pattern: #"<p[^>]*>\s*Resets on ([^<]+?)\s*</p>"#,
             in: windowBody)
         return SakanaUsageSnapshot.QuotaWindow(
-            usedPercent: min(100, max(0, percent)),
+            usedPercent: percent,
             resetsAt: resetText.flatMap { self.parseResetDate($0, timeZone: timeZone) })
     }
 

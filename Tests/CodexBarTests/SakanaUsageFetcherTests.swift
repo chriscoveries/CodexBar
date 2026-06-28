@@ -41,12 +41,49 @@ struct SakanaUsageFetcherTests {
         #expect(request?.url == "https://console.sakana.ai/billing")
         #expect(request?.method == "GET")
         #expect(request?.cookie == "session=abc; theme=dark")
+        #expect(request?.acceptLanguage == "en-US,en;q=0.9")
+    }
+
+    @Test
+    func `fetch rejects cross origin login redirect`() async throws {
+        let transport = try SakanaScriptedTransport(
+            statusCode: 200,
+            body: Self.billingHTML,
+            responseURL: #require(URL(string: "https://auth.sakana.ai/login")))
+
+        await #expect(throws: SakanaUsageError.loginRequired) {
+            _ = try await SakanaUsageFetcher.fetchUsage(
+                cookieHeader: "session=expired",
+                session: transport)
+        }
+    }
+
+    @Test
+    func `fetch does not expose error response body`() async {
+        let transport = SakanaScriptedTransport(statusCode: 500, body: "private account response")
+
+        await #expect(throws: SakanaUsageError.apiError(500)) {
+            _ = try await SakanaUsageFetcher.fetchUsage(
+                cookieHeader: "session=abc",
+                session: transport)
+        }
     }
 
     @Test
     func `missing usage windows throws parse error`() {
         #expect(throws: SakanaUsageError.parseFailed("Usage limit windows were not found.")) {
             _ = try SakanaUsageFetcher.parseBillingHTML("<main>Billing</main>")
+        }
+    }
+
+    @Test
+    func `out of range percentages are rejected`() {
+        let html = Self.billingHTML
+            .replacing("92% used", with: "101% used")
+            .replacing("32% used", with: "999% used")
+
+        #expect(throws: SakanaUsageError.parseFailed("Usage limit windows were not found.")) {
+            _ = try SakanaUsageFetcher.parseBillingHTML(html)
         }
     }
 
@@ -126,15 +163,18 @@ private actor SakanaScriptedTransport: ProviderHTTPTransport {
         let url: String?
         let method: String?
         let cookie: String?
+        let acceptLanguage: String?
     }
 
     private let statusCode: Int
     private let body: String
+    private let responseURL: URL?
     private var capturedRequest: CapturedRequest?
 
-    init(statusCode: Int, body: String) {
+    init(statusCode: Int, body: String, responseURL: URL? = nil) {
         self.statusCode = statusCode
         self.body = body
+        self.responseURL = responseURL
     }
 
     func lastCapturedRequest() -> CapturedRequest? {
@@ -145,9 +185,10 @@ private actor SakanaScriptedTransport: ProviderHTTPTransport {
         self.capturedRequest = CapturedRequest(
             url: request.url?.absoluteString,
             method: request.httpMethod,
-            cookie: request.value(forHTTPHeaderField: "Cookie"))
+            cookie: request.value(forHTTPHeaderField: "Cookie"),
+            acceptLanguage: request.value(forHTTPHeaderField: "Accept-Language"))
         let response = HTTPURLResponse(
-            url: request.url!,
+            url: self.responseURL ?? request.url!,
             statusCode: self.statusCode,
             httpVersion: "HTTP/1.1",
             headerFields: [:])!
