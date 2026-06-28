@@ -650,6 +650,7 @@
 
 /* Provider status */
 "status_operational" = "Çalışır durumda";
+"status_degraded" = "Düşük performans";
 "status_partial_outage" = "Kısmi kesinti";
 "status_major_outage" = "Büyük kesinti";
 "status_critical_issue" = "Kritik sorun";
@@ -706,6 +707,7 @@
 "Add Account..." = "Hesap Ekle...";
 "Usage Dashboard" = "Kullanım Paneli";
 "Status Page" = "Durum Sayfası";
+"Open Status Page" = "Durum Sayfasını Aç";
 "Settings..." = "Ayarlar...";
 "About CodexBar" = "CodexBar Hakkında";
 "Quit" = "Çık";

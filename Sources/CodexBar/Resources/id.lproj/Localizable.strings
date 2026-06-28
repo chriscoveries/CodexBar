@@ -654,6 +654,7 @@
 
 /* Provider status */
 "status_operational" = "Operasional";
+"status_degraded" = "Performa menurun";
 "status_partial_outage" = "Gangguan sebagian";
 "status_major_outage" = "Gangguan besar";
 "status_critical_issue" = "Masalah kritis";
@@ -710,6 +711,7 @@
 "Add Account..." = "Tambah Akun...";
 "Usage Dashboard" = "Dasbor Penggunaan";
 "Status Page" = "Halaman Status";
+"Open Status Page" = "Buka Halaman Status";
 "Settings..." = "Pengaturan...";
 "About CodexBar" = "Tentang CodexBar";
 "Quit" = "Keluar";
