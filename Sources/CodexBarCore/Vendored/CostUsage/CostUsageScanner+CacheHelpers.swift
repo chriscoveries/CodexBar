@@ -560,6 +560,11 @@ extension CostUsageScanner {
         rows.contains { !Self.hasStableCodexRowIdentity($0) }
     }
 
+    static func cachedCodexRowsNeedIdentityRescan(_ usage: CostUsageFileUsage) -> Bool {
+        let rows = usage.codexRows ?? []
+        return (!usage.days.isEmpty && rows.isEmpty) || Self.codexRowsNeedIdentityRescan(rows)
+    }
+
     static func nextCodexUsageRowIndex(_ rows: [CodexUsageRow]?) -> Int {
         guard let rows, !rows.isEmpty else { return 0 }
         if let maxIndex = rows.compactMap(\.eventIndex).max() {
@@ -853,7 +858,7 @@ extension CostUsageScanner {
 
         let sessionAlreadyContributed = cached.sessionId.map { state.contributingSessionIds.contains($0) } ?? false
         let cachedRows = cached.codexRows ?? []
-        if Self.codexRowsNeedIdentityRescan(cachedRows) {
+        if Self.cachedCodexRowsNeedIdentityRescan(cached) {
             return false
         }
         if sessionAlreadyContributed {
@@ -915,7 +920,7 @@ extension CostUsageScanner {
         try context.checkCancellation?()
         guard let cached = input.cached, cached.sessionId != nil, !context.forceFullScan else { return false }
         guard !Self.cachedCodexFileNeedsPriorityRescan(cached, context: context) else { return false }
-        if Self.codexRowsNeedIdentityRescan(cached.codexRows ?? []) {
+        if Self.cachedCodexRowsNeedIdentityRescan(cached) {
             return false
         }
         let startOffset = cached.parsedBytes ?? cached.size

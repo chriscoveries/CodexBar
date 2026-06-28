@@ -1685,6 +1685,25 @@ struct CostUsageScannerBreakdownTests {
         #expect(second.data[0].cacheReadTokens == 650)
         #expect(second.data[0].outputTokens == 8)
         #expect(second.data[0].totalTokens == 43)
+
+        var cache = CostUsageCacheIO.load(provider: .codex, cacheRoot: env.cacheRoot)
+        for path in cache.files.keys where cache.files[path]?.sessionId == "sess-warm-cache-active-archive" {
+            cache.files[path]?.codexRows = nil
+        }
+        CostUsageCacheIO.save(provider: .codex, cache: cache, cacheRoot: env.cacheRoot)
+
+        let rowlessWarm = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day.addingTimeInterval(2),
+            options: options)
+
+        #expect(rowlessWarm.data.count == 1)
+        #expect(rowlessWarm.data[0].inputTokens == 35)
+        #expect(rowlessWarm.data[0].cacheReadTokens == 650)
+        #expect(rowlessWarm.data[0].outputTokens == 8)
+        #expect(rowlessWarm.data[0].totalTokens == 43)
     }
 
     @Test
