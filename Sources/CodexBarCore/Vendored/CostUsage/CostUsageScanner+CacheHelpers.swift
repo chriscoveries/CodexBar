@@ -321,10 +321,14 @@ extension CostUsageScanner {
     }
 
     static func needsCodexModeSplitCache(_ usage: CostUsageFileUsage) -> Bool {
-        usage.codexStandardCostNanos == nil
-            || usage.codexPriorityCostNanos == nil
-            || usage.codexStandardTokens == nil
-            || usage.codexPriorityTokens == nil
+        let hasStandardCost = !(usage.codexStandardCostNanos?.isEmpty ?? true)
+        let hasPriorityCost = !(usage.codexPriorityCostNanos?.isEmpty ?? true)
+        let hasStandardTokens = !(usage.codexStandardTokens?.isEmpty ?? true)
+        let hasPriorityTokens = !(usage.codexPriorityTokens?.isEmpty ?? true)
+
+        guard hasStandardCost || hasPriorityCost else { return true }
+        guard hasStandardTokens || hasPriorityTokens else { return true }
+        return hasStandardCost != hasStandardTokens || hasPriorityCost != hasPriorityTokens
     }
 
     static func codexFileUsageWithCostCache(
@@ -535,6 +539,19 @@ extension CostUsageScanner {
         return ids.sorted()
     }
 
+    static func mergeCodexRows(
+        _ existing: [CodexUsageRow]?,
+        rows: [CodexUsageRow],
+        sessionId: String?) -> [CodexUsageRow]?
+    {
+        var merged = existing ?? []
+        let existingKeys = Set(merged.map { Self.codexUsageRowKey(sessionId: sessionId, row: $0) })
+        for row in rows where !existingKeys.contains(Self.codexUsageRowKey(sessionId: sessionId, row: row)) {
+            merged.append(row)
+        }
+        return merged.isEmpty ? nil : merged
+    }
+
     static func codexUsageRowKey(sessionId: String?, row: CodexUsageRow) -> String {
         [
             sessionId ?? "",
@@ -553,12 +570,15 @@ extension CostUsageScanner {
         state: inout CodexScanState) -> [CodexUsageRow]
     {
         var unique: [CodexUsageRow] = []
+        var acceptedKeys = Set<String>()
         for row in rows {
             let key = Self.codexUsageRowKey(sessionId: sessionId, row: row)
-            if state.seenCodexUsageRowKeys.insert(key).inserted {
+            if !state.seenCodexUsageRowKeys.contains(key) {
                 unique.append(row)
+                acceptedKeys.insert(key)
             }
         }
+        state.seenCodexUsageRowKeys.formUnion(acceptedKeys)
         return unique
     }
 
@@ -798,10 +818,7 @@ extension CostUsageScanner {
         let sessionAlreadyContributed = cached.sessionId.map { state.contributingSessionIds.contains($0) } ?? false
         let cachedRows = cached.codexRows ?? []
         if sessionAlreadyContributed {
-            guard !cachedRows.isEmpty else {
-                Self.dropCachedCodexFile(path: input.metadata.path, cached: cached, cache: &cache)
-                return true
-            }
+            guard !cachedRows.isEmpty else { return false }
             let uniqueRows = Self.uniqueCodexRows(rows: cachedRows, sessionId: cached.sessionId, state: &state)
             guard !uniqueRows.isEmpty else {
                 Self.dropCachedCodexFile(path: input.metadata.path, cached: cached, cache: &cache)
@@ -932,7 +949,7 @@ extension CostUsageScanner {
                 migratedCached.codexPriorityTokens,
                 splitMaps.priorityTokens),
             codexTurnIDs: Self.mergeCodexTurnIDs(migratedCached.codexTurnIDs, rows: uniqueRows),
-            codexRows: migratedCached.codexRows)
+            codexRows: Self.mergeCodexRows(migratedCached.codexRows, rows: uniqueRows, sessionId: sessionId))
         Self.rememberScannedCodexFile(
             input: input,
             session: CodexScannedSession(id: sessionId, days: mergedDays),
@@ -1032,7 +1049,9 @@ extension CostUsageScanner {
             codexTurnIDs: context.dropDeferredCodexRows
                 ? Self.codexTurnIDs(rows: uniqueRows)
                 : Self.mergeCodexTurnIDs(migratedCached?.codexTurnIDs, rows: uniqueRows),
-            codexRows: context.dropDeferredCodexRows ? nil : migratedCached?.codexRows)
+            codexRows: context.dropDeferredCodexRows
+                ? nil
+                : Self.mergeCodexRows(migratedCached?.codexRows, rows: uniqueRows, sessionId: sessionId))
         Self.applyFileDays(cache: &cache, fileDays: cache.files[input.metadata.path]?.days ?? [:], sign: 1)
         Self.rememberScannedCodexFile(
             input: input,
@@ -1145,6 +1164,7 @@ extension CostUsageScanner {
     {
         var entries: [CostUsageDailyReport.Entry] = []
         var totalInput = 0
+        var totalCacheRead = 0
         var totalOutput = 0
         var totalTokens = 0
         var totalCost: Double = 0
@@ -1170,6 +1190,7 @@ extension CostUsageScanner {
             let modelNames = models.keys.sorted()
 
             var dayInput = 0
+            var dayCacheRead = 0
             var dayOutput = 0
             var breakdown: [CostUsageDailyReport.ModelBreakdown] = []
             var dayCost: Double = 0
@@ -1183,6 +1204,7 @@ extension CostUsageScanner {
                 let totalTokens = input + output
 
                 dayInput += input
+                dayCacheRead += cached
                 dayOutput += output
 
                 let rows = rowsByDayModel[day]?[model]
@@ -1257,12 +1279,14 @@ extension CostUsageScanner {
                 date: day,
                 inputTokens: dayInput,
                 outputTokens: dayOutput,
+                cacheReadTokens: dayCacheRead > 0 ? dayCacheRead : nil,
                 totalTokens: dayTotal,
                 costUSD: entryCost,
                 modelsUsed: modelNames,
                 modelBreakdowns: Self.sortedModelBreakdowns(breakdown)))
 
             totalInput += dayInput
+            totalCacheRead += dayCacheRead
             totalOutput += dayOutput
             totalTokens += dayTotal
             if let entryCost {
@@ -1276,6 +1300,7 @@ extension CostUsageScanner {
             : CostUsageDailyReport.Summary(
                 totalInputTokens: totalInput,
                 totalOutputTokens: totalOutput,
+                cacheReadTokens: totalCacheRead > 0 ? totalCacheRead : nil,
                 totalTokens: totalTokens,
                 totalCostUSD: costSeen ? totalCost : nil)
 

@@ -519,7 +519,7 @@ struct CostUsageScannerBreakdownTests {
 
         var migratedCache = CostUsageCacheIO.load(provider: .codex, cacheRoot: env.cacheRoot)
         let migratedUsage = try #require(migratedCache.files[path])
-        #expect(migratedUsage.codexRows?.map(\.day) == [olderDayKey])
+        #expect(migratedUsage.codexRows?.map(\.day) == [olderDayKey, dayKey])
         #expect(migratedUsage.codexCostNanos?[dayKey] != nil)
 
         let parsedBytes = migratedUsage.parsedBytes
@@ -1455,6 +1455,18 @@ struct CostUsageScannerBreakdownTests {
         #expect(report.data[0].totalTokens == 62)
         #expect(report.data[0].modelBreakdowns?.first?.totalTokens == 62)
         #expect(abs((report.data[0].costUSD ?? 0) - expectedCost) < 0.000001)
+
+        let repeated = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day.addingTimeInterval(1),
+            options: options)
+        #expect(repeated.data.count == 1)
+        #expect(repeated.data[0].inputTokens == 50)
+        #expect(repeated.data[0].cacheReadTokens == 500)
+        #expect(repeated.data[0].outputTokens == 12)
+        #expect(repeated.data[0].totalTokens == 62)
     }
 
     @Test
