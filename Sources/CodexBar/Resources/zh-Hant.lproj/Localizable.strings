@@ -547,6 +547,8 @@
 "show_debug_settings_subtitle" = "在「除錯」標籤中顯示疑難排解工具。";
 "surprise_me_title" = "給我驚喜";
 "surprise_me_subtitle" = "讓選單列上的 Agent 多一點變化。";
+"session_limit_confetti_title" = "工作階段限制彩帶";
+"session_limit_confetti_subtitle" = "工作階段用量重置時播放全螢幕彩帶。";
 "weekly_limit_confetti_title" = "每週重置慶祝動畫";
 "weekly_limit_confetti_subtitle" = "每週使用量重置時播放全螢幕慶祝動畫。";
 "hide_personal_info_title" = "隱藏個人資訊";

@@ -551,6 +551,8 @@
 "show_debug_settings_subtitle" = "แสดงเครื่องมือการแก้ไขปัญหาในแท็บ แก้ไขข้อบกพร่อง";
 "surprise_me_title" = "ทําให้ฉันประหลาดใจ";
 "surprise_me_subtitle" = "ตรวจสอบว่าคุณชอบให้ตัวแทนของคุณสนุกสนานที่นั่นหรือไม่";
+"session_limit_confetti_title" = "คอนเฟตตีขีดจำกัดเซสชัน";
+"session_limit_confetti_subtitle" = "แสดงคอนเฟตตีเต็มหน้าจอเมื่อการใช้งานเซสชันถูกรีเซ็ต";
 "weekly_limit_confetti_title" = "ลูกปาจํากัดรายสัปดาห์";
 "weekly_limit_confetti_subtitle" = "เล่นลูกปาแบบเต็มหน้าจอเมื่อรีเซ็ตการใช้งานรายสัปดาห์";
 "hide_personal_info_title" = "ซ่อนข้อมูลส่วนบุคคล";

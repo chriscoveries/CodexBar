@@ -2,13 +2,14 @@ import CodexBarCore
 import Foundation
 
 extension UsageStore {
-    private nonisolated static let weeklyLimitResetThreshold = 1.0
+    private nonisolated static let limitResetThreshold = 1.0
+    nonisolated static let sessionLimitResetDetectorDefaultsKey = "sessionLimitResetDetectorStates"
     private nonisolated static let weeklyLimitResetDetectorDefaultsKey = "weeklyLimitResetDetectorStates"
     private nonisolated static let weeklyWindowMinutes = 7 * 24 * 60
     private nonisolated static let planUtilizationUnscopedPreferredKey = "__unscoped__"
     private nonisolated static let claudeOAuthPlanUtilizationAccountKeyPrefix = "__claude_oauth__:"
 
-    struct WeeklyLimitResetDetectorState: Codable, Equatable {
+    struct LimitResetDetectorState: Codable, Equatable {
         let wasAboveThreshold: Bool
         let lastObservedAt: Date
     }
@@ -44,6 +45,20 @@ extension UsageStore {
         let name: PlanUtilizationSeriesName
         let windowMinutes: Int
         let entry: PlanUtilizationHistoryEntry
+    }
+
+    private struct LimitResetDetectionContext {
+        let provider: UsageProvider
+        let account: ProviderTokenAccount?
+        let snapshot: UsageSnapshot
+        let accountKey: String?
+        let samples: [PlanUtilizationSeriesSample]
+    }
+
+    private struct LimitResetDetectionDescriptor {
+        let seriesName: PlanUtilizationSeriesName
+        let defaultsKey: String
+        let resetKind: String
     }
 
     func planUtilizationHistory(for provider: UsageProvider) -> [PlanUtilizationSeriesHistory] {
@@ -154,7 +169,7 @@ extension UsageStore {
             return
         }
         await MainActor.run {
-            self.postWeeklyLimitResetCelebrationIfNeeded(
+            self.postLimitResetCelebrationsIfNeeded(
                 provider: provider,
                 account: account,
                 snapshot: snapshot,
@@ -331,60 +346,103 @@ extension UsageStore {
         return max(0, min(100, value))
     }
 
-    private func postWeeklyLimitResetCelebrationIfNeeded(
+    private func postLimitResetCelebrationsIfNeeded(
         provider: UsageProvider,
         account: ProviderTokenAccount?,
         snapshot: UsageSnapshot,
         accountKey: String?,
         samples: [PlanUtilizationSeriesSample])
     {
-        guard let weeklySample = samples.last(where: { $0.name == .weekly }) else { return }
-
-        let accountIdentifier = self.weeklyLimitResetAccountIdentifier(
+        let context = LimitResetDetectionContext(
             provider: provider,
             account: account,
             snapshot: snapshot,
-            accountKey: accountKey)
-        let detectorKey = Self.weeklyLimitResetDetectorStateKey(
-            provider: provider,
+            accountKey: accountKey,
+            samples: samples)
+        self.postLimitResetCelebrationIfNeeded(
+            states: &self.sessionLimitResetDetectorStates,
+            context: context,
+            descriptor: LimitResetDetectionDescriptor(
+                seriesName: .session,
+                defaultsKey: Self.sessionLimitResetDetectorDefaultsKey,
+                resetKind: "session"))
+        self.postLimitResetCelebrationIfNeeded(
+            states: &self.weeklyLimitResetDetectorStates,
+            context: context,
+            descriptor: LimitResetDetectionDescriptor(
+                seriesName: .weekly,
+                defaultsKey: Self.weeklyLimitResetDetectorDefaultsKey,
+                resetKind: "weekly"))
+    }
+
+    private func postLimitResetCelebrationIfNeeded(
+        states: inout [String: LimitResetDetectorState],
+        context: LimitResetDetectionContext,
+        descriptor: LimitResetDetectionDescriptor)
+    {
+        guard let sample = context.samples.last(where: { $0.name == descriptor.seriesName }) else { return }
+
+        let accountIdentifier = self.limitResetAccountIdentifier(
+            provider: context.provider,
+            account: context.account,
+            snapshot: context.snapshot,
+            accountKey: context.accountKey)
+        let detectorKey = Self.limitResetDetectorStateKey(
+            provider: context.provider,
             accountIdentifier: accountIdentifier)
-        let currentUsed = weeklySample.entry.usedPercent
-        let currentObservedAt = weeklySample.entry.capturedAt
-        let wasAboveThreshold = currentUsed > Self.weeklyLimitResetThreshold
-        if let existingState = self.weeklyLimitResetDetectorStates[detectorKey],
+        let currentUsed = sample.entry.usedPercent
+        let currentObservedAt = sample.entry.capturedAt
+        let wasAboveThreshold = currentUsed > Self.limitResetThreshold
+        if let existingState = states[detectorKey],
            currentObservedAt <= existingState.lastObservedAt
         {
             return
         }
 
-        let shouldPost = self.weeklyLimitResetDetectorStates[detectorKey]?.wasAboveThreshold == true
+        let shouldPost = states[detectorKey]?.wasAboveThreshold == true
             && !wasAboveThreshold
-        self.weeklyLimitResetDetectorStates[detectorKey] = WeeklyLimitResetDetectorState(
+        states[detectorKey] = LimitResetDetectorState(
             wasAboveThreshold: wasAboveThreshold,
             lastObservedAt: currentObservedAt)
-        self.persistWeeklyLimitResetDetectorStates()
+        self.persistLimitResetDetectorStates(
+            states,
+            defaultsKey: descriptor.defaultsKey,
+            logName: descriptor.resetKind)
 
         guard shouldPost else { return }
-        let accountLabel = self.weeklyLimitResetAccountLabel(
-            provider: provider,
-            account: account,
-            snapshot: snapshot)
-        let event = WeeklyLimitResetEvent(
-            provider: provider,
-            accountIdentifier: accountIdentifier,
-            accountLabel: accountLabel,
-            usedPercent: currentUsed)
+        let accountLabel = self.limitResetAccountLabel(
+            provider: context.provider,
+            account: context.account,
+            snapshot: context.snapshot)
 
         CodexBarLog.logger(LogCategories.confetti).info(
-            "Weekly limit reset",
+            "\(descriptor.resetKind.capitalized) limit reset",
             metadata: [
-                "provider": provider.rawValue,
+                "provider": context.provider.rawValue,
                 "accountIdentifier": accountIdentifier,
                 "accountLabel": accountLabel ?? "",
+                "resetKind": descriptor.resetKind,
                 "usedPercent": String(format: "%.2f", currentUsed),
                 "observedAt": String(format: "%.0f", currentObservedAt.timeIntervalSince1970),
             ])
-        NotificationCenter.default.post(name: .codexbarWeeklyLimitReset, object: event)
+        switch descriptor.seriesName {
+        case .session:
+            let event = SessionLimitResetEvent(
+                provider: context.provider,
+                accountIdentifier: accountIdentifier,
+                accountLabel: accountLabel,
+                usedPercent: currentUsed)
+            NotificationCenter.default.post(name: .codexbarSessionLimitReset, object: event)
+        case .weekly:
+            let event = WeeklyLimitResetEvent(
+                provider: context.provider,
+                accountIdentifier: accountIdentifier,
+                accountLabel: accountLabel,
+                usedPercent: currentUsed)
+            NotificationCenter.default.post(name: .codexbarWeeklyLimitReset, object: event)
+        default:
+            return
+        }
     }
 
     private func planUtilizationSeriesSamples(
@@ -704,7 +762,7 @@ extension UsageStore {
         provider == .claude && self.shouldHidePlanUtilizationMenuItem(for: .claude)
     }
 
-    private func weeklyLimitResetAccountIdentifier(
+    private func limitResetAccountIdentifier(
         provider: UsageProvider,
         account: ProviderTokenAccount?,
         snapshot: UsageSnapshot,
@@ -718,7 +776,7 @@ extension UsageStore {
             ?? provider.rawValue
     }
 
-    private func weeklyLimitResetAccountLabel(
+    private func limitResetAccountLabel(
         provider: UsageProvider,
         account: ProviderTokenAccount?,
         snapshot: UsageSnapshot) -> String?
@@ -729,7 +787,7 @@ extension UsageStore {
             ?? identity?.accountOrganization
     }
 
-    private nonisolated static func weeklyLimitResetDetectorStateKey(
+    private nonisolated static func limitResetDetectorStateKey(
         provider: UsageProvider,
         accountIdentifier: String) -> String
     {
@@ -737,26 +795,41 @@ extension UsageStore {
     }
 
     nonisolated static func loadWeeklyLimitResetDetectorStates(from userDefaults: UserDefaults)
-        -> [String: WeeklyLimitResetDetectorState]
+        -> [String: LimitResetDetectorState]
     {
-        guard let data = userDefaults.data(forKey: self.weeklyLimitResetDetectorDefaultsKey) else { return [:] }
+        self.loadLimitResetDetectorStates(
+            from: userDefaults,
+            defaultsKey: self.weeklyLimitResetDetectorDefaultsKey,
+            logName: "weekly")
+    }
+
+    nonisolated static func loadLimitResetDetectorStates(
+        from userDefaults: UserDefaults,
+        defaultsKey: String,
+        logName: String) -> [String: LimitResetDetectorState]
+    {
+        guard let data = userDefaults.data(forKey: defaultsKey) else { return [:] }
         do {
-            return try JSONDecoder().decode([String: WeeklyLimitResetDetectorState].self, from: data)
+            return try JSONDecoder().decode([String: LimitResetDetectorState].self, from: data)
         } catch {
             CodexBarLog.logger(LogCategories.confetti).error(
-                "Failed to decode weekly limit reset detector state",
+                "Failed to decode \(logName) limit reset detector state",
                 metadata: ["error": String(describing: error)])
             return [:]
         }
     }
 
-    private func persistWeeklyLimitResetDetectorStates() {
+    private func persistLimitResetDetectorStates(
+        _ states: [String: LimitResetDetectorState],
+        defaultsKey: String,
+        logName: String)
+    {
         do {
-            let data = try JSONEncoder().encode(self.weeklyLimitResetDetectorStates)
-            self.settings.userDefaults.set(data, forKey: Self.weeklyLimitResetDetectorDefaultsKey)
+            let data = try JSONEncoder().encode(states)
+            self.settings.userDefaults.set(data, forKey: defaultsKey)
         } catch {
             CodexBarLog.logger(LogCategories.confetti).error(
-                "Failed to encode weekly limit reset detector state",
+                "Failed to encode \(logName) limit reset detector state",
                 metadata: ["error": String(describing: error)])
         }
     }

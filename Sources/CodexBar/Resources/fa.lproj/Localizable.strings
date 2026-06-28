@@ -551,6 +551,8 @@
 "show_debug_settings_subtitle" = "ابزارهای عیب یابی را در تب اشکال زدایی آشکار کنید.";
 "surprise_me_title" = "سورپرایزم کن";
 "surprise_me_subtitle" = "بررسی کن که آیا دوست داری مأمورانت آنجا خوش بگذرانند یا نه.";
+"session_limit_confetti_title" = "کاغذرنگی حد جلسه";
+"session_limit_confetti_subtitle" = "وقتی میزان استفادهٔ جلسه بازنشانی می‌شود، کاغذرنگی تمام‌صفحه نمایش بده.";
 "weekly_limit_confetti_title" = "کنفتی محدود هفتگی";
 "weekly_limit_confetti_subtitle" = "وقتی استفاده هفتگی ریست می شود، کنفتی تمام صفحه را پخش کنید.";
 "hide_personal_info_title" = "مخفی کردن اطلاعات شخصی";

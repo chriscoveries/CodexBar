@@ -540,6 +540,8 @@
 "show_debug_settings_subtitle" = "Mostreu eines de diagnòstic a la pestanya Depuració.";
 "surprise_me_title" = "Sorprèn-me";
 "surprise_me_subtitle" = "Activeu-ho si us agrada que els vostres agents es diverteixin allà dalt.";
+"session_limit_confetti_title" = "Confeti del límit de sessió";
+"session_limit_confetti_subtitle" = "Mostra confeti a pantalla completa quan es restableixi l'ús de la sessió.";
 "weekly_limit_confetti_title" = "Confeti del límit setmanal";
 "weekly_limit_confetti_subtitle" = "Mostreu confeti a pantalla completa quan es reinicia l'ús setmanal.";
 "hide_personal_info_title" = "Amagueu la informació personal";

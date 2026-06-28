@@ -547,6 +547,8 @@
 "show_debug_settings_subtitle" = "Hiển thị các công cụ khắc phục sự cố trong tab Gỡ lỗi.";
 "surprise_me_title" = "Làm tôi ngạc nhiên";
 "surprise_me_subtitle" = "Kiểm tra xem bạn có thích các đại lý của mình vui vẻ ở đó không.";
+"session_limit_confetti_title" = "Pháo giấy giới hạn phiên";
+"session_limit_confetti_subtitle" = "Hiển thị pháo giấy toàn màn hình khi mức sử dụng phiên được đặt lại.";
 "weekly_limit_confetti_title" = "Hoa giấy giới hạn hàng tuần";
 "weekly_limit_confetti_subtitle" = "Phát hoa giấy toàn màn hình khi đặt lại Mức sử dụng hàng tuần.";
 "hide_personal_info_title" = "Ẩn thông tin cá nhân";

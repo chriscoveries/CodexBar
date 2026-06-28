@@ -551,6 +551,8 @@
 "show_debug_settings_subtitle" = "Stellen Sie Tools zur Fehlerbehebung auf der Registerkarte \"Debug\" bereit.";
 "surprise_me_title" = "Überrasche mich";
 "surprise_me_subtitle" = "Prüfen Sie, ob Sie möchten, dass Ihre Agenten dort oben Spaß haben.";
+"session_limit_confetti_title" = "Konfetti beim Sitzungslimit";
+"session_limit_confetti_subtitle" = "Zeigt Vollbild-Konfetti, wenn die Sitzungsnutzung zurückgesetzt wird.";
 "weekly_limit_confetti_title" = "Wöchentliches Konfetti-Limit";
 "weekly_limit_confetti_subtitle" = "Spielen Sie Konfetti im Vollbildmodus ab, wenn die wöchentliche Nutzung zurückgesetzt wird.";
 "hide_personal_info_title" = "Persönliche Informationen ausblenden";

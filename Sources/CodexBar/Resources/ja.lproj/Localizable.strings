@@ -548,6 +548,8 @@
 "show_debug_settings_subtitle" = "デバッグタブにトラブルシューティングツールを表示します。";
 "surprise_me_title" = "サプライズ";
 "surprise_me_subtitle" = "エージェントたちがメニューバーで少し遊ぶのが好きか試してみてください。";
+"session_limit_confetti_title" = "セッション上限の紙吹雪";
+"session_limit_confetti_subtitle" = "セッション使用量がリセットされたときに全画面の紙吹雪を表示します。";
 "weekly_limit_confetti_title" = "週間上限の紙吹雪";
 "weekly_limit_confetti_subtitle" = "週間使用量がリセットされたときに全画面の紙吹雪を再生します。";
 "hide_personal_info_title" = "個人情報を隠す";

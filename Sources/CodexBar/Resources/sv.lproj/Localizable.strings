@@ -550,6 +550,8 @@
 "show_debug_settings_subtitle" = "Visa felsökningsverktyg på fliken Felsök.";
 "surprise_me_title" = "Överraska mig";
 "surprise_me_subtitle" = "Kontrollera om du vill att agenterna ska få leka lite där uppe.";
+"session_limit_confetti_title" = "Konfetti för sessionsgräns";
+"session_limit_confetti_subtitle" = "Visa konfetti i helskärm när sessionsanvändningen återställs.";
 "weekly_limit_confetti_title" = "Veckogränskonfetti";
 "weekly_limit_confetti_subtitle" = "Spela konfetti i helskärm när veckoförbrukningen återställs.";
 "hide_personal_info_title" = "Dölj personuppgifter";

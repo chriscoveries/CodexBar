@@ -551,6 +551,8 @@
 "show_debug_settings_subtitle" = "اعرض أدوات استكشاف الأخطاء في تبويب التصحيح.";
 "surprise_me_title" = "فاجئني";
 "surprise_me_subtitle" = "تحقق إذا كنت تحب وكلائنك يستمتعون هناك.";
+"session_limit_confetti_title" = "قصاصات ورقية لحد الجلسة";
+"session_limit_confetti_subtitle" = "اعرض قصاصات ورقية بملء الشاشة عند إعادة تعيين استخدام الجلسة.";
 "weekly_limit_confetti_title" = "قصاصات كونفيتي أسبوعية محدودة";
 "weekly_limit_confetti_subtitle" = "شغل ورق الورق الورقية بملء الشاشة عند إعادة ضبط الاستخدام الأسبوعي.";
 "hide_personal_info_title" = "إخفاء المعلومات الشخصية";

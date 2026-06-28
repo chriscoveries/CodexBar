@@ -551,6 +551,8 @@
 "show_debug_settings_subtitle" = "Sorun giderme araçlarını Hata Ayıklama sekmesinde göster.";
 "surprise_me_title" = "Beni şaşırt";
 "surprise_me_subtitle" = "Ajanlarınızın yukarıda biraz eğlenmesini istiyorsanız işaretleyin.";
+"session_limit_confetti_title" = "Oturum sınırı konfeti";
+"session_limit_confetti_subtitle" = "Oturum kullanımı sıfırlandığında tam ekran konfeti göster.";
 "weekly_limit_confetti_title" = "Haftalık limit konfetisi";
 "weekly_limit_confetti_subtitle" = "Haftalık kullanım sıfırlandığında tam ekran konfeti oynat.";
 "hide_personal_info_title" = "Kişisel bilgileri gizle";

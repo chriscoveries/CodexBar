@@ -548,6 +548,8 @@
 "show_debug_settings_subtitle" = "Exibe ferramentas de diagnóstico na aba Depuração.";
 "surprise_me_title" = "Surpreenda-me";
 "surprise_me_subtitle" = "Veja se você gosta dos seus agentes se divertindo ali em cima.";
+"session_limit_confetti_title" = "Confete do limite de sessão";
+"session_limit_confetti_subtitle" = "Mostra confete em tela cheia quando o uso da sessão for redefinido.";
 "weekly_limit_confetti_title" = "Confete do limite semanal";
 "weekly_limit_confetti_subtitle" = "Mostra confete em tela cheia quando o uso semanal for renovado.";
 "hide_personal_info_title" = "Ocultar informações pessoais";

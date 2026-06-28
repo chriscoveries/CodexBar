@@ -135,6 +135,31 @@ struct SettingsStoreTests {
     }
 
     @Test
+    func `session confetti setting defaults off and persists`() throws {
+        let suite = "SettingsStoreTests-session-confetti"
+        let defaultsA = try #require(UserDefaults(suiteName: suite))
+        defaultsA.removePersistentDomain(forName: suite)
+        let configStore = testConfigStore(suiteName: suite)
+        let storeA = SettingsStore(
+            userDefaults: defaultsA,
+            configStore: configStore,
+            zaiTokenStore: NoopZaiTokenStore(),
+            syntheticTokenStore: NoopSyntheticTokenStore())
+
+        #expect(storeA.confettiOnSessionLimitResetsEnabled == false)
+        storeA.confettiOnSessionLimitResetsEnabled = true
+
+        let defaultsB = try #require(UserDefaults(suiteName: suite))
+        let storeB = SettingsStore(
+            userDefaults: defaultsB,
+            configStore: configStore,
+            zaiTokenStore: NoopZaiTokenStore(),
+            syntheticTokenStore: NoopSyntheticTokenStore())
+
+        #expect(storeB.confettiOnSessionLimitResetsEnabled == true)
+    }
+
+    @Test
     func `provider storage setting defaults off and persists`() throws {
         let suite = "SettingsStoreTests-provider-storage"
         let defaultsA = try #require(UserDefaults(suiteName: suite))

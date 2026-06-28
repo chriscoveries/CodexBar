@@ -418,6 +418,8 @@ extension SettingsStore {
             costUsageEnabled: costUsageEnabled)
         let hidePersonalInfo = userDefaults.object(forKey: "hidePersonalInfo") as? Bool ?? false
         let randomBlinkEnabled = userDefaults.object(forKey: "randomBlinkEnabled") as? Bool ?? false
+        let confettiOnSessionLimitResetsEnabled = userDefaults.object(
+            forKey: "confettiOnSessionLimitResetsEnabled") as? Bool ?? false
         let confettiOnWeeklyLimitResetsEnabled = userDefaults.object(
             forKey: "confettiOnWeeklyLimitResetsEnabled") as? Bool ?? false
         let menuBarShowsHighestUsage = userDefaults.object(forKey: "menuBarShowsHighestUsage") as? Bool ?? false
@@ -494,6 +496,7 @@ extension SettingsStore {
             costSummaryDisplayStyleRaw: costSummaryDisplayStyleRaw,
             hidePersonalInfo: hidePersonalInfo,
             randomBlinkEnabled: randomBlinkEnabled,
+            confettiOnSessionLimitResetsEnabled: confettiOnSessionLimitResetsEnabled,
             confettiOnWeeklyLimitResetsEnabled: confettiOnWeeklyLimitResetsEnabled,
             menuBarShowsHighestUsage: menuBarShowsHighestUsage,
             claudeOAuthKeychainPromptModeRaw: claudeOAuthKeychainPromptModeRaw,

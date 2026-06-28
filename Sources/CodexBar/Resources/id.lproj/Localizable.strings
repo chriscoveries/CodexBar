@@ -553,6 +553,8 @@
 "show_debug_settings_subtitle" = "Tampilkan alat pemecahan masalah di tab Debug.";
 "surprise_me_title" = "Kejutkan saya";
 "surprise_me_subtitle" = "Centang jika Anda suka agen bersenang-senang di atas sana.";
+"session_limit_confetti_title" = "Konfeti batas sesi";
+"session_limit_confetti_subtitle" = "Tampilkan konfeti layar penuh saat penggunaan sesi direset.";
 "weekly_limit_confetti_title" = "Confetti batas mingguan";
 "weekly_limit_confetti_subtitle" = "Mainkan confetti layar penuh saat penggunaan mingguan direset.";
 "hide_personal_info_title" = "Sembunyikan informasi pribadi";

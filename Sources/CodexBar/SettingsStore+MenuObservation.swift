@@ -38,6 +38,7 @@ extension SettingsStore {
         _ = self.appLanguage
         _ = self.hidePersonalInfo
         _ = self.randomBlinkEnabled
+        _ = self.confettiOnSessionLimitResetsEnabled
         _ = self.confettiOnWeeklyLimitResetsEnabled
         _ = self.claudeOAuthKeychainPromptMode
         _ = self.claudeOAuthKeychainReadStrategy

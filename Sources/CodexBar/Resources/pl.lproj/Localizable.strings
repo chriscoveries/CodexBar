@@ -553,6 +553,8 @@
 "show_debug_settings_subtitle" = "Pokazuje dodatkowe ustawienia debugowania i diagnostyki.";
 "surprise_me_title" = "Zaskocz mnie";
 "surprise_me_subtitle" = "Sprawdź, czy lubisz, gdy twoi agenci trochę się tam bawią.";
+"session_limit_confetti_title" = "Konfetti limitu sesji";
+"session_limit_confetti_subtitle" = "Wyświetl konfetti na pełnym ekranie po zresetowaniu użycia sesji.";
 "weekly_limit_confetti_title" = "Konfetti limitu tygodniowego";
 "weekly_limit_confetti_subtitle" = "Odtwórz pełnoekranowe konfetti, gdy tygodniowe użycie się resetuje.";
 "hide_personal_info_title" = "Ukryj dane osobowe";

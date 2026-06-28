@@ -38,6 +38,7 @@ struct SettingsDefaultsState {
     var costSummaryDisplayStyleRaw: String
     var hidePersonalInfo: Bool
     var randomBlinkEnabled: Bool
+    var confettiOnSessionLimitResetsEnabled: Bool
     var confettiOnWeeklyLimitResetsEnabled: Bool
     var menuBarShowsHighestUsage: Bool
     var claudeOAuthKeychainPromptModeRaw: String?
