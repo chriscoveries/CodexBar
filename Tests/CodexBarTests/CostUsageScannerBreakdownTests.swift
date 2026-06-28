@@ -521,7 +521,8 @@ struct CostUsageScannerBreakdownTests {
 
         var migratedCache = CostUsageCacheIO.load(provider: .codex, cacheRoot: env.cacheRoot)
         let migratedUsage = try #require(migratedCache.files[path])
-        #expect(migratedUsage.codexRows?.map(\.day) == [olderDayKey, dayKey])
+        #expect(migratedUsage.codexRows?.map(\.day) == [olderDayKey, dayKey, dayKey])
+        #expect(migratedUsage.codexRows?.map(\.eventIndex) == [0, 1, 2])
         #expect(migratedUsage.codexCostNanos?[dayKey] != nil)
 
         let parsedBytes = migratedUsage.parsedBytes
@@ -535,6 +536,86 @@ struct CostUsageScannerBreakdownTests {
         migratedCache = CostUsageCacheIO.load(provider: .codex, cacheRoot: env.cacheRoot)
         #expect(repeated.data.first?.totalTokens == 15)
         #expect(migratedCache.files[path]?.parsedBytes == parsedBytes)
+    }
+
+    @Test
+    func `codex incremental cost migration retains row identities for archive dedupe`() throws {
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+
+        let day = try env.makeLocalNoon(year: 2026, month: 5, day: 18)
+        let dayKey = CostUsageScanner.CostUsageDayRange.dayKey(from: day)
+        let iso0 = env.isoString(for: day)
+        let iso1 = env.isoString(for: day.addingTimeInterval(1))
+        let iso2 = env.isoString(for: day.addingTimeInterval(2))
+        let model = "gpt-5.4"
+        let sessionMeta: [String: Any] = [
+            "type": "session_meta",
+            "timestamp": iso0,
+            "payload": ["session_id": "incremental-migration-overlap"],
+        ]
+        let turnContext = self.codexTurnContext(timestamp: iso0, model: model)
+        let firstTokenCount = self.codexTokenCount(
+            timestamp: iso1,
+            model: model,
+            total: (input: 10, cached: 0, output: 0))
+        let secondTokenCount = self.codexTokenCount(
+            timestamp: iso2,
+            model: model,
+            total: (input: 15, cached: 0, output: 0))
+        let fileURL = try env.writeCodexSessionFile(
+            day: day,
+            filename: "incremental-migration-overlap.jsonl",
+            contents: env.jsonl([sessionMeta, turnContext, firstTokenCount]))
+
+        var options = CostUsageScanner.Options(
+            codexSessionsRoot: env.codexSessionsRoot,
+            claudeProjectsRoots: nil,
+            cacheRoot: env.cacheRoot,
+            codexTraceDatabaseURL: env.root.appendingPathComponent("missing-traces.sqlite"))
+        options.refreshMinIntervalSeconds = 0
+
+        _ = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day,
+            options: options)
+
+        var cache = CostUsageCacheIO.load(provider: .codex, cacheRoot: env.cacheRoot)
+        let path = try #require(cache.files.keys.first)
+        cache.files[path]?.codexCostNanos = nil
+        CostUsageCacheIO.save(provider: .codex, cache: cache, cacheRoot: env.cacheRoot)
+
+        let appended = try "\n" + env.jsonl([secondTokenCount])
+        let handle = try FileHandle(forWritingTo: fileURL)
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data(appended.utf8))
+        try handle.close()
+
+        let appendedReport = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day.addingTimeInterval(1),
+            options: options)
+        #expect(appendedReport.summary?.totalTokens == 15)
+
+        cache = CostUsageCacheIO.load(provider: .codex, cacheRoot: env.cacheRoot)
+        let activeRows = try #require(cache.files[path]?.codexRows)
+        #expect(activeRows.map(\.eventIndex) == [0, 1])
+
+        _ = try env.writeCodexArchivedSessionFile(
+            filename: "rollout-\(dayKey)T12-00-00-incremental-migration-overlap.jsonl",
+            contents: env.jsonl([sessionMeta, turnContext, firstTokenCount, secondTokenCount]))
+
+        let overlapReport = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day.addingTimeInterval(2),
+            options: options)
+        #expect(overlapReport.summary?.totalTokens == 15)
     }
 
     @Test
