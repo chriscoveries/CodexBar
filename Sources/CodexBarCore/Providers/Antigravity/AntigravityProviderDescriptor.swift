@@ -166,6 +166,90 @@ struct AntigravityCLIHTTPSFetchStrategy: ProviderFetchStrategy {
         }
     }
 
+    /// Seams for discovering and reusing an already-running ``agy`` CLI language
+    /// server, so a fresh spawn (and its multi-second ``GetUserStatus`` warm-up)
+    /// can be skipped when a warm server is already present.
+    struct WarmAgyDependencies {
+        let processInfos: @Sendable () async throws -> [AntigravityStatusProbe.ProcessInfoResult]
+        let listeningPorts: @Sendable (Int, TimeInterval) async throws -> [Int]
+        let fetchSnapshot: @Sendable ([Int]) async throws -> AntigravityStatusSnapshot
+
+        init(
+            processInfos: @escaping @Sendable () async throws -> [AntigravityStatusProbe.ProcessInfoResult],
+            listeningPorts: @escaping @Sendable (Int, TimeInterval) async throws -> [Int],
+            fetchSnapshot: @escaping @Sendable ([Int]) async throws -> AntigravityStatusSnapshot)
+        {
+            self.processInfos = processInfos
+            self.listeningPorts = listeningPorts
+            self.fetchSnapshot = fetchSnapshot
+        }
+    }
+
+    /// Discover an already-running, authenticated ``agy`` CLI language server and
+    /// reuse its listening ports instead of spawning a fresh process.
+    ///
+    /// One-shot CLI invocations otherwise spawn a brand-new ``agy`` on every
+    /// call; a fresh server binds its port quickly but ``GetUserStatus`` returns
+    /// transient initialization failures for a few seconds, so the readiness
+    /// deadline is occasionally missed. When a warm CLI server is already up, we
+    /// can talk to it immediately — it needs no CSRF token (``cliHTTPS``).
+    ///
+    /// Returns the snapshot from the first warm server that answers with
+    /// parseable usage, or `nil` when none is found or none answers — in which
+    /// case the caller falls back to the existing spawn path unchanged.
+    static func tryWarmAgyFetch(
+        timeout: TimeInterval,
+        dependencies: WarmAgyDependencies) async -> AntigravityStatusSnapshot?
+    {
+        let processInfos = await (try? dependencies.processInfos()) ?? []
+        // Only the CLI's language server needs no CSRF token; the IDE/app servers
+        // require one and must not be reused through this token-less fast path.
+        let cliProcesses = processInfos.filter { info in
+            AntigravityStatusProbe.antigravityProcessKind(info.commandLine) == .cli
+        }
+        guard !cliProcesses.isEmpty else { return nil }
+
+        for info in cliProcesses {
+            guard let ports = try? await dependencies.listeningPorts(info.pid, timeout),
+                  !ports.isEmpty
+            else {
+                continue
+            }
+            guard let snapshot = try? await dependencies.fetchSnapshot(ports),
+                  (try? snapshot.toUsageSnapshot()) != nil
+            else {
+                continue
+            }
+            Self.log.debug("Antigravity CLI HTTPS reusing warm agy", metadata: [
+                "pid": "\(info.pid)",
+                "ports": ports.map(String.init).joined(separator: ","),
+            ])
+            return snapshot
+        }
+        return nil
+    }
+
+    /// Production wiring for ``tryWarmAgyFetch``: list processes via `ps`, find
+    /// listening ports via `lsof`, and probe the token-less CLI HTTPS endpoint.
+    static func liveWarmAgyDependencies() -> WarmAgyDependencies {
+        WarmAgyDependencies(
+            processInfos: {
+                // A missing-CSRF/notRunning throw means no reusable server; the
+                // caller maps any throw to "no warm agy" and spawns instead.
+                try await AntigravityStatusProbe.detectProcessInfos(
+                    timeout: 2.0,
+                    scope: .ideAndCLI)
+            },
+            listeningPorts: { pid, timeout in
+                try await AntigravityStatusProbe.listeningPorts(pid: pid, timeout: timeout)
+            },
+            fetchSnapshot: { ports in
+                let deadline = Date().addingTimeInterval(2.0)
+                return try await AntigravityStatusProbe(timeout: 2.0)
+                    .fetchFromPorts(ports, deadline: deadline)
+            })
+    }
+
     func isAvailable(_ context: ProviderFetchContext) async -> Bool {
         BinaryLocator.resolveAntigravityBinary(env: context.env) != nil
     }
@@ -191,6 +275,7 @@ struct AntigravityCLIHTTPSFetchStrategy: ProviderFetchStrategy {
             binary: binary,
             idleWindow: idleWindow,
             resetAfterFetch: resetAfterFetch,
+            warmDependencies: Self.liveWarmAgyDependencies(),
             spawnFetch: { binary, idleWindow, resetAfterFetch in
                 try await self.fetchBySpawning(
                     binary: binary,
@@ -199,16 +284,40 @@ struct AntigravityCLIHTTPSFetchStrategy: ProviderFetchStrategy {
             })
     }
 
-    /// Testable core of the CLI fetch. The `spawnFetch` seam isolates the spawn
-    /// path so callers (and tests) can substitute or observe it.
+    /// Testable core of the CLI fetch: try the warm-reuse fast path first, then
+    /// fall back to spawning. The `spawnFetch` seam lets tests assert the spawn
+    /// path is skipped when a warm server is reused.
     func fetchUsingWarmSession(
         binary: String,
         idleWindow: TimeInterval?,
         resetAfterFetch: Bool,
+        warmDependencies: WarmAgyDependencies,
         spawnFetch: @Sendable (String, TimeInterval?, Bool) async throws -> ProviderFetchResult)
         async throws -> ProviderFetchResult
     {
-        try await spawnFetch(binary, idleWindow, resetAfterFetch)
+        // Fast path: reuse an already-running, authenticated `agy` CLI server if
+        // one is present, avoiding a fresh spawn and its multi-second warm-up.
+        // When none is found (or none answers), fall through to the spawn path.
+        //
+        // The warm path deliberately does NOT touch `AntigravityCLISession`
+        // (`beginProbe`/`finishProbe`): a discovered `agy` is owned by another
+        // process (an IDE, a long-lived `agy`, or another CodexBar host), so
+        // CodexBar must not manage its lifecycle, idle timeout, or
+        // `resetAfterFetch` teardown. Those apply only to processes CodexBar
+        // itself spawns on the fallback path below.
+        if let warmSnapshot = await Self.tryWarmAgyFetch(
+            timeout: 2.0,
+            dependencies: warmDependencies)
+        {
+            // `tryWarmAgyFetch` only returns a snapshot whose `toUsageSnapshot()`
+            // already succeeded, so this conversion must not silently fail.
+            let warmUsage = try warmSnapshot.toUsageSnapshot()
+            return self.makeResult(
+                usage: warmUsage,
+                sourceLabel: Self.sourceLabel)
+        }
+
+        return try await spawnFetch(binary, idleWindow, resetAfterFetch)
     }
 
     /// Spawn (or reuse CodexBar's own warm) `agy` session and wait for the CLI
