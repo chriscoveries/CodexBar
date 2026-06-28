@@ -31,7 +31,7 @@ struct MenuDescriptor {
     enum MenuActionSystemImage: String {
         case installUpdate = "arrow.down.circle"
         case refresh = "arrow.clockwise"
-        case dashboard = "chart.bar"
+        case dashboard = "chart.xyaxis.line"
         case statusPage = "waveform.path.ecg"
         case changelog = "list.bullet.rectangle"
         case addAccount = "plus"
@@ -293,7 +293,7 @@ struct MenuDescriptor {
         entries: inout [Entry],
         usage: OpenAIAPIUsageSnapshot)
     {
-        let today = usage.latestDay
+        let today = usage.currentDay
         let last7 = usage.last7Days
         let last30 = usage.last30Days
         let historyLabel = usage.historyWindowLabel
@@ -319,7 +319,7 @@ struct MenuDescriptor {
         entries: inout [Entry],
         usage: ClaudeAdminAPIUsageSnapshot)
     {
-        let today = usage.latestDay
+        let today = usage.currentDay
         let last7 = usage.last7Days
         let last30 = usage.last30Days
 
@@ -393,7 +393,7 @@ struct MenuDescriptor {
         entries: inout [Entry],
         usage: PoeUsageHistorySnapshot)
     {
-        let today = usage.latestDay
+        let today = usage.currentDay()
         let week = usage.last7Days
         let month = usage.last30Days
         let todayCostSuffix = today.costUSD.map { " · \(UsageFormatter.usdString($0))" } ?? ""
@@ -484,7 +484,7 @@ struct MenuDescriptor {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let redactedEmail = PersonalInfoRedactor.redactEmail(emailText, isEnabled: hidePersonalInfo)
 
-        if let emailText, !emailText.isEmpty {
+        if let emailText, !emailText.isEmpty, !redactedEmail.isEmpty {
             entries.append(.text("\(L("Account")): \(redactedEmail)", .secondary))
         }
         if provider == .kiro {
@@ -533,7 +533,9 @@ struct MenuDescriptor {
         if metadata.usesAccountFallback {
             if emailText?.isEmpty ?? true, let fallbackEmail = fallback.email, !fallbackEmail.isEmpty {
                 let redacted = PersonalInfoRedactor.redactEmail(fallbackEmail, isEnabled: hidePersonalInfo)
-                entries.append(.text("\(L("Account")): \(redacted)", .secondary))
+                if !redacted.isEmpty {
+                    entries.append(.text("\(L("Account")): \(redacted)", .secondary))
+                }
             }
             if loginMethodText?.isEmpty ?? true, let fallbackPlan = fallback.plan, !fallbackPlan.isEmpty {
                 entries.append(

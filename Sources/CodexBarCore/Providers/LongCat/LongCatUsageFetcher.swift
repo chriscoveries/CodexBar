@@ -117,7 +117,13 @@ public struct LongCatUsageFetcher: Sendable {
 
         let response = try await ProviderHTTPClient.shared.response(for: request)
         guard response.statusCode == 200 else {
-            if response.statusCode == 401 || response.statusCode == 403 {
+            // The shared transport's redirect guard drops cross-origin / non-HTTPS
+            // hops, so an expired-cookie login redirect surfaces here as the raw 3xx.
+            // Classify 3xx (and explicit 401/403) as an invalid session rather than a
+            // generic HTTP error, so users see "sign in again" instead of "HTTP 302".
+            if response.statusCode == 401 || response.statusCode == 403
+                || (300..<400).contains(response.statusCode)
+            {
                 throw LongCatAPIError.invalidSession
             }
             if required {

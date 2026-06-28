@@ -23,6 +23,8 @@ struct ProviderConfigEnvironmentTests {
             config: config)
 
         #expect(env[ZaiSettingsReader.apiTokenKey] == "z-token")
+        #expect(env[ZaiSettingsReader.bigModelOrganizationKey] == nil)
+        #expect(env[ZaiSettingsReader.bigModelProjectKey] == nil)
     }
 
     @Test
@@ -61,6 +63,18 @@ struct ProviderConfigEnvironmentTests {
 
         #expect(env[DoubaoSettingsReader.apiKeyEnvironmentKeys[0]] == "db-token")
         #expect(ProviderTokenResolver.doubaoToken(environment: env) == "db-token")
+    }
+
+    @Test
+    func `applies cookie header override for sakana`() {
+        let config = ProviderConfig(id: .sakana, cookieHeader: "Cookie: session=abc")
+        let env = ProviderConfigEnvironment.applyProviderConfigOverrides(
+            base: [:],
+            provider: .sakana,
+            config: config)
+
+        #expect(env[SakanaSettingsReader.cookieHeaderKey] == "Cookie: session=abc")
+        #expect(SakanaSettingsReader.cookieHeader(environment: env) == "session=abc")
     }
 
     @Test

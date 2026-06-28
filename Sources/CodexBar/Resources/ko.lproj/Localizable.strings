@@ -414,6 +414,15 @@
 "start_at_login_subtitle" = "Mac을 시작할 때 CodexBar를 자동으로 엽니다.";
 "show_cost_summary" = "비용 요약 표시";
 "show_cost_summary_subtitle" = "로컬 사용량 로그를 읽습니다. 메뉴에 오늘 및 선택한 기록 범위를 표시합니다.";
+"cost_summary_style_title" = "표시 스타일";
+"cost_summary_style_inline" = "인라인만";
+"cost_summary_style_submenu" = "하위 메뉴만";
+"cost_summary_style_both" = "둘 다";
+"cost_summary_style_inline_help" = "비용 요약을 기본 메뉴에 직접 표시합니다.";
+"cost_summary_style_submenu_help" = "대신 자세한 비용 하위 메뉴를 표시합니다.";
+"cost_summary_style_both_help" = "기본 메뉴 요약과 자세한 비용 하위 메뉴를 모두 표시합니다.";
+"cost_history_window_title" = "기록 범위";
+"cost_history_window_help" = "메뉴에 표시할 로컬 사용량 로그 일수를 설정합니다.";
 "cost_history_days_title" = "기록 범위: %d일";
 "cost_auto_refresh_info" = "자동 새로 고침: 매시간 · 시간 초과: 10분";
 "refresh_cadence_title" = "새로 고침 주기";
@@ -622,6 +631,7 @@
 "display_mode_both_desc" = "백분율과 사용 속도 모두 표시(예: 45% · +5%)";
 "display_mode_reset_time_desc" = "선택한 지표의 재설정 시간 표시(예: ↻ 오후 3:56)";
 "status_operational" = "정상 작동";
+"status_degraded" = "성능 저하";
 "status_partial_outage" = "부분 장애";
 "status_major_outage" = "주요 장애";
 "status_critical_issue" = "심각한 문제";
@@ -672,6 +682,7 @@
 "Add Account..." = "계정 추가...";
 "Usage Dashboard" = "사용량 대시보드";
 "Status Page" = "상태 페이지";
+"Open Status Page" = "상태 페이지 열기";
 "Settings..." = "설정...";
 "About CodexBar" = "CodexBar 정보";
 "Quit" = "종료";
@@ -975,6 +986,7 @@
 "Optional. Leave blank to discover and aggregate projects visible to the API key." = "선택 사항입니다. API 키에 표시되는 프로젝트를 검색하고 집계하려면 비워 두세요.";
 "Org ID (optional)" = "조직 ID(선택 사항)";
 "Organizations" = "조직";
+"Organization ID" = "조직 ID";
 "Password" = "암호";
 "%@ authentication is disabled." = "%@ 인증이 사용 안 함으로 설정되어 있습니다.";
 "%@ cookies are disabled." = "%@ 쿠키가 사용 안 함으로 설정되어 있습니다.";
@@ -1028,6 +1040,7 @@
 "Stored in ~/.codexbar/config.json. You can also provide CROF_API_KEY." = "~/.codexbar/config.json에 저장됩니다. CROF_API_KEY를 제공할 수도 있습니다.";
 "Stored in ~/.codexbar/config.json. You can also provide KILO_API_KEY or ~/.local/share/kilo/auth.json (kilo.access)." = "~/.codexbar/config.json에 저장됩니다. KILO_API_KEY 또는 ~/.local/share/kilo/auth.json(kilo.access)을 제공할 수도 있습니다.";
 "T3 Chat cookie" = "T3 Chat 쿠키";
+"Team mode" = "팀 모드";
 "That account is no longer available in CodexBar. Refresh the account list and try again." = "해당 계정은 더 이상 CodexBar에서 사용할 수 없습니다. 계정 목록을 새로 고침한 후 다시 시도하세요.";
 "The browser login did not complete in time. Try Antigravity login again." = "브라우저 로그인이 제때 완료되지 않았습니다. Antigravity 로그인을 다시 시도하세요.";
 "Timed out waiting for Cursor login. %@" = "Cursor 로그인을 기다리는 중 시간이 초과되었습니다. %@";

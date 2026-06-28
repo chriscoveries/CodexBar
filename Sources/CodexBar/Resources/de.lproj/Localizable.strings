@@ -417,6 +417,15 @@
 "start_at_login_subtitle" = "Startet CodexBar automatisch, wenn dein Mac hochfährt.";
 "show_cost_summary" = "Kostenübersicht anzeigen";
 "show_cost_summary_subtitle" = "Liest lokale Nutzungsprotokolle. Zeigt heute + das gewählte Verlaufsfenster im Menü.";
+"cost_summary_style_title" = "Anzeigestil";
+"cost_summary_style_inline" = "Nur Inline";
+"cost_summary_style_submenu" = "Nur Untermenü";
+"cost_summary_style_both" = "Beides";
+"cost_summary_style_inline_help" = "Zeigt die Kostenübersicht direkt im Hauptmenü.";
+"cost_summary_style_submenu_help" = "Zeigt stattdessen das detaillierte Kosten-Untermenü.";
+"cost_summary_style_both_help" = "Zeigt die Hauptmenü-Übersicht und das detaillierte Kosten-Untermenü.";
+"cost_history_window_title" = "Verlaufsfenster";
+"cost_history_window_help" = "Legt fest, wie viele Tage lokaler Nutzungsprotokolle im Menü erscheinen.";
 "cost_history_days_title" = "Verlaufsfenster: %d Tage";
 "cost_auto_refresh_info" = "Auto-Aktualisierung: stündlich · Timeout: 10 Min.";
 "refresh_cadence_title" = "Aktualisierungsintervall";
@@ -643,6 +652,7 @@
 
 /* Provider status */
 "status_operational" = "Betriebsbereit";
+"status_degraded" = "Eingeschränkte Leistung";
 "status_partial_outage" = "Teilweiser Ausfall";
 "status_major_outage" = "Schwerwiegender Ausfall";
 "status_critical_issue" = "Kritisches Problem";
@@ -699,6 +709,7 @@
 "Add Account..." = "Konto hinzufügen...";
 "Usage Dashboard" = "Nutzungs-Dashboard";
 "Status Page" = "Statusseite";
+"Open Status Page" = "Statusseite öffnen";
 "Settings..." = "Einstellungen...";
 "About CodexBar" = "About CodexBar";
 "Quit" = "Beenden";
@@ -1008,6 +1019,7 @@
 "Optional. Leave blank to discover and aggregate projects visible to the API key." = "Optional. Lassen Sie das Feld leer, um für den API-Schlüssel sichtbare Projekte zu ermitteln und zu aggregieren.";
 "Org ID (optional)" = "Organisations-ID (optional)";
 "Organizations" = "Organisationen";
+"Organization ID" = "Organisations-ID";
 "Password" = "Passwort";
 "%@ authentication is disabled." = "Die %@-Authentifizierung ist deaktiviert.";
 "%@ cookies are disabled." = "%@ Cookies sind deaktiviert.";
@@ -1061,6 +1073,7 @@
 "Stored in ~/.codexbar/config.json. You can also provide CROF_API_KEY." = "Gespeichert in ~/.codexbar/config.json. Sie können auch CROF_API_KEY angeben.";
 "Stored in ~/.codexbar/config.json. You can also provide KILO_API_KEY or ~/.local/share/kilo/auth.json (kilo.access)." = "Gespeichert in ~/.codexbar/config.json. Sie können auch KILO_API_KEY oder ~/.local/share/kilo/auth.json (kilo.access) angeben.";
 "T3 Chat cookie" = "T3-Chat-Cookie";
+"Team mode" = "Teammodus";
 "That account is no longer available in CodexBar. Refresh the account list and try again." = "Dieses Konto ist in CodexBar nicht mehr verfügbar. Aktualisieren Sie die Kontoliste und versuchen Sie es erneut.";
 "The browser login did not complete in time. Try Antigravity login again." = "Die Browseranmeldung wurde nicht rechtzeitig abgeschlossen. Versuchen Sie erneut, sich bei Antigravity anzumelden.";
 "Timed out waiting for Cursor login. %@" = "Zeitüberschreitung beim Warten auf die Cursor-Anmeldung. %@";

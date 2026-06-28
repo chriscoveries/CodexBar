@@ -417,6 +417,15 @@
 "start_at_login_subtitle" = "وقتی مک را روشن می کنید، CodexBar به طور خودکار باز می شود.";
 "show_cost_summary" = "خلاصه هزینه نمایش";
 "show_cost_summary_subtitle" = "گزارش های استفاده محلی را می خواند. امروز نمایش داده می شود + پنجره تاریخچه انتخاب شده در منو.";
+"cost_summary_style_title" = "سبک نمایش";
+"cost_summary_style_inline" = "فقط درون‌خطی";
+"cost_summary_style_submenu" = "فقط زیرمنو";
+"cost_summary_style_both" = "هر دو";
+"cost_summary_style_inline_help" = "خلاصه هزینه را مستقیماً در منوی اصلی نشان می‌دهد.";
+"cost_summary_style_submenu_help" = "در عوض زیرمنوی جزئیات هزینه را نشان می‌دهد.";
+"cost_summary_style_both_help" = "هم خلاصه منوی اصلی و هم زیرمنوی جزئیات هزینه را نشان می‌دهد.";
+"cost_history_window_title" = "پنجره تاریخچه";
+"cost_history_window_help" = "تعیین می‌کند چند روز از گزارش‌های استفاده محلی در منو نشان داده شود.";
 "cost_history_days_title" = "پنجره تاریخچه: %d روز";
 "cost_auto_refresh_info" = "تازه سازی خودکار: ساعتی · زمان استراحت: 10m";
 "refresh_cadence_title" = "کادانس تازه سازی";
@@ -643,6 +652,7 @@
 
 /* Provider status */
 "status_operational" = "عملیاتی";
+"status_degraded" = "کارایی کاهش‌یافته";
 "status_partial_outage" = "قطعی جزئی";
 "status_major_outage" = "قطعی عمده";
 "status_critical_issue" = "مسئله بحرانی";
@@ -699,6 +709,7 @@
 "Add Account..." = "افزودن حساب...";
 "Usage Dashboard" = "داشبورد استفاده";
 "Status Page" = "صفحه وضعیت";
+"Open Status Page" = "باز کردن صفحه وضعیت";
 "Settings..." = "محیط ها...";
 "About CodexBar" = "درباره CodexBar";
 "Quit" = "ترک کن";
@@ -1011,6 +1022,7 @@
 "Optional. Leave blank to discover and aggregate projects visible to the API key." = "اختیاری. برای کشف و تجمیع پروژه هایی که با کلید API قابل مشاهده هستند، صفحه خالی بگذارید.";
 "Org ID (optional)" = "شناسه سازمان (اختیاری)";
 "Organizations" = "سازمان ها";
+"Organization ID" = "شناسه سازمان";
 "Password" = "رمز عبور";
 "%@ authentication is disabled." = "%@ احراز هویت غیرفعال است.";
 "%@ cookies are disabled." = "%@ کوکی ها غیرفعال هستند.";
@@ -1064,6 +1076,7 @@
 "Stored in ~/.codexbar/config.json. You can also provide CROF_API_KEY." = "ذخیره شده در ~/.codexbar/config.json. همچنین می توانید CROF_API_KEY ارائه دهید.";
 "Stored in ~/.codexbar/config.json. You can also provide KILO_API_KEY or ~/.local/share/kilo/auth.json (kilo.access)." = "ذخیره شده در ~/.codexbar/config.json. همچنین می توانید KILO_API_KEY یا ~/.local/share/kilo/auth.json (kilo.access) ارائه دهید.";
 "T3 Chat cookie" = "T3 Chat کوکی";
+"Team mode" = "حالت تیم";
 "That account is no longer available in CodexBar. Refresh the account list and try again." = "آن حساب دیگر در CodexBar در دسترس نیست. لیست حساب ها را تازه کنید و دوباره تلاش کنید.";
 "The browser login did not complete in time. Try Antigravity login again." = "ورود به مرورگر به موقع کامل نشد. دوباره Antigravity حساب کاربری امتحان کن.";
 "Timed out waiting for Cursor login. %@" = "زمان خروج منتظر ورود Cursor هستم. %@";

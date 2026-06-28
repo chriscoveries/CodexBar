@@ -464,12 +464,28 @@ struct ProvidersPane: View {
                 }
             },
             showsOrganizationField: provider == .claude,
-            addAccount: { label, token, organizationID in
+            showsTeamModeControls: provider == .zai,
+            addAccount: { label, token, usageScope, organizationID, workspaceID in
                 self.settings.addTokenAccount(
                     provider: provider,
                     label: label,
                     token: token,
-                    organizationID: organizationID)
+                    usageScope: usageScope,
+                    organizationID: organizationID,
+                    workspaceID: workspaceID)
+                Task { @MainActor in
+                    await ProviderInteractionContext.$current.withValue(.userInitiated) {
+                        await self.store.refreshProvider(provider, allowDisabled: true)
+                    }
+                }
+            },
+            updateAccount: { accountID, usageScope, organizationID, workspaceID in
+                self.settings.updateTokenAccount(
+                    provider: provider,
+                    accountID: accountID,
+                    usageScope: usageScope,
+                    organizationID: organizationID,
+                    workspaceID: workspaceID)
                 Task { @MainActor in
                     await ProviderInteractionContext.$current.withValue(.userInitiated) {
                         await self.store.refreshProvider(provider, allowDisabled: true)
@@ -729,6 +745,10 @@ struct ProvidersPane: View {
             usageBarsShowUsed: self.settings.usageBarsShowUsed,
             resetTimeDisplayStyle: self.settings.resetTimeDisplayStyle,
             tokenCostUsageEnabled: self.settings.isCostUsageEffectivelyEnabled(for: provider),
+            tokenCostInlineDashboardEnabled: self.settings.costSummaryShowsInlineDashboard(for: provider),
+            // Display style only controls the main menu. Provider details always expose
+            // available cost data in their Usage section.
+            tokenCostMenuSectionEnabled: self.settings.isCostUsageEffectivelyEnabled(for: provider),
             showOptionalCreditsAndExtraUsage: self.settings.showOptionalCreditsAndExtraUsage,
             copilotBudgetExtrasEnabled: self.settings.copilotBudgetExtrasEnabled,
             hidePersonalInfo: self.settings.hidePersonalInfo,
