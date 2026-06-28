@@ -1819,6 +1819,92 @@ struct CostUsageScannerBreakdownTests {
     }
 
     @Test
+    func `codex narrow rowless rescan retains cached days outside scan window`() throws {
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+
+        let olderDay = try env.makeLocalNoon(year: 2026, month: 6, day: 10)
+        let day = try env.makeLocalNoon(year: 2026, month: 6, day: 28)
+        let model = "openai/gpt-5.5"
+        let sessionMeta: [String: Any] = [
+            "type": "session_meta",
+            "payload": ["session_id": "sess-narrow-rowless-rescan"],
+        ]
+        let currentContext = self.codexTurnContext(timestamp: env.isoString(for: day), model: model)
+        let currentTurn: [String: Any] = [
+            "type": "event_msg",
+            "timestamp": env.isoString(for: day),
+            "payload": ["type": "task_started", "turn_id": "turn-current"],
+        ]
+        let currentUsage = self.codexTokenCount(
+            timestamp: env.isoString(for: day.addingTimeInterval(1)),
+            model: model,
+            last: (input: 10, cached: 0, output: 1))
+        let olderContext = self.codexTurnContext(timestamp: env.isoString(for: olderDay), model: model)
+        let olderTurn: [String: Any] = [
+            "type": "event_msg",
+            "timestamp": env.isoString(for: olderDay),
+            "payload": ["type": "task_started", "turn_id": "turn-older"],
+        ]
+        let olderUsage = self.codexTokenCount(
+            timestamp: env.isoString(for: olderDay.addingTimeInterval(1)),
+            model: model,
+            last: (input: 20, cached: 0, output: 2))
+
+        _ = try env.writeCodexSessionFile(
+            day: day,
+            filename: "active-narrow-rowless-rescan.jsonl",
+            contents: env.jsonl([sessionMeta, currentContext, currentTurn, currentUsage]))
+        let dayKey = CostUsageScanner.CostUsageDayRange.dayKey(from: day)
+        let archiveURL = try env.writeCodexArchivedSessionFile(
+            filename: "rollout-\(dayKey)T12-00-00-narrow-rowless-rescan.jsonl",
+            contents: env.jsonl([
+                sessionMeta,
+                currentContext,
+                currentTurn,
+                currentUsage,
+                olderContext,
+                olderTurn,
+                olderUsage,
+            ]))
+
+        var options = CostUsageScanner.Options(
+            codexSessionsRoot: env.codexSessionsRoot,
+            claudeProjectsRoots: nil,
+            cacheRoot: env.cacheRoot)
+        options.refreshMinIntervalSeconds = 0
+
+        let wide = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: olderDay,
+            until: day,
+            now: day,
+            options: options)
+        #expect(wide.summary?.totalTokens == 33)
+
+        var cache = CostUsageCacheIO.load(provider: .codex, cacheRoot: env.cacheRoot)
+        let archivePath = try #require(cache.files.keys.first {
+            URL(fileURLWithPath: $0).lastPathComponent == archiveURL.lastPathComponent
+        })
+        cache.files[archivePath]?.codexRows = nil
+        CostUsageCacheIO.save(provider: .codex, cache: cache, cacheRoot: env.cacheRoot)
+
+        let narrow = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day.addingTimeInterval(1),
+            options: options)
+        #expect(narrow.summary?.totalTokens == 11)
+
+        cache = CostUsageCacheIO.load(provider: .codex, cacheRoot: env.cacheRoot)
+        let archiveUsage = try #require(cache.files[archivePath])
+        let olderDayKey = CostUsageScanner.CostUsageDayRange.dayKey(from: olderDay)
+        let olderPacked = try #require(archiveUsage.days[olderDayKey]?.values.first)
+        #expect(olderPacked == [20, 0, 2])
+    }
+
+    @Test
     func `codex daily report includes long lived sessions stored under older date partitions`() throws {
         let env = try CostUsageTestEnvironment()
         defer { env.cleanup() }

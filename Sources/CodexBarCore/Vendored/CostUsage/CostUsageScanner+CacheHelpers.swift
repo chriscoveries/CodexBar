@@ -1066,7 +1066,11 @@ extension CostUsageScanner {
             sessionId: sessionId,
             fileIdentity: input.metadata.path,
             state: &state)
-        if let sessionId, state.contributingSessionIds.contains(sessionId), uniqueRows.isEmpty {
+        if let sessionId,
+           state.contributingSessionIds.contains(sessionId),
+           uniqueRows.isEmpty,
+           usageDays.isEmpty
+        {
             cache.files.removeValue(forKey: input.metadata.path)
             return
         }
