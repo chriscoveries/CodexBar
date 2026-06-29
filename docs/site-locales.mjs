@@ -90,8 +90,8 @@ export const localeCatalog = [
 export const localeMessages = {
   "en": {
     "meta.title": "CodexBar — every AI coding limit in your menu bar",
-    "meta.description": "A tiny macOS menu bar app that tracks AI coding-provider usage windows, credits, costs, and resets across 53 providers — Codex, OpenAI, Claude, Cursor, Gemini, Copilot, LiteLLM, and more.",
-    "meta.ogDescription": "Track usage windows, credits, and resets across 53 AI coding providers from your macOS menu bar.",
+    "meta.description": "A tiny macOS menu bar app that tracks AI coding-provider usage windows, credits, costs, and resets across 54 providers — Codex, OpenAI, Claude, Cursor, Gemini, Copilot, LiteLLM, and more.",
+    "meta.ogDescription": "Track usage windows, credits, and resets across 54 AI coding providers from your macOS menu bar.",
     "nav.primary": "Primary",
     "nav.language": "Language",
     "nav.docs": "Docs",
@@ -104,7 +104,7 @@ export const localeMessages = {
     "hero.description": "CodexBar tracks usage windows, credit balances, and reset countdowns across the providers you actually pay for — one status item each, or merge them into one.",
     "hero.download": "Download for macOS",
     "hero.fineprint": "Free & open source · macOS 14+ · Universal via GitHub Releases and Homebrew",
-    "providers.title": "53 providers, one menu bar",
+    "providers.title": "54 providers, one menu bar",
     "providers.description": "Popular providers become status items with their own usage windows, reset countdowns, charts, and provider menus.",
     "providers.yourProvider": "Your provider",
     "providers.authoringGuide": "Authoring guide",
@@ -714,8 +714,8 @@ export const localeMessages = {
   },
   "nl": {
     "meta.title": "CodexBar — elke AI-coderingslimiet in uw menubalk",
-    "meta.description": "Een kleine macOS menubalk-app die gebruiksperioden, tegoeden, kosten en resets van AI-coderingsproviders bijhoudt bij 53 providers: Codex, OpenAI, Claude, Cursor, Gemini, Copilot, LiteLLM en meer.",
-    "meta.ogDescription": "Houd gebruiksvensters, tegoeden en resets bij van 53 leveranciers van AI-codering via uw macOS-menubalk.",
+    "meta.description": "Een kleine macOS menubalk-app die gebruiksperioden, tegoeden, kosten en resets van AI-coderingsproviders bijhoudt bij 54 providers: Codex, OpenAI, Claude, Cursor, Gemini, Copilot, LiteLLM en meer.",
+    "meta.ogDescription": "Houd gebruiksvensters, tegoeden en resets bij van 54 leveranciers van AI-codering via uw macOS-menubalk.",
     "nav.primary": "Primair",
     "nav.language": "Taal",
     "nav.docs": "Documenten",
