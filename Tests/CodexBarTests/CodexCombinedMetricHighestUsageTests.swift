@@ -186,6 +186,44 @@ struct CodexCombinedMetricHighestUsageTests {
         #expect(highest?.usedPercent == 80)
     }
 
+    @Test
+    func `combined claude metric excludes an exhausted spend-limit-only account`() {
+        let store = self.makeStore(
+            suiteName: "CodexCombinedMetricHighestUsageTests-claude-spend-limit-exhausted",
+            claudeCombined: true)
+
+        store._setSnapshotForTesting(
+            UsageSnapshot(
+                primary: RateWindow(usedPercent: 80, windowMinutes: 300, resetsAt: nil, resetDescription: nil),
+                secondary: RateWindow(
+                    usedPercent: 80,
+                    windowMinutes: 7 * 24 * 60,
+                    resetsAt: nil,
+                    resetDescription: nil),
+                updatedAt: Date()),
+            provider: .codex)
+        // Claude spend-limit-only account: exhausted providerCost, no secondary/tertiary, and an
+        // unflagged 0% 5h placeholder primary. The metric resolves to the (exhausted) spend-limit window.
+        store._setSnapshotForTesting(
+            UsageSnapshot(
+                primary: RateWindow(usedPercent: 0, windowMinutes: 300, resetsAt: nil, resetDescription: nil),
+                secondary: nil,
+                providerCost: ProviderCostSnapshot(
+                    used: 100,
+                    limit: 100,
+                    currencyCode: "USD",
+                    period: "Spend limit",
+                    updatedAt: Date()),
+                updatedAt: Date()),
+            provider: .claude)
+
+        // The spend limit is exhausted and there are no real lanes, so Claude must be excluded from
+        // ranking (the unflagged 0% placeholder must not keep it eligible); Codex surfaces instead.
+        let highest = store.providerWithHighestUsage()
+        #expect(highest?.provider == .codex)
+        #expect(highest?.usedPercent == 80)
+    }
+
     private func makeStore(suiteName: String, claudeCombined: Bool = false) -> UsageStore {
         let settings = SettingsStore(
             configStore: testConfigStore(suiteName: suiteName),
