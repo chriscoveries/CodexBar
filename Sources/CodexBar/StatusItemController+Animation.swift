@@ -1023,11 +1023,30 @@ extension StatusItemController {
         {
             return nil
         }
-        let session = projection?.rateWindow(for: .session)
-            ?? Self.rateWindow(in: snapshot, matchingCadenceMinutes: Self.sessionWindowMinutes)
+        let session = Self.combinedSessionLane(snapshot: snapshot, projection: projection)
         let weekly = projection?.rateWindow(for: .weekly)
             ?? Self.rateWindow(in: snapshot, matchingCadenceMinutes: Self.weeklyWindowMinutes)
         return (session, weekly)
+    }
+
+    /// The combined metric's session (5h) lane. Codex resolves it through the consumer projection; other
+    /// providers classify by window cadence. A 5-hour lane the provider only synthesized to stand in for an
+    /// absent session — Claude web's null `five_hour` placeholder, flagged at the boundary — is dropped so a
+    /// weekly-only account falls back to its weekly lane instead of rendering a phantom `5h 0%`/`5h 100%`
+    /// session. A genuine session (even one freshly reset to 0%) is not flagged, so it is kept.
+    private static func combinedSessionLane(
+        snapshot: UsageSnapshot?,
+        projection: CodexConsumerProjection?) -> RateWindow?
+    {
+        if let projected = projection?.rateWindow(for: .session) {
+            return projected
+        }
+        guard let session = Self.rateWindow(in: snapshot, matchingCadenceMinutes: Self.sessionWindowMinutes)
+        else { return nil }
+        if session.isSyntheticPlaceholder {
+            return nil
+        }
+        return session
     }
 
     /// The window the weekly pace is computed on in pace/both modes. Codex paces on its projected weekly
@@ -1056,7 +1075,8 @@ extension StatusItemController {
     /// The usage window shown for the combined metric in pace/both modes. It pairs the SESSION usage with
     /// the weekly pace, so the usage component normally comes from the session lane — not the
     /// most-constrained lane that drives the icon/bar. Two exceptions: fall back to the weekly lane when no
-    /// session lane exists (the five_hour OAuth fallback), and surface the weekly lane when it is exhausted
+    /// session lane exists (the five_hour OAuth fallback or Claude web's filtered null-session
+    /// placeholder), and surface the weekly lane when it is exhausted
     /// — it is then the binding cap with no pace to show, and a roomy session number would hide it.
     private static func combinedDisplayPercentWindow(
         lanes: (session: RateWindow?, weekly: RateWindow?),
