@@ -146,6 +146,46 @@ struct CodexCombinedMetricHighestUsageTests {
         #expect(highest?.usedPercent == 80)
     }
 
+    @Test
+    func `combined claude metric excludes an exhausted weekly-only account with a synthetic placeholder`() {
+        let store = self.makeStore(
+            suiteName: "CodexCombinedMetricHighestUsageTests-claude-placeholder-exhausted",
+            claudeCombined: true)
+
+        store._setSnapshotForTesting(
+            UsageSnapshot(
+                primary: RateWindow(usedPercent: 80, windowMinutes: 300, resetsAt: nil, resetDescription: nil),
+                secondary: RateWindow(
+                    usedPercent: 80,
+                    windowMinutes: 7 * 24 * 60,
+                    resetsAt: nil,
+                    resetDescription: nil),
+                updatedAt: Date()),
+            provider: .codex)
+        // Claude web weekly-only account: a synthetic 0% session placeholder plus an exhausted weekly lane.
+        store._setSnapshotForTesting(
+            UsageSnapshot(
+                primary: RateWindow(
+                    usedPercent: 0,
+                    windowMinutes: 300,
+                    resetsAt: nil,
+                    resetDescription: nil,
+                    isSyntheticPlaceholder: true),
+                secondary: RateWindow(
+                    usedPercent: 100,
+                    windowMinutes: 7 * 24 * 60,
+                    resetsAt: nil,
+                    resetDescription: nil),
+                updatedAt: Date()),
+            provider: .claude)
+
+        // The placeholder is not a real lane, so the only real Claude lane (weekly) is fully exhausted —
+        // Claude must be excluded from ranking, not kept eligible by the phantom 0% session.
+        let highest = store.providerWithHighestUsage()
+        #expect(highest?.provider == .codex)
+        #expect(highest?.usedPercent == 80)
+    }
+
     private func makeStore(suiteName: String, claudeCombined: Bool = false) -> UsageStore {
         let settings = SettingsStore(
             configStore: testConfigStore(suiteName: suiteName),
