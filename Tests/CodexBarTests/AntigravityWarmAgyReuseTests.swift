@@ -116,6 +116,53 @@ struct AntigravityWarmAgyReuseTests {
         #expect(fetchSnapshotCallCount.value == 0)
     }
 
+    @Test
+    func ownedAgyExcluded_fallsBackToSpawnPath() async {
+        // CodexBar's own managed `agy` (pid 4242) appears in the process scan.
+        // It must NOT be reused through the warm path — doing so would bypass the
+        // session lifecycle and let `stopIfIdle` tear it down mid-poll.
+        let fetchSnapshotCallCount = LockedCounter()
+
+        let result = await AntigravityCLIHTTPSFetchStrategy.tryWarmAgyFetch(
+            timeout: 2.0,
+            dependencies: AntigravityCLIHTTPSFetchStrategy.WarmAgyDependencies(
+                processInfos: { [Self.cliProcessInfo(pid: 4242)] },
+                listeningPorts: { _, _ in
+                    Issue.record("listeningPorts must not be called for a CodexBar-owned agy")
+                    return []
+                },
+                fetchSnapshot: { _ in
+                    fetchSnapshotCallCount.increment()
+                    return Self.usableSnapshot(email: "owned@example.com")
+                },
+                ownedPID: { 4242 }))
+
+        #expect(result == nil)
+        #expect(fetchSnapshotCallCount.value == 0)
+    }
+
+    @Test
+    func externalAgyReused_whenOwnedAlsoPresent() async {
+        // With both an owned `agy` (pid 4242) and an external one (pid 7000), only
+        // the external server is reused; the owned pid is filtered out.
+        let listeningPortsCallCount = LockedCounter()
+
+        let result = await AntigravityCLIHTTPSFetchStrategy.tryWarmAgyFetch(
+            timeout: 2.0,
+            dependencies: AntigravityCLIHTTPSFetchStrategy.WarmAgyDependencies(
+                processInfos: { [Self.cliProcessInfo(pid: 4242), Self.cliProcessInfo(pid: 7000)] },
+                listeningPorts: { pid, _ in
+                    listeningPortsCallCount.increment()
+                    #expect(pid == 7000)
+                    return [50050]
+                },
+                fetchSnapshot: { _ in Self.usableSnapshot(email: "external@example.com") },
+                ownedPID: { 4242 }))
+
+        #expect(result?.accountEmail == "external@example.com")
+        #expect(listeningPortsCallCount.value == 1)
+    }
+
     // MARK: - Integration: fetchUsingWarmSession fast-path branch
 
     @Test

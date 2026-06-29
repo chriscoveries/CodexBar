@@ -173,15 +173,24 @@ struct AntigravityCLIHTTPSFetchStrategy: ProviderFetchStrategy {
         let processInfos: @Sendable () async throws -> [AntigravityStatusProbe.ProcessInfoResult]
         let listeningPorts: @Sendable (Int, TimeInterval) async throws -> [Int]
         let fetchSnapshot: @Sendable ([Int]) async throws -> AntigravityStatusSnapshot
+        /// The pid of an ``agy`` that CodexBar itself spawned and manages through
+        /// ``AntigravityCLISession`` (if any). Such a process must NOT be reused
+        /// through the warm path: doing so bypasses `beginProbe`/`finishProbe`, so
+        /// the idle timer is never cancelled/extended and `stopIfIdle` could tear
+        /// the managed session down mid-poll. Externally owned `agy` (an IDE, a
+        /// long-lived `agy`, or another CodexBar host) has no such accounting.
+        let ownedPID: @Sendable () async -> Int?
 
         init(
             processInfos: @escaping @Sendable () async throws -> [AntigravityStatusProbe.ProcessInfoResult],
             listeningPorts: @escaping @Sendable (Int, TimeInterval) async throws -> [Int],
-            fetchSnapshot: @escaping @Sendable ([Int]) async throws -> AntigravityStatusSnapshot)
+            fetchSnapshot: @escaping @Sendable ([Int]) async throws -> AntigravityStatusSnapshot,
+            ownedPID: @escaping @Sendable () async -> Int? = { nil })
         {
             self.processInfos = processInfos
             self.listeningPorts = listeningPorts
             self.fetchSnapshot = fetchSnapshot
+            self.ownedPID = ownedPID
         }
     }
 
@@ -202,10 +211,14 @@ struct AntigravityCLIHTTPSFetchStrategy: ProviderFetchStrategy {
         dependencies: WarmAgyDependencies) async -> AntigravityStatusSnapshot?
     {
         let processInfos = await (try? dependencies.processInfos()) ?? []
+        let ownedPID = await dependencies.ownedPID()
         // Only the CLI's language server needs no CSRF token; the IDE/app servers
         // require one and must not be reused through this token-less fast path.
+        // Also exclude any `agy` CodexBar itself spawned and manages: reusing it
+        // here would bypass session lifecycle accounting (see `ownedPID`).
         let cliProcesses = processInfos.filter { info in
-            AntigravityStatusProbe.antigravityProcessKind(info.commandLine) == .cli
+            info.pid != ownedPID &&
+                AntigravityStatusProbe.antigravityProcessKind(info.commandLine) == .cli
         }
         guard !cliProcesses.isEmpty else { return nil }
 
@@ -247,6 +260,11 @@ struct AntigravityCLIHTTPSFetchStrategy: ProviderFetchStrategy {
                 let deadline = Date().addingTimeInterval(2.0)
                 return try await AntigravityStatusProbe(timeout: 2.0)
                     .fetchFromPorts(ports, deadline: deadline)
+            },
+            ownedPID: {
+                // The pid of the `agy` CodexBar manages through the shared
+                // session, so the warm scan never reuses our own process.
+                await AntigravityCLISession.shared.pid.map(Int.init)
             })
     }
 
