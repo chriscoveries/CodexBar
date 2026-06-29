@@ -203,6 +203,7 @@ struct CursorUsageEventsFetcherTests {
 
     @Test
     func `fetchUsage paginates, dedupes, sums metered cents, and sends Origin and Cookie headers`() async throws {
+        // swiftlint:disable line_length
         let firstEvent = #"""
         {"timestamp":"1700000000000","model":"claude-4.5-sonnet","tokenUsage":{"inputTokens":100,"outputTokens":50,"cacheWriteTokens":0,"cacheReadTokens":0,"totalCents":100},"chargedCents":4}
         """#
@@ -213,6 +214,7 @@ struct CursorUsageEventsFetcherTests {
         let thirdEvent = #"""
         {"timestamp":"1700005400000","model":"gpt-5","tokenUsage":{"inputTokens":1,"outputTokens":1,"cacheWriteTokens":0,"cacheReadTokens":0,"totalCents":25},"chargedCents":8}
         """#
+        // swiftlint:enable line_length
 
         let transport = ProviderHTTPTransportStub { request in
             switch Self.requestedPage(request) {
@@ -258,9 +260,11 @@ struct CursorUsageEventsFetcherTests {
 
     @Test
     func `fetchUsage reports nil metered total when events omit chargedCents`() async throws {
+        // swiftlint:disable line_length
         let event = #"""
         {"timestamp":"1700000000000","model":"gpt-5","tokenUsage":{"inputTokens":10,"outputTokens":5,"cacheWriteTokens":0,"cacheReadTokens":0,"totalCents":50}}
         """#
+        // swiftlint:enable line_length
         let transport = ProviderHTTPTransportStub { _ in
             Self.httpResponse("{\"totalUsageEventsCount\":1,\"usageEventsDisplay\":[\(event)]}")
         }

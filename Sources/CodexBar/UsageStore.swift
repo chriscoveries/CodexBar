@@ -154,6 +154,7 @@ final class UsageStore {
     var debugForceAnimation = false
     var pathDebugInfo: PathDebugSnapshot = .empty
     var statuses: [UsageProvider: ProviderStatus] = [:]
+    var statusComponents: [UsageProvider: [ProviderStatusComponent]] = [:]
     var probeLogs: [UsageProvider: String] = [:]
     var historicalPaceRevision: Int = 0
     var planUtilizationHistoryRevision: Int = 0
@@ -880,16 +881,26 @@ final class UsageStore {
 
         do {
             let status: ProviderStatus
+            var components: [ProviderStatusComponent]?
             if let override = self._test_providerStatusFetchOverride {
                 status = try await override(provider)
             } else if let urlString = meta.statusPageURL, let baseURL = URL(string: urlString) {
-                status = try await Self.fetchStatus(from: baseURL)
+                let summary = try await Self.fetchStatusSummary(from: baseURL)
+                status = summary.status
+                components = summary.components
             } else if let productID = meta.statusWorkspaceProductID {
                 status = try await Self.fetchWorkspaceStatus(productID: productID)
             } else {
                 return
             }
-            await MainActor.run { self.statuses[provider] = status }
+            await MainActor.run {
+                self.statuses[provider] = status
+                // A component endpoint is best-effort. Preserve the last good list when the
+                // overall status succeeds but the component request or decoding fails.
+                if let components {
+                    self.statusComponents[provider] = components
+                }
+            }
         } catch {
             self.recordStartupConnectivityRetryableFailure(error)
             // Keep the previous status to avoid flapping when the API hiccups.
@@ -998,6 +1009,7 @@ extension UsageStore {
                 .jetbrains: "JetBrains AI debug log not yet implemented",
                 .mimo: "Xiaomi MiMo debug log not yet implemented",
                 .doubao: "Doubao debug log not yet implemented",
+                .sakana: "Sakana AI debug log not yet implemented",
                 .venice: "Venice debug log not yet implemented",
                 .commandcode: "Command Code debug log not yet implemented",
                 .stepfun: "StepFun debug log not yet implemented",
@@ -1085,8 +1097,8 @@ extension UsageStore {
                         hasTokenAccount: deepSeekHasTokenAccount)
                 case .gemini, .antigravity, .opencode, .opencodego, .alibabatokenplan, .factory, .copilot, .devin,
                      .vertexai, .kilo, .kiro, .kimi, .kimik2, .moonshot, .jetbrains, .perplexity, .mimo, .doubao,
-                     .abacus, .mistral, .codebuff, .crof, .windsurf, .venice, .manus, .commandcode, .stepfun, .bedrock,
-                     .grok, .groq, .t3chat, .llmproxy, .litellm, .zed, .deepgram, .poe, .chutes:
+                     .sakana, .abacus, .mistral, .codebuff, .crof, .windsurf, .venice, .manus, .commandcode, .stepfun,
+                     .bedrock, .grok, .groq, .t3chat, .llmproxy, .litellm, .zed, .deepgram, .poe, .chutes:
                     return unimplementedDebugLogMessages[provider] ?? "Debug log not yet implemented"
                 }
             }
@@ -1447,13 +1459,22 @@ extension UsageStore {
         }
     }
 
-    private func refreshTokenUsage(_ provider: UsageProvider, force: Bool) async {
-        guard ProviderDescriptorRegistry.descriptor(for: provider).tokenCost.supportsTokenCost else {
-            self.tokenSnapshots.removeValue(forKey: provider)
-            self.tokenErrors[provider] = nil
-            self.tokenFailureGates[provider]?.reset()
+    /// Clears cached cost/token state for a provider so an ineligible or disabled provider stops
+    /// surfacing stale data. Pass `resetFetchMarkers: false` to keep the TTL fetch markers (used
+    /// when a provider snapshot simply lacks token data for this cycle).
+    private func resetTokenState(for provider: UsageProvider, resetFetchMarkers: Bool = true) {
+        self.tokenSnapshots.removeValue(forKey: provider)
+        self.tokenErrors[provider] = nil
+        self.tokenFailureGates[provider]?.reset()
+        if resetFetchMarkers {
             self.lastTokenFetchAt.removeValue(forKey: provider)
             self.lastTokenFetchScope.removeValue(forKey: provider)
+        }
+    }
+
+    private func refreshTokenUsage(_ provider: UsageProvider, force: Bool) async {
+        guard ProviderDescriptorRegistry.descriptor(for: provider).tokenCost.supportsTokenCost else {
+            self.resetTokenState(for: provider)
             return
         }
 
@@ -1464,39 +1485,25 @@ extension UsageStore {
                 self.tokenFailureGates[provider]?.recordSuccess()
                 self.persistWidgetSnapshot(reason: "token-usage")
             } else {
-                self.tokenSnapshots.removeValue(forKey: provider)
-                self.tokenErrors[provider] = nil
-                self.tokenFailureGates[provider]?.reset()
+                self.resetTokenState(for: provider, resetFetchMarkers: false)
             }
             return
         }
 
         guard self.settings.costUsageEnabled else {
-            self.tokenSnapshots.removeValue(forKey: provider)
-            self.tokenErrors[provider] = nil
-            self.tokenFailureGates[provider]?.reset()
-            self.lastTokenFetchAt.removeValue(forKey: provider)
-            self.lastTokenFetchScope.removeValue(forKey: provider)
+            self.resetTokenState(for: provider)
             return
         }
 
         guard self.isEnabled(provider) else {
-            self.tokenSnapshots.removeValue(forKey: provider)
-            self.tokenErrors[provider] = nil
-            self.tokenFailureGates[provider]?.reset()
-            self.lastTokenFetchAt.removeValue(forKey: provider)
-            self.lastTokenFetchScope.removeValue(forKey: provider)
+            self.resetTokenState(for: provider)
             return
         }
 
         // Cursor cost honors the same cookie policy as status: when the user set the cookie source
         // to Off, skip the network fetch entirely (mirrors CursorProviderDescriptor.checkStatus).
         if provider == .cursor, self.settings.cursorCookieSource == .off {
-            self.tokenSnapshots.removeValue(forKey: provider)
-            self.tokenErrors[provider] = nil
-            self.tokenFailureGates[provider]?.reset()
-            self.lastTokenFetchAt.removeValue(forKey: provider)
-            self.lastTokenFetchScope.removeValue(forKey: provider)
+            self.resetTokenState(for: provider)
             return
         }
 
@@ -1514,7 +1521,7 @@ extension UsageStore {
         // Fold the manual cookie into the cache key (via an in-process hash, never the raw header) so
         // pasting a different Cursor cookie invalidates a snapshot fetched within the TTL instead of
         // showing the previous account's data.
-        let cursorScopeSuffix: String = if provider != .cursor {
+        let cursorScopeSuffix = if provider != .cursor {
             ""
         } else if let override = cursorCookieHeaderOverride {
             "|cursorCookie=manual:\(override.hashValue)"

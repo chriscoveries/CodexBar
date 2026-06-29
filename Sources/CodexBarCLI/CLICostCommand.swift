@@ -251,7 +251,7 @@ extension CodexBarCLI {
 
     /// Human-readable list of providers that support a cost report, used by both `cost` and serve.
     static func costSupportedProviderNames() -> String {
-        Self.costSupportedProviders
+        self.costSupportedProviders
             .map { ProviderDescriptorRegistry.descriptor(for: $0).metadata.displayName }
             .sorted()
             .joined(separator: ", ")
