@@ -593,7 +593,7 @@ struct CostUsageScannerPriorityTests {
     }
 
     @Test
-    func `codex pricing skips priority surcharge when cache read crosses long context limit`() throws {
+    func `codex pricing applies priority surcharge when cached reads exceed limit but input stays under it`() throws {
         let env = try CostUsageTestEnvironment()
         defer { env.cleanup() }
 
@@ -623,11 +623,10 @@ struct CostUsageScannerPriorityTests {
             until: day,
             now: day,
             options: options)
-        // input+cached (300K) exceeds the 272K priority limit, so the priority surcharge is
-        // skipped and the turn is priced at standard rates. The 200K input is below the long
-        // context threshold (cached is a subset of input, not additive), so base rates apply
-        // and only the 100K non-cached input is billed at the input rate.
-        let expected = (100_000.0 * 5e-6) + (100_000.0 * 5e-7) + (5.0 * 3e-5)
+        // cached input is a subset of input, so the 272K priority limit applies to the 200K
+        // input alone (not input+cached). Input stays under the limit, so the priority surcharge
+        // applies at priority rates, and only the 100K non-cached input is billed at the input rate.
+        let expected = (100_000.0 * 1.25e-5) + (100_000.0 * 1.25e-6) + (5.0 * 7.5e-5)
 
         #expect(abs((report.summary?.totalCostUSD ?? 0) - expected) < 0.000_000_001)
         let breakdown = try #require(report.data.first?.modelBreakdowns?.first)

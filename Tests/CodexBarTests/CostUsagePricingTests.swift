@@ -185,11 +185,6 @@ struct CostUsagePricingTests {
             inputTokens: 272_001,
             cachedInputTokens: 0,
             outputTokens: 10)
-        let gpt55CachedHeavy = CostUsagePricing.codexPriorityCostUSD(
-            model: "gpt-5.5",
-            inputTokens: 200_000,
-            cachedInputTokens: 100_000,
-            outputTokens: 10)
         let gpt54Mini = CostUsagePricing.codexPriorityCostUSD(
             model: "gpt-5.4-mini",
             inputTokens: 272_001,
@@ -197,19 +192,41 @@ struct CostUsagePricingTests {
             outputTokens: 10)
 
         #expect(gpt55 == nil)
-        #expect(gpt55CachedHeavy == nil)
         #expect(gpt54Mini == nil)
+    }
+
+    @Test
+    func `codex priority cost counts only input tokens toward the limit`() {
+        let eligible = CostUsagePricing.codexPriorityCostUSD(
+            model: "gpt-5.5",
+            inputTokens: 200_000,
+            cachedInputTokens: 100_000,
+            outputTokens: 10)
+        let boundary = CostUsagePricing.codexPriorityCostUSD(
+            model: "gpt-5.5",
+            inputTokens: 272_000,
+            cachedInputTokens: 0,
+            outputTokens: 10)
+        let overLimit = CostUsagePricing.codexPriorityCostUSD(
+            model: "gpt-5.5",
+            inputTokens: 272_001,
+            cachedInputTokens: 0,
+            outputTokens: 10)
+
+        #expect(eligible == (100_000.0 * 1.25e-5) + (100_000.0 * 1.25e-6) + (10.0 * 7.5e-5))
+        #expect(boundary != nil)
+        #expect(overLimit == nil)
     }
 
     @Test
     func `codex priority cost remains available at priority input boundary`() {
         let gpt55 = CostUsagePricing.codexPriorityCostUSD(
             model: "gpt-5.5",
-            inputTokens: 200_000,
-            cachedInputTokens: 72000,
+            inputTokens: 272_000,
+            cachedInputTokens: 0,
             outputTokens: 10)
 
-        #expect(gpt55 == (128_000.0 * 1.25e-5) + (72000.0 * 1.25e-6) + (10.0 * 7.5e-5))
+        #expect(gpt55 == (272_000.0 * 1.25e-5) + (10.0 * 7.5e-5))
     }
 
     @Test
