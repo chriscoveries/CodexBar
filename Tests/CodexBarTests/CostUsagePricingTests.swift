@@ -272,6 +272,43 @@ struct CostUsagePricingTests {
     }
 
     @Test
+    func `codex models dev cached fallback uses long context input rate when cache read is absent`() throws {
+        let root = try Self.seedModelsDevCache("""
+        {
+          "openai": {
+            "id": "openai",
+            "models": {
+              "gpt-5.5": {
+                "id": "gpt-5.5",
+                "cost": {
+                  "input": 5,
+                  "output": 30,
+                  "context_over_200k": {
+                    "input": 10,
+                    "output": 45
+                  }
+                }
+              }
+            }
+          }
+        }
+        """)
+
+        let cost = CostUsagePricing.codexCostUSD(
+            model: "gpt-5.5",
+            inputTokens: 300_000,
+            cachedInputTokens: 200_000,
+            outputTokens: 10,
+            modelsDevCacheRoot: root)
+
+        // Input (300K) is above the 272K Codex long-context threshold and no cache-read price is
+        // defined, so cached tokens fall back to the above-threshold input rate (10e-6), not the
+        // base input rate. Both the 100K non-cached and 200K cached input bill at 10e-6.
+        let expected = (100_000.0 * 10e-6) + (200_000.0 * 10e-6) + (10.0 * 45e-6)
+        #expect(cost == expected)
+    }
+
+    @Test
     func `codex cost supports gpt55 pro bundled fallback`() throws {
         let root = try Self.cacheRoot()
         let cost = CostUsagePricing.codexCostUSD(

@@ -521,7 +521,7 @@ enum CostUsagePricing {
             ? pricing.inputCostPerTokenAboveThreshold ?? pricing.inputCostPerToken
             : pricing.inputCostPerToken
         let cachedInputRate = usesLongContextRates
-            ? pricing.cacheReadInputCostPerTokenAboveThreshold ?? cachedRate
+            ? pricing.cacheReadInputCostPerTokenAboveThreshold ?? pricing.cacheReadInputCostPerToken ?? inputRate
             : cachedRate
         let outputRate = usesLongContextRates
             ? pricing.outputCostPerTokenAboveThreshold ?? pricing.outputCostPerToken
