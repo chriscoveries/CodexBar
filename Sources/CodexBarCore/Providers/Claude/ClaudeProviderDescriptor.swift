@@ -50,7 +50,7 @@ public enum ClaudeProviderDescriptor {
             return [ClaudeAdminAPIFetchStrategy()]
         }
 
-        let planningInput = await Self.makePlanningInput(context: context)
+        let planningInput = Self.makePlanningInput(context: context)
         let plan = ClaudeSourcePlanner.resolve(input: planningInput)
         let manualCookieHeader = Self.manualCookieHeader(from: context)
 
@@ -80,10 +80,10 @@ public enum ClaudeProviderDescriptor {
         context.sourceMode == .auto && ClaudeAdminAPISettingsReader.apiKey(environment: context.env) != nil
     }
 
-    private static func makePlanningInput(context: ProviderFetchContext) async -> ClaudeSourcePlanningInput {
+    private static func makePlanningInput(context: ProviderFetchContext) -> ClaudeSourcePlanningInput {
         let webExtrasEnabled = context.settings?.claude?.webExtrasEnabled ?? false
         let needsOAuthAvailability = context.runtime == .app && context.sourceMode == .auto
-        let hasWebSession = await Self.hasWebSessionForPlanning(context: context)
+        let hasWebSession = Self.hasPlausibleWebSession(context: context)
 
         return ClaudeSourcePlanningInput(
             runtime: context.runtime,
@@ -97,7 +97,7 @@ public enum ClaudeProviderDescriptor {
                 environment: context.env))
     }
 
-    private static func hasWebSessionForPlanning(context: ProviderFetchContext) async -> Bool {
+    private static func hasPlausibleWebSession(context: ProviderFetchContext) -> Bool {
         switch context.sourceMode {
         case .api, .oauth, .cli:
             return false
@@ -114,14 +114,10 @@ public enum ClaudeProviderDescriptor {
         case .manual?:
             return ClaudeWebFetchStrategy.hasManualSessionKey(context: context)
         case .auto?, nil:
-            if context.runtime == .cli {
-                // CLI auto deliberately tries web before CLI. Defer browser-cookie inspection to the
-                // bounded web fetch so stale cookie/keychain work shares the web deadline.
-                return true
-            }
-            return await ClaudeWebFetchStrategy.hasBrowserSessionKey(
-                context: context,
-                before: context.webTimeout)
+            // Browser/Keychain inspection can block. Keep planning synchronous and let the web step
+            // perform the bounded availability check if app-auto actually reaches its last fallback.
+            // CLI auto continues to perform its real session import inside the bounded web fetch.
+            return true
         }
     }
 
@@ -198,10 +194,14 @@ private struct ClaudePlannedFetchStrategy: ProviderFetchStrategy {
     }
 
     func isAvailable(_ context: ProviderFetchContext) async -> Bool {
-        if context.sourceMode == .auto {
-            return self.plannedStep.isPlausiblyAvailable
+        guard context.sourceMode == .auto else {
+            return await self.base.isAvailable(context)
         }
-        return await self.base.isAvailable(context)
+        guard self.plannedStep.isPlausiblyAvailable else { return false }
+        if context.runtime == .app, self.plannedStep.dataSource == .web {
+            return await self.base.isAvailable(context)
+        }
+        return true
     }
 
     func fetch(_ context: ProviderFetchContext) async throws -> ProviderFetchResult {
@@ -430,9 +430,12 @@ struct ClaudeWebFetchStrategy: ProviderFetchStrategy {
         case .manual?:
             Self.hasManualSessionKey(context: context)
         case .auto?, nil:
-            // Browser-cookie work can block on browser/Keychain access. Treat it as plausible and
-            // let fetch perform the real import under webTimeout.
-            true
+            if context.runtime == .app, context.sourceMode == .auto {
+                await Self.hasBrowserSessionKey(context: context, before: context.webTimeout)
+            } else {
+                // Explicit web and CLI auto perform the real browser import inside the bounded fetch.
+                true
+            }
         }
     }
 

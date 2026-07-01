@@ -44,41 +44,8 @@ struct ClaudeWebFetchDeadlineTests {
     }
 
     @Test
-    func `app auto descriptor bounds and reuses browser availability`() async throws {
+    func `stalled app auto browser probe does not delay CLI success`() async throws {
         let planningProbe = ClaudeWebPlanningAvailabilityProbe()
-        let context = Self.makeContext(
-            runtime: .app,
-            sourceMode: .auto,
-            webTimeout: 0.1,
-            cookieSource: .auto,
-            env: [
-                "CLAUDE_CLI_PATH": "/usr/bin/true",
-                ClaudeOAuthCredentialsStore.environmentTokenKey: "oauth-token",
-            ])
-        let availabilityOverride: @Sendable (ProviderFetchContext, BrowserDetection) -> Bool = { _, _ in
-            planningProbe.stallAndReportUnavailable()
-        }
-
-        let strategies = await ClaudeWebFetchStrategy.$availabilityProbeOverrideForTesting.withValue(
-            availabilityOverride)
-        {
-            await ClaudeProviderDescriptor.makeDescriptor().fetchPlan.pipeline.resolveStrategies(context)
-        }
-        planningProbe.release()
-        let cliStrategy = try #require(strategies.first(where: { $0.id == "claude.cli" }))
-        let shouldFallback = cliStrategy.shouldFallback(
-            on: ClaudeUsageError.parseFailed("cli failed"),
-            context: context)
-
-        #expect(planningProbe.invocationCount == 1)
-        #expect(!shouldFallback)
-        #expect(planningProbe.invocationCount == 1)
-    }
-
-    @Test
-    func `caller cancellation during app auto planning does not execute fallback`() async {
-        let planningProbe = ClaudeWebPlanningAvailabilityProbe()
-        let fallbackProbe = ClaudeWebPlanningAvailabilityProbe()
         let context = Self.makeContext(
             runtime: .app,
             sourceMode: .auto,
@@ -95,21 +62,68 @@ struct ClaudeWebFetchDeadlineTests {
             [String: String],
             Bool,
             Bool) async throws -> ClaudeOAuthCredentials)? = { _, _, _ in
-            fallbackProbe.recordInvocation()
-            throw CancellationError()
+            throw ClaudeUsageError.oauthFailed("stub OAuth failure")
+        }
+        let cliFetchOverride: @Sendable (String, TimeInterval, Bool) async throws -> ClaudeStatusSnapshot =
+            { _, _, _ in Self.makeClaudeStatus() }
+
+        let outcome = await ClaudeWebFetchStrategy.$availabilityProbeOverrideForTesting.withValue(
+            availabilityOverride)
+        {
+            await ClaudeUsageFetcher.$loadOAuthCredentialsOverride.withValue(oauthLoadOverride) {
+                await ClaudeStatusProbe.$fetchOverride.withValue(cliFetchOverride) {
+                    await ClaudeProviderDescriptor.makeDescriptor().fetchPlan.fetchOutcome(
+                        context: context,
+                        provider: .claude)
+                }
+            }
+        }
+        let result = try outcome.result.get()
+
+        #expect(result.strategyID == "claude.cli")
+        #expect(outcome.attempts.map(\.strategyID) == ["claude.oauth", "claude.cli"])
+        #expect(!planningProbe.wasInvoked)
+    }
+
+    @Test
+    func `caller cancellation during deferred app auto browser probe stops web fallback`() async {
+        let planningProbe = ClaudeWebPlanningAvailabilityProbe()
+        let webFetchProbe = ClaudeWebPlanningAvailabilityProbe()
+        let context = Self.makeContext(
+            runtime: .app,
+            sourceMode: .auto,
+            webTimeout: 60,
+            cookieSource: .auto,
+            env: [
+                "CLAUDE_CLI_PATH": "/usr/bin/true",
+                ClaudeOAuthCredentialsStore.environmentTokenKey: "oauth-token",
+            ])
+        let availabilityOverride: @Sendable (ProviderFetchContext, BrowserDetection) -> Bool = { _, _ in
+            planningProbe.stallAndReportUnavailable()
+        }
+        let oauthLoadOverride: (@Sendable (
+            [String: String],
+            Bool,
+            Bool) async throws -> ClaudeOAuthCredentials)? = { _, _, _ in
+            throw ClaudeUsageError.oauthFailed("stub OAuth failure")
         }
         let cliFetchOverride: @Sendable (String, TimeInterval, Bool) async throws -> ClaudeStatusSnapshot = { _, _, _ in
-            fallbackProbe.recordInvocation()
-            throw CancellationError()
+            throw ClaudeUsageError.parseFailed("stub CLI failure")
+        }
+        let usageLoader: ClaudeWebFetchStrategy.UsageLoader = { _ in
+            webFetchProbe.recordInvocation()
+            return Self.makeClaudeUsage()
         }
 
         let fetchTask = Task {
             await ClaudeWebFetchStrategy.$availabilityProbeOverrideForTesting.withValue(availabilityOverride) {
-                await ClaudeUsageFetcher.$loadOAuthCredentialsOverride.withValue(oauthLoadOverride) {
-                    await ClaudeStatusProbe.$fetchOverride.withValue(cliFetchOverride) {
-                        await ClaudeProviderDescriptor.makeDescriptor().fetchPlan.fetchOutcome(
-                            context: context,
-                            provider: .claude)
+                await ClaudeWebFetchStrategy.$usageLoaderOverrideForTesting.withValue(usageLoader) {
+                    await ClaudeUsageFetcher.$loadOAuthCredentialsOverride.withValue(oauthLoadOverride) {
+                        await ClaudeStatusProbe.$fetchOverride.withValue(cliFetchOverride) {
+                            await ClaudeProviderDescriptor.makeDescriptor().fetchPlan.fetchOutcome(
+                                context: context,
+                                provider: .claude)
+                        }
                     }
                 }
             }
@@ -124,12 +138,12 @@ struct ClaudeWebFetchDeadlineTests {
 
         switch outcome.result {
         case .success:
-            Issue.record("Expected caller cancellation to stop after availability planning")
+            Issue.record("Expected caller cancellation to stop the deferred web fallback")
         case let .failure(error):
             #expect(error is CancellationError)
         }
-        #expect(outcome.attempts.isEmpty)
-        #expect(fallbackProbe.invocationCount == 0)
+        #expect(outcome.attempts.map(\.strategyID) == ["claude.oauth", "claude.cli"])
+        #expect(webFetchProbe.invocationCount == 0)
     }
 
     @Test
