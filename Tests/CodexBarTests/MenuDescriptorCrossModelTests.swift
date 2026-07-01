@@ -54,6 +54,43 @@ struct MenuDescriptorCrossModelTests {
         #expect(lines.contains("Month: $5.37 · 3.2K requests"))
     }
 
+    @Test
+    @MainActor
+    func `crossmodel menu card suppresses generic credits bar`() throws {
+        let now = Date()
+        let metadata = try #require(ProviderDefaults.metadata[.crossmodel])
+        let usage = CrossModelUsageSnapshot(
+            currency: "USD",
+            balanceUSD: 8.059489,
+            uncollectedUSD: 0,
+            daily: Self.window(costUSD: 0.005746, totalTokens: 12467, requestCount: 9),
+            weekly: Self.window(costUSD: 0.665033, totalTokens: 1_925_790, requestCount: 529),
+            monthly: Self.window(costUSD: 5.368746, totalTokens: 35_412_471, requestCount: 3166),
+            updatedAt: now)
+
+        let model = UsageMenuCardView.Model.make(.init(
+            provider: .crossmodel,
+            metadata: metadata,
+            snapshot: usage.toUsageSnapshot(),
+            credits: nil,
+            creditsError: nil,
+            dashboard: nil,
+            dashboardError: nil,
+            tokenSnapshot: nil,
+            tokenError: nil,
+            account: AccountInfo(email: nil, plan: nil),
+            isRefreshing: false,
+            lastError: nil,
+            usageBarsShowUsed: false,
+            resetTimeDisplayStyle: .countdown,
+            tokenCostUsageEnabled: false,
+            showOptionalCreditsAndExtraUsage: true,
+            hidePersonalInfo: false,
+            now: now))
+
+        #expect(model.creditsText == nil)
+    }
+
     private static func window(
         costUSD: Double,
         totalTokens: Int,
