@@ -2,6 +2,8 @@ import Foundation
 
 #if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
 #endif
 
 #if os(macOS)
@@ -65,12 +67,8 @@ public struct ClaudeOAuthCredentials: Sendable {
     }
 
     private static func makeHistoryOwnerIdentifier(secretKind: String, secret: String) -> String? {
-        #if canImport(CryptoKit)
         let material = Data("codexbar:claude-oauth-history-owner:v1\0\(secretKind)\0\(secret)".utf8)
         return SHA256.hash(data: material).map { String(format: "%02x", $0) }.joined()
-        #else
-        return nil
-        #endif
     }
 
     static func normalizedHistoryOwnerIdentifier(_ identifier: String?) -> String? {
