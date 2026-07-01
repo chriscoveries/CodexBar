@@ -40,17 +40,7 @@ To capture the cookie manually:
 4. Right-click → Copy → Copy as cURL.
 5. Paste the full `curl` command into the **T3 Chat cookie** field in CodexBar settings.
 
-Environment variable override:
-
-```bash
-export T3_CHAT_COOKIE="cookie-value-here"
-```
-
-Or pass it directly on the command line:
-
-```bash
-codexbar usage --provider t3chat --cookie "cookie-value-here"
-```
+T3 Chat does not support a standalone environment variable or a `--cookie` CLI flag. The only manual path is the Settings field above.
 
 ## Data Source
 
