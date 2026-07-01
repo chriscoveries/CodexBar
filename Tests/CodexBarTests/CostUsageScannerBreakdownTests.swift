@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Testing
 @testable import CodexBarCore
@@ -400,9 +401,13 @@ struct CostUsageScannerBreakdownTests {
         let tolerance = 0.000000001
         #expect(abs((first.summary?.totalCostUSD ?? 0) - correctCost) < tolerance)
 
-        // Simulate a cache written by an older cost formula: stale pricing key + inflated nanos.
+        // Simulate a cache written by the previous formula. Its key hashed only the rates, so
+        // derive that exact legacy key and verify the formula version makes the current key differ.
         var cache = CostUsageCacheIO.load(provider: .codex, cacheRoot: env.cacheRoot)
-        cache.codexPricingKey = "builtin-stale-formula-v0"
+        let legacyPricingKey = "builtin-\(Self.sha256Hex(CostUsagePricing.codexBuiltInPricingFingerprint()))"
+        let currentPricingKey = try #require(cache.codexPricingKey)
+        #expect(currentPricingKey != legacyPricingKey)
+        cache.codexPricingKey = legacyPricingKey
         for (path, usage) in cache.files {
             guard let costNanos = usage.codexCostNanos else { continue }
             var inflated = costNanos
@@ -4212,6 +4217,10 @@ struct CostUsageScannerBreakdownTests {
         }
         """
         return try JSONDecoder().decode(ModelsDevCatalog.self, from: Data(json.utf8))
+    }
+
+    private static func sha256Hex(_ value: String) -> String {
+        SHA256.hash(data: Data(value.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 }
 
