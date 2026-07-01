@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Added
+- Menu: add an opt-in setting to refresh provider usage whenever the menu opens without changing the periodic refresh clock. Thanks @dstier-git!
+
 ### Fixed
 - Claude web usage: bound stale requests so Auto can reach CLI fallback instead of hanging indefinitely.
 - Claude history: keep OAuth utilization separate across account switches while preserving continuity through token refreshes.
