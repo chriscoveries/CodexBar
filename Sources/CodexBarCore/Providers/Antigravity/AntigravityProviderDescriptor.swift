@@ -215,14 +215,24 @@ struct AntigravityCLIHTTPSFetchStrategy: ProviderFetchStrategy {
         timeout: TimeInterval,
         expectedBinaryPath: String? = nil,
         expectedAccountEmail: String? = nil,
-        dependencies: WarmAgyDependencies) async -> AntigravityStatusSnapshot?
+        dependencies: WarmAgyDependencies) async throws -> AntigravityStatusSnapshot?
     {
+        try Task.checkCancellation()
         let deadline = dependencies.now().addingTimeInterval(timeout)
         guard let discoveryTimeout = Self.remainingWarmProbeTime(deadline: deadline, now: dependencies.now) else {
             return nil
         }
-        let processInfos = await (try? dependencies.processInfos(discoveryTimeout)) ?? []
+        let processInfos: [AntigravityStatusProbe.ProcessInfoResult]
+        do {
+            processInfos = try await dependencies.processInfos(discoveryTimeout)
+        } catch let error as CancellationError {
+            throw error
+        } catch {
+            return nil
+        }
+        try Task.checkCancellation()
         let ownedPID = await dependencies.ownedPID()
+        try Task.checkCancellation()
         // Only the CLI's language server needs no CSRF token; the IDE/app servers
         // require one and must not be reused through this token-less fast path.
         // Also exclude any `agy` CodexBar itself spawned and manages: reusing it
@@ -243,16 +253,29 @@ struct AntigravityCLIHTTPSFetchStrategy: ProviderFetchStrategy {
             guard let portTimeout = Self.remainingWarmProbeTime(deadline: deadline, now: dependencies.now) else {
                 return nil
             }
-            guard let ports = try? await dependencies.listeningPorts(info.pid, portTimeout),
-                  !ports.isEmpty
-            else {
+            let ports: [Int]
+            do {
+                ports = try await dependencies.listeningPorts(info.pid, portTimeout)
+            } catch let error as CancellationError {
+                throw error
+            } catch {
                 continue
             }
+            try Task.checkCancellation()
+            guard !ports.isEmpty else { continue }
             guard let fetchTimeout = Self.remainingWarmProbeTime(deadline: deadline, now: dependencies.now) else {
                 return nil
             }
-            guard let snapshot = try? await dependencies.fetchSnapshot(ports, fetchTimeout),
-                  (try? snapshot.toUsageSnapshot()) != nil,
+            let snapshot: AntigravityStatusSnapshot
+            do {
+                snapshot = try await dependencies.fetchSnapshot(ports, fetchTimeout)
+            } catch let error as CancellationError {
+                throw error
+            } catch {
+                continue
+            }
+            try Task.checkCancellation()
+            guard (try? snapshot.toUsageSnapshot()) != nil,
                   AntigravitySelectedAccountGuard.matches(
                       snapshotAccountEmail: snapshot.accountEmail,
                       expectedAccountEmail: expectedAccountEmail)
@@ -265,6 +288,7 @@ struct AntigravityCLIHTTPSFetchStrategy: ProviderFetchStrategy {
             ])
             return snapshot
         }
+        try Task.checkCancellation()
         return nil
     }
 
@@ -381,7 +405,7 @@ struct AntigravityCLIHTTPSFetchStrategy: ProviderFetchStrategy {
         // Long-lived hosts already keep a managed session warm. Restrict external
         // process reuse to one-shot CLI calls so app/server lifecycle accounting
         // stays entirely inside AntigravityCLISession.
-        if resetAfterFetch, let warmSnapshot = await Self.tryWarmAgyFetch(
+        if resetAfterFetch, let warmSnapshot = try await Self.tryWarmAgyFetch(
             timeout: 2.0,
             expectedBinaryPath: binary,
             expectedAccountEmail: expectedAccountEmail,
@@ -395,6 +419,7 @@ struct AntigravityCLIHTTPSFetchStrategy: ProviderFetchStrategy {
                 sourceLabel: Self.sourceLabel)
         }
 
+        try Task.checkCancellation()
         return try await spawnFetch(binary, idleWindow, resetAfterFetch)
     }
 

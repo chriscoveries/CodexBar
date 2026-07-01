@@ -6,11 +6,11 @@ struct AntigravityWarmAgyReuseTests {
     // MARK: - Helper-seam tests (tryWarmAgyFetch)
 
     @Test
-    func `warm agy found reuses ports without spawn`() async {
+    func `warm agy found reuses ports without spawn`() async throws {
         let listeningPortsCallCount = AntigravityWarmLockedCounter()
         let fetchSnapshotCallCount = AntigravityWarmLockedCounter()
 
-        let result = await AntigravityCLIHTTPSFetchStrategy.tryWarmAgyFetch(
+        let result = try await AntigravityCLIHTTPSFetchStrategy.tryWarmAgyFetch(
             timeout: 2.0,
             dependencies: AntigravityCLIHTTPSFetchStrategy.WarmAgyDependencies(
                 processInfos: { _ in [Self.cliProcessInfo(pid: 9901)] },
@@ -32,8 +32,8 @@ struct AntigravityWarmAgyReuseTests {
     }
 
     @Test
-    func `no warm agy returns nil`() async {
-        let result = await AntigravityCLIHTTPSFetchStrategy.tryWarmAgyFetch(
+    func `no warm agy returns nil`() async throws {
+        let result = try await AntigravityCLIHTTPSFetchStrategy.tryWarmAgyFetch(
             timeout: 2.0,
             dependencies: AntigravityCLIHTTPSFetchStrategy.WarmAgyDependencies(
                 processInfos: { _ in [] },
@@ -50,10 +50,10 @@ struct AntigravityWarmAgyReuseTests {
     }
 
     @Test
-    func `process infos throws returns nil`() async {
+    func `process infos throws returns nil`() async throws {
         // detectProcessInfos throws (e.g. .missingCSRFToken / .notRunning) — the
         // fast path must swallow it and let the caller fall back to spawning.
-        let result = await AntigravityCLIHTTPSFetchStrategy.tryWarmAgyFetch(
+        let result = try await AntigravityCLIHTTPSFetchStrategy.tryWarmAgyFetch(
             timeout: 2.0,
             dependencies: AntigravityCLIHTTPSFetchStrategy.WarmAgyDependencies(
                 processInfos: { _ in throw AntigravityStatusProbeError.missingCSRFToken },
@@ -70,10 +70,10 @@ struct AntigravityWarmAgyReuseTests {
     }
 
     @Test
-    func `warm agy fetch fails returns nil`() async {
+    func `warm agy fetch fails returns nil`() async throws {
         let fetchSnapshotCallCount = AntigravityWarmLockedCounter()
 
-        let result = await AntigravityCLIHTTPSFetchStrategy.tryWarmAgyFetch(
+        let result = try await AntigravityCLIHTTPSFetchStrategy.tryWarmAgyFetch(
             timeout: 2.0,
             dependencies: AntigravityCLIHTTPSFetchStrategy.WarmAgyDependencies(
                 processInfos: { _ in [Self.cliProcessInfo(pid: 7701)] },
@@ -89,7 +89,7 @@ struct AntigravityWarmAgyReuseTests {
     }
 
     @Test
-    func `ide process ignored not reuseable as warm CLI`() async {
+    func `ide process ignored not reuseable as warm CLI`() async throws {
         // An IDE language server requires a CSRF token — must NOT be reused via
         // the token-less warm path.
         let ideProcessInfo = AntigravityStatusProbe.ProcessInfoResult(
@@ -102,7 +102,7 @@ struct AntigravityWarmAgyReuseTests {
             "/Applications/Antigravity IDE.app/Contents/Resources/language_server --csrf_token abc123 --app_data_dir antigravity-ide")
         let fetchSnapshotCallCount = AntigravityWarmLockedCounter()
 
-        let result = await AntigravityCLIHTTPSFetchStrategy.tryWarmAgyFetch(
+        let result = try await AntigravityCLIHTTPSFetchStrategy.tryWarmAgyFetch(
             timeout: 2.0,
             dependencies: AntigravityCLIHTTPSFetchStrategy.WarmAgyDependencies(
                 processInfos: { _ in [ideProcessInfo] },
@@ -117,13 +117,13 @@ struct AntigravityWarmAgyReuseTests {
     }
 
     @Test
-    func `owned agy excluded falls back to spawn path`() async {
+    func `owned agy excluded falls back to spawn path`() async throws {
         // CodexBar's own managed `agy` (pid 4242) appears in the process scan.
         // It must NOT be reused through the warm path — doing so would bypass the
         // session lifecycle and let `stopIfIdle` tear it down mid-poll.
         let fetchSnapshotCallCount = AntigravityWarmLockedCounter()
 
-        let result = await AntigravityCLIHTTPSFetchStrategy.tryWarmAgyFetch(
+        let result = try await AntigravityCLIHTTPSFetchStrategy.tryWarmAgyFetch(
             timeout: 2.0,
             dependencies: AntigravityCLIHTTPSFetchStrategy.WarmAgyDependencies(
                 processInfos: { _ in [Self.cliProcessInfo(pid: 4242)] },
@@ -142,12 +142,12 @@ struct AntigravityWarmAgyReuseTests {
     }
 
     @Test
-    func `external agy reused when owned also present`() async {
+    func `external agy reused when owned also present`() async throws {
         // With both an owned `agy` (pid 4242) and an external one (pid 7000), only
         // the external server is reused; the owned pid is filtered out.
         let listeningPortsCallCount = AntigravityWarmLockedCounter()
 
-        let result = await AntigravityCLIHTTPSFetchStrategy.tryWarmAgyFetch(
+        let result = try await AntigravityCLIHTTPSFetchStrategy.tryWarmAgyFetch(
             timeout: 2.0,
             dependencies: AntigravityCLIHTTPSFetchStrategy.WarmAgyDependencies(
                 processInfos: { _ in [Self.cliProcessInfo(pid: 4242), Self.cliProcessInfo(pid: 7000)] },
@@ -164,10 +164,10 @@ struct AntigravityWarmAgyReuseTests {
     }
 
     @Test
-    func `account mismatch tries next warm agy`() async {
+    func `account mismatch tries next warm agy`() async throws {
         let listeningPIDs = AntigravityWarmLockedValues<Int>()
 
-        let result = await AntigravityCLIHTTPSFetchStrategy.tryWarmAgyFetch(
+        let result = try await AntigravityCLIHTTPSFetchStrategy.tryWarmAgyFetch(
             timeout: 2.0,
             expectedAccountEmail: "selected@example.com",
             dependencies: AntigravityCLIHTTPSFetchStrategy.WarmAgyDependencies(
@@ -186,10 +186,10 @@ struct AntigravityWarmAgyReuseTests {
     }
 
     @Test
-    func `binary mismatch tries next warm agy`() async {
+    func `binary mismatch tries next warm agy`() async throws {
         let listeningPIDs = AntigravityWarmLockedValues<Int>()
 
-        let result = await AntigravityCLIHTTPSFetchStrategy.tryWarmAgyFetch(
+        let result = try await AntigravityCLIHTTPSFetchStrategy.tryWarmAgyFetch(
             timeout: 2.0,
             expectedBinaryPath: "/selected/agy",
             dependencies: AntigravityCLIHTTPSFetchStrategy.WarmAgyDependencies(
@@ -210,12 +210,12 @@ struct AntigravityWarmAgyReuseTests {
     }
 
     @Test
-    func `warm probe deadline is shared across discovery and candidates`() async {
+    func `warm probe deadline is shared across discovery and candidates`() async throws {
         let clock = AntigravityWarmTestClock(date: Date(timeIntervalSince1970: 100))
         let listeningPortsCallCount = AntigravityWarmLockedCounter()
         let fetchSnapshotCallCount = AntigravityWarmLockedCounter()
 
-        let result = await AntigravityCLIHTTPSFetchStrategy.tryWarmAgyFetch(
+        let result = try await AntigravityCLIHTTPSFetchStrategy.tryWarmAgyFetch(
             timeout: 2.0,
             dependencies: AntigravityCLIHTTPSFetchStrategy.WarmAgyDependencies(
                 processInfos: { timeout in
@@ -292,6 +292,36 @@ struct AntigravityWarmAgyReuseTests {
 
         #expect(result.usage.identity?.accountEmail == "spawned@example.com")
         #expect(spawnCallCount.value == 1)
+    }
+
+    @Test
+    func `warm probe cancellation does not fall back to spawn`() async {
+        let spawnCallCount = AntigravityWarmLockedCounter()
+        let strategy = AntigravityCLIHTTPSFetchStrategy()
+
+        do {
+            _ = try await strategy.fetchUsingWarmSession(
+                binary: "/usr/local/bin/agy",
+                idleWindow: nil,
+                resetAfterFetch: true,
+                warmDependencies: AntigravityCLIHTTPSFetchStrategy.WarmAgyDependencies(
+                    processInfos: { _ in throw CancellationError() },
+                    listeningPorts: { _, _ in [] },
+                    fetchSnapshot: { _, _ in throw AntigravityStatusProbeError.notRunning }),
+                spawnFetch: { _, _, _ in
+                    spawnCallCount.increment()
+                    return strategy.makeResult(
+                        usage: Self.usableUsage(email: "spawned@example.com"),
+                        sourceLabel: AntigravityCLIHTTPSFetchStrategy.sourceLabel)
+                })
+            Issue.record("cancellation must be rethrown")
+        } catch is CancellationError {
+            // Expected: cancellation must not be downgraded to a warm miss.
+        } catch {
+            Issue.record("unexpected error: \(error)")
+        }
+
+        #expect(spawnCallCount.value == 0)
     }
 
     @Test
