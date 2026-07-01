@@ -220,6 +220,12 @@ struct QoderWebFetchStrategy: ProviderFetchStrategy {
         case invalid
     }
 
+    private enum CurlHeaderHostInspection {
+        case ignored
+        case site(QoderWebSite)
+        case invalid
+    }
+
     private static func sites(forManualCookieHeader rawHeader: String?) throws -> [QoderWebSite] {
         switch self.manualCookieRoute(rawHeader) {
         case let .site(site):
@@ -459,7 +465,12 @@ struct QoderWebFetchStrategy: ProviderFetchStrategy {
             let token = tokens[index]
             let lowercased = token.lowercased()
             let headerValue: String?
-            if token == "-H" || lowercased == "--header" {
+            if lowercased == "--config" || lowercased.hasPrefix("--config=") ||
+                self.shortCurlOptions(token, contain: "K")
+            {
+                return nil
+            }
+            if lowercased == "--header" {
                 let valueIndex = tokens.index(after: index)
                 guard valueIndex < tokens.endIndex else { return nil }
                 headerValue = tokens[valueIndex]
@@ -467,23 +478,95 @@ struct QoderWebFetchStrategy: ProviderFetchStrategy {
             } else if lowercased.hasPrefix("--header=") {
                 headerValue = String(token.dropFirst("--header=".count))
                 index = tokens.index(after: index)
-            } else if token.hasPrefix("-H"), token.count > 2 {
-                headerValue = String(token.dropFirst(2))
-                index = tokens.index(after: index)
+            } else if let shortHeaderValue = self.shortCurlHeaderValue(token) {
+                switch shortHeaderValue {
+                case let .attached(value):
+                    headerValue = value
+                    index = tokens.index(after: index)
+                case .nextToken:
+                    let valueIndex = tokens.index(after: index)
+                    guard valueIndex < tokens.endIndex else { return nil }
+                    headerValue = tokens[valueIndex]
+                    index = tokens.index(after: valueIndex)
+                case .invalid:
+                    return nil
+                }
             } else {
                 index = tokens.index(after: index)
                 continue
             }
 
             guard let headerValue else { continue }
-            let pieces = headerValue.split(separator: ":", maxSplits: 1)
-            guard pieces.count == 2 else { continue }
-            let name = pieces[0].trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            guard name == "host" else { continue }
-            guard let site = self.site(forHost: String(pieces[1])) else { return nil }
-            sites.append(site)
+            switch self.inspectCurlHeaderHost(headerValue) {
+            case .ignored:
+                continue
+            case let .site(site):
+                sites.append(site)
+            case .invalid:
+                return nil
+            }
         }
         return sites
+    }
+
+    private enum ShortCurlHeaderValue {
+        case attached(String)
+        case nextToken
+        case invalid
+    }
+
+    private static func shortCurlOptions(_ token: String, contain option: Character) -> Bool {
+        guard token.hasPrefix("-"),
+              !token.hasPrefix("--")
+        else {
+            return false
+        }
+        return token.dropFirst().contains(option)
+    }
+
+    private static func shortCurlHeaderValue(_ token: String) -> ShortCurlHeaderValue? {
+        guard token.hasPrefix("-"),
+              !token.hasPrefix("--")
+        else {
+            return nil
+        }
+
+        let options = String(token.dropFirst())
+        guard let headerOption = options.firstIndex(of: "H") else {
+            return nil
+        }
+
+        let safeBundledFlags = Set("fsSL")
+        let bundledFlags = options[..<headerOption]
+        guard bundledFlags.allSatisfy({ safeBundledFlags.contains($0) }) else {
+            return .invalid
+        }
+
+        let attached = String(options[options.index(after: headerOption)...])
+        return attached.isEmpty ? .nextToken : .attached(attached)
+    }
+
+    private static func inspectCurlHeaderHost(_ headerValue: String) -> CurlHeaderHostInspection {
+        let trimmed = headerValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              !trimmed.hasPrefix("@")
+        else {
+            return .invalid
+        }
+
+        let pieces = trimmed.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
+        guard pieces.count == 2 else {
+            let lowercased = trimmed.lowercased()
+            if lowercased == "host" || lowercased.hasPrefix("host ") || lowercased.hasPrefix("host\t") {
+                return .invalid
+            }
+            return .ignored
+        }
+
+        let name = pieces[0].trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard name == "host" else { return .ignored }
+        guard let site = self.site(forHost: String(pieces[1])) else { return .invalid }
+        return .site(site)
     }
 
     private static func hostHeaderSites(_ rawHeader: String) -> [QoderWebSite?] {
