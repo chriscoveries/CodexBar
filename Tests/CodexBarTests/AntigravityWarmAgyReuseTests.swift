@@ -98,8 +98,8 @@ struct AntigravityWarmAgyReuseTests {
             extensionServerCSRFToken: nil,
             csrfToken: "abc123",
             commandLine:
-            // swiftlint:disable:next line_length
-            "/Applications/Antigravity IDE.app/Contents/Resources/language_server --csrf_token abc123 --app_data_dir antigravity-ide")
+            "/Applications/Antigravity IDE.app/Contents/Resources/language_server " +
+                "--csrf_token abc123 --app_data_dir antigravity-ide")
         let fetchSnapshotCallCount = AntigravityWarmLockedCounter()
 
         let result = try await AntigravityCLIHTTPSFetchStrategy.tryWarmAgyFetch(
