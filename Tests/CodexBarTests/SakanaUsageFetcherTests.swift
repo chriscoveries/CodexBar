@@ -11,8 +11,7 @@ struct SakanaUsageFetcherTests {
         let now = Date(timeIntervalSince1970: 1_782_222_000)
         let usage = try SakanaUsageFetcher.parseBillingHTML(
             Self.billingHTML,
-            now: now,
-            timeZone: Self.shanghaiTimeZone).toUsageSnapshot()
+            now: now).toUsageSnapshot()
 
         #expect(usage.primary?.usedPercent == 92)
         #expect(usage.primary?.windowMinutes == 300)
@@ -113,8 +112,7 @@ struct SakanaUsageFetcherTests {
     @Test
     func `unparsed reset date does not become reset description`() throws {
         let usage = try SakanaUsageFetcher.parseBillingHTML(
-            Self.billingHTML.replacing("June 23, 2026 at 10:53 PM", with: "soon-ish"),
-            timeZone: Self.shanghaiTimeZone).toUsageSnapshot()
+            Self.billingHTML.replacing("June 23, 2026 at 10:53 PM", with: "soon-ish")).toUsageSnapshot()
 
         #expect(usage.primary?.usedPercent == 92)
         #expect(usage.primary?.resetsAt == nil)
@@ -126,9 +124,7 @@ struct SakanaUsageFetcherTests {
         let html = Self.billingHTML.replacing(
             "<p class=\"text-muted-foreground text-xs tabular-nums\">Resets on June 23, 2026 at 10:53 PM</p>",
             with: "")
-        let usage = try SakanaUsageFetcher.parseBillingHTML(
-            html,
-            timeZone: Self.shanghaiTimeZone).toUsageSnapshot()
+        let usage = try SakanaUsageFetcher.parseBillingHTML(html).toUsageSnapshot()
 
         #expect(usage.primary?.usedPercent == 92)
         #expect(usage.primary?.windowMinutes == 300)
@@ -145,15 +141,25 @@ struct SakanaUsageFetcherTests {
             with: "")
 
         #expect(throws: SakanaUsageError.parseFailed("Invalid 5-hour usage percentage.")) {
-            _ = try SakanaUsageFetcher.parseBillingHTML(html, timeZone: Self.shanghaiTimeZone)
+            _ = try SakanaUsageFetcher.parseBillingHTML(html)
         }
     }
 
-    private static let shanghaiTimeZone = TimeZone(identifier: "Asia/Shanghai")!
+    @Test
+    func `reset date is parsed as UTC regardless of the billing page's raw wall clock text`() throws {
+        // The console always server-renders "Resets on <date>" in UTC (the client corrects it to
+        // the viewer's local time only after JS hydration, which this HTML-only fetcher never
+        // runs). Regression coverage for steipete/CodexBar#1826: a device timezone far from UTC
+        // must not shift the parsed instant.
+        let usage = try SakanaUsageFetcher.parseBillingHTML(Self.billingHTML).toUsageSnapshot()
+
+        #expect(usage.primary?.resetsAt == Self.date(year: 2026, month: 6, day: 23, hour: 22, minute: 53))
+        #expect(usage.primary?.resetsAt?.timeIntervalSince1970 == 1_782_255_180)
+    }
 
     private static func date(year: Int, month: Int, day: Int, hour: Int, minute: Int) -> Date? {
         var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = Self.shanghaiTimeZone
+        calendar.timeZone = TimeZone(identifier: "UTC")!
         return calendar.date(from: DateComponents(
             year: year,
             month: month,
