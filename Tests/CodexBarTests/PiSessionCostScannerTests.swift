@@ -63,7 +63,7 @@ struct PiSessionCostScannerTests {
             options: options)
         let expectedCodexCost = CostUsagePricing.codexCostUSD(
             model: "gpt-5.4",
-            inputTokens: 125,
+            inputTokens: 135,
             cachedInputTokens: 10,
             outputTokens: 30)
         #expect(codexReport.data.count == 1)
@@ -129,7 +129,7 @@ struct PiSessionCostScannerTests {
                 refreshMinIntervalSeconds: 0))
         let expectedCost = CostUsagePricing.codexCostUSD(
             model: "gpt-5.4",
-            inputTokens: 180_000,
+            inputTokens: 240_000,
             cachedInputTokens: 60000,
             outputTokens: 0)
 
@@ -237,7 +237,7 @@ struct PiSessionCostScannerTests {
 
         let expectedCost = CostUsagePricing.codexCostUSD(
             model: "gpt-5.3-codex",
-            inputTokens: 20,
+            inputTokens: 22,
             cachedInputTokens: 2,
             outputTokens: 20)
         #expect(report.data.count == 1)
