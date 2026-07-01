@@ -14,9 +14,10 @@ struct CodexResetCreditsContent: View {
                 .lineLimit(1)
             HStack(alignment: .firstTextBaseline) {
                 Text(self.text)
-                    .font(.footnote)
+                    .font(.footnote.weight(.semibold))
                     .foregroundStyle(MenuHighlightStyle.primary(self.isHighlighted))
                     .lineLimit(1)
+                    .layoutPriority(1)
                 Spacer()
                 if let detailText, !detailText.isEmpty {
                     Text(detailText)
