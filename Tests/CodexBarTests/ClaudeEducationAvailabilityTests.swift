@@ -5,6 +5,33 @@ import Testing
 
 struct ClaudeEducationAvailabilityTests {
     @Test
+    func `auto CLI subscription notice is terminal before web fallback`() {
+        let browserDetection = BrowserDetection(cacheTTL: 0)
+        let strategy = ClaudeCLIFetchStrategy(
+            useWebExtras: false,
+            manualCookieHeader: "sessionKey=test-session",
+            browserDetection: browserDetection,
+            hasWebFallback: true)
+        let context = ProviderFetchContext(
+            runtime: .app,
+            sourceMode: .auto,
+            includeCredits: false,
+            webTimeout: 1,
+            webDebugDumpHTML: false,
+            verbose: false,
+            env: [:],
+            settings: nil,
+            fetcher: UsageFetcher(environment: [:]),
+            claudeFetcher: ClaudeUsageFetcher(browserDetection: browserDetection),
+            browserDetection: browserDetection)
+
+        let unavailable = ClaudeStatusProbeError.parseFailed(
+            ClaudeStatusProbe.subscriptionQuotaUnavailableDescription)
+        #expect(!strategy.shouldFallback(on: unavailable, context: context))
+        #expect(strategy.shouldFallback(on: ClaudeStatusProbeError.timedOut, context: context))
+    }
+
+    @Test
     func `subscription-only response is informational across Claude surfaces`() async throws {
         try await ClaudeOAuthCredentialsStore.withIsolatedCredentialsFileTrackingForTesting {
             let tempDir = FileManager.default.temporaryDirectory
