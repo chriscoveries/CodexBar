@@ -798,7 +798,7 @@ extension UsageMenuCardView.Model {
         let openAIAPIUsage = input.snapshot?.openAIAPIUsage
         let inlineUsageDashboard = Self.inlineUsageDashboard(input: input)
         let usageNotes = Self.usageNotes(input: input)
-        let rawCreditsText: String? = if input.provider == .openrouter || input.provider == .crossmodel {
+        let rawCreditsText: String? = if input.provider == .openrouter {
             nil
         } else if input.codexProjection != nil, !input.showOptionalCreditsAndExtraUsage {
             nil

@@ -59,19 +59,19 @@ struct CrossModelProviderImplementation: ProviderImplementation {
         entries.append(.text("\(L("Balance")): \(usage.balanceDisplay)", .primary))
         if let daily = usage.daily {
             entries.append(.text(
-                "\(L("Today")): \(UsageFormatter.usdString(daily.costUSD)) · " +
+                "\(L("Today")): \(usage.currencyString(daily.cost)) · " +
                     "\(UsageFormatter.tokenCountString(daily.totalTokens)) \(L("tokens"))",
                 .secondary))
         }
         if let weekly = usage.weekly {
             entries.append(.text(
-                "\(L("Week")): \(UsageFormatter.usdString(weekly.costUSD)) · " +
+                "\(L("Week")): \(usage.currencyString(weekly.cost)) · " +
                     "\(UsageFormatter.tokenCountString(weekly.requestCount)) \(L("requests"))",
                 .secondary))
         }
         if let monthly = usage.monthly {
             entries.append(.text(
-                "\(L("Month")): \(UsageFormatter.usdString(monthly.costUSD)) · " +
+                "\(L("Month")): \(usage.currencyString(monthly.cost)) · " +
                     "\(UsageFormatter.tokenCountString(monthly.requestCount)) \(L("requests"))",
                 .secondary))
         }

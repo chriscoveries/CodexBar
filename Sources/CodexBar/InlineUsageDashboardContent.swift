@@ -431,9 +431,9 @@ extension UsageMenuCardView.Model {
 
     private static func crossModelInlineDashboard(_ usage: CrossModelUsageSnapshot) -> InlineUsageDashboardModel? {
         let periodValues: [(String, String, Double?)] = [
-            ("day", L("Today"), usage.daily?.costUSD),
-            ("week", L("Week"), usage.weekly?.costUSD),
-            ("month", L("Month"), usage.monthly?.costUSD),
+            ("day", L("Today"), usage.daily?.cost),
+            ("week", L("Week"), usage.weekly?.cost),
+            ("month", L("Month"), usage.monthly?.cost),
         ]
         let points = periodValues.compactMap { id, label, value -> InlineUsageDashboardModel.Point? in
             guard let value else { return nil }
@@ -441,25 +441,25 @@ extension UsageMenuCardView.Model {
                 id: id,
                 label: label,
                 value: value,
-                accessibilityValue: "\(label): \(Self.openRouterCurrencyString(value))")
+                accessibilityValue: "\(label): \(usage.currencyString(value))")
         }
         guard !points.isEmpty else { return nil }
         return InlineUsageDashboardModel(
             accessibilityLabel: L("CrossModel API spend trend"),
-            valueStyle: .currencyUSD,
+            valueStyle: Self.costValueStyle(currencyCode: usage.currency),
             kpis: [
-                .init(title: L("Balance"), value: Self.openRouterCurrencyString(usage.balanceUSD), emphasis: true),
+                .init(title: L("Balance"), value: usage.balanceDisplay, emphasis: true),
                 .init(
                     title: L("Today"),
-                    value: usage.daily.map { Self.openRouterCurrencyString($0.costUSD) } ?? "—",
+                    value: usage.daily.map { usage.currencyString($0.cost) } ?? "—",
                     emphasis: false),
                 .init(
                     title: L("Week"),
-                    value: usage.weekly.map { Self.openRouterCurrencyString($0.costUSD) } ?? "—",
+                    value: usage.weekly.map { usage.currencyString($0.cost) } ?? "—",
                     emphasis: false),
                 .init(
                     title: L("Month"),
-                    value: usage.monthly.map { Self.openRouterCurrencyString($0.costUSD) } ?? "—",
+                    value: usage.monthly.map { usage.currencyString($0.cost) } ?? "—",
                     emphasis: false),
             ],
             points: points,

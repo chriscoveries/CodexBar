@@ -302,7 +302,7 @@ headers, source selection, provider ordering, and token accounts are stored in `
 
 ## CrossModel
 - API key from `~/.codexbar/config.json` (`providers[].apiKey`) or `CROSSMODEL_API_KEY` env var.
-- Reads wallet balance (`/v1/credits`) and UTC day/week/month spend (`/v1/usage`).
+- Reads wallet balance (`/v1/credits`) and matching-currency UTC day/week/month spend (`/v1/usage`).
 - Shows balance plus today/this week/this month spend; no quota meter (prepaid wallet, no per-key limit).
 - Override base URL with `CROSSMODEL_API_URL` env var (loopback HTTP allowed for local testing).
 - Details: `docs/crossmodel.md`.
