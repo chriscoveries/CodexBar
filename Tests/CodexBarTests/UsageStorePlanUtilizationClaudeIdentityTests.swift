@@ -200,11 +200,17 @@ struct UsageStorePlanUtilizationClaudeIdentityTests {
             claudeOAuthPersistentRefHash: "oauth-ref",
             isClaudeOAuthSample: true,
             now: Date(timeIntervalSince1970: 1_700_000_000))
+        store._setSnapshotForTesting(snapshot, provider: .claude)
+        store.lastSourceLabels[.claude] = "oauth"
 
         let buckets = try #require(store.planUtilizationHistory[.claude])
+        let selection = store.planUtilizationHistorySelection(for: .claude)
         #expect(buckets.preferredAccountKey == oauthAccountKey)
         #expect(buckets.accounts[tokenAccountKey] == nil)
         #expect(findSeries(buckets.accounts[oauthAccountKey] ?? [], name: .session, windowMinutes: 300)?
+            .entries.map(\.usedPercent) == [45])
+        #expect(selection.accountKey == oauthAccountKey)
+        #expect(findSeries(selection.histories, name: .session, windowMinutes: 300)?
             .entries.map(\.usedPercent) == [45])
     }
 
@@ -227,11 +233,17 @@ struct UsageStorePlanUtilizationClaudeIdentityTests {
             snapshot: snapshot,
             isClaudeOAuthSample: true,
             now: Date(timeIntervalSince1970: 1_700_000_000))
+        store._setSnapshotForTesting(snapshot, provider: .claude)
+        store.lastSourceLabels[.claude] = "oauth"
 
         let buckets = try #require(store.planUtilizationHistory[.claude])
+        let selection = store.planUtilizationHistorySelection(for: .claude)
         #expect(buckets.preferredAccountKey != tokenAccountKey)
         #expect(buckets.accounts[tokenAccountKey] == nil)
         #expect(findSeries(buckets.unscoped, name: .session, windowMinutes: 300)?
+            .entries.map(\.usedPercent) == [55])
+        #expect(selection.accountKey == nil)
+        #expect(findSeries(selection.histories, name: .session, windowMinutes: 300)?
             .entries.map(\.usedPercent) == [55])
     }
 

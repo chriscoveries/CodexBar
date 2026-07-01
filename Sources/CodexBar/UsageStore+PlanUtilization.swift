@@ -53,6 +53,12 @@ extension UsageStore {
         -> (accountKey: String?, histories: [PlanUtilizationSeriesHistory])
     {
         var providerBuckets = self.planUtilizationHistory[provider] ?? PlanUtilizationHistoryBuckets()
+        if provider == .claude, self.lastSourceLabels[provider] == "oauth" {
+            // Match the history view to the latest successful snapshot. OAuth provenance outranks an
+            // unrelated configured token account; the unscoped sentinel intentionally resolves to nil.
+            let accountKey = self.stickyPlanUtilizationAccountKey(providerBuckets: providerBuckets)
+            return (accountKey, providerBuckets.histories(for: accountKey))
+        }
         let originalProviderBuckets = providerBuckets
         let accountKey = self.resolvePlanUtilizationAccountKey(
             provider: provider,
