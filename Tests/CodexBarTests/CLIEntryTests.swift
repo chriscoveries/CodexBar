@@ -227,11 +227,18 @@ final class CLIEntryTests: XCTestCase {
         let signature = CodexBarCLI._usageSignatureForTesting()
         let parser = CommandParser(signature: signature)
         let parsed = try parser.parse(arguments: ["--web-timeout", "45", "--source", "oauth"])
-        XCTAssertEqual(CodexBarCLI._decodeWebTimeoutForTesting(from: parsed), 45)
+        XCTAssertEqual(try CodexBarCLI._decodeWebTimeoutForTesting(from: parsed), 45)
         XCTAssertEqual(CodexBarCLI._decodeSourceModeForTesting(from: parsed), .oauth)
 
         let parsedWeb = try parser.parse(arguments: ["--web"])
         XCTAssertEqual(CodexBarCLI._decodeSourceModeForTesting(from: parsedWeb), .web)
+    }
+
+    func test_rejectsUnsafeWebTimeoutOptions() throws {
+        for value in ["-1", "nan", "inf", "1e300"] {
+            let parsed = ParsedValues(positional: [], options: ["webTimeout": [value]], flags: [])
+            XCTAssertThrowsError(try CodexBarCLI._decodeWebTimeoutForTesting(from: parsed))
+        }
     }
 
     func test_shouldUseColorRespectsFormatAndFlags() {
@@ -319,6 +326,8 @@ final class CLIEntryTests: XCTestCase {
 
         XCTAssertTrue(CodexBarCLI.sourceModeRequiresWebSupport(.web, provider: .kilo))
         XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(.auto, provider: .codex))
+        XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(.auto, provider: .claude))
+        XCTAssertTrue(CodexBarCLI.sourceModeRequiresWebSupport(.web, provider: .claude))
         XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(.auto, provider: .kilo))
         XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(.auto, provider: .grok))
         XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(.web, provider: .grok))

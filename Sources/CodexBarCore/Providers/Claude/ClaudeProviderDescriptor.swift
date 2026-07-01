@@ -402,7 +402,12 @@ struct ClaudeWebFetchStrategy: ProviderFetchStrategy {
 
     func shouldFallback(on error: Error, context: ProviderFetchContext) -> Bool {
         guard context.sourceMode == .auto else { return false }
-        _ = error
+        guard !Task.isCancelled,
+              !(error is CancellationError),
+              (error as? URLError)?.code != .cancelled
+        else {
+            return false
+        }
         // In CLI runtime auto mode, web comes before CLI so fallback is required.
         // In app runtime auto mode, web is terminal and should surface its concrete error.
         return context.runtime == .cli
@@ -428,6 +433,12 @@ struct ClaudeWebFetchStrategy: ProviderFetchStrategy {
         before timeout: TimeInterval,
         context: ProviderFetchContext) async throws -> ClaudeUsageSnapshot
     {
+        guard timeout.isFinite,
+              timeout >= 0,
+              timeout <= TimeInterval(Int64.max)
+        else {
+            throw ClaudeWebFetchStrategyError.invalidTimeout
+        }
         let sourceTask = Task<ClaudeUsageSnapshot, Error> {
             if let usageLoader = self.usageLoader {
                 return try await usageLoader(context)
@@ -441,7 +452,7 @@ struct ClaudeWebFetchStrategy: ProviderFetchStrategy {
             return try await fetcher.loadLatestUsage(model: "sonnet")
         }
         let race = BoundedTaskJoin(sourceTask: sourceTask)
-        switch await race.value(joinGrace: .seconds(max(0, timeout))) {
+        switch await race.value(joinGrace: .seconds(timeout)) {
         case let .value(usage):
             try Task.checkCancellation()
             return usage
@@ -455,10 +466,13 @@ struct ClaudeWebFetchStrategy: ProviderFetchStrategy {
 }
 
 enum ClaudeWebFetchStrategyError: LocalizedError, Equatable, Sendable {
+    case invalidTimeout
     case timedOut(seconds: TimeInterval)
 
     var errorDescription: String? {
         switch self {
+        case .invalidTimeout:
+            "Claude web usage fetch timeout must be a finite, nonnegative value within the supported range."
         case let .timedOut(seconds):
             "Claude web usage fetch timed out after \(seconds.formatted()) seconds."
         }

@@ -38,6 +38,51 @@ struct ClaudeWebFetchDeadlineTests {
         #expect(outcome.attempts.map(\.strategyID) == ["claude.web"])
     }
 
+    @Test
+    func `caller cancellation does not fall back to CLI`() async {
+        let probe = ClaudeWebDeadlineProbe()
+        let web = Self.makeTimedOutWebStrategy(probe: probe)
+        let pipeline = ProviderFetchPipeline { _ in [web, ClaudeWebDeadlineCLIStrategy()] }
+        let context = Self.makeContext(sourceMode: .auto, webTimeout: 60)
+        let fetchTask = Task {
+            await pipeline.fetch(context: context, provider: .claude)
+        }
+
+        await probe.waitUntilStarted()
+        fetchTask.cancel()
+        let outcome = await fetchTask.value
+        await probe.release()
+
+        switch outcome.result {
+        case .success:
+            Issue.record("Expected caller cancellation to stop the fetch pipeline")
+        case let .failure(error):
+            #expect(error is CancellationError)
+        }
+        #expect(outcome.attempts.map(\.strategyID) == ["claude.web"])
+    }
+
+    @Test
+    func `unsafe timeout is rejected before starting web work`() async {
+        let strategy = ClaudeWebFetchStrategy(
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            usageLoader: { _ in
+                Issue.record("Unsafe timeout should be rejected before invoking the loader")
+                return Self.makeClaudeUsage()
+            })
+
+        for timeout in [-1, .nan, .infinity, .greatestFiniteMagnitude] {
+            do {
+                _ = try await strategy.fetch(Self.makeContext(sourceMode: .web, webTimeout: timeout))
+                Issue.record("Expected timeout \(timeout) to be rejected")
+            } catch let error as ClaudeWebFetchStrategyError {
+                #expect(error == .invalidTimeout)
+            } catch {
+                Issue.record("Unexpected error: \(error)")
+            }
+        }
+    }
+
     private static func makeTimedOutWebStrategy(probe: ClaudeWebDeadlineProbe) -> ClaudeWebFetchStrategy {
         ClaudeWebFetchStrategy(
             browserDetection: BrowserDetection(cacheTTL: 0),
@@ -88,13 +133,27 @@ struct ClaudeWebFetchDeadlineTests {
 }
 
 private actor ClaudeWebDeadlineProbe {
+    private var started = false
     private var released = false
+    private var startWaiter: CheckedContinuation<Void, Never>?
     private var releaseWaiter: CheckedContinuation<Void, Never>?
 
     func waitUntilReleased() async {
+        if !self.started {
+            self.started = true
+            self.startWaiter?.resume()
+            self.startWaiter = nil
+        }
         guard !self.released else { return }
         await withCheckedContinuation { continuation in
             self.releaseWaiter = continuation
+        }
+    }
+
+    func waitUntilStarted() async {
+        guard !self.started else { return }
+        await withCheckedContinuation { continuation in
+            self.startWaiter = continuation
         }
     }
 

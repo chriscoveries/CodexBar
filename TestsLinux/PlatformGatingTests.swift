@@ -10,6 +10,12 @@ struct PlatformGatingTests {
     }
 
     @Test
+    func claudeAutoSource_allowsPlannerToFallBackToCLI() {
+        #expect(!CodexBarCLI.sourceModeRequiresWebSupport(.auto, provider: .claude))
+        #expect(CodexBarCLI.sourceModeRequiresWebSupport(.web, provider: .claude))
+    }
+
+    @Test
     func claudeWebFetcher_isNotSupportedOnLinux() async {
         #if os(Linux)
         let error = await #expect(throws: ClaudeWebAPIFetcher.FetchError.self) {
