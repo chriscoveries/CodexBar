@@ -268,6 +268,7 @@ extension UsageStore {
                 }
                 self.lastSourceLabels[provider] = result.sourceLabel
                 self.errors[provider] = nil
+                self.knownLimitsAvailabilityByProvider.removeValue(forKey: provider)
                 self.failureGates[provider]?.recordSuccess()
                 if provider == .codex {
                     self.rememberLiveSystemCodexEmailIfNeeded(scoped.accountEmail(for: .codex))
@@ -327,6 +328,7 @@ extension UsageStore {
             self.snapshots.removeValue(forKey: provider)
             self.lastKnownResetSnapshots.removeValue(forKey: provider)
             self.errors[provider] = nil
+            self.knownLimitsAvailabilityByProvider.removeValue(forKey: provider)
             self.lastSourceLabels.removeValue(forKey: provider)
             self.lastFetchAttempts.removeValue(forKey: provider)
             self.accountSnapshots.removeValue(forKey: provider)
@@ -487,6 +489,7 @@ extension UsageStore {
         self.snapshots.removeValue(forKey: .claude)
         self.lastKnownResetSnapshots.removeValue(forKey: .claude)
         self.errors[.claude] = nil
+        self.knownLimitsAvailabilityByProvider.removeValue(forKey: .claude)
         self.lastSourceLabels.removeValue(forKey: .claude)
         self.accountSnapshots.removeValue(forKey: .claude)
         self.tokenSnapshots.removeValue(forKey: .claude)
@@ -507,6 +510,8 @@ extension UsageStore {
         let shouldNotifyPermissionPrompt = Self.isPermissionPromptWaiting(error)
         await MainActor.run {
             guard self.isCurrentProviderRefreshGeneration(provider, generation: generation) else { return }
+            let hadKnownUnavailableLimits = self.knownLimitsAvailabilityByProvider[provider]?.isUnavailable == true
+            self.knownLimitsAvailabilityByProvider.removeValue(forKey: provider)
             if provider == .claude,
                ClaudeStatusProbe.isSubscriptionQuotaUnavailableDescription(error.localizedDescription)
             {
@@ -518,8 +523,18 @@ extension UsageStore {
                 self.lastKnownSessionWindowSource.removeValue(forKey: provider)
                 self.quotaWarningState = self.quotaWarningState.filter { $0.key.provider != provider }
                 self.lastSourceLabels.removeValue(forKey: provider)
-                self.errors[provider] = error.localizedDescription
+                self.errors[provider] = nil
+                self.knownLimitsAvailabilityByProvider[provider] = .unavailable
                 self.failureGates[provider]?.reset()
+                return
+            }
+            if provider == .claude,
+               hadKnownUnavailableLimits,
+               Self.shouldPreservePriorSnapshot(after: error, hadPriorData: true) ||
+               Self.isClaudeCLIRateLimitFailure(error)
+            {
+                self.errors[provider] = nil
+                self.knownLimitsAvailabilityByProvider[provider] = .unavailable
                 return
             }
             let hadPriorData = self.snapshots[provider] != nil

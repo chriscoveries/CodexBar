@@ -334,6 +334,9 @@ extension UsageMenuCardView.Model {
         {
             return false
         }
+        if input.limitsAvailability?.isUnavailable == true {
+            return true
+        }
         return self.rateLimitsUnavailable(input: input, lastError: currentError)
     }
 
