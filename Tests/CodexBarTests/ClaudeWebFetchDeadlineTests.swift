@@ -147,6 +147,49 @@ struct ClaudeWebFetchDeadlineTests {
     }
 
     @Test
+    func `app auto availability and fetch share one web deadline`() async {
+        let deadlineClock = ClaudeWebDeadlineClock()
+        let usageProbe = ClaudeWebDeadlineProbe()
+        let context = Self.makeContext(
+            runtime: .app,
+            sourceMode: .auto,
+            webTimeout: 1,
+            cookieSource: .auto)
+        let availabilityOverride: @Sendable (ProviderFetchContext, BrowserDetection) -> Bool = { _, _ in
+            deadlineClock.advance(by: .milliseconds(990))
+            return true
+        }
+        let strategy = ClaudeWebFetchStrategy(
+            browserDetection: context.browserDetection,
+            usageLoader: { _ in
+                await usageProbe.waitUntilReleased()
+                return Self.makeClaudeUsage()
+            },
+            deadlineNow: { deadlineClock.now() })
+
+        let available = await ClaudeWebFetchStrategy.$availabilityProbeOverrideForTesting.withValue(
+            availabilityOverride)
+        {
+            await strategy.isAvailable(context)
+        }
+        #expect(available)
+
+        let startedAt = ContinuousClock.now
+        do {
+            _ = try await strategy.fetch(context)
+            Issue.record("Expected the stalled load to consume only the remaining web deadline")
+        } catch let error as ClaudeWebFetchStrategyError {
+            #expect(error == .timedOut(seconds: 1))
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+        let elapsed = startedAt.duration(to: ContinuousClock.now)
+        await usageProbe.release()
+
+        #expect(elapsed < .milliseconds(300))
+    }
+
+    @Test
     func `CLI auto timeout cancels web and falls back to CLI`() async throws {
         let probe = ClaudeWebDeadlineProbe()
         let web = Self.makeTimedOutWebStrategy(probe: probe)
@@ -321,6 +364,23 @@ private final class ClaudeWebPlanningAvailabilityProbe: @unchecked Sendable {
 
     func release() {
         self.releaseSemaphore.signal()
+    }
+}
+
+private final class ClaudeWebDeadlineClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var instant = ContinuousClock.now
+
+    func now() -> ContinuousClock.Instant {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        return self.instant
+    }
+
+    func advance(by duration: Duration) {
+        self.lock.lock()
+        self.instant = self.instant.advanced(by: duration)
+        self.lock.unlock()
     }
 }
 

@@ -108,6 +108,8 @@ public enum ClaudeProviderDescriptor {
             break
         }
 
+        guard ClaudeWebFetchStrategy.isSupportedOnCurrentPlatform else { return false }
+
         switch context.settings?.claude?.cookieSource {
         case .off?:
             return false
@@ -401,8 +403,31 @@ struct ClaudeOAuthFetchStrategy: ProviderFetchStrategy {
     }
 }
 
+private final class ClaudeWebFetchDeadlineState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var deadline: ContinuousClock.Instant?
+
+    func remainingBudget(
+        fullBudget: Duration,
+        now: ContinuousClock.Instant) -> Duration
+    {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+
+        let deadline: ContinuousClock.Instant
+        if let existingDeadline = self.deadline {
+            deadline = existingDeadline
+        } else {
+            deadline = now.advanced(by: fullBudget)
+            self.deadline = deadline
+        }
+        return max(.zero, now.duration(to: deadline))
+    }
+}
+
 struct ClaudeWebFetchStrategy: ProviderFetchStrategy {
     typealias UsageLoader = @Sendable (ProviderFetchContext) async throws -> ClaudeUsageSnapshot
+    typealias DeadlineNow = @Sendable () -> ContinuousClock.Instant
 
     #if DEBUG
     @TaskLocal static var availabilityProbeOverrideForTesting:
@@ -414,24 +439,41 @@ struct ClaudeWebFetchStrategy: ProviderFetchStrategy {
     let kind: ProviderFetchKind = .web
     let browserDetection: BrowserDetection
     private let usageLoader: UsageLoader?
+    private let deadlineState: ClaudeWebFetchDeadlineState
+    private let deadlineNow: DeadlineNow
 
     init(
         browserDetection: BrowserDetection,
-        usageLoader: UsageLoader? = nil)
+        usageLoader: UsageLoader? = nil,
+        deadlineNow: @escaping DeadlineNow = { ContinuousClock.now })
     {
         self.browserDetection = browserDetection
         self.usageLoader = usageLoader
+        self.deadlineState = ClaudeWebFetchDeadlineState()
+        self.deadlineNow = deadlineNow
     }
 
     func isAvailable(_ context: ProviderFetchContext) async -> Bool {
-        switch context.settings?.claude?.cookieSource {
+        let appAutoRemainingBudget: Duration?
+        if context.runtime == .app, context.sourceMode == .auto {
+            guard let fullBudget = Self.timeoutDuration(context.webTimeout) else { return false }
+            let remainingBudget = self.deadlineState.remainingBudget(
+                fullBudget: fullBudget,
+                now: self.deadlineNow())
+            guard remainingBudget > .zero else { return false }
+            appAutoRemainingBudget = remainingBudget
+        } else {
+            appAutoRemainingBudget = nil
+        }
+
+        return switch context.settings?.claude?.cookieSource {
         case .off?:
             false
         case .manual?:
             Self.hasManualSessionKey(context: context)
         case .auto?, nil:
-            if context.runtime == .app, context.sourceMode == .auto {
-                await Self.hasBrowserSessionKey(context: context, before: context.webTimeout)
+            if let appAutoRemainingBudget {
+                await Self.hasBrowserSessionKey(context: context, before: appAutoRemainingBudget)
             } else {
                 // Explicit web and CLI auto perform the real browser import inside the bounded fetch.
                 true
@@ -465,9 +507,8 @@ struct ClaudeWebFetchStrategy: ProviderFetchStrategy {
 
     fileprivate static func hasBrowserSessionKey(
         context: ProviderFetchContext,
-        before timeout: TimeInterval) async -> Bool
+        before timeout: Duration) async -> Bool
     {
-        guard let timeoutDuration = Self.timeoutDuration(timeout) else { return false }
         let browserDetection = context.browserDetection
         let sourceTask = Task<Bool, Error> {
             #if DEBUG
@@ -478,7 +519,7 @@ struct ClaudeWebFetchStrategy: ProviderFetchStrategy {
             return ClaudeWebAPIFetcher.hasSessionKey(browserDetection: browserDetection)
         }
         let race = BoundedTaskJoin(sourceTask: sourceTask)
-        switch await race.value(joinGrace: timeoutDuration) {
+        switch await race.value(joinGrace: timeout) {
         case let .value(isAvailable):
             return isAvailable
         case .failure, .timedOut:
@@ -498,6 +539,13 @@ struct ClaudeWebFetchStrategy: ProviderFetchStrategy {
         guard let timeoutDuration = Self.timeoutDuration(timeout) else {
             throw ClaudeWebFetchStrategyError.invalidTimeout
         }
+        let remainingBudget = self.deadlineState.remainingBudget(
+            fullBudget: timeoutDuration,
+            now: self.deadlineNow())
+        guard remainingBudget > .zero else {
+            try Task.checkCancellation()
+            throw ClaudeWebFetchStrategyError.timedOut(seconds: timeout)
+        }
         let sourceTask = Task<ClaudeUsageSnapshot, Error> {
             if let usageLoader = self.usageLoader {
                 return try await usageLoader(context)
@@ -516,7 +564,7 @@ struct ClaudeWebFetchStrategy: ProviderFetchStrategy {
             return try await fetcher.loadLatestUsage(model: "sonnet")
         }
         let race = BoundedTaskJoin(sourceTask: sourceTask)
-        switch await race.value(joinGrace: timeoutDuration) {
+        switch await race.value(joinGrace: remainingBudget) {
         case let .value(usage):
             try Task.checkCancellation()
             return usage
@@ -536,6 +584,14 @@ struct ClaudeWebFetchStrategy: ProviderFetchStrategy {
             return nil
         }
         return .seconds(timeout)
+    }
+
+    fileprivate static var isSupportedOnCurrentPlatform: Bool {
+        #if os(macOS)
+        true
+        #else
+        false
+        #endif
     }
 }
 
