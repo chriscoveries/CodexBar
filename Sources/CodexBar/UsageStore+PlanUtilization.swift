@@ -757,6 +757,23 @@ extension UsageStore {
                 && (providerBuckets.preferredAccountKey == Self.planUtilizationUnscopedPreferredKey
                     || !providerBuckets.accounts.isEmpty))
 
+        if provider == .claude, isClaudeOAuthSample {
+            if let oauthAccountKey = Self.claudeOAuthPlanUtilizationAccountKey(
+                persistentRefHash: claudeOAuthPersistentRefHash)
+            {
+                if shouldUpdatePreferredAccountKey {
+                    providerBuckets.preferredAccountKey = oauthAccountKey
+                }
+                // Existing unscoped or identity-keyed history can belong to another OAuth account.
+                // Preserve it in place rather than silently adopting it into this opaque account.
+                return oauthAccountKey
+            }
+            if shouldUpdatePreferredAccountKey {
+                providerBuckets.preferredAccountKey = Self.planUtilizationUnscopedPreferredKey
+            }
+            return nil
+        }
+
         let resolvedAccount = preferredAccount ?? self.settings.selectedTokenAccount(for: provider)
         if let tokenAccountKey = Self.planUtilizationAccountKey(provider: provider, account: resolvedAccount) {
             if shouldUpdatePreferredAccountKey {
@@ -769,19 +786,6 @@ extension UsageStore {
                     providerBuckets: &providerBuckets)
             }
             return tokenAccountKey
-        }
-
-        if provider == .claude,
-           isClaudeOAuthSample,
-           let oauthAccountKey = Self.claudeOAuthPlanUtilizationAccountKey(
-               persistentRefHash: claudeOAuthPersistentRefHash)
-        {
-            if shouldUpdatePreferredAccountKey {
-                providerBuckets.preferredAccountKey = oauthAccountKey
-            }
-            // Existing unscoped or identity-keyed history can belong to another OAuth account.
-            // Preserve it in place rather than silently adopting it into this opaque account.
-            return oauthAccountKey
         }
 
         if let snapshot,
@@ -802,13 +806,6 @@ extension UsageStore {
                     providerBuckets: &providerBuckets)
             }
             return resolvedIdentityAccountKey
-        }
-
-        if provider == .claude, isClaudeOAuthSample {
-            if shouldUpdatePreferredAccountKey {
-                providerBuckets.preferredAccountKey = Self.planUtilizationUnscopedPreferredKey
-            }
-            return nil
         }
 
         if let stickyAccountKey = self.stickyPlanUtilizationAccountKey(providerBuckets: providerBuckets) {

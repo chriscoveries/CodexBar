@@ -47,6 +47,11 @@ public enum ClaudeOAuthCredentialsStore {
         let persistentRefHash: String?
     }
 
+    private struct ClaudeKeychainCredentialEvidence {
+        let credentials: ClaudeOAuthCredentials
+        let persistentRefHash: String
+    }
+
     struct CredentialsFileFingerprint: Codable, Equatable {
         let modifiedAtMs: Int?
         let size: Int
@@ -1311,15 +1316,109 @@ public enum ClaudeOAuthCredentialsStore {
     public static func matchingClaudeKeychainPersistentRefHashWithoutPrompt(
         for record: ClaudeOAuthCredentialRecord) -> String?
     {
-        guard record.owner == .claudeCLI,
-              let keychainData = try? self.loadFromClaudeKeychainNonInteractive(),
-              let keychainCredentials = try? ClaudeOAuthCredentials.parse(data: keychainData),
-              keychainCredentials.accessToken == record.credentials.accessToken
+        guard record.owner == .claudeCLI else { return nil }
+        return self.matchingClaudeKeychainPersistentRefHash(
+            for: record,
+            evidence: self.newestClaudeKeychainCredentialEvidenceWithoutPrompt())
+    }
+
+    private static func matchingClaudeKeychainPersistentRefHash(
+        for record: ClaudeOAuthCredentialRecord,
+        evidence: ClaudeKeychainCredentialEvidence?) -> String?
+    {
+        guard let evidence,
+              evidence.credentials.accessToken == record.credentials.accessToken
         else {
             return nil
         }
-        return self.claudeKeychainPersistentRefHashWithoutPrompt()
+        return evidence.persistentRefHash
     }
+
+    private static func newestClaudeKeychainCredentialEvidenceWithoutPrompt()
+        -> ClaudeKeychainCredentialEvidence?
+    {
+        #if DEBUG
+        if let store = self.taskClaudeKeychainOverrideStore {
+            return self.makeClaudeKeychainCredentialEvidence(
+                data: store.data,
+                persistentRefHash: store.fingerprint?.persistentRefHash)
+        }
+        let overrideData = self.taskClaudeKeychainDataOverride ?? self.claudeKeychainDataOverride
+        let overrideFingerprint = self.taskClaudeKeychainFingerprintOverride ?? self.claudeKeychainFingerprintOverride
+        if overrideData != nil || overrideFingerprint != nil {
+            return self.makeClaudeKeychainCredentialEvidence(
+                data: overrideData,
+                persistentRefHash: overrideFingerprint?.persistentRefHash)
+        }
+        if self.taskSecurityCLIReadOverride != nil || self.securityCLIReadOverride != nil {
+            // A security(1) result cannot be bound to a persistent reference without an exact candidate read.
+            return nil
+        }
+        #endif
+
+        #if os(macOS)
+        let promptMode = ClaudeOAuthKeychainPromptPreference.current()
+        let newest: ClaudeKeychainCandidate?
+        switch self.claudeKeychainCandidatesProbeWithoutPrompt(promptMode: promptMode) {
+        case .unavailable:
+            return nil
+        case let .value(candidates):
+            if let first = candidates.first {
+                newest = first
+            } else {
+                switch self.claudeKeychainLegacyCandidateProbeWithoutPrompt(promptMode: promptMode) {
+                case .unavailable:
+                    return nil
+                case let .value(candidate):
+                    newest = candidate
+                }
+            }
+        }
+        guard let newest,
+              let persistentRefHash = self.sha256Prefix(newest.persistentRef),
+              let data = try? self.loadClaudeKeychainData(
+                  candidate: newest,
+                  allowKeychainPrompt: false,
+                  promptMode: promptMode)
+        else {
+            return nil
+        }
+        return self.makeClaudeKeychainCredentialEvidence(
+            data: data,
+            persistentRefHash: persistentRefHash)
+        #else
+        return nil
+        #endif
+    }
+
+    private static func makeClaudeKeychainCredentialEvidence(
+        data: Data?,
+        persistentRefHash: String?) -> ClaudeKeychainCredentialEvidence?
+    {
+        guard let data,
+              let persistentRefHash,
+              let credentials = try? ClaudeOAuthCredentials.parse(data: data)
+        else {
+            return nil
+        }
+        return ClaudeKeychainCredentialEvidence(
+            credentials: credentials,
+            persistentRefHash: persistentRefHash)
+    }
+
+    #if DEBUG
+    static func _matchingClaudeKeychainPersistentRefHashForTesting(
+        record: ClaudeOAuthCredentialRecord,
+        candidateCredentials: ClaudeOAuthCredentials,
+        persistentRefHash: String) -> String?
+    {
+        self.matchingClaudeKeychainPersistentRefHash(
+            for: record,
+            evidence: ClaudeKeychainCredentialEvidence(
+                credentials: candidateCredentials,
+                persistentRefHash: persistentRefHash))
+    }
+    #endif
 
     private enum ClaudeKeychainProbe<Value> {
         case unavailable
