@@ -458,6 +458,7 @@
 "quota_warning_warn_at" = "提醒門檻";
 "quota_warning_global_threshold_subtitle" = "工作階段和每週時段的剩餘百分比，除非提供者另有設定。";
 "quota_warning_sound" = "播放通知音效";
+"quota_warning_onscreen_alert" = "顯示螢幕文字提醒";
 "quota_warning_provider_inherits" = "預設使用全域配額提醒設定，除非在此自訂時段。";
 "quota_warning_customize_thresholds" = "自訂 %@ 門檻";
 "quota_warning_enable_warnings" = "啟用 %@ 提醒";

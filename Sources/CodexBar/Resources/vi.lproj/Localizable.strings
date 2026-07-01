@@ -450,6 +450,7 @@
 "quota_warning_warn_at" = "Cảnh báo ở";
 "quota_warning_global_threshold_subtitle" = "Tỷ lệ phần trăm còn lại cho phiên và thời lượng hàng tuần trừ khi Nhà cung cấp ghi đè chúng.";
 "quota_warning_sound" = "Phát âm thanh thông báo";
+"quota_warning_onscreen_alert" = "Hiển thị cảnh báo văn bản trên màn hình";
 "quota_warning_provider_inherits" = "Sử dụng cảnh báo Hạn mức toàn cầu Cài đặt trừ khi một cửa sổ được tùy chỉnh tại đây.";
 "quota_warning_customize_thresholds" = "Tùy chỉnh %@ ngưỡng";
 "quota_warning_enable_warnings" = "Bật %@ cảnh báo";

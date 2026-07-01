@@ -792,7 +792,8 @@ final class UsageStore {
         self.sessionQuotaNotifier.postQuotaWarning(
             event: event,
             provider: provider,
-            soundEnabled: self.settings.quotaWarningSoundEnabled)
+            soundEnabled: self.settings.quotaWarningSoundEnabled,
+            onScreenAlertEnabled: self.settings.quotaWarningOnScreenAlertEnabled)
     }
 
     func handleSessionQuotaTransition(provider: UsageProvider, snapshot: UsageSnapshot) {

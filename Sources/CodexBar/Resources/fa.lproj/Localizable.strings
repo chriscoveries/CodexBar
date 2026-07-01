@@ -454,6 +454,7 @@
 "quota_warning_warn_at" = "هشدار در";
 "quota_warning_global_threshold_subtitle" = "درصدهای باقی مانده برای جلسات و بازه های هفتگی مگر اینکه ارائه دهنده آن ها را لغو کند.";
 "quota_warning_sound" = "صدای اعلان پخش کن";
+"quota_warning_onscreen_alert" = "نمایش هشدار متنی روی صفحه";
 "quota_warning_provider_inherits" = "از تنظیمات هشدار سهمیه جهانی استفاده می کند مگر اینکه پنجره ای اینجا سفارشی شده باشد.";
 "quota_warning_customize_thresholds" = "آستانه های %@ شخصی سازی کنید";
 "quota_warning_enable_warnings" = "فعال کردن هشدارهای %@";

@@ -18,6 +18,7 @@ extension SettingsStore {
         _ = self.quotaWarningWindowEnabled(.session)
         _ = self.quotaWarningWindowEnabled(.weekly)
         _ = self.quotaWarningSoundEnabled
+        _ = self.quotaWarningOnScreenAlertEnabled
         _ = self.quotaWarningMarkersVisible
         _ = self.weeklyProgressWorkDays
         _ = self.usageBarsShowUsed

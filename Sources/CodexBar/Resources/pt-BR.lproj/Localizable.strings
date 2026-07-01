@@ -451,6 +451,7 @@
 "quota_warning_warn_at" = "Alertar em";
 "quota_warning_global_threshold_subtitle" = "Percentuais restantes para as janelas de sessão e semanal, a menos que um provedor defina valores próprios.";
 "quota_warning_sound" = "Reproduzir som de notificação";
+"quota_warning_onscreen_alert" = "Mostrar alerta de texto na tela";
 "quota_warning_provider_inherits" = "Usa as configurações globais de alerta de cota, a menos que uma janela seja personalizada aqui.";
 "quota_warning_customize_thresholds" = "Personalizar limites de %@";
 "quota_warning_enable_warnings" = "Ativar alertas de %@";

@@ -456,6 +456,7 @@
 "quota_warning_warn_at" = "Peringatkan pada";
 "quota_warning_global_threshold_subtitle" = "Persentase sisa untuk jendela sesi dan mingguan kecuali penyedia menimpanya.";
 "quota_warning_sound" = "Mainkan suara notifikasi";
+"quota_warning_onscreen_alert" = "Tampilkan peringatan teks di layar";
 "quota_warning_provider_inherits" = "Menggunakan pengaturan peringatan kuota global kecuali jendela dikustomisasi di sini.";
 "quota_warning_customize_thresholds" = "Kustomisasi ambang batas %@";
 "quota_warning_enable_warnings" = "Aktifkan peringatan %@";

@@ -454,6 +454,7 @@
 "quota_warning_warn_at" = "التحذير في";
 "quota_warning_global_threshold_subtitle" = "النسب المتبقية للجلسات والفترات الأسبوعية ما لم يتجاوزها مقدم الخدمة.";
 "quota_warning_sound" = "تشغيل صوت الإشعار";
+"quota_warning_onscreen_alert" = "إظهار تنبيه نصي على الشاشة";
 "quota_warning_provider_inherits" = "يستخدم إعدادات تحذير الحصص العامة إلا إذا تم تخصيص نافذة هنا.";
 "quota_warning_customize_thresholds" = "تخصيص عتبات %@";
 "quota_warning_enable_warnings" = "تفعيل تحذيرات %@";

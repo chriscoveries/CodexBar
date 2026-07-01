@@ -19,6 +19,7 @@ struct SettingsDefaultsState {
     var quotaWarningSessionEnabled: Bool
     var quotaWarningWeeklyEnabled: Bool
     var quotaWarningSoundEnabled: Bool
+    var quotaWarningOnScreenAlertEnabled: Bool
     var quotaWarningMarkersVisible: Bool
     var weeklyProgressWorkDays: Int?
     var usageBarsShowUsed: Bool
