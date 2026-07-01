@@ -118,6 +118,14 @@ public struct ClaudeUsageFetcher: ClaudeUsageFetching, Sendable {
         self.configuration.oauthKeychainPromptCooldownEnabled
     }
 
+    private var allowsDelegatedOAuthRefresh: Bool {
+        self.runtime == .app
+    }
+
+    private var allowsOAuthClaudeVersionDetection: Bool {
+        self.runtime == .app
+    }
+
     private var allowBackgroundDelegatedRefresh: Bool {
         self.configuration.allowBackgroundDelegatedRefresh
     }
@@ -219,7 +227,9 @@ public struct ClaudeUsageFetcher: ClaudeUsageFetching, Sendable {
         [String: String],
         Bool,
         Bool) async throws -> ClaudeOAuthCredentials)?
-    @TaskLocal static var fetchOAuthUsageOverride: (@Sendable (String) async throws -> OAuthUsageResponse)?
+    @TaskLocal static var fetchOAuthUsageOverride: (@Sendable (
+        String,
+        Bool) async throws -> OAuthUsageResponse)?
     @TaskLocal static var delegatedRefreshAttemptOverride: (@Sendable (
         Date,
         TimeInterval,
@@ -298,7 +308,9 @@ public struct ClaudeUsageFetcher: ClaudeUsageFetching, Sendable {
                 let credentials = credentialRecord.credentials
 
                 try self.validateRequiredOAuthScope(credentials)
-                let usage = try await ClaudeUsageFetcher.fetchOAuthUsage(accessToken: credentials.accessToken)
+                let usage = try await ClaudeUsageFetcher.fetchOAuthUsage(
+                    accessToken: credentials.accessToken,
+                    detectClaudeVersion: self.fetcher.allowsOAuthClaudeVersionDetection)
                 return try ClaudeUsageFetcher.mapOAuthUsage(
                     usage,
                     credentials: credentials,
@@ -350,7 +362,7 @@ public struct ClaudeUsageFetcher: ClaudeUsageFetching, Sendable {
         private func loadAfterDelegatedRefresh(allowDelegatedRetry: Bool) async throws -> ClaudeUsageSnapshot {
             guard allowDelegatedRetry else {
                 throw ClaudeUsageError.oauthFailed(
-                    "Claude OAuth token expired and delegated Claude CLI refresh did not recover. "
+                    "Claude OAuth token expired. CodexBar CLI does not launch Claude to refresh credentials. "
                         + "Run `claude login`, then retry.")
             }
 
@@ -440,7 +452,8 @@ public struct ClaudeUsageFetcher: ClaudeUsageFetching, Sendable {
 
                 try self.validateRequiredOAuthScope(refreshedCredentials)
                 let usage = try await ClaudeUsageFetcher.fetchOAuthUsage(
-                    accessToken: refreshedCredentials.accessToken)
+                    accessToken: refreshedCredentials.accessToken,
+                    detectClaudeVersion: self.fetcher.allowsOAuthClaudeVersionDetection)
                 return try ClaudeUsageFetcher.mapOAuthUsage(
                     usage,
                     credentials: refreshedCredentials,
@@ -484,7 +497,8 @@ public struct ClaudeUsageFetcher: ClaudeUsageFetching, Sendable {
             case .api:
                 throw ClaudeUsageError.parseFailed("Claude Admin API usage is handled by the provider descriptor.")
             case .oauth:
-                var snapshot = try await self.fetcher.loadViaOAuth(allowDelegatedRetry: true)
+                var snapshot = try await self.fetcher.loadViaOAuth(
+                    allowDelegatedRetry: self.fetcher.allowsDelegatedOAuthRefresh)
                 snapshot = await self.fetcher.applyWebExtrasIfNeeded(to: snapshot)
                 return snapshot
             case .web:
@@ -559,7 +573,8 @@ public struct ClaudeUsageFetcher: ClaudeUsageFetching, Sendable {
             case .api:
                 throw ClaudeUsageError.parseFailed("Planner emitted invalid api execution step.")
             case .oauth:
-                var snapshot = try await self.fetcher.loadViaOAuth(allowDelegatedRetry: true)
+                var snapshot = try await self.fetcher.loadViaOAuth(
+                    allowDelegatedRetry: self.fetcher.allowsDelegatedOAuthRefresh)
                 snapshot = await self.fetcher.applyWebExtrasIfNeeded(to: snapshot)
                 return snapshot
             case .web:
@@ -859,13 +874,18 @@ extension ClaudeUsageFetcher {
             respectKeychainPromptCooldown: respectKeychainPromptCooldown)
     }
 
-    private static func fetchOAuthUsage(accessToken: String) async throws -> OAuthUsageResponse {
+    private static func fetchOAuthUsage(
+        accessToken: String,
+        detectClaudeVersion: Bool) async throws -> OAuthUsageResponse
+    {
         #if DEBUG
         if let override = fetchOAuthUsageOverride {
-            return try await override(accessToken)
+            return try await override(accessToken, detectClaudeVersion)
         }
         #endif
-        return try await ClaudeOAuthUsageFetcher.fetchUsage(accessToken: accessToken)
+        return try await ClaudeOAuthUsageFetcher.fetchUsage(
+            accessToken: accessToken,
+            detectClaudeVersion: detectClaudeVersion)
     }
 
     private static func attemptDelegatedRefresh(
