@@ -213,6 +213,7 @@ struct AntigravityCLIHTTPSFetchStrategy: ProviderFetchStrategy {
     /// path unchanged.
     static func tryWarmAgyFetch(
         timeout: TimeInterval,
+        expectedBinaryPath: String? = nil,
         expectedAccountEmail: String? = nil,
         dependencies: WarmAgyDependencies) async -> AntigravityStatusSnapshot?
     {
@@ -233,6 +234,12 @@ struct AntigravityCLIHTTPSFetchStrategy: ProviderFetchStrategy {
         guard !cliProcesses.isEmpty else { return nil }
 
         for info in cliProcesses {
+            if let expectedBinaryPath {
+                guard Self.commandLine(info.commandLine, matchesBinaryPath: expectedBinaryPath)
+                else {
+                    continue
+                }
+            }
             guard let portTimeout = Self.remainingWarmProbeTime(deadline: deadline, now: dependencies.now) else {
                 return nil
             }
@@ -267,6 +274,16 @@ struct AntigravityCLIHTTPSFetchStrategy: ProviderFetchStrategy {
     {
         let remaining = deadline.timeIntervalSince(now())
         return remaining > 0 ? remaining : nil
+    }
+
+    private static func commandLine(_ commandLine: String, matchesBinaryPath binaryPath: String) -> Bool {
+        let candidates = [
+            URL(fileURLWithPath: binaryPath).standardizedFileURL.path,
+            URL(fileURLWithPath: binaryPath).resolvingSymlinksInPath().standardizedFileURL.path,
+        ]
+        return candidates.contains { candidate in
+            commandLine == candidate || commandLine.hasPrefix("\(candidate) ")
+        }
     }
 
     /// Production wiring for ``tryWarmAgyFetch``: list processes via `ps`, find
@@ -366,6 +383,7 @@ struct AntigravityCLIHTTPSFetchStrategy: ProviderFetchStrategy {
         // stays entirely inside AntigravityCLISession.
         if resetAfterFetch, let warmSnapshot = await Self.tryWarmAgyFetch(
             timeout: 2.0,
+            expectedBinaryPath: binary,
             expectedAccountEmail: expectedAccountEmail,
             dependencies: warmDependencies)
         {

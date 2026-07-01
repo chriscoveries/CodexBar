@@ -186,6 +186,30 @@ struct AntigravityWarmAgyReuseTests {
     }
 
     @Test
+    func `binary mismatch tries next warm agy`() async {
+        let listeningPIDs = AntigravityWarmLockedValues<Int>()
+
+        let result = await AntigravityCLIHTTPSFetchStrategy.tryWarmAgyFetch(
+            timeout: 2.0,
+            expectedBinaryPath: "/selected/agy",
+            dependencies: AntigravityCLIHTTPSFetchStrategy.WarmAgyDependencies(
+                processInfos: { _ in
+                    [
+                        Self.cliProcessInfo(pid: 6151, binaryPath: "/other/agy"),
+                        Self.cliProcessInfo(pid: 6152, binaryPath: "/selected/agy"),
+                    ]
+                },
+                listeningPorts: { pid, _ in
+                    listeningPIDs.append(pid)
+                    return [pid]
+                },
+                fetchSnapshot: { _, _ in Self.usableSnapshot(email: "selected@example.com") }))
+
+        #expect(result?.accountEmail == "selected@example.com")
+        #expect(listeningPIDs.value == [6152])
+    }
+
+    @Test
     func `warm probe deadline is shared across discovery and candidates`() async {
         let clock = AntigravityWarmTestClock(date: Date(timeIntervalSince1970: 100))
         let listeningPortsCallCount = AntigravityWarmLockedCounter()
@@ -300,13 +324,16 @@ struct AntigravityWarmAgyReuseTests {
 
     // MARK: - Fixtures
 
-    private static func cliProcessInfo(pid: Int) -> AntigravityStatusProbe.ProcessInfoResult {
+    private static func cliProcessInfo(
+        pid: Int,
+        binaryPath: String = "/usr/local/bin/agy") -> AntigravityStatusProbe.ProcessInfoResult
+    {
         AntigravityStatusProbe.ProcessInfoResult(
             pid: pid,
             extensionPort: nil,
             extensionServerCSRFToken: nil,
             csrfToken: "",
-            commandLine: "/usr/local/bin/agy")
+            commandLine: binaryPath)
     }
 
     private static func usableSnapshot(email: String) -> AntigravityStatusSnapshot {
