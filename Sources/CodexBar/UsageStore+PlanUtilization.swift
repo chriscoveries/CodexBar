@@ -372,7 +372,8 @@ extension UsageStore {
             }
         } else {
             self.sessionQuotaWindow(provider: context.provider, snapshot: context.snapshot).flatMap { resolved in
-                Self.clampedPercent(resolved.window.usedPercent).map {
+                guard Self.isSemanticSessionResetWindow(resolved) else { return nil }
+                return Self.clampedPercent(resolved.window.usedPercent).map {
                     LimitResetObservation(
                         usedPercent: $0,
                         observedAt: context.capturedAt,
@@ -402,6 +403,18 @@ extension UsageStore {
                 defaultsKey: Self.weeklyLimitResetDetectorDefaultsKey,
                 resetKind: "weekly"),
             observation: weeklyObservation)
+    }
+
+    private static func isSemanticSessionResetWindow(
+        _ resolved: (window: RateWindow, source: SessionQuotaWindowSource)) -> Bool
+    {
+        switch resolved.source {
+        case .primary:
+            guard let minutes = resolved.window.windowMinutes else { return false }
+            return minutes > 0 && minutes <= 6 * 60
+        case .copilotSecondaryFallback, .zaiTertiary, .antigravityQuotaSummary, .antigravityLegacy:
+            return true
+        }
     }
 
     private func postLimitResetCelebrationIfNeeded(

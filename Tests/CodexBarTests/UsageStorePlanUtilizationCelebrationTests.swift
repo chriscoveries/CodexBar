@@ -554,6 +554,40 @@ extension UsageStorePlanUtilizationTests {
 
     @MainActor
     @Test
+    func `session quota celebration ignores unknown duration credit pool`() async {
+        let store = Self.makeStore()
+        let accountLabel = "elevenlabs-monthly-reset@example.com"
+        let recorder = SessionLimitResetEventRecorder(provider: .elevenlabs, accountLabel: accountLabel)
+        defer { recorder.invalidate() }
+
+        func snapshot(usedPercent: Double, updatedAt: Date) -> UsageSnapshot {
+            UsageSnapshot(
+                primary: RateWindow(
+                    usedPercent: usedPercent,
+                    windowMinutes: nil,
+                    resetsAt: nil,
+                    resetDescription: "Monthly credits"),
+                secondary: nil,
+                updatedAt: updatedAt,
+                identity: ProviderIdentitySnapshot(
+                    providerID: .elevenlabs,
+                    accountEmail: accountLabel,
+                    accountOrganization: nil,
+                    loginMethod: "api-key"))
+        }
+
+        let before = snapshot(usedPercent: 88, updatedAt: Date(timeIntervalSince1970: 1_700_000_000))
+        let after = snapshot(usedPercent: 0, updatedAt: Date(timeIntervalSince1970: 1_700_003_600))
+
+        await store.recordPlanUtilizationHistorySample(provider: .elevenlabs, snapshot: before, now: before.updatedAt)
+        await store.recordPlanUtilizationHistorySample(provider: .elevenlabs, snapshot: after, now: after.updatedAt)
+
+        #expect(recorder.events.isEmpty)
+        #expect(store.sessionLimitResetDetectorStates.isEmpty)
+    }
+
+    @MainActor
+    @Test
     func `session quota celebration uses zai semantic tertiary session lane`() async {
         let store = Self.makeStore()
         let accountLabel = "zai-semantic-session-org"
