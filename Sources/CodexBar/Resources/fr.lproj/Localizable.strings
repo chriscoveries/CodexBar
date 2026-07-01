@@ -454,6 +454,7 @@
 "quota_warning_warn_at" = "Avertir à";
 "quota_warning_global_threshold_subtitle" = "Pourcentages restants pour les fenêtres de session et hebdomadaires, sauf si un fournisseur les remplace.";
 "quota_warning_sound" = "Lire un son de notification";
+"quota_warning_onscreen_alert" = "Afficher une alerte textuelle à l’écran";
 "quota_warning_provider_inherits" = "Utilise les réglages globaux d'alerte de quota, sauf personnalisation de cette fenêtre.";
 "quota_warning_customize_thresholds" = "Personnaliser les seuils %@";
 "quota_warning_enable_warnings" = "Activer les alertes %@";

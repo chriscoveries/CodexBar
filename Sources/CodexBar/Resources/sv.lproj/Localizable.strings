@@ -454,6 +454,7 @@
 "quota_warning_warn_at" = "Varna vid";
 "quota_warning_global_threshold_subtitle" = "Återstående procent för sessions- och veckofönster, om inte en leverantör åsidosätter dem.";
 "quota_warning_sound" = "Spela aviseringsljud";
+"quota_warning_onscreen_alert" = "Visa textavisering på skärmen";
 "quota_warning_provider_inherits" = "Använder de globala kvotvarningsinställningarna om inte ett fönster anpassas här.";
 "quota_warning_customize_thresholds" = "Anpassa trösklar för %@";
 "quota_warning_enable_warnings" = "Aktivera varningar för %@";

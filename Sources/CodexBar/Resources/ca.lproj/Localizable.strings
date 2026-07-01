@@ -445,6 +445,7 @@
 "quota_warning_warn_at" = "Aviseu al";
 "quota_warning_global_threshold_subtitle" = "Percentatges restants per a les finestres de sessió i setmanal, llevat que un proveïdor els substitueixi.";
 "quota_warning_sound" = "Reprodueix el so de notificació";
+"quota_warning_onscreen_alert" = "Mostra una alerta de text a la pantalla";
 "quota_warning_provider_inherits" = "Fa servir la configuració global d'avís de quota llevat que es personalitzi una finestra aquí.";
 "quota_warning_customize_thresholds" = "Personalitza els llindars de %@";
 "quota_warning_enable_warnings" = "Activeu els avisos de %@";

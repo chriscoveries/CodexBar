@@ -456,6 +456,7 @@
 "quota_warning_warn_at" = "Avvisa a";
 "quota_warning_global_threshold_subtitle" = "Percentuali residue per le finestre di sessione e settimanale, salvo override del provider.";
 "quota_warning_sound" = "Riproduci suono di notifica";
+"quota_warning_onscreen_alert" = "Mostra avviso di testo sullo schermo";
 "quota_warning_provider_inherits" = "Usa le impostazioni globali di avviso quota, salvo personalizzazione di una finestra qui.";
 "quota_warning_customize_thresholds" = "Personalizza soglie %@";
 "quota_warning_enable_warnings" = "Abilita avvisi %@";

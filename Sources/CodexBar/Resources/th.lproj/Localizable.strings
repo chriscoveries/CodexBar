@@ -454,6 +454,7 @@
 "quota_warning_warn_at" = "เตือนที่";
 "quota_warning_global_threshold_subtitle" = "เปอร์เซ็นต์ที่เหลืออยู่สําหรับกรอบเวลาเซสชันและรายสัปดาห์ เว้นแต่ผู้ให้บริการจะแทนที่";
 "quota_warning_sound" = "เล่นเสียงแจ้งเตือน";
+"quota_warning_onscreen_alert" = "แสดงการแจ้งเตือนข้อความบนหน้าจอ";
 "quota_warning_provider_inherits" = "ใช้การตั้งค่าคําเตือนโควต้าส่วนกลาง เว้นแต่จะมีการกําหนดหน้าต่างเองที่นี่";
 "quota_warning_customize_thresholds" = "ปรับแต่งเกณฑ์ %@";
 "quota_warning_enable_warnings" = "เปิดใช้งานคําเตือน %@";
