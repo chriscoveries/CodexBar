@@ -556,7 +556,8 @@ extension UsageStorePlanUtilizationTests {
     @Test
     func `session quota celebration uses zai semantic tertiary session lane`() async {
         let store = Self.makeStore()
-        let recorder = SessionLimitResetEventRecorder(provider: .zai, accountLabel: nil)
+        let accountLabel = "zai-semantic-session-org"
+        let recorder = SessionLimitResetEventRecorder(provider: .zai, accountLabel: accountLabel)
         defer { recorder.invalidate() }
 
         func snapshot(sessionUsed: Double, updatedAt: Date) -> UsageSnapshot {
@@ -580,7 +581,7 @@ extension UsageStorePlanUtilizationTests {
                 identity: ProviderIdentitySnapshot(
                     providerID: .zai,
                     accountEmail: nil,
-                    accountOrganization: nil,
+                    accountOrganization: accountLabel,
                     loginMethod: "pro"))
         }
 
