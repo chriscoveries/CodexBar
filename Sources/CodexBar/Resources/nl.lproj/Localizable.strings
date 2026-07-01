@@ -551,6 +551,8 @@
 "show_debug_settings_subtitle" = "Geef hulpprogramma's voor probleemoplossing weer op het tabblad Foutopsporing.";
 "surprise_me_title" = "Verras mij";
 "surprise_me_subtitle" = "Controleer of je het leuk vindt dat je agenten daar plezier hebben.";
+"session_limit_confetti_title" = "Confetti bij sessielimiet";
+"session_limit_confetti_subtitle" = "Speel confetti op volledig scherm af wanneer het sessiegebruik wordt gereset.";
 "weekly_limit_confetti_title" = "Wekelijkse limiet confetti";
 "weekly_limit_confetti_subtitle" = "Speel confetti op volledig scherm af wanneer het wekelijkse gebruik wordt gereset.";
 "hide_personal_info_title" = "Verberg persoonlijke informatie";

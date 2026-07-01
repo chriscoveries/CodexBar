@@ -540,6 +540,8 @@
 "show_debug_settings_subtitle" = "디버그 탭에 문제 해결 도구를 표시합니다.";
 "surprise_me_title" = "깜짝 놀래주기";
 "surprise_me_subtitle" = "에이전트가 저 위에서 조금 즐기는 모습이 마음에 드는지 확인해 보세요.";
+"session_limit_confetti_title" = "세션 한도 색종이";
+"session_limit_confetti_subtitle" = "세션 사용량이 재설정될 때 전체 화면 색종이를 표시합니다.";
 "weekly_limit_confetti_title" = "주간 한도 색종이";
 "weekly_limit_confetti_subtitle" = "주간 사용량이 재설정될 때 전체 화면 색종이를 재생합니다.";
 "hide_personal_info_title" = "개인 정보 가리기";

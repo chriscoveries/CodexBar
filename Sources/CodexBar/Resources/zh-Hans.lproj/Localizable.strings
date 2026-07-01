@@ -536,6 +536,8 @@
 "show_debug_settings_subtitle" = "在“调试”标签中显示故障排除工具。";
 "surprise_me_title" = "给我惊喜";
 "surprise_me_subtitle" = "看看你是否喜欢你的智能体在上面找点乐子。";
+"session_limit_confetti_title" = "会话限制彩带";
+"session_limit_confetti_subtitle" = "会话用量重置时播放全屏彩带。";
 "weekly_limit_confetti_title" = "每周限制彩纸";
 "weekly_limit_confetti_subtitle" = "当每周用量重置时播放全屏彩纸。";
 "hide_personal_info_title" = "隐藏个人信息";

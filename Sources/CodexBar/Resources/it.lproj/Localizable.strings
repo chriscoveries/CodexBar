@@ -553,6 +553,8 @@
 "show_debug_settings_subtitle" = "Espone strumenti di diagnosi nella scheda Debug.";
 "surprise_me_title" = "Sorprendimi";
 "surprise_me_subtitle" = "Per chi apprezza un po' di personalità dagli agenti.";
+"session_limit_confetti_title" = "Coriandoli limite sessione";
+"session_limit_confetti_subtitle" = "Mostra coriandoli a schermo intero quando la quota di sessione si resetta.";
 "weekly_limit_confetti_title" = "Coriandoli limite settimanale";
 "weekly_limit_confetti_subtitle" = "Mostra coriandoli a schermo intero quando la quota settimanale si resetta.";
 "hide_personal_info_title" = "Nascondi informazioni personali";

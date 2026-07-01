@@ -551,6 +551,8 @@
 "show_debug_settings_subtitle" = "Expose troubleshooting tools in the Debug tab.";
 "surprise_me_title" = "Surprise me";
 "surprise_me_subtitle" = "Check if you like your agents having some fun up there.";
+"session_limit_confetti_title" = "Session limit confetti";
+"session_limit_confetti_subtitle" = "Play full-screen confetti when session usage resets.";
 "weekly_limit_confetti_title" = "Weekly limit confetti";
 "weekly_limit_confetti_subtitle" = "Play full-screen confetti when weekly usage resets.";
 "hide_personal_info_title" = "Hide personal information";

@@ -418,8 +418,7 @@ extension SettingsStore {
             costUsageEnabled: costUsageEnabled)
         let hidePersonalInfo = userDefaults.object(forKey: "hidePersonalInfo") as? Bool ?? false
         let randomBlinkEnabled = userDefaults.object(forKey: "randomBlinkEnabled") as? Bool ?? false
-        let confettiOnWeeklyLimitResetsEnabled = userDefaults.object(
-            forKey: "confettiOnWeeklyLimitResetsEnabled") as? Bool ?? false
+        let confettiOnReset = Self.loadConfettiOnResetDefaults(userDefaults: userDefaults)
         let menuBarShowsHighestUsage = userDefaults.object(forKey: "menuBarShowsHighestUsage") as? Bool ?? false
         let claudeOAuthKeychainPromptModeRaw = userDefaults.string(forKey: "claudeOAuthKeychainPromptMode")
         let claudeOAuthKeychainReadStrategyRaw = userDefaults.string(forKey: "claudeOAuthKeychainReadStrategy")
@@ -494,7 +493,8 @@ extension SettingsStore {
             costSummaryDisplayStyleRaw: costSummaryDisplayStyleRaw,
             hidePersonalInfo: hidePersonalInfo,
             randomBlinkEnabled: randomBlinkEnabled,
-            confettiOnWeeklyLimitResetsEnabled: confettiOnWeeklyLimitResetsEnabled,
+            confettiOnSessionLimitResetsEnabled: confettiOnReset.session,
+            confettiOnWeeklyLimitResetsEnabled: confettiOnReset.weekly,
             menuBarShowsHighestUsage: menuBarShowsHighestUsage,
             claudeOAuthKeychainPromptModeRaw: claudeOAuthKeychainPromptModeRaw,
             claudeOAuthKeychainReadStrategyRaw: claudeOAuthKeychainReadStrategyRaw,
@@ -529,6 +529,12 @@ extension SettingsStore {
             userDefaults.set(migratedStyle, forKey: "costSummaryDisplayStyle")
         }
         return migratedStyle
+    }
+
+    private static func loadConfettiOnResetDefaults(userDefaults: UserDefaults) -> (session: Bool, weekly: Bool) {
+        (
+            session: userDefaults.object(forKey: "confettiOnSessionLimitResetsEnabled") as? Bool ?? false,
+            weekly: userDefaults.object(forKey: "confettiOnWeeklyLimitResetsEnabled") as? Bool ?? false)
     }
 
     private static func loadMenuBarMetricPreferences(userDefaults: UserDefaults) -> [String: String] {

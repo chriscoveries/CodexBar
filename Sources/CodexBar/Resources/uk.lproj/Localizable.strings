@@ -551,6 +551,8 @@
 "show_debug_settings_subtitle" = "Розкрийте інструменти усунення несправностей на вкладці Debug.";
 "surprise_me_title" = "Здивуйте мене";
 "surprise_me_subtitle" = "Перевірте, чи подобається вам, що ваші агенти розважаються там.";
+"session_limit_confetti_title" = "Конфеті для ліміту сесії";
+"session_limit_confetti_subtitle" = "Показувати конфеті на весь екран, коли використання сесії скидається.";
 "weekly_limit_confetti_title" = "Щотижневий ліміт конфетті";
 "weekly_limit_confetti_subtitle" = "Відтворення конфетті на весь екран, коли тижневе використання скидається.";
 "hide_personal_info_title" = "Приховати особисту інформацію";

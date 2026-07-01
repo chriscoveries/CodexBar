@@ -551,6 +551,8 @@
 "show_debug_settings_subtitle" = "Exposez les outils de dépannage dans l’onglet Débogage.";
 "surprise_me_title" = "Surprenez-moi";
 "surprise_me_subtitle" = "Vérifiez si vous aimez que vos agents s'amusent là-haut.";
+"session_limit_confetti_title" = "Confettis de limite de session";
+"session_limit_confetti_subtitle" = "Affiche des confettis en plein écran lorsque l'utilisation de la session est réinitialisée.";
 "weekly_limit_confetti_title" = "Confettis de limite hebdomadaire";
 "weekly_limit_confetti_subtitle" = "Jouez des confettis en plein écran lorsque l'utilisation hebdomadaire est réinitialisée.";
 "hide_personal_info_title" = "Masquer les informations personnelles";

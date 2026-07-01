@@ -360,6 +360,14 @@ extension SettingsStore {
         }
     }
 
+    var confettiOnSessionLimitResetsEnabled: Bool {
+        get { self.defaultsState.confettiOnSessionLimitResetsEnabled }
+        set {
+            self.defaultsState.confettiOnSessionLimitResetsEnabled = newValue
+            self.userDefaults.set(newValue, forKey: "confettiOnSessionLimitResetsEnabled")
+        }
+    }
+
     var confettiOnWeeklyLimitResetsEnabled: Bool {
         get { self.defaultsState.confettiOnWeeklyLimitResetsEnabled }
         set {
