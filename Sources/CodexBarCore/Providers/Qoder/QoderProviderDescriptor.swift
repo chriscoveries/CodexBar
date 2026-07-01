@@ -578,7 +578,7 @@ struct QoderWebFetchStrategy: ProviderFetchStrategy {
         return .site(site)
     }
 
-    private enum ShellQuote {
+    private enum ShellQuote: Equatable {
         case single
         case double
     }
@@ -593,17 +593,31 @@ struct QoderWebFetchStrategy: ProviderFetchStrategy {
             let scalar = scalars[index]
             let nextIndex = scalars.index(after: index)
 
-            if quote == nil, scalar == "\\" {
-                if nextIndex < scalars.endIndex, scalars[nextIndex] == "\n" {
+            if scalar == "\\" {
+                if quote == nil {
+                    if nextIndex < scalars.endIndex, scalars[nextIndex] == "\n" {
+                        index = scalars.index(after: nextIndex)
+                        continue
+                    }
+                    if nextIndex < scalars.endIndex, scalars[nextIndex] == "\r" {
+                        let afterReturn = scalars.index(after: nextIndex)
+                        if afterReturn < scalars.endIndex, scalars[afterReturn] == "\n" {
+                            index = scalars.index(after: afterReturn)
+                            continue
+                        }
+                    }
+                }
+                if quote != .single,
+                   nextIndex < scalars.endIndex,
+                   self.isSupportedEscapedShellLiteral(scalars[nextIndex])
+                {
+                    output.append(scalar)
+                    output.append(scalars[nextIndex])
                     index = scalars.index(after: nextIndex)
                     continue
                 }
-                if nextIndex < scalars.endIndex, scalars[nextIndex] == "\r" {
-                    let afterReturn = scalars.index(after: nextIndex)
-                    if afterReturn < scalars.endIndex, scalars[afterReturn] == "\n" {
-                        index = scalars.index(after: afterReturn)
-                        continue
-                    }
+                if quote == .double {
+                    return nil
                 }
             }
 
@@ -638,6 +652,10 @@ struct QoderWebFetchStrategy: ProviderFetchStrategy {
         }
 
         return quote == nil ? String(output) : nil
+    }
+
+    private static func isSupportedEscapedShellLiteral(_ scalar: UnicodeScalar) -> Bool {
+        scalar == "'" || scalar == "\"" || scalar == "\\"
     }
 
     private static func isShellScalarTextSafe(_ scalar: UnicodeScalar) -> Bool {

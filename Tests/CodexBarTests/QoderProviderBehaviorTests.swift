@@ -489,6 +489,14 @@ struct QoderManualCookieRoutingTests {
         #expect(QoderWebFetchStrategy
             .site(
                 forManualCookieHeader:
+                "curl https://qoder.com -A \\'$'agent\\r\\nHost: qoder.com.cn'\\' -H 'Cookie: sid=abc'") == nil)
+        #expect(QoderWebFetchStrategy
+            .site(
+                forManualCookieHeader:
+                "curl https://qoder.com -A \\'$'agent\r\nHost: qoder.com.cn'\\' -H 'Cookie: sid=abc'") == nil)
+        #expect(QoderWebFetchStrategy
+            .site(
+                forManualCookieHeader:
                 "curl https://qoder.com -H 'User-Agent: agent\\\nHost: qoder.com.cn' -H 'Cookie: sid=abc'") == nil)
         #expect(QoderWebFetchStrategy
             .site(
@@ -518,6 +526,18 @@ struct QoderManualCookieRoutingTests {
             .site(
                 forManualCookieHeader:
                 "curl https://qoder.com -H @<(printf 'Host: qoder.com.cn') -H 'Cookie: sid=abc'") == nil)
+        #expect(QoderWebFetchStrategy
+            .site(
+                forManualCookieHeader:
+                "curl https://qoder.com -A \\'literal\\' -H 'Cookie: sid=abc'") == .international)
+        #expect(QoderWebFetchStrategy
+            .site(
+                forManualCookieHeader:
+                "curl https://qoder.com -A \\\"literal\\\" -H 'Cookie: sid=abc'") == .international)
+        #expect(QoderWebFetchStrategy
+            .site(
+                forManualCookieHeader:
+                "curl https://qoder.com -A literal\\\\slash -H 'Cookie: sid=abc'") == .international)
     }
 }
 
