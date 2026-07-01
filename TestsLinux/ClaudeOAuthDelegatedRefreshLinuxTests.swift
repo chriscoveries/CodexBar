@@ -57,14 +57,14 @@ struct ClaudeOAuthDelegatedRefreshLinuxTests {
     }
 
     @Test
-    func appOAuthPreservesBackgroundPromptPolicy() async {
+    func appOAuthBackgroundDelegatesWhenKeychainPromptPolicyIsNotApplicable() async {
         let result = await self.runDelegatedRefresh(
             runtime: .app,
             interaction: .background,
             promptMode: .onlyOnUserAction)
 
-        #expect(result.attempts == 0)
-        #expect(result.message.contains("background repair is suppressed"))
+        #expect(result.attempts == 1)
+        #expect(result.message.contains("still unavailable after delegated Claude CLI refresh"))
     }
 
     private func runDelegatedRefresh(
