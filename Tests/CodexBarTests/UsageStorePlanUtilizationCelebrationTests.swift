@@ -554,6 +554,49 @@ extension UsageStorePlanUtilizationTests {
 
     @MainActor
     @Test
+    func `session quota celebration uses zai semantic tertiary session lane`() async {
+        let store = Self.makeStore()
+        let recorder = SessionLimitResetEventRecorder(provider: .zai, accountLabel: nil)
+        defer { recorder.invalidate() }
+
+        func snapshot(sessionUsed: Double, updatedAt: Date) -> UsageSnapshot {
+            UsageSnapshot(
+                primary: RateWindow(
+                    usedPercent: 30,
+                    windowMinutes: 10080,
+                    resetsAt: nil,
+                    resetDescription: nil),
+                secondary: RateWindow(
+                    usedPercent: 40,
+                    windowMinutes: 43200,
+                    resetsAt: nil,
+                    resetDescription: "Monthly"),
+                tertiary: RateWindow(
+                    usedPercent: sessionUsed,
+                    windowMinutes: 300,
+                    resetsAt: nil,
+                    resetDescription: nil),
+                updatedAt: updatedAt,
+                identity: ProviderIdentitySnapshot(
+                    providerID: .zai,
+                    accountEmail: nil,
+                    accountOrganization: nil,
+                    loginMethod: "pro"))
+        }
+
+        let before = snapshot(sessionUsed: 88, updatedAt: Date(timeIntervalSince1970: 1_700_000_000))
+        let after = snapshot(sessionUsed: 0, updatedAt: Date(timeIntervalSince1970: 1_700_003_600))
+
+        await store.recordPlanUtilizationHistorySample(provider: .zai, snapshot: before, now: before.updatedAt)
+        await store.recordPlanUtilizationHistorySample(provider: .zai, snapshot: after, now: after.updatedAt)
+
+        #expect(recorder.events.count == 1)
+        #expect(recorder.events.first?.usedPercent == 0)
+        #expect(store.sessionLimitResetDetectorStates.values.first?.sourceRawValue == "zaiTertiary")
+    }
+
+    @MainActor
+    @Test
     func `session quota celebration keeps account baselines isolated`() async {
         let store = Self.makeStore()
         let accountLabel = "session-reset-b@example.com"

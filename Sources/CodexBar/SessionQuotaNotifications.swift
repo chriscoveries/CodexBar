@@ -144,6 +144,11 @@ extension UsageStore {
                 : .antigravityLegacy
             return (window, source)
         }
+        // z.ai's typed sessionTokenLimit is rendered in the tertiary lane when the response also
+        // contains its weekly token limit and MCP time limit. Prefer that semantic session lane.
+        if provider == .zai, let tertiary = snapshot.tertiary {
+            return (tertiary, .zaiTertiary)
+        }
         if let primary = snapshot.primary, Self.isSessionWindow(primary) {
             return (primary, .primary)
         }
