@@ -8,7 +8,7 @@ read_when:
 
 # Providers
 
-CodexBar currently registers 53 provider IDs. Some companies expose multiple surfaces, such as Codex vs OpenAI API or
+CodexBar currently registers 54 provider IDs. Some companies expose multiple surfaces, such as Codex vs OpenAI API or
 OpenCode vs OpenCode Go, because the auth source and quota shape differ.
 
 ## Fetch strategies (current)
@@ -56,6 +56,7 @@ headers, source selection, provider ordering, and token accounts are stored in `
 | Perplexity | Browser cookies/manual cookie/env session token → credits API (`web`). |
 | Xiaomi MiMo | Browser cookies → balance/token plan endpoints (`web`). |
 | Doubao | API key from config/env → Volcengine Ark chat-completions probe (`api`). |
+| Sakana AI | Manual Cookie header → billing page parser for 5-hour and weekly quota windows (`web`). |
 | Abacus AI | Browser cookies → compute points + billing API (`web`). |
 | Mistral | Console billing and Vibe subscription usage via browser cookies (`web`). |
 | DeepSeek | API key from env or token accounts → balance endpoint (`api`). |
@@ -313,6 +314,11 @@ headers, source selection, provider ordering, and token accounts are stored in `
 - Probes Volcengine Ark chat completions and reads request rate-limit headers when present.
 - Status: none yet.
 - Details: `docs/doubao.md`.
+
+## Sakana AI
+- Manual `Cookie:` header from `console.sakana.ai`; no automatic browser import.
+- Reads the billing page and surfaces 5-hour and weekly quota windows when present.
+- Status: none yet.
 
 ## Abacus AI
 - Browser cookies (`abacus.ai`, `apps.abacus.ai`) via automatic import or manual header.
