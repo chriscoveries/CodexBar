@@ -1186,11 +1186,11 @@ extension StatusItemController {
         if isFallbackOnly { return false }
 
         let isStale = self.store.isStale(provider: provider)
-        let hasData = self.store.snapshot(for: provider) != nil
-        if provider == .warp, !hasData, self.store.refreshingProviders.contains(provider) {
+        let hasSatisfiedUsageFetch = self.store.hasSatisfiedUsageFetch(for: provider)
+        if provider == .warp, !hasSatisfiedUsageFetch, self.store.refreshingProviders.contains(provider) {
             return true
         }
-        return !hasData && !isStale
+        return !hasSatisfiedUsageFetch && !isStale
     }
 
     func updateAnimationState() {
