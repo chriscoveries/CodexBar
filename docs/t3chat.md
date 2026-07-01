@@ -21,8 +21,8 @@ The T3 Chat provider tracks the 4-hour Base and monthly Overage usage buckets fr
 CodexBar imports your browser session cookie automatically. CodexBar sends the cookie only to
 `https://t3.chat`.
 
-**Note**: Automatic import requires Full Disk Access to read browser cookies
-(System Settings → Privacy & Security → Full Disk Access → CodexBar).
+**Note**: Browser cookie import may require Full Disk Access (especially for Safari) or macOS
+Keychain approval (for Chromium-based browsers).
 
 ### Manual
 
@@ -90,7 +90,8 @@ codexbar usage --provider t3-chat
 codexbar usage --provider t3
 ```
 
-T3 Chat provides no token cost data; the `--format json` cost fields will be empty.
+T3 Chat provides no token-cost data. The `usage --format json` output contains usage and identity
+data, while `codexbar cost --provider t3chat` is unsupported.
 
 ## Common errors
 
