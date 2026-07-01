@@ -76,6 +76,63 @@ struct ClaudeWebFetchDeadlineTests {
     }
 
     @Test
+    func `caller cancellation during app auto planning does not execute fallback`() async {
+        let planningProbe = ClaudeWebPlanningAvailabilityProbe()
+        let fallbackProbe = ClaudeWebPlanningAvailabilityProbe()
+        let context = Self.makeContext(
+            runtime: .app,
+            sourceMode: .auto,
+            webTimeout: 60,
+            cookieSource: .auto,
+            env: [
+                "CLAUDE_CLI_PATH": "/usr/bin/true",
+                ClaudeOAuthCredentialsStore.environmentTokenKey: "oauth-token",
+            ])
+        let availabilityOverride: @Sendable (ProviderFetchContext, BrowserDetection) -> Bool = { _, _ in
+            planningProbe.stallAndReportUnavailable()
+        }
+        let oauthLoadOverride: (@Sendable (
+            [String: String],
+            Bool,
+            Bool) async throws -> ClaudeOAuthCredentials)? = { _, _, _ in
+            fallbackProbe.recordInvocation()
+            throw CancellationError()
+        }
+        let cliFetchOverride: @Sendable (String, TimeInterval, Bool) async throws -> ClaudeStatusSnapshot = { _, _, _ in
+            fallbackProbe.recordInvocation()
+            throw CancellationError()
+        }
+
+        let fetchTask = Task {
+            await ClaudeWebFetchStrategy.$availabilityProbeOverrideForTesting.withValue(availabilityOverride) {
+                await ClaudeUsageFetcher.$loadOAuthCredentialsOverride.withValue(oauthLoadOverride) {
+                    await ClaudeStatusProbe.$fetchOverride.withValue(cliFetchOverride) {
+                        await ClaudeProviderDescriptor.makeDescriptor().fetchPlan.fetchOutcome(
+                            context: context,
+                            provider: .claude)
+                    }
+                }
+            }
+        }
+
+        while !planningProbe.wasInvoked {
+            await Task.yield()
+        }
+        fetchTask.cancel()
+        let outcome = await fetchTask.value
+        planningProbe.release()
+
+        switch outcome.result {
+        case .success:
+            Issue.record("Expected caller cancellation to stop after availability planning")
+        case let .failure(error):
+            #expect(error is CancellationError)
+        }
+        #expect(outcome.attempts.isEmpty)
+        #expect(fallbackProbe.invocationCount == 0)
+    }
+
+    @Test
     func `CLI auto timeout cancels web and falls back to CLI`() async throws {
         let probe = ClaudeWebDeadlineProbe()
         let web = Self.makeTimedOutWebStrategy(probe: probe)
@@ -237,11 +294,15 @@ private final class ClaudeWebPlanningAvailabilityProbe: @unchecked Sendable {
     }
 
     func stallAndReportUnavailable() -> Bool {
+        self.recordInvocation()
+        _ = self.releaseSemaphore.wait(timeout: .now() + 1)
+        return false
+    }
+
+    func recordInvocation() {
         self.lock.lock()
         self.invocations += 1
         self.lock.unlock()
-        _ = self.releaseSemaphore.wait(timeout: .now() + 1)
-        return false
     }
 
     func release() {
