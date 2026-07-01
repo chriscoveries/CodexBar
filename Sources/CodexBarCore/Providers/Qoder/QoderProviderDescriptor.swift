@@ -474,7 +474,17 @@ struct QoderWebFetchStrategy: ProviderFetchStrategy {
             .lowercased()
             .trimmingPrefix("."))
         if let portSeparator = normalized.lastIndex(of: ":") {
-            normalized = String(normalized[..<portSeparator])
+            let port = normalized[normalized.index(after: portSeparator)...]
+            let hostname = normalized[..<portSeparator]
+            guard !hostname.contains(":"),
+                  !port.isEmpty,
+                  port.allSatisfy({ $0.isASCII && $0.isNumber }),
+                  let portNumber = Int(port),
+                  (1...65535).contains(portNumber)
+            else {
+                return nil
+            }
+            normalized = String(hostname)
         }
         switch normalized {
         case "qoder.com", "www.qoder.com":

@@ -307,6 +307,17 @@ struct QoderProviderBehaviorTests {
         #expect(QoderWebFetchStrategy
             .site(forManualCookieHeader: "GET /account/usage HTTP/1.1\nHost: www.qoder.com.cn") ==
             .china)
+        #expect(QoderWebFetchStrategy
+            .site(forManualCookieHeader: "GET /account/usage HTTP/1.1\nHost: qoder.com.cn:443") ==
+            .china)
+        #expect(QoderWebFetchStrategy
+            .site(forManualCookieHeader: "GET /account/usage HTTP/1.1\nHost: qoder.com.cn:evil") == nil)
+        #expect(QoderWebFetchStrategy
+            .site(forManualCookieHeader: "GET /account/usage HTTP/1.1\nHost: qoder.com.cn:") == nil)
+        #expect(QoderWebFetchStrategy
+            .site(forManualCookieHeader: "GET /account/usage HTTP/1.1\nHost: qoder.com.cn:65536") == nil)
+        #expect(QoderWebFetchStrategy
+            .site(forManualCookieHeader: "GET /account/usage HTTP/1.1\nHost: qoder.com.cn:443:444") == nil)
         #expect(QoderWebFetchStrategy.site(forManualCookieHeader: "GET /account/usage HTTP/1.1\nHost: qoder.com") ==
             .international)
         #expect(QoderWebFetchStrategy
