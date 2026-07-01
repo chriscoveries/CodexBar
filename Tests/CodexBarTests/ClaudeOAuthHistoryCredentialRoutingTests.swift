@@ -104,6 +104,30 @@ struct ClaudeOAuthHistoryCredentialRoutingTests {
         #expect(!replacementIdentifier.contains("replacement-access"))
     }
 
+    @Test
+    func `only an explicit refresh lineage can preserve a rotated credential owner`() throws {
+        let original = try ClaudeOAuthCredentials.parse(
+            data: self.makeCredentialsData(accessToken: "access-before", refreshToken: "refresh-before"))
+        let rotated = try ClaudeOAuthCredentials.parse(
+            data: self.makeCredentialsData(accessToken: "access-after", refreshToken: "refresh-after"))
+        let originalIdentifier = try #require(original.historyOwnerIdentifier)
+        let rotatedIdentifier = try #require(rotated.historyOwnerIdentifier)
+        #expect(originalIdentifier != rotatedIdentifier)
+
+        let refreshProvenRecord = ClaudeOAuthCredentialRecord(
+            credentials: rotated,
+            owner: .codexbar,
+            source: .memoryCache,
+            historyOwnerIdentifier: originalIdentifier)
+        let unrelatedReplacementRecord = ClaudeOAuthCredentialRecord(
+            credentials: rotated,
+            owner: .codexbar,
+            source: .cacheKeychain)
+
+        #expect(refreshProvenRecord.historyOwnerIdentifier == originalIdentifier)
+        #expect(unrelatedReplacementRecord.historyOwnerIdentifier == rotatedIdentifier)
+    }
+
     private func makeCredentialsData(accessToken: String, refreshToken: String? = nil) -> Data {
         let expiresAt = Int(Date(timeIntervalSinceNow: 3600).timeIntervalSince1970 * 1000)
         let refreshTokenJSON = refreshToken.map { "\n            \"refreshToken\": \"\($0)\"," } ?? ""

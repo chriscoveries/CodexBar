@@ -303,7 +303,8 @@ public struct ClaudeUsageFetcher: ClaudeUsageFetching, Sendable {
                     usage,
                     credentials: credentials,
                     oauthKeychainPersistentRefHash: ClaudeOAuthCredentialsStore
-                        .matchingClaudeKeychainPersistentRefHashWithoutPrompt(for: credentialRecord))
+                        .matchingClaudeKeychainPersistentRefHashWithoutPrompt(for: credentialRecord),
+                    oauthHistoryOwnerIdentifier: credentialRecord.historyOwnerIdentifier)
             } catch let error as CancellationError {
                 throw error
             } catch let error as ClaudeUsageError {
@@ -444,7 +445,8 @@ public struct ClaudeUsageFetcher: ClaudeUsageFetching, Sendable {
                     usage,
                     credentials: refreshedCredentials,
                     oauthKeychainPersistentRefHash: ClaudeOAuthCredentialsStore
-                        .matchingClaudeKeychainPersistentRefHashWithoutPrompt(for: refreshedRecord))
+                        .matchingClaudeKeychainPersistentRefHashWithoutPrompt(for: refreshedRecord),
+                    oauthHistoryOwnerIdentifier: refreshedRecord.historyOwnerIdentifier)
             } catch {
                 ClaudeUsageFetcher.log.debug(
                     "Claude OAuth post-delegation retry failed",
@@ -962,9 +964,11 @@ extension ClaudeUsageFetcher {
     private static func mapOAuthUsage(
         _ usage: OAuthUsageResponse,
         credentials: ClaudeOAuthCredentials,
-        oauthKeychainPersistentRefHash: String? = nil) throws -> ClaudeUsageSnapshot
+        oauthKeychainPersistentRefHash: String? = nil,
+        oauthHistoryOwnerIdentifier: String? = nil) throws -> ClaudeUsageSnapshot
     {
-        let oauthHistoryOwnerIdentifier = credentials.historyOwnerIdentifier
+        let oauthHistoryOwnerIdentifier = ClaudeOAuthCredentials.normalizedHistoryOwnerIdentifier(
+            oauthHistoryOwnerIdentifier) ?? credentials.historyOwnerIdentifier
 
         func makeWindow(_ window: OAuthUsageWindow?, windowMinutes: Int?) -> RateWindow? {
             guard let window,
