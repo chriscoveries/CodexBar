@@ -5,6 +5,97 @@ import Testing
 
 struct ClaudeResilienceTests {
     @Test
+    func `subscription-only response replaces stale quotas but preserves local cost`() async throws {
+        try await ClaudeOAuthCredentialsStore.withIsolatedCredentialsFileTrackingForTesting {
+            let tempDir = FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString, isDirectory: true)
+            try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+            let fileURL = tempDir.appendingPathComponent("missing-credentials.json")
+
+            try await ClaudeOAuthCredentialsStore.withCredentialsURLOverrideForTesting(fileURL) {
+                let (store, tokenSnapshot) = try await MainActor.run {
+                    let settings = Self.makeSettingsStore(suite: "ClaudeResilienceTests-subscription-only")
+                    settings.refreshFrequency = .manual
+                    settings.statusChecksEnabled = false
+                    settings.claudeUsageDataSource = .cli
+                    settings.claudeOAuthKeychainPromptMode = .never
+
+                    let metadata = ProviderRegistry.shared.metadata
+                    for provider in UsageProvider.allCases {
+                        try settings.setProviderEnabled(
+                            provider: provider,
+                            metadata: #require(metadata[provider]),
+                            enabled: provider == .claude)
+                    }
+
+                    let store = UsageStore(
+                        fetcher: UsageFetcher(environment: [:]),
+                        browserDetection: BrowserDetection(cacheTTL: 0),
+                        settings: settings,
+                        startupBehavior: .testing,
+                        environmentBase: [:])
+                    store._setSnapshotForTesting(
+                        UsageSnapshot(
+                            primary: RateWindow(
+                                usedPercent: 12,
+                                windowMinutes: 300,
+                                resetsAt: nil,
+                                resetDescription: nil),
+                            secondary: RateWindow(
+                                usedPercent: 34,
+                                windowMinutes: 10080,
+                                resetsAt: nil,
+                                resetDescription: nil),
+                            updatedAt: Date(timeIntervalSince1970: 1_800_000_000),
+                            identity: ProviderIdentitySnapshot(
+                                providerID: .claude,
+                                accountEmail: "claude@example.com",
+                                accountOrganization: nil,
+                                loginMethod: "Education")),
+                        provider: .claude)
+                    let tokenSnapshot = CostUsageTokenSnapshot(
+                        sessionTokens: 4200,
+                        sessionCostUSD: 1.25,
+                        last30DaysTokens: 42000,
+                        last30DaysCostUSD: 12.50,
+                        daily: [],
+                        updatedAt: Date(timeIntervalSince1970: 1_800_000_001))
+                    store._setTokenSnapshotForTesting(tokenSnapshot, provider: .claude)
+
+                    let baseSpec = try #require(store.providerSpecs[.claude])
+                    let descriptor = ProviderDescriptor(
+                        id: .claude,
+                        metadata: baseSpec.descriptor.metadata,
+                        branding: baseSpec.descriptor.branding,
+                        tokenCost: baseSpec.descriptor.tokenCost,
+                        fetchPlan: ProviderFetchPlan(
+                            sourceModes: [.cli],
+                            pipeline: ProviderFetchPipeline { _ in [SubscriptionOnlyFetchStrategy()] }),
+                        cli: baseSpec.descriptor.cli)
+                    store.providerSpecs[.claude] = ProviderSpec(
+                        style: baseSpec.style,
+                        isEnabled: baseSpec.isEnabled,
+                        descriptor: descriptor,
+                        makeFetchContext: baseSpec.makeFetchContext)
+                    return (store, tokenSnapshot)
+                }
+
+                await store.refreshProvider(.claude)
+                let result = await MainActor.run {
+                    (
+                        hasSnapshot: store.snapshot(for: .claude) != nil,
+                        error: store.error(for: .claude),
+                        tokenSnapshot: store.tokenSnapshot(for: .claude))
+                }
+
+                #expect(!result.hasSnapshot)
+                #expect(ClaudeStatusProbe.isSubscriptionQuotaUnavailableDescription(result.error))
+                #expect(result.tokenSnapshot == tokenSnapshot)
+            }
+        }
+    }
+
+    @Test
     func `cancelled Claude refresh never publishes an error`() async throws {
         try await ClaudeOAuthCredentialsStore.withIsolatedCredentialsFileTrackingForTesting {
             let tempDir = FileManager.default.temporaryDirectory
@@ -1106,6 +1197,23 @@ private struct CancellationFetchStrategy: ProviderFetchStrategy {
 
     func fetch(_: ProviderFetchContext) async throws -> ProviderFetchResult {
         throw CancellationError()
+    }
+
+    func shouldFallback(on _: Error, context _: ProviderFetchContext) -> Bool {
+        false
+    }
+}
+
+private struct SubscriptionOnlyFetchStrategy: ProviderFetchStrategy {
+    let id = "test.subscription-only"
+    let kind: ProviderFetchKind = .cli
+
+    func isAvailable(_: ProviderFetchContext) async -> Bool {
+        true
+    }
+
+    func fetch(_: ProviderFetchContext) async throws -> ProviderFetchResult {
+        throw ClaudeStatusProbeError.parseFailed(ClaudeStatusProbe.subscriptionQuotaUnavailableDescription)
     }
 
     func shouldFallback(on _: Error, context _: ProviderFetchContext) -> Bool {

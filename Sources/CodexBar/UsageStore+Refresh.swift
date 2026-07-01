@@ -516,6 +516,21 @@ extension UsageStore {
         let shouldNotifyPermissionPrompt = Self.isPermissionPromptWaiting(error)
         await MainActor.run {
             guard self.isCurrentProviderRefreshGeneration(provider, generation: generation) else { return }
+            if provider == .claude,
+               ClaudeStatusProbe.isSubscriptionQuotaUnavailableDescription(error.localizedDescription)
+            {
+                // This is a successful answer about quota availability, not a transient probe failure.
+                // Drop prior limits immediately so an Education subscription notice cannot leave stale bars visible.
+                self.snapshots.removeValue(forKey: provider)
+                self.lastKnownResetSnapshots.removeValue(forKey: provider)
+                self.lastKnownSessionRemaining.removeValue(forKey: provider)
+                self.lastKnownSessionWindowSource.removeValue(forKey: provider)
+                self.quotaWarningState = self.quotaWarningState.filter { $0.key.provider != provider }
+                self.lastSourceLabels.removeValue(forKey: provider)
+                self.errors[provider] = error.localizedDescription
+                self.failureGates[provider]?.reset()
+                return
+            }
             let hadPriorData = self.snapshots[provider] != nil
             let preservesPriorData = Self.shouldPreservePriorSnapshot(
                 after: error,
