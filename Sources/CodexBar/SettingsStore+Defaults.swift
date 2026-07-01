@@ -13,8 +13,8 @@ extension SettingsStore {
         }
     }
 
-    /// When enabled, opening the menu refreshes usage for every enabled provider (on top of the
-    /// periodic refresh clock, which is left untouched). See `scheduleOpenMenuRefresh`.
+    /// When enabled, keeping the menu open through its short refresh delay fetches usage for every
+    /// enabled provider. The periodic refresh clock remains unchanged. See `scheduleOpenMenuRefresh`.
     var refreshAllProvidersOnMenuOpen: Bool {
         get { self.defaultsState.refreshAllProvidersOnMenuOpen }
         set {
