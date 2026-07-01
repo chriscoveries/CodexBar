@@ -161,6 +161,7 @@ extension UsageStore {
         var snapshotToPersist: [UsageProvider: PlanUtilizationHistoryBuckets]?
         await MainActor.run {
             var providerBuckets = self.planUtilizationHistory[provider] ?? PlanUtilizationHistoryBuckets()
+            let originalProviderBuckets = providerBuckets
             let preferredAccount = account ?? self.settings.selectedTokenAccount(for: provider)
             let accountKey = self.resolvePlanUtilizationAccountKey(
                 provider: provider,
@@ -173,14 +174,14 @@ extension UsageStore {
                 providerBuckets: &providerBuckets)
             let histories = providerBuckets.histories(for: accountKey)
 
-            guard let updatedHistories = Self.updatedPlanUtilizationHistories(
+            if let updatedHistories = Self.updatedPlanUtilizationHistories(
                 existingHistories: histories,
                 samples: samples)
-            else {
-                return
+            {
+                providerBuckets.setHistories(updatedHistories, for: accountKey)
             }
 
-            providerBuckets.setHistories(updatedHistories, for: accountKey)
+            guard providerBuckets != originalProviderBuckets else { return }
             self.planUtilizationHistory[provider] = providerBuckets
             self.planUtilizationHistoryRevision &+= 1
             snapshotToPersist = self.planUtilizationHistory

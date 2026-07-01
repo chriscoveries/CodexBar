@@ -247,6 +247,84 @@ struct UsageStorePlanUtilizationClaudeIdentityTests {
 
     @MainActor
     @Test
+    func `coalesced scoped claude oauth sample still switches preferred account`() async throws {
+        let store = UsageStorePlanUtilizationTests.makeStore()
+        let accountAKey = try #require(
+            UsageStore._claudeOAuthPlanUtilizationAccountKeyForTesting(persistentRefHash: "account-a-ref"))
+        let accountBKey = try #require(
+            UsageStore._claudeOAuthPlanUtilizationAccountKeyForTesting(persistentRefHash: "account-b-ref"))
+        let hourStart = Date(timeIntervalSince1970: 1_700_000_000)
+
+        await store.recordPlanUtilizationHistorySample(
+            provider: .claude,
+            snapshot: self.identitylessClaudeSnapshot(usedPercent: 70),
+            claudeOAuthPersistentRefHash: "account-a-ref",
+            isClaudeOAuthSample: true,
+            now: hourStart)
+        await store.recordPlanUtilizationHistorySample(
+            provider: .claude,
+            snapshot: self.identitylessClaudeSnapshot(usedPercent: 40),
+            claudeOAuthPersistentRefHash: "account-b-ref",
+            isClaudeOAuthSample: true,
+            now: hourStart.addingTimeInterval(5 * 60))
+        await store.recordPlanUtilizationHistorySample(
+            provider: .claude,
+            snapshot: self.identitylessClaudeSnapshot(usedPercent: 60),
+            claudeOAuthPersistentRefHash: "account-a-ref",
+            isClaudeOAuthSample: true,
+            now: hourStart.addingTimeInterval(10 * 60))
+
+        let buckets = try #require(store.planUtilizationHistory[.claude])
+        let selection = store.planUtilizationHistorySelection(for: .claude)
+        #expect(buckets.preferredAccountKey == accountAKey)
+        #expect(findSeries(buckets.accounts[accountAKey] ?? [], name: .session, windowMinutes: 300)?
+            .entries.map(\.usedPercent) == [70])
+        #expect(findSeries(buckets.accounts[accountBKey] ?? [], name: .session, windowMinutes: 300)?
+            .entries.map(\.usedPercent) == [40])
+        #expect(selection.accountKey == accountAKey)
+        #expect(findSeries(selection.histories, name: .session, windowMinutes: 300)?
+            .entries.map(\.usedPercent) == [70])
+    }
+
+    @MainActor
+    @Test
+    func `coalesced unscoped claude oauth sample still switches preferred sentinel`() async throws {
+        let store = UsageStorePlanUtilizationTests.makeStore()
+        let scopedAccountKey = try #require(
+            UsageStore._claudeOAuthPlanUtilizationAccountKeyForTesting(persistentRefHash: "scoped-ref"))
+        let hourStart = Date(timeIntervalSince1970: 1_700_000_000)
+
+        await store.recordPlanUtilizationHistorySample(
+            provider: .claude,
+            snapshot: self.identitylessClaudeSnapshot(usedPercent: 70),
+            isClaudeOAuthSample: true,
+            now: hourStart)
+        await store.recordPlanUtilizationHistorySample(
+            provider: .claude,
+            snapshot: self.identitylessClaudeSnapshot(usedPercent: 40),
+            claudeOAuthPersistentRefHash: "scoped-ref",
+            isClaudeOAuthSample: true,
+            now: hourStart.addingTimeInterval(5 * 60))
+        await store.recordPlanUtilizationHistorySample(
+            provider: .claude,
+            snapshot: self.identitylessClaudeSnapshot(usedPercent: 60),
+            isClaudeOAuthSample: true,
+            now: hourStart.addingTimeInterval(10 * 60))
+
+        let buckets = try #require(store.planUtilizationHistory[.claude])
+        let selection = store.planUtilizationHistorySelection(for: .claude)
+        #expect(buckets.preferredAccountKey == "__unscoped__")
+        #expect(findSeries(buckets.unscoped, name: .session, windowMinutes: 300)?
+            .entries.map(\.usedPercent) == [70])
+        #expect(findSeries(buckets.accounts[scopedAccountKey] ?? [], name: .session, windowMinutes: 300)?
+            .entries.map(\.usedPercent) == [40])
+        #expect(selection.accountKey == nil)
+        #expect(findSeries(selection.histories, name: .session, windowMinutes: 300)?
+            .entries.map(\.usedPercent) == [70])
+    }
+
+    @MainActor
+    @Test
     func `reloaded scoped claude oauth preference wins over configured token account`() throws {
         let oauthAccountKey = try #require(
             UsageStore._claudeOAuthPlanUtilizationAccountKeyForTesting(persistentRefHash: "oauth-ref"))
@@ -630,6 +708,17 @@ struct UsageStorePlanUtilizationClaudeIdentityTests {
         #expect(buckets.accounts[legacyKey] == nil)
         #expect(buckets.accounts[accountKey] == [legacyWeekly])
         #expect(buckets.preferredAccountKey == accountKey)
+    }
+
+    private func identitylessClaudeSnapshot(usedPercent: Double) -> UsageSnapshot {
+        UsageSnapshot(
+            primary: RateWindow(
+                usedPercent: usedPercent,
+                windowMinutes: 300,
+                resetsAt: nil,
+                resetDescription: nil),
+            secondary: nil,
+            updatedAt: Date())
     }
 
     @MainActor
