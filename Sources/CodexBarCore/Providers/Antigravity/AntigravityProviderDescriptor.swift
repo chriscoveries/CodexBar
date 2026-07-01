@@ -170,9 +170,9 @@ struct AntigravityCLIHTTPSFetchStrategy: ProviderFetchStrategy {
     /// server, so a fresh spawn (and its multi-second ``GetUserStatus`` warm-up)
     /// can be skipped when a warm server is already present.
     struct WarmAgyDependencies {
-        let processInfos: @Sendable () async throws -> [AntigravityStatusProbe.ProcessInfoResult]
+        let processInfos: @Sendable (TimeInterval) async throws -> [AntigravityStatusProbe.ProcessInfoResult]
         let listeningPorts: @Sendable (Int, TimeInterval) async throws -> [Int]
-        let fetchSnapshot: @Sendable ([Int]) async throws -> AntigravityStatusSnapshot
+        let fetchSnapshot: @Sendable ([Int], TimeInterval) async throws -> AntigravityStatusSnapshot
         /// The pid of an ``agy`` that CodexBar itself spawned and manages through
         /// ``AntigravityCLISession`` (if any). Such a process must NOT be reused
         /// through the warm path: doing so bypasses `beginProbe`/`finishProbe`, so
@@ -180,17 +180,21 @@ struct AntigravityCLIHTTPSFetchStrategy: ProviderFetchStrategy {
         /// the managed session down mid-poll. Externally owned `agy` (an IDE, a
         /// long-lived `agy`, or another CodexBar host) has no such accounting.
         let ownedPID: @Sendable () async -> Int?
+        let now: @Sendable () -> Date
 
         init(
-            processInfos: @escaping @Sendable () async throws -> [AntigravityStatusProbe.ProcessInfoResult],
+            processInfos: @escaping @Sendable (TimeInterval) async throws
+                -> [AntigravityStatusProbe.ProcessInfoResult],
             listeningPorts: @escaping @Sendable (Int, TimeInterval) async throws -> [Int],
-            fetchSnapshot: @escaping @Sendable ([Int]) async throws -> AntigravityStatusSnapshot,
-            ownedPID: @escaping @Sendable () async -> Int? = { nil })
+            fetchSnapshot: @escaping @Sendable ([Int], TimeInterval) async throws -> AntigravityStatusSnapshot,
+            ownedPID: @escaping @Sendable () async -> Int? = { nil },
+            now: @escaping @Sendable () -> Date = Date.init)
         {
             self.processInfos = processInfos
             self.listeningPorts = listeningPorts
             self.fetchSnapshot = fetchSnapshot
             self.ownedPID = ownedPID
+            self.now = now
         }
     }
 
@@ -204,13 +208,19 @@ struct AntigravityCLIHTTPSFetchStrategy: ProviderFetchStrategy {
     /// can talk to it immediately — it needs no CSRF token (``cliHTTPS``).
     ///
     /// Returns the snapshot from the first warm server that answers with
-    /// parseable usage, or `nil` when none is found or none answers — in which
-    /// case the caller falls back to the existing spawn path unchanged.
+    /// parseable usage for the requested account, or `nil` when none is found or
+    /// none answers — in which case the caller falls back to the existing spawn
+    /// path unchanged.
     static func tryWarmAgyFetch(
         timeout: TimeInterval,
+        expectedAccountEmail: String? = nil,
         dependencies: WarmAgyDependencies) async -> AntigravityStatusSnapshot?
     {
-        let processInfos = await (try? dependencies.processInfos()) ?? []
+        let deadline = dependencies.now().addingTimeInterval(timeout)
+        guard let discoveryTimeout = Self.remainingWarmProbeTime(deadline: deadline, now: dependencies.now) else {
+            return nil
+        }
+        let processInfos = await (try? dependencies.processInfos(discoveryTimeout)) ?? []
         let ownedPID = await dependencies.ownedPID()
         // Only the CLI's language server needs no CSRF token; the IDE/app servers
         // require one and must not be reused through this token-less fast path.
@@ -223,13 +233,22 @@ struct AntigravityCLIHTTPSFetchStrategy: ProviderFetchStrategy {
         guard !cliProcesses.isEmpty else { return nil }
 
         for info in cliProcesses {
-            guard let ports = try? await dependencies.listeningPorts(info.pid, timeout),
+            guard let portTimeout = Self.remainingWarmProbeTime(deadline: deadline, now: dependencies.now) else {
+                return nil
+            }
+            guard let ports = try? await dependencies.listeningPorts(info.pid, portTimeout),
                   !ports.isEmpty
             else {
                 continue
             }
-            guard let snapshot = try? await dependencies.fetchSnapshot(ports),
-                  (try? snapshot.toUsageSnapshot()) != nil
+            guard let fetchTimeout = Self.remainingWarmProbeTime(deadline: deadline, now: dependencies.now) else {
+                return nil
+            }
+            guard let snapshot = try? await dependencies.fetchSnapshot(ports, fetchTimeout),
+                  (try? snapshot.toUsageSnapshot()) != nil,
+                  AntigravitySelectedAccountGuard.matches(
+                      snapshotAccountEmail: snapshot.accountEmail,
+                      expectedAccountEmail: expectedAccountEmail)
             else {
                 continue
             }
@@ -242,23 +261,31 @@ struct AntigravityCLIHTTPSFetchStrategy: ProviderFetchStrategy {
         return nil
     }
 
+    private static func remainingWarmProbeTime(
+        deadline: Date,
+        now: @Sendable () -> Date) -> TimeInterval?
+    {
+        let remaining = deadline.timeIntervalSince(now())
+        return remaining > 0 ? remaining : nil
+    }
+
     /// Production wiring for ``tryWarmAgyFetch``: list processes via `ps`, find
     /// listening ports via `lsof`, and probe the token-less CLI HTTPS endpoint.
     static func liveWarmAgyDependencies() -> WarmAgyDependencies {
         WarmAgyDependencies(
-            processInfos: {
+            processInfos: { timeout in
                 // A missing-CSRF/notRunning throw means no reusable server; the
                 // caller maps any throw to "no warm agy" and spawns instead.
                 try await AntigravityStatusProbe.detectProcessInfos(
-                    timeout: 2.0,
+                    timeout: timeout,
                     scope: .ideAndCLI)
             },
             listeningPorts: { pid, timeout in
                 try await AntigravityStatusProbe.listeningPorts(pid: pid, timeout: timeout)
             },
-            fetchSnapshot: { ports in
-                let deadline = Date().addingTimeInterval(2.0)
-                return try await AntigravityStatusProbe(timeout: 2.0)
+            fetchSnapshot: { ports, timeout in
+                let deadline = Date().addingTimeInterval(timeout)
+                return try await AntigravityStatusProbe(timeout: timeout)
                     .fetchFromPorts(ports, deadline: deadline)
             },
             ownedPID: {
@@ -276,10 +303,18 @@ struct AntigravityCLIHTTPSFetchStrategy: ProviderFetchStrategy {
         guard let binary = BinaryLocator.resolveAntigravityBinary(env: context.env) else {
             throw AntigravityStatusProbeError.notRunning
         }
+        let expectedAccountEmail: String? = if context.sourceMode == .auto,
+                                               context.selectedTokenAccountID != nil
+        {
+            AntigravitySelectedAccountGuard.selectedAccountEmail(context: context)
+        } else {
+            nil
+        }
         let result = try await self.fetchUsingWarmSession(
             binary: binary,
             idleWindow: context.persistentCLISessionIdleWindow,
-            resetAfterFetch: Self.shouldResetSessionAfterFetch(context))
+            resetAfterFetch: Self.shouldResetSessionAfterFetch(context),
+            expectedAccountEmail: expectedAccountEmail)
         try AntigravitySelectedAccountGuard.validate(result.usage, context: context)
         return result
     }
@@ -287,12 +322,14 @@ struct AntigravityCLIHTTPSFetchStrategy: ProviderFetchStrategy {
     private func fetchUsingWarmSession(
         binary: String,
         idleWindow: TimeInterval?,
-        resetAfterFetch: Bool) async throws -> ProviderFetchResult
+        resetAfterFetch: Bool,
+        expectedAccountEmail: String?) async throws -> ProviderFetchResult
     {
         try await self.fetchUsingWarmSession(
             binary: binary,
             idleWindow: idleWindow,
             resetAfterFetch: resetAfterFetch,
+            expectedAccountEmail: expectedAccountEmail,
             warmDependencies: Self.liveWarmAgyDependencies(),
             spawnFetch: { binary, idleWindow, resetAfterFetch in
                 try await self.fetchBySpawning(
@@ -309,6 +346,7 @@ struct AntigravityCLIHTTPSFetchStrategy: ProviderFetchStrategy {
         binary: String,
         idleWindow: TimeInterval?,
         resetAfterFetch: Bool,
+        expectedAccountEmail: String? = nil,
         warmDependencies: WarmAgyDependencies,
         spawnFetch: @Sendable (String, TimeInterval?, Bool) async throws -> ProviderFetchResult)
         async throws -> ProviderFetchResult
@@ -323,8 +361,12 @@ struct AntigravityCLIHTTPSFetchStrategy: ProviderFetchStrategy {
         // CodexBar must not manage its lifecycle, idle timeout, or
         // `resetAfterFetch` teardown. Those apply only to processes CodexBar
         // itself spawns on the fallback path below.
-        if let warmSnapshot = await Self.tryWarmAgyFetch(
+        // Long-lived hosts already keep a managed session warm. Restrict external
+        // process reuse to one-shot CLI calls so app/server lifecycle accounting
+        // stays entirely inside AntigravityCLISession.
+        if resetAfterFetch, let warmSnapshot = await Self.tryWarmAgyFetch(
             timeout: 2.0,
+            expectedAccountEmail: expectedAccountEmail,
             dependencies: warmDependencies)
         {
             // `tryWarmAgyFetch` only returns a snapshot whose `toUsageSnapshot()`
@@ -539,6 +581,12 @@ struct AntigravityOAuthFetchStrategy: ProviderFetchStrategy {
 /// and let the pipeline fall through to OAuth. Explicit ``cli``/``oauth`` source
 /// modes stay authoritative and are never second-guessed here.
 enum AntigravitySelectedAccountGuard {
+    static func matches(snapshotAccountEmail: String?, expectedAccountEmail: String?) -> Bool {
+        guard let expected = self.normalizedEmail(expectedAccountEmail) else { return true }
+        guard let found = self.normalizedEmail(snapshotAccountEmail) else { return false }
+        return found.caseInsensitiveCompare(expected) == .orderedSame
+    }
+
     static func validate(_ usage: UsageSnapshot, context: ProviderFetchContext) throws {
         guard context.sourceMode == .auto, context.selectedTokenAccountID != nil else { return }
         let expected = self.selectedAccountEmail(context: context)
