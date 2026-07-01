@@ -15,6 +15,21 @@ struct MenuOpenRefreshPlanTests {
 
         #expect(plan.providers == [.codex, .claude, .factory])
         #expect(plan.scheduling == .concurrent)
+        #expect(plan.refreshCodexDashboard)
+    }
+
+    @Test
+    func `refresh all skips dashboard refresh when codex is disabled`() {
+        let plan = MenuOpenRefreshPlan.resolve(.init(
+            refreshAllOnOpen: true,
+            enabledProviders: [.claude, .factory],
+            visibleProviders: [.claude],
+            refreshingProviders: [],
+            staleProviders: [],
+            missingProviders: []))
+
+        #expect(plan.providers == [.claude, .factory])
+        #expect(!plan.refreshCodexDashboard)
     }
 
     @Test
@@ -29,6 +44,7 @@ struct MenuOpenRefreshPlanTests {
 
         #expect(plan.providers == [.factory, .codex, .claude])
         #expect(plan.scheduling == .sequential)
+        #expect(!plan.refreshCodexDashboard)
     }
 
     @Test

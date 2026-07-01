@@ -17,10 +17,14 @@ struct MenuOpenRefreshPlan: Equatable {
 
     let providers: [UsageProvider]
     let scheduling: Scheduling
+    let refreshCodexDashboard: Bool
 
     static func resolve(_ inputs: Inputs) -> Self {
         if inputs.refreshAllOnOpen {
-            return Self(providers: inputs.enabledProviders, scheduling: .concurrent)
+            return Self(
+                providers: inputs.enabledProviders,
+                scheduling: .concurrent,
+                refreshCodexDashboard: inputs.enabledProviders.contains(.codex))
         }
 
         let enabled = Set(inputs.enabledProviders)
@@ -29,6 +33,9 @@ struct MenuOpenRefreshPlan: Equatable {
                 (inputs.refreshingProviders.contains($0) || inputs.staleProviders.contains($0) ||
                     inputs.missingProviders.contains($0))
         }
-        return Self(providers: providers, scheduling: .sequential)
+        return Self(
+            providers: providers,
+            scheduling: .sequential,
+            refreshCodexDashboard: false)
     }
 }
