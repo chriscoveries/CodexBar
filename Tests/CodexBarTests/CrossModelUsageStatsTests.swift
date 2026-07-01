@@ -332,6 +332,57 @@ struct CrossModelUsageStatsTests {
     }
 
     @Test
+    func `fetch usage accepts same origin default https port redirect`() async throws {
+        let transport = ProviderHTTPTransportHandler { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            if url.path == "/v1/credits" {
+                let body = #"{"currency":"USD","balance_micro":1500000,"uncollected_micro":0}"#
+                let redirectedURL = URL(string: "https://crossmodel.test:443/v1/credits")!
+                let (response, data) = Self.makeResponse(url: redirectedURL, body: body)
+                return (data, response)
+            }
+
+            let body = #"""
+            {"currency":"USD",
+             "daily":{"cost_micro":5746,"prompt_tokens":9176,"completion_tokens":3291,
+                      "total_tokens":12467,"request_count":9,"success_count":9},
+             "weekly":{"cost_micro":665033,"prompt_tokens":1368222,"completion_tokens":557568,
+                       "total_tokens":1925790,"request_count":529,"success_count":529},
+             "monthly":{"cost_micro":5368746,"prompt_tokens":33488242,"completion_tokens":1924229,
+                        "total_tokens":35412471,"request_count":3166,"success_count":3057}}
+            """#
+            let redirectedURL = URL(string: "https://crossmodel.test:443/v1/usage")!
+            let (response, data) = Self.makeResponse(url: redirectedURL, body: body)
+            return (data, response)
+        }
+
+        let usage = try await CrossModelUsageFetcher.fetchUsage(
+            apiKey: "cm-test",
+            environment: ["CROSSMODEL_API_URL": "https://crossmodel.test/v1"],
+            transport: transport)
+
+        #expect(usage.balance == 1.5)
+        #expect(usage.daily?.cost == 0.005746)
+    }
+
+    @Test
+    func `fetch usage rejects credits redirect to different port`() async throws {
+        let transport = ProviderHTTPTransportHandler { _ in
+            let body = #"{"currency":"USD","balance_micro":1500000,"uncollected_micro":0}"#
+            let redirectedURL = URL(string: "https://crossmodel.test:444/v1/credits")!
+            let (response, data) = Self.makeResponse(url: redirectedURL, body: body)
+            return (data, response)
+        }
+
+        await #expect(throws: CrossModelUsageError.apiError("CrossModel /credits redirected to a different origin")) {
+            _ = try await CrossModelUsageFetcher.fetchUsage(
+                apiKey: "cm-test",
+                environment: ["CROSSMODEL_API_URL": "https://crossmodel.test/v1"],
+                transport: transport)
+        }
+    }
+
+    @Test
     func `fetch usage omits cross origin usage redirect`() async throws {
         let transport = ProviderHTTPTransportHandler { request in
             guard let url = request.url else { throw URLError(.badURL) }
@@ -350,6 +401,38 @@ struct CrossModelUsageStatsTests {
                         "total_tokens":35412471,"request_count":3166,"success_count":3057}}
             """#
             let redirectedURL = URL(string: "https://evil.example/v1/usage")!
+            let (response, data) = Self.makeResponse(url: redirectedURL, body: body)
+            return (data, response)
+        }
+
+        let usage = try await CrossModelUsageFetcher.fetchUsage(
+            apiKey: "cm-test",
+            environment: ["CROSSMODEL_API_URL": "https://crossmodel.test/v1"],
+            transport: transport)
+
+        #expect(usage.balance == 1.5)
+        #expect(usage.daily == nil)
+    }
+
+    @Test
+    func `fetch usage omits usage redirect to different port`() async throws {
+        let transport = ProviderHTTPTransportHandler { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            if url.path == "/v1/credits" {
+                let body = #"{"currency":"USD","balance_micro":1500000,"uncollected_micro":0}"#
+                let (response, data) = Self.makeResponse(url: url, body: body)
+                return (data, response)
+            }
+            let body = #"""
+            {"currency":"USD",
+             "daily":{"cost_micro":5746,"prompt_tokens":9176,"completion_tokens":3291,
+                      "total_tokens":12467,"request_count":9,"success_count":9},
+             "weekly":{"cost_micro":665033,"prompt_tokens":1368222,"completion_tokens":557568,
+                       "total_tokens":1925790,"request_count":529,"success_count":529},
+             "monthly":{"cost_micro":5368746,"prompt_tokens":33488242,"completion_tokens":1924229,
+                        "total_tokens":35412471,"request_count":3166,"success_count":3057}}
+            """#
+            let redirectedURL = URL(string: "https://crossmodel.test:444/v1/usage")!
             let (response, data) = Self.makeResponse(url: redirectedURL, body: body)
             return (data, response)
         }

@@ -319,9 +319,23 @@ public struct CrossModelUsageFetcher: Sendable {
               let responseHost = responseURL.host?.lowercased(),
               requestURL.scheme?.lowercased() == responseURL.scheme?.lowercased(),
               requestHost == responseHost,
-              requestURL.port == responseURL.port
+              self.effectivePort(for: requestURL) == self.effectivePort(for: responseURL)
         else {
             throw CrossModelUsageError.apiError("CrossModel /\(endpoint) redirected to a different origin")
+        }
+    }
+
+    private static func effectivePort(for url: URL) -> Int? {
+        if let port = url.port {
+            return port
+        }
+        switch url.scheme?.lowercased() {
+        case "https":
+            return 443
+        case "http":
+            return 80
+        default:
+            return nil
         }
     }
 
