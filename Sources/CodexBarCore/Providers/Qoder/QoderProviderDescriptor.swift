@@ -359,11 +359,17 @@ struct QoderWebFetchStrategy: ProviderFetchStrategy {
     }
 
     private static func isCurlExecutableToken(_ token: String) -> Bool {
+        guard !token.contains("="),
+              !token.contains("://")
+        else {
+            return false
+        }
         let executable = token.split(separator: "/").last.map(String.init) ?? token
         return executable.lowercased() == "curl"
     }
 
     private static func isShellAssignment(_ token: String) -> Bool {
+        guard !token.contains(";") else { return false }
         guard let equals = token.firstIndex(of: "="),
               equals != token.startIndex
         else {
