@@ -4,6 +4,78 @@ import Testing
 
 struct ClaudeWebFetchDeadlineTests {
     @Test
+    func `CLI auto descriptor defers browser probe and falls back after web deadline`() async throws {
+        let planningProbe = ClaudeWebPlanningAvailabilityProbe()
+        let webProbe = ClaudeWebDeadlineProbe()
+        let context = Self.makeContext(
+            sourceMode: .auto,
+            webTimeout: 0.01,
+            cookieSource: .auto,
+            env: ["CLAUDE_CLI_PATH": "/usr/bin/true"])
+        let availabilityOverride: @Sendable (ProviderFetchContext, BrowserDetection) -> Bool = { _, _ in
+            planningProbe.stallAndReportUnavailable()
+        }
+        let usageLoader: ClaudeWebFetchStrategy.UsageLoader = { _ in
+            await webProbe.waitUntilReleased()
+            return Self.makeClaudeUsage()
+        }
+        let cliFetchOverride: @Sendable (String, TimeInterval, Bool) async throws -> ClaudeStatusSnapshot =
+            { _, _, _ in Self.makeClaudeStatus() }
+
+        let outcome = await ClaudeWebFetchStrategy.$availabilityProbeOverrideForTesting.withValue(
+            availabilityOverride)
+        {
+            await ClaudeWebFetchStrategy.$usageLoaderOverrideForTesting.withValue(usageLoader) {
+                await ClaudeStatusProbe.$fetchOverride.withValue(cliFetchOverride) {
+                    await ClaudeProviderDescriptor.makeDescriptor().fetchPlan.fetchOutcome(
+                        context: context,
+                        provider: .claude)
+                }
+            }
+        }
+        await webProbe.release()
+        let result = try outcome.result.get()
+
+        #expect(!planningProbe.wasInvoked)
+        #expect(result.strategyID == "claude.cli")
+        #expect(outcome.attempts.map(\.strategyID) == ["claude.web", "claude.cli"])
+        #expect(outcome.attempts.map(\.wasAvailable) == [true, true])
+        #expect(outcome.attempts.first?.errorDescription?.contains("Claude web usage fetch timed out") == true)
+    }
+
+    @Test
+    func `app auto descriptor bounds and reuses browser availability`() async throws {
+        let planningProbe = ClaudeWebPlanningAvailabilityProbe()
+        let context = Self.makeContext(
+            runtime: .app,
+            sourceMode: .auto,
+            webTimeout: 0.1,
+            cookieSource: .auto,
+            env: [
+                "CLAUDE_CLI_PATH": "/usr/bin/true",
+                ClaudeOAuthCredentialsStore.environmentTokenKey: "oauth-token",
+            ])
+        let availabilityOverride: @Sendable (ProviderFetchContext, BrowserDetection) -> Bool = { _, _ in
+            planningProbe.stallAndReportUnavailable()
+        }
+
+        let strategies = await ClaudeWebFetchStrategy.$availabilityProbeOverrideForTesting.withValue(
+            availabilityOverride)
+        {
+            await ClaudeProviderDescriptor.makeDescriptor().fetchPlan.pipeline.resolveStrategies(context)
+        }
+        planningProbe.release()
+        let cliStrategy = try #require(strategies.first(where: { $0.id == "claude.cli" }))
+        let shouldFallback = cliStrategy.shouldFallback(
+            on: ClaudeUsageError.parseFailed("cli failed"),
+            context: context)
+
+        #expect(planningProbe.invocationCount == 1)
+        #expect(!shouldFallback)
+        #expect(planningProbe.invocationCount == 1)
+    }
+
+    @Test
     func `CLI auto timeout cancels web and falls back to CLI`() async throws {
         let probe = ClaudeWebDeadlineProbe()
         let web = Self.makeTimedOutWebStrategy(probe: probe)
@@ -93,23 +165,26 @@ struct ClaudeWebFetchDeadlineTests {
     }
 
     private static func makeContext(
+        runtime: ProviderRuntime = .cli,
         sourceMode: ProviderSourceMode,
-        webTimeout: TimeInterval) -> ProviderFetchContext
+        webTimeout: TimeInterval,
+        cookieSource: ProviderCookieSource = .manual,
+        env: [String: String] = [:]) -> ProviderFetchContext
     {
         let browserDetection = BrowserDetection(cacheTTL: 0)
         return ProviderFetchContext(
-            runtime: .cli,
+            runtime: runtime,
             sourceMode: sourceMode,
             includeCredits: false,
             webTimeout: webTimeout,
             webDebugDumpHTML: false,
             verbose: false,
-            env: [:],
+            env: env,
             settings: ProviderSettingsSnapshot.make(claude: .init(
                 usageDataSource: sourceMode == .web ? .web : .auto,
                 webExtrasEnabled: false,
-                cookieSource: .manual,
-                manualCookieHeader: "sessionKey=sk-ant-session-token")),
+                cookieSource: cookieSource,
+                manualCookieHeader: cookieSource == .manual ? "sessionKey=sk-ant-session-token" : nil)),
             fetcher: UsageFetcher(),
             claudeFetcher: ClaudeUsageFetcher(browserDetection: browserDetection),
             browserDetection: browserDetection)
@@ -129,6 +204,48 @@ struct ClaudeWebFetchDeadlineTests {
             accountOrganization: nil,
             loginMethod: nil,
             rawText: nil)
+    }
+
+    private static func makeClaudeStatus() -> ClaudeStatusSnapshot {
+        ClaudeStatusSnapshot(
+            sessionPercentLeft: 80,
+            weeklyPercentLeft: nil,
+            opusPercentLeft: nil,
+            accountEmail: nil,
+            accountOrganization: nil,
+            loginMethod: nil,
+            primaryResetDescription: nil,
+            secondaryResetDescription: nil,
+            opusResetDescription: nil,
+            rawText: "stub")
+    }
+}
+
+private final class ClaudeWebPlanningAvailabilityProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private let releaseSemaphore = DispatchSemaphore(value: 0)
+    private var invocations = 0
+
+    var invocationCount: Int {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        return self.invocations
+    }
+
+    var wasInvoked: Bool {
+        self.invocationCount > 0
+    }
+
+    func stallAndReportUnavailable() -> Bool {
+        self.lock.lock()
+        self.invocations += 1
+        self.lock.unlock()
+        _ = self.releaseSemaphore.wait(timeout: .now() + 1)
+        return false
+    }
+
+    func release() {
+        self.releaseSemaphore.signal()
     }
 }
 
