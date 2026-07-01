@@ -40,7 +40,7 @@ extension CodexBarCLI {
         let forceRefresh = values.flags.contains("refresh")
         let useColor = Self.shouldUseColor(noColor: values.flags.contains("noColor"), format: format)
         let historyDays = Self.decodeCostHistoryDays(from: values)
-        // Cursor cost reuses the same cookie-source policy as usage fetches: skip the fetch when the
+        // Cursor cost reuses the same cookie-source policy as usage fetches: reject the fetch when the
         // user set Cursor cookies to Off, and forward the Manual header so the dashboard request uses
         // the configured session instead of auto-resolving a different one.
         let cursorCookieSettings = Self.cursorCookieSettings(config: config, providers: providers)
@@ -51,9 +51,12 @@ extension CodexBarCLI {
         var exitCode: ExitCode = .success
 
         for provider in providers {
-            if Self.cursorCostShouldSkip(provider, settings: cursorCookieSettings) {
-                if !output.jsonOnly {
-                    Self.writeStderr("Cursor cost skipped: cookie source is set to Off.\n")
+            if let error = Self.cursorCostAvailabilityError(provider, settings: cursorCookieSettings) {
+                exitCode = Self.mapError(error)
+                if format == .json {
+                    payload.append(Self.makeCostPayload(provider: provider, snapshot: nil, error: error))
+                } else if !output.jsonOnly {
+                    Self.writeStderr("Error: \(error.localizedDescription)\n")
                 }
                 continue
             }
@@ -272,12 +275,13 @@ extension CodexBarCLI {
         return context.settingsSnapshot(for: .cursor, account: account)?.cursor
     }
 
-    /// Whether a Cursor cost fetch must be skipped because the user set the cookie source to Off.
-    static func cursorCostShouldSkip(
+    /// Return the actionable error for a Cursor cost fetch disabled by cookie-source policy.
+    static func cursorCostAvailabilityError(
         _ provider: UsageProvider,
-        settings: ProviderSettingsSnapshot.CursorProviderSettings?) -> Bool
+        settings: ProviderSettingsSnapshot.CursorProviderSettings?) -> Error?
     {
-        provider == .cursor && settings?.cookieSource == .off
+        guard provider == .cursor, settings?.cookieSource == .off else { return nil }
+        return CursorCostAvailabilityError.cookieSourceOff
     }
 
     /// Manual cookie header to forward for a Cursor cost fetch, or nil for auto/non-cursor sources.
@@ -287,6 +291,17 @@ extension CodexBarCLI {
     {
         guard provider == .cursor, settings?.cookieSource == .manual else { return nil }
         return CookieHeaderNormalizer.normalize(settings?.manualCookieHeader)
+    }
+}
+
+enum CursorCostAvailabilityError: LocalizedError {
+    case cookieSourceOff
+
+    var errorDescription: String? {
+        switch self {
+        case .cookieSourceOff:
+            "Cursor cost is unavailable because the Cursor cookie source is set to Off."
+        }
     }
 }
 

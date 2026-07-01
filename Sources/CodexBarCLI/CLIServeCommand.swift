@@ -855,13 +855,16 @@ extension CodexBarCLI {
                 message: "cost is only supported for \(Self.costSupportedProviderNames())")
         }
 
-        // Cursor cost honors the same cookie policy here as the `cost` command: skip when the source
-        // is Off and forward the Manual header so served data matches the configured session.
+        // Cursor cost honors the same cookie policy here as the `cost` command: return a provider
+        // error when the source is Off and forward the Manual header for an enabled fetch.
         let cursorCookieSettings = Self.cursorCookieSettings(config: config, providers: providers)
         let fetcher = CostUsageFetcher()
         var payload: [CostPayload] = []
         for provider in providers {
-            if Self.cursorCostShouldSkip(provider, settings: cursorCookieSettings) { continue }
+            if let error = Self.cursorCostAvailabilityError(provider, settings: cursorCookieSettings) {
+                payload.append(Self.makeCostPayload(provider: provider, snapshot: nil, error: error))
+                continue
+            }
             do {
                 let snapshot = try await fetcher.loadTokenSnapshot(
                     provider: provider,
