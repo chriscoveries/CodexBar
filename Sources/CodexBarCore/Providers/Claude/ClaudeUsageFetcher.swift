@@ -87,7 +87,6 @@ public struct ClaudeUsageFetcher: ClaudeUsageFetching, Sendable {
         let runtime: ProviderRuntime
         let dataSource: ClaudeUsageDataSource
         let oauthKeychainPromptCooldownEnabled: Bool
-        let allowDelegatedRefresh: Bool
         let allowBackgroundDelegatedRefresh: Bool
         let allowStartupBootstrapPrompt: Bool
         let useWebExtras: Bool
@@ -119,8 +118,8 @@ public struct ClaudeUsageFetcher: ClaudeUsageFetching, Sendable {
         self.configuration.oauthKeychainPromptCooldownEnabled
     }
 
-    private var allowDelegatedRefresh: Bool {
-        self.configuration.allowDelegatedRefresh
+    private var allowsDelegatedOAuthRefresh: Bool {
+        self.runtime == .app
     }
 
     private var allowBackgroundDelegatedRefresh: Bool {
@@ -243,7 +242,6 @@ public struct ClaudeUsageFetcher: ClaudeUsageFetching, Sendable {
         runtime: ProviderRuntime = .app,
         dataSource: ClaudeUsageDataSource = .oauth,
         oauthKeychainPromptCooldownEnabled: Bool = false,
-        allowDelegatedRefresh: Bool = true,
         allowBackgroundDelegatedRefresh: Bool = false,
         allowStartupBootstrapPrompt: Bool = false,
         useWebExtras: Bool = false,
@@ -256,7 +254,6 @@ public struct ClaudeUsageFetcher: ClaudeUsageFetching, Sendable {
             runtime: runtime,
             dataSource: dataSource,
             oauthKeychainPromptCooldownEnabled: oauthKeychainPromptCooldownEnabled,
-            allowDelegatedRefresh: allowDelegatedRefresh,
             allowBackgroundDelegatedRefresh: allowBackgroundDelegatedRefresh,
             allowStartupBootstrapPrompt: allowStartupBootstrapPrompt,
             useWebExtras: useWebExtras,
@@ -357,7 +354,7 @@ public struct ClaudeUsageFetcher: ClaudeUsageFetching, Sendable {
         private func loadAfterDelegatedRefresh(allowDelegatedRetry: Bool) async throws -> ClaudeUsageSnapshot {
             guard allowDelegatedRetry else {
                 throw ClaudeUsageError.oauthFailed(
-                    "Claude OAuth token expired and delegated Claude CLI refresh did not recover. "
+                    "Claude OAuth token expired. CodexBar CLI does not launch Claude to refresh credentials. "
                         + "Run `claude login`, then retry.")
             }
 
@@ -492,7 +489,7 @@ public struct ClaudeUsageFetcher: ClaudeUsageFetching, Sendable {
                 throw ClaudeUsageError.parseFailed("Claude Admin API usage is handled by the provider descriptor.")
             case .oauth:
                 var snapshot = try await self.fetcher.loadViaOAuth(
-                    allowDelegatedRetry: self.fetcher.allowDelegatedRefresh)
+                    allowDelegatedRetry: self.fetcher.allowsDelegatedOAuthRefresh)
                 snapshot = await self.fetcher.applyWebExtrasIfNeeded(to: snapshot)
                 return snapshot
             case .web:
@@ -568,7 +565,7 @@ public struct ClaudeUsageFetcher: ClaudeUsageFetching, Sendable {
                 throw ClaudeUsageError.parseFailed("Planner emitted invalid api execution step.")
             case .oauth:
                 var snapshot = try await self.fetcher.loadViaOAuth(
-                    allowDelegatedRetry: self.fetcher.allowDelegatedRefresh)
+                    allowDelegatedRetry: self.fetcher.allowsDelegatedOAuthRefresh)
                 snapshot = await self.fetcher.applyWebExtrasIfNeeded(to: snapshot)
                 return snapshot
             case .web:

@@ -1,5 +1,6 @@
 import CodexBarCore
 import Commander
+import Foundation
 import Testing
 @testable import CodexBarCLI
 
