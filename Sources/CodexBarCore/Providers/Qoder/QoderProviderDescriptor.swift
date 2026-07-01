@@ -321,17 +321,17 @@ struct QoderWebFetchStrategy: ProviderFetchStrategy {
     }
 
     private static func curlRequestRoute(_ rawHeader: String) -> ManualCookieRoute? {
-        let rawTokens = self.shellTokens(rawHeader)
-        guard self.curlCommandIndex(rawTokens) != nil else {
-            if rawTokens.contains(where: self.isCurlExecutableToken) {
+        guard let preprocessedHeader = self.preprocessedCurlShellText(rawHeader) else {
+            return self.containsCurlExecutableText(rawHeader) ? .invalid : nil
+        }
+
+        let tokens = self.shellTokens(preprocessedHeader)
+        guard let curlIndex = self.curlCommandIndex(tokens) else {
+            if tokens.contains(where: self.isCurlExecutableToken) {
                 return .invalid
             }
             return nil
         }
-        guard let preprocessedHeader = self.preprocessedCurlShellText(rawHeader) else { return .invalid }
-
-        let tokens = self.shellTokens(preprocessedHeader)
-        guard let curlIndex = self.curlCommandIndex(tokens) else { return .invalid }
         guard tokens.allSatisfy(self.isCurlTokenTextSafe) else { return .invalid }
 
         guard let explicitTargets = self.explicitCurlURLTargets(tokens, after: curlIndex),
@@ -385,6 +385,11 @@ struct QoderWebFetchStrategy: ProviderFetchStrategy {
         }
         let executable = token.split(separator: "/").last.map(String.init) ?? token
         return executable.lowercased() == "curl"
+    }
+
+    private static func containsCurlExecutableText(_ text: String) -> Bool {
+        let pattern = #"(^|[\s;])(?:[^\s;=]+/)?curl($|[\s;])"#
+        return text.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
     }
 
     private static func isShellAssignment(_ token: String) -> Bool {

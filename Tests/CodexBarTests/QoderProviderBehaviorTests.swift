@@ -285,6 +285,15 @@ struct QoderManualCookieRoutingTests {
         #expect(QoderWebFetchStrategy
             .site(
                 forManualCookieHeader:
+                "HTTPS_PROXY=http://127.0.0.1:8080 \\\ncurl https://qoder.com.cn -H 'Cookie: sid=abc'") ==
+            .china)
+        #expect(QoderWebFetchStrategy
+            .site(forManualCookieHeader: "\\\ncurl https://qoder.com.cn -H 'Cookie: sid=abc'") == .china)
+        #expect(QoderWebFetchStrategy
+            .site(forManualCookieHeader: "\\\r\ncurl https://qoder.com -H 'Cookie: sid=abc'") == .international)
+        #expect(QoderWebFetchStrategy
+            .site(
+                forManualCookieHeader:
                 "curl https://qoder.com -H 'Origin: https://qoder.com' " +
                     "-H 'Referer: https://qoder.com/account/usage' -H 'Cookie: sid=abc'") == .international)
         #expect(QoderWebFetchStrategy
@@ -514,6 +523,10 @@ struct QoderManualCookieRoutingTests {
             .site(
                 forManualCookieHeader:
                 "curl https://qoder.com -A $AGENT -H 'Cookie: sid=abc'") == nil)
+        #expect(QoderWebFetchStrategy
+            .site(
+                forManualCookieHeader:
+                "QODER_AGENT=$AGENT \\\ncurl https://qoder.com.cn -H 'Cookie: sid=abc'") == nil)
         #expect(QoderWebFetchStrategy
             .site(
                 forManualCookieHeader:
