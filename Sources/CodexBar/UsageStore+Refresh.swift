@@ -293,6 +293,9 @@ extension UsageStore {
                 provider: provider,
                 snapshot: backfilled,
                 claudeOAuthPersistentRefHash: claudeOAuthPersistentRefHash,
+                claudeOAuthHistoryOwnerIdentifier: isClaudeOAuthSample
+                    ? result.claudeOAuthHistoryOwnerIdentifier
+                    : nil,
                 isClaudeOAuthSample: isClaudeOAuthSample)
             guard self.isCurrentProviderRefreshGeneration(provider, generation: context.generation) else { return }
             if let runtime = self.providerRuntimes[provider] {

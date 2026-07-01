@@ -76,12 +76,42 @@ struct ClaudeOAuthHistoryCredentialRoutingTests {
             persistentRefHash: "newest-candidate-ref") == "newest-candidate-ref")
     }
 
-    private func makeCredentialsData(accessToken: String) -> Data {
+    @Test
+    func `history owner follows refresh credential across access token rotation`() throws {
+        let beforeRefresh = try ClaudeOAuthCredentials.parse(
+            data: self.makeCredentialsData(accessToken: "access-before", refreshToken: "stable-refresh"))
+        let afterRefresh = try ClaudeOAuthCredentials.parse(
+            data: self.makeCredentialsData(accessToken: "access-after", refreshToken: "stable-refresh"))
+
+        let beforeIdentifier = try #require(beforeRefresh.historyOwnerIdentifier)
+        let afterIdentifier = try #require(afterRefresh.historyOwnerIdentifier)
+        #expect(beforeIdentifier == afterIdentifier)
+        #expect(beforeIdentifier.count == 64)
+        #expect(!beforeIdentifier.contains("stable-refresh"))
+    }
+
+    @Test
+    func `access-only credential replacement rotates history owner`() throws {
+        let original = try ClaudeOAuthCredentials.parse(
+            data: self.makeCredentialsData(accessToken: "original-access"))
+        let replacement = try ClaudeOAuthCredentials.parse(
+            data: self.makeCredentialsData(accessToken: "replacement-access"))
+
+        let originalIdentifier = try #require(original.historyOwnerIdentifier)
+        let replacementIdentifier = try #require(replacement.historyOwnerIdentifier)
+        #expect(originalIdentifier != replacementIdentifier)
+        #expect(!originalIdentifier.contains("original-access"))
+        #expect(!replacementIdentifier.contains("replacement-access"))
+    }
+
+    private func makeCredentialsData(accessToken: String, refreshToken: String? = nil) -> Data {
         let expiresAt = Int(Date(timeIntervalSinceNow: 3600).timeIntervalSince1970 * 1000)
+        let refreshTokenJSON = refreshToken.map { "\n            \"refreshToken\": \"\($0)\"," } ?? ""
         return Data("""
         {
           "claudeAiOauth": {
             "accessToken": "\(accessToken)",
+            \(refreshTokenJSON)
             "expiresAt": \(expiresAt),
             "scopes": ["user:profile"]
           }

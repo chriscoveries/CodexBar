@@ -1,5 +1,9 @@
 import Foundation
 
+#if canImport(CryptoKit)
+import CryptoKit
+#endif
+
 #if os(macOS)
 import Security
 #endif
@@ -36,6 +40,33 @@ public struct ClaudeOAuthCredentials: Sendable {
     public var expiresIn: TimeInterval? {
         guard let expiresAt else { return nil }
         return expiresAt.timeIntervalSinceNow
+    }
+
+    /// A one-way discriminator for history owned by this credential.
+    ///
+    /// Prefer the refresh token because access tokens routinely rotate for the same principal. If a provider
+    /// supplies only an access token, rotating that token intentionally starts a new history bucket rather than
+    /// risking that two identityless accounts share one. The source secret never leaves this computation.
+    var historyOwnerIdentifier: String? {
+        let normalizedRefreshToken = self.refreshToken?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let secretKind: String
+        let secret: String
+        if let normalizedRefreshToken, !normalizedRefreshToken.isEmpty {
+            secretKind = "refresh"
+            secret = normalizedRefreshToken
+        } else {
+            let normalizedAccessToken = self.accessToken.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalizedAccessToken.isEmpty else { return nil }
+            secretKind = "access"
+            secret = normalizedAccessToken
+        }
+
+        #if canImport(CryptoKit)
+        let material = Data("codexbar:claude-oauth-history-owner:v1\0\(secretKind)\0\(secret)".utf8)
+        return SHA256.hash(data: material).map { String(format: "%02x", $0) }.joined()
+        #else
+        return nil
+        #endif
     }
 
     public static func parse(data: Data) throws -> ClaudeOAuthCredentials {

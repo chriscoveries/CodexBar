@@ -129,6 +129,7 @@ extension UsageStore {
         snapshot: UsageSnapshot,
         account: ProviderTokenAccount? = nil,
         claudeOAuthPersistentRefHash: String? = nil,
+        claudeOAuthHistoryOwnerIdentifier: String? = nil,
         isClaudeOAuthSample: Bool = false,
         shouldUpdatePreferredAccountKey: Bool = true,
         shouldAdoptUnscopedHistory: Bool = true,
@@ -139,12 +140,18 @@ extension UsageStore {
         guard !samples.isEmpty else { return }
 
         let detectorAccountKey = if provider == .claude, isClaudeOAuthSample {
-            Self.claudeOAuthPlanUtilizationAccountKey(persistentRefHash: claudeOAuthPersistentRefHash)
+            Self.claudeOAuthPlanUtilizationAccountKey(
+                historyOwnerIdentifier: claudeOAuthHistoryOwnerIdentifier,
+                corroboratingPersistentRefHash: claudeOAuthPersistentRefHash)
         } else {
             self.planUtilizationAccountKey(
                 for: provider,
                 snapshot: snapshot,
                 preferredAccount: account)
+        }
+        if provider == .claude, isClaudeOAuthSample, detectorAccountKey == nil {
+            // Persisting without a high-entropy owner would merge unrelated OAuth accounts into `unscoped`.
+            return
         }
         await MainActor.run {
             self.postWeeklyLimitResetCelebrationIfNeeded(
@@ -168,6 +175,7 @@ extension UsageStore {
                 snapshot: snapshot,
                 preferredAccount: preferredAccount,
                 claudeOAuthPersistentRefHash: claudeOAuthPersistentRefHash,
+                claudeOAuthHistoryOwnerIdentifier: claudeOAuthHistoryOwnerIdentifier,
                 isClaudeOAuthSample: isClaudeOAuthSample,
                 shouldUpdatePreferredAccountKey: shouldUpdatePreferredAccountKey,
                 shouldAdoptUnscopedHistory: shouldAdoptUnscopedHistory,
@@ -603,17 +611,22 @@ extension UsageStore {
         return self.sha256Hex("\(provider.rawValue):token-account:\(account.id.uuidString.lowercased())")
     }
 
+    /// The Keychain row reference is corroborating provenance, not principal identity. Excluding it from the
+    /// canonical key keeps one credential stable when its row is recreated, while requiring the credential
+    /// discriminator ensures an in-place login replacement cannot inherit the prior principal's history.
     private nonisolated static func claudeOAuthPlanUtilizationAccountKey(
-        persistentRefHash: String?) -> String?
+        historyOwnerIdentifier: String?,
+        corroboratingPersistentRefHash _: String? = nil) -> String?
     {
-        guard let normalizedHash = persistentRefHash?
+        guard let normalizedIdentifier = historyOwnerIdentifier?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased(),
-            !normalizedHash.isEmpty
+            normalizedIdentifier.count == 64,
+            normalizedIdentifier.allSatisfy(\.isHexDigit)
         else {
             return nil
         }
-        let digest = self.sha256Hex("claude:oauth-keychain-persistent-ref:\(normalizedHash)")
+        let digest = self.sha256Hex("claude:oauth-history-owner:v2:\(normalizedIdentifier)")
         return "\(self.claudeOAuthPlanUtilizationAccountKeyPrefix)\(digest)"
     }
 
@@ -753,6 +766,7 @@ extension UsageStore {
         snapshot: UsageSnapshot?,
         preferredAccount: ProviderTokenAccount?,
         claudeOAuthPersistentRefHash: String? = nil,
+        claudeOAuthHistoryOwnerIdentifier: String? = nil,
         isClaudeOAuthSample: Bool = false,
         shouldUpdatePreferredAccountKey: Bool = true,
         shouldAdoptUnscopedHistory: Bool = true,
@@ -775,7 +789,8 @@ extension UsageStore {
 
         if provider == .claude, isClaudeOAuthSample {
             if let oauthAccountKey = Self.claudeOAuthPlanUtilizationAccountKey(
-                persistentRefHash: claudeOAuthPersistentRefHash)
+                historyOwnerIdentifier: claudeOAuthHistoryOwnerIdentifier,
+                corroboratingPersistentRefHash: claudeOAuthPersistentRefHash)
             {
                 if shouldUpdatePreferredAccountKey {
                     providerBuckets.preferredAccountKey = oauthAccountKey
@@ -784,9 +799,8 @@ extension UsageStore {
                 // Preserve it in place rather than silently adopting it into this opaque account.
                 return oauthAccountKey
             }
-            if shouldUpdatePreferredAccountKey {
-                providerBuckets.preferredAccountKey = Self.planUtilizationUnscopedPreferredKey
-            }
+            // Never append identityless OAuth samples to the shared unscoped bucket. A future fetch with
+            // trustworthy ownership evidence can start a scoped history without inheriting this sample.
             return nil
         }
 
@@ -1223,9 +1237,12 @@ extension UsageStore {
     }
 
     nonisolated static func _claudeOAuthPlanUtilizationAccountKeyForTesting(
-        persistentRefHash: String?) -> String?
+        historyOwnerIdentifier: String?,
+        persistentRefHash: String? = nil) -> String?
     {
-        self.claudeOAuthPlanUtilizationAccountKey(persistentRefHash: persistentRefHash)
+        self.claudeOAuthPlanUtilizationAccountKey(
+            historyOwnerIdentifier: historyOwnerIdentifier,
+            corroboratingPersistentRefHash: persistentRefHash)
     }
 
     nonisolated static func _legacyClaudePlanUtilizationEmailAccountKeyForTesting(snapshot: UsageSnapshot) -> String? {

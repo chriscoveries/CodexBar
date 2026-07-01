@@ -132,8 +132,9 @@ struct UsageStorePlanUtilizationClaudeIdentityTests {
 
     @MainActor
     @Test
-    func `claude oauth persistent reference separates switched account history`() async throws {
+    func `claude oauth credential owner separates switched account history`() async throws {
         let store = UsageStorePlanUtilizationTests.makeStore()
+        let accountBOwner = self.oauthOwnerIdentifier("b")
         let accountASnapshot = UsageSnapshot(
             primary: RateWindow(usedPercent: 10, windowMinutes: 300, resetsAt: nil, resetDescription: nil),
             secondary: RateWindow(usedPercent: 20, windowMinutes: 10080, resetsAt: nil, resetDescription: nil),
@@ -155,11 +156,13 @@ struct UsageStorePlanUtilizationClaudeIdentityTests {
             secondary: RateWindow(usedPercent: 80, windowMinutes: 10080, resetsAt: nil, resetDescription: nil),
             updatedAt: Date())
         let accountBKey = try #require(
-            UsageStore._claudeOAuthPlanUtilizationAccountKeyForTesting(persistentRefHash: "account-b-ref"))
+            UsageStore._claudeOAuthPlanUtilizationAccountKeyForTesting(
+                historyOwnerIdentifier: accountBOwner))
         await store.recordPlanUtilizationHistorySample(
             provider: .claude,
             snapshot: accountBSnapshot,
             claudeOAuthPersistentRefHash: "account-b-ref",
+            claudeOAuthHistoryOwnerIdentifier: accountBOwner,
             isClaudeOAuthSample: true,
             now: Date(timeIntervalSince1970: 1_700_007_200))
         store._setSnapshotForTesting(accountBSnapshot, provider: .claude)
@@ -180,15 +183,17 @@ struct UsageStorePlanUtilizationClaudeIdentityTests {
 
     @MainActor
     @Test
-    func `claude oauth persistent reference wins over configured token account`() async throws {
+    func `claude oauth credential owner wins over configured token account`() async throws {
         let store = UsageStorePlanUtilizationTests.makeStore()
+        let oauthOwner = self.oauthOwnerIdentifier("a")
         store.settings.addTokenAccount(provider: .claude, label: "Unrelated", token: "unrelated-token")
         store.settings.setActiveTokenAccountIndex(0, for: .claude)
         let selectedAccount = try #require(store.settings.selectedTokenAccount(for: .claude))
         let tokenAccountKey = try #require(
             UsageStore._planUtilizationTokenAccountKeyForTesting(provider: .claude, account: selectedAccount))
         let oauthAccountKey = try #require(
-            UsageStore._claudeOAuthPlanUtilizationAccountKeyForTesting(persistentRefHash: "oauth-ref"))
+            UsageStore._claudeOAuthPlanUtilizationAccountKeyForTesting(
+                historyOwnerIdentifier: oauthOwner))
         let snapshot = UsageSnapshot(
             primary: RateWindow(usedPercent: 45, windowMinutes: 300, resetsAt: nil, resetDescription: nil),
             secondary: nil,
@@ -198,12 +203,13 @@ struct UsageStorePlanUtilizationClaudeIdentityTests {
             provider: .claude,
             snapshot: snapshot,
             claudeOAuthPersistentRefHash: "oauth-ref",
+            claudeOAuthHistoryOwnerIdentifier: oauthOwner,
             isClaudeOAuthSample: true,
             now: Date(timeIntervalSince1970: 1_700_000_000))
         store._setSnapshotForTesting(snapshot, provider: .claude)
 
-        let buckets = try #require(store.planUtilizationHistory[.claude])
         let selection = store.planUtilizationHistorySelection(for: .claude)
+        let buckets = try #require(store.planUtilizationHistory[.claude])
         #expect(buckets.preferredAccountKey == oauthAccountKey)
         #expect(buckets.accounts[tokenAccountKey] == nil)
         #expect(findSeries(buckets.accounts[oauthAccountKey] ?? [], name: .session, windowMinutes: 300)?
@@ -215,7 +221,7 @@ struct UsageStorePlanUtilizationClaudeIdentityTests {
 
     @MainActor
     @Test
-    func `unscoped claude oauth wins over configured token account`() async throws {
+    func `claude oauth without credential ownership is not persisted`() async throws {
         let store = UsageStorePlanUtilizationTests.makeStore()
         store.settings.addTokenAccount(provider: .claude, label: "Unrelated", token: "unrelated-token")
         store.settings.setActiveTokenAccountIndex(0, for: .claude)
@@ -230,47 +236,52 @@ struct UsageStorePlanUtilizationClaudeIdentityTests {
         await store.recordPlanUtilizationHistorySample(
             provider: .claude,
             snapshot: snapshot,
+            claudeOAuthPersistentRefHash: "row-only-ref",
             isClaudeOAuthSample: true,
             now: Date(timeIntervalSince1970: 1_700_000_000))
         store._setSnapshotForTesting(snapshot, provider: .claude)
 
-        let buckets = try #require(store.planUtilizationHistory[.claude])
         let selection = store.planUtilizationHistorySelection(for: .claude)
-        #expect(buckets.preferredAccountKey != tokenAccountKey)
-        #expect(buckets.accounts[tokenAccountKey] == nil)
-        #expect(findSeries(buckets.unscoped, name: .session, windowMinutes: 300)?
-            .entries.map(\.usedPercent) == [55])
-        #expect(selection.accountKey == nil)
-        #expect(findSeries(selection.histories, name: .session, windowMinutes: 300)?
-            .entries.map(\.usedPercent) == [55])
+        let buckets = try #require(store.planUtilizationHistory[.claude])
+        #expect(buckets.unscoped.isEmpty)
+        #expect(buckets.accounts.isEmpty)
+        #expect(selection.accountKey == tokenAccountKey)
+        #expect(selection.histories.isEmpty)
     }
 
     @MainActor
     @Test
-    func `coalesced scoped claude oauth sample still switches preferred account`() async throws {
+    func `coalesced claude oauth sample still switches preferred account`() async throws {
         let store = UsageStorePlanUtilizationTests.makeStore()
+        let accountAOwner = self.oauthOwnerIdentifier("a")
+        let accountBOwner = self.oauthOwnerIdentifier("b")
         let accountAKey = try #require(
-            UsageStore._claudeOAuthPlanUtilizationAccountKeyForTesting(persistentRefHash: "account-a-ref"))
+            UsageStore._claudeOAuthPlanUtilizationAccountKeyForTesting(
+                historyOwnerIdentifier: accountAOwner))
         let accountBKey = try #require(
-            UsageStore._claudeOAuthPlanUtilizationAccountKeyForTesting(persistentRefHash: "account-b-ref"))
+            UsageStore._claudeOAuthPlanUtilizationAccountKeyForTesting(
+                historyOwnerIdentifier: accountBOwner))
         let hourStart = Date(timeIntervalSince1970: 1_700_000_000)
 
         await store.recordPlanUtilizationHistorySample(
             provider: .claude,
             snapshot: self.identitylessClaudeSnapshot(usedPercent: 70),
             claudeOAuthPersistentRefHash: "account-a-ref",
+            claudeOAuthHistoryOwnerIdentifier: accountAOwner,
             isClaudeOAuthSample: true,
             now: hourStart)
         await store.recordPlanUtilizationHistorySample(
             provider: .claude,
             snapshot: self.identitylessClaudeSnapshot(usedPercent: 40),
             claudeOAuthPersistentRefHash: "account-b-ref",
+            claudeOAuthHistoryOwnerIdentifier: accountBOwner,
             isClaudeOAuthSample: true,
             now: hourStart.addingTimeInterval(5 * 60))
         await store.recordPlanUtilizationHistorySample(
             provider: .claude,
             snapshot: self.identitylessClaudeSnapshot(usedPercent: 60),
             claudeOAuthPersistentRefHash: "account-a-ref",
+            claudeOAuthHistoryOwnerIdentifier: accountAOwner,
             isClaudeOAuthSample: true,
             now: hourStart.addingTimeInterval(10 * 60))
 
@@ -288,10 +299,12 @@ struct UsageStorePlanUtilizationClaudeIdentityTests {
 
     @MainActor
     @Test
-    func `coalesced unscoped claude oauth sample still switches preferred sentinel`() async throws {
+    func `coalesced claude oauth sample without owner cannot switch preferred account`() async throws {
         let store = UsageStorePlanUtilizationTests.makeStore()
+        let scopedOwner = self.oauthOwnerIdentifier("c")
         let scopedAccountKey = try #require(
-            UsageStore._claudeOAuthPlanUtilizationAccountKeyForTesting(persistentRefHash: "scoped-ref"))
+            UsageStore._claudeOAuthPlanUtilizationAccountKeyForTesting(
+                historyOwnerIdentifier: scopedOwner))
         let hourStart = Date(timeIntervalSince1970: 1_700_000_000)
 
         await store.recordPlanUtilizationHistorySample(
@@ -303,6 +316,7 @@ struct UsageStorePlanUtilizationClaudeIdentityTests {
             provider: .claude,
             snapshot: self.identitylessClaudeSnapshot(usedPercent: 40),
             claudeOAuthPersistentRefHash: "scoped-ref",
+            claudeOAuthHistoryOwnerIdentifier: scopedOwner,
             isClaudeOAuthSample: true,
             now: hourStart.addingTimeInterval(5 * 60))
         await store.recordPlanUtilizationHistorySample(
@@ -313,21 +327,22 @@ struct UsageStorePlanUtilizationClaudeIdentityTests {
 
         let buckets = try #require(store.planUtilizationHistory[.claude])
         let selection = store.planUtilizationHistorySelection(for: .claude)
-        #expect(buckets.preferredAccountKey == "__unscoped__")
-        #expect(findSeries(buckets.unscoped, name: .session, windowMinutes: 300)?
-            .entries.map(\.usedPercent) == [70])
+        #expect(buckets.preferredAccountKey == scopedAccountKey)
+        #expect(buckets.unscoped.isEmpty)
         #expect(findSeries(buckets.accounts[scopedAccountKey] ?? [], name: .session, windowMinutes: 300)?
             .entries.map(\.usedPercent) == [40])
-        #expect(selection.accountKey == nil)
+        #expect(selection.accountKey == scopedAccountKey)
         #expect(findSeries(selection.histories, name: .session, windowMinutes: 300)?
-            .entries.map(\.usedPercent) == [70])
+            .entries.map(\.usedPercent) == [40])
     }
 
     @MainActor
     @Test
     func `reloaded scoped claude oauth preference wins over configured token account`() throws {
+        let oauthOwner = self.oauthOwnerIdentifier("a")
         let oauthAccountKey = try #require(
-            UsageStore._claudeOAuthPlanUtilizationAccountKeyForTesting(persistentRefHash: "oauth-ref"))
+            UsageStore._claudeOAuthPlanUtilizationAccountKeyForTesting(
+                historyOwnerIdentifier: oauthOwner))
         let oauthHistory = planSeries(name: .session, windowMinutes: 300, entries: [
             planEntry(at: Date(timeIntervalSince1970: 1_700_000_000), usedPercent: 45),
         ])
@@ -371,13 +386,15 @@ struct UsageStorePlanUtilizationClaudeIdentityTests {
     @Test
     func `later token account sample supersedes claude oauth preference`() async throws {
         let store = UsageStorePlanUtilizationTests.makeStore()
+        let oauthOwner = self.oauthOwnerIdentifier("a")
         store.settings.addTokenAccount(provider: .claude, label: "Selected", token: "selected-token")
         store.settings.setActiveTokenAccountIndex(0, for: .claude)
         let selectedAccount = try #require(store.settings.selectedTokenAccount(for: .claude))
         let tokenAccountKey = try #require(
             UsageStore._planUtilizationTokenAccountKeyForTesting(provider: .claude, account: selectedAccount))
         let oauthAccountKey = try #require(
-            UsageStore._claudeOAuthPlanUtilizationAccountKeyForTesting(persistentRefHash: "oauth-ref"))
+            UsageStore._claudeOAuthPlanUtilizationAccountKeyForTesting(
+                historyOwnerIdentifier: oauthOwner))
         let oauthSnapshot = UsageSnapshot(
             primary: RateWindow(usedPercent: 45, windowMinutes: 300, resetsAt: nil, resetDescription: nil),
             secondary: nil,
@@ -386,6 +403,7 @@ struct UsageStorePlanUtilizationClaudeIdentityTests {
             provider: .claude,
             snapshot: oauthSnapshot,
             claudeOAuthPersistentRefHash: "oauth-ref",
+            claudeOAuthHistoryOwnerIdentifier: oauthOwner,
             isClaudeOAuthSample: true,
             now: Date(timeIntervalSince1970: 1_700_000_000))
 
@@ -411,8 +429,9 @@ struct UsageStorePlanUtilizationClaudeIdentityTests {
 
     @MainActor
     @Test
-    func `first claude oauth persistent reference quarantines legacy unscoped history`() async throws {
+    func `first claude oauth owner quarantines legacy unscoped history`() async throws {
         let store = UsageStorePlanUtilizationTests.makeStore()
+        let currentOwner = self.oauthOwnerIdentifier("c")
         let legacy = planSeries(name: .session, windowMinutes: 300, entries: [
             planEntry(at: Date(timeIntervalSince1970: 1_700_000_000), usedPercent: 25),
         ])
@@ -423,11 +442,13 @@ struct UsageStorePlanUtilizationClaudeIdentityTests {
             secondary: nil,
             updatedAt: Date())
         let accountKey = try #require(
-            UsageStore._claudeOAuthPlanUtilizationAccountKeyForTesting(persistentRefHash: "current-ref"))
+            UsageStore._claudeOAuthPlanUtilizationAccountKeyForTesting(
+                historyOwnerIdentifier: currentOwner))
         await store.recordPlanUtilizationHistorySample(
             provider: .claude,
             snapshot: snapshot,
             claudeOAuthPersistentRefHash: "current-ref",
+            claudeOAuthHistoryOwnerIdentifier: currentOwner,
             isClaudeOAuthSample: true,
             now: Date(timeIntervalSince1970: 1_700_007_200))
 
@@ -440,143 +461,101 @@ struct UsageStorePlanUtilizationClaudeIdentityTests {
 
     @MainActor
     @Test
-    func `claude oauth without persistent reference prefers unscoped over previous account`() async throws {
+    func `provenance-less claude oauth credentials stay isolated across restart`() async throws {
         let store = UsageStorePlanUtilizationTests.makeStore()
-        let accountASnapshot = UsageSnapshot(
-            primary: RateWindow(usedPercent: 10, windowMinutes: 300, resetsAt: nil, resetDescription: nil),
-            secondary: nil,
-            updatedAt: Date(),
-            identity: ProviderIdentitySnapshot(
-                providerID: .claude,
-                accountEmail: "alice@example.com",
-                accountOrganization: nil,
-                loginMethod: "max"))
-        let accountAKey = try #require(
-            UsageStore._planUtilizationAccountKeyForTesting(provider: .claude, snapshot: accountASnapshot))
-        await store.recordPlanUtilizationHistorySample(
-            provider: .claude,
-            snapshot: accountASnapshot,
-            now: Date(timeIntervalSince1970: 1_700_000_000))
+        let accountAOwner = self.oauthOwnerIdentifier("a")
+        let accountBOwner = self.oauthOwnerIdentifier("b")
+        let accountAKey = try #require(UsageStore._claudeOAuthPlanUtilizationAccountKeyForTesting(
+            historyOwnerIdentifier: accountAOwner))
+        let accountBKey = try #require(UsageStore._claudeOAuthPlanUtilizationAccountKeyForTesting(
+            historyOwnerIdentifier: accountBOwner))
 
-        let identitylessOAuthSnapshot = UsageSnapshot(
-            primary: RateWindow(usedPercent: 75, windowMinutes: 300, resetsAt: nil, resetDescription: nil),
-            secondary: nil,
-            updatedAt: Date())
         await store.recordPlanUtilizationHistorySample(
             provider: .claude,
-            snapshot: identitylessOAuthSnapshot,
+            snapshot: self.identitylessClaudeSnapshot(usedPercent: 10),
+            claudeOAuthHistoryOwnerIdentifier: accountAOwner,
+            isClaudeOAuthSample: true,
+            now: Date(timeIntervalSince1970: 1_700_000_000))
+        await store.recordPlanUtilizationHistorySample(
+            provider: .claude,
+            snapshot: self.identitylessClaudeSnapshot(usedPercent: 75),
+            claudeOAuthHistoryOwnerIdentifier: accountBOwner,
             isClaudeOAuthSample: true,
             now: Date(timeIntervalSince1970: 1_700_007_200))
-        store._setSnapshotForTesting(identitylessOAuthSnapshot, provider: .claude)
 
-        let selectedHistory = store.planUtilizationHistory(for: .claude)
         let buckets = try #require(store.planUtilizationHistory[.claude])
-        let accountAHistory = try #require(buckets.accounts[accountAKey])
-        #expect(findSeries(accountAHistory, name: .session, windowMinutes: 300)?.entries.map(\.usedPercent) == [10])
-        #expect(findSeries(buckets.unscoped, name: .session, windowMinutes: 300)?.entries.map(\.usedPercent) == [75])
-        #expect(findSeries(selectedHistory, name: .session, windowMinutes: 300)?.entries.map(\.usedPercent) == [75])
-        #expect(buckets.preferredAccountKey != accountAKey)
+        #expect(buckets.unscoped.isEmpty)
+        #expect(findSeries(buckets.accounts[accountAKey] ?? [], name: .session, windowMinutes: 300)?
+            .entries.map(\.usedPercent) == [10])
+        #expect(findSeries(buckets.accounts[accountBKey] ?? [], name: .session, windowMinutes: 300)?
+            .entries.map(\.usedPercent) == [75])
+
+        let reloaded = self.makeReloadedStoreWithConfiguredTokenAccount(buckets: buckets)
+        let selection = reloaded.planUtilizationHistorySelection(for: .claude)
+        #expect(selection.accountKey == accountBKey)
+        #expect(findSeries(selection.histories, name: .session, windowMinutes: 300)?
+            .entries.map(\.usedPercent) == [75])
+        #expect(reloaded.planUtilizationHistory[.claude]?.accounts[accountAKey] != nil)
     }
 
     @MainActor
     @Test
-    func `claude oauth unscoped sentinel prevents first later identity adoption`() async throws {
+    func `same keychain reference credential replacement stays isolated across restart`() async throws {
         let store = UsageStorePlanUtilizationTests.makeStore()
-        let identitylessOAuthSnapshot = UsageSnapshot(
-            primary: RateWindow(usedPercent: 75, windowMinutes: 300, resetsAt: nil, resetDescription: nil),
-            secondary: nil,
-            updatedAt: Date())
+        let originalOwner = self.oauthOwnerIdentifier("c")
+        let replacementOwner = self.oauthOwnerIdentifier("d")
+        let originalKey = try #require(UsageStore._claudeOAuthPlanUtilizationAccountKeyForTesting(
+            historyOwnerIdentifier: originalOwner,
+            persistentRefHash: "same-row-ref"))
+        let replacementKey = try #require(UsageStore._claudeOAuthPlanUtilizationAccountKeyForTesting(
+            historyOwnerIdentifier: replacementOwner,
+            persistentRefHash: "same-row-ref"))
+
         await store.recordPlanUtilizationHistorySample(
             provider: .claude,
-            snapshot: identitylessOAuthSnapshot,
+            snapshot: self.identitylessClaudeSnapshot(usedPercent: 25),
+            claudeOAuthPersistentRefHash: "same-row-ref",
+            claudeOAuthHistoryOwnerIdentifier: originalOwner,
             isClaudeOAuthSample: true,
             now: Date(timeIntervalSince1970: 1_700_000_000))
-
-        let identifiedSnapshot = UsageSnapshot(
-            primary: RateWindow(usedPercent: 10, windowMinutes: 300, resetsAt: nil, resetDescription: nil),
-            secondary: nil,
-            updatedAt: Date(),
-            identity: ProviderIdentitySnapshot(
-                providerID: .claude,
-                accountEmail: "alice@example.com",
-                accountOrganization: nil,
-                loginMethod: "max"))
-        let identifiedKey = try #require(
-            UsageStore._planUtilizationAccountKeyForTesting(provider: .claude, snapshot: identifiedSnapshot))
         await store.recordPlanUtilizationHistorySample(
             provider: .claude,
-            snapshot: identifiedSnapshot,
+            snapshot: self.identitylessClaudeSnapshot(usedPercent: 80),
+            claudeOAuthPersistentRefHash: "same-row-ref",
+            claudeOAuthHistoryOwnerIdentifier: replacementOwner,
+            isClaudeOAuthSample: true,
             now: Date(timeIntervalSince1970: 1_700_007_200))
 
         let buckets = try #require(store.planUtilizationHistory[.claude])
-        #expect(findSeries(buckets.unscoped, name: .session, windowMinutes: 300)?.entries.map(\.usedPercent) == [75])
-        #expect(findSeries(buckets.accounts[identifiedKey] ?? [], name: .session, windowMinutes: 300)?
-            .entries.map(\.usedPercent) == [10])
-    }
+        #expect(originalKey != replacementKey)
+        #expect(findSeries(buckets.accounts[originalKey] ?? [], name: .session, windowMinutes: 300)?
+            .entries.map(\.usedPercent) == [25])
+        #expect(findSeries(buckets.accounts[replacementKey] ?? [], name: .session, windowMinutes: 300)?
+            .entries.map(\.usedPercent) == [80])
 
-    @MainActor
-    @Test
-    func `claude oauth unscoped history remains quarantined after later scoped samples`() async throws {
-        let store = UsageStorePlanUtilizationTests.makeStore()
-        let identitylessOAuthSnapshot = UsageSnapshot(
-            primary: RateWindow(usedPercent: 75, windowMinutes: 300, resetsAt: nil, resetDescription: nil),
-            secondary: nil,
-            updatedAt: Date())
-        await store.recordPlanUtilizationHistorySample(
-            provider: .claude,
-            snapshot: identitylessOAuthSnapshot,
-            isClaudeOAuthSample: true,
-            now: Date(timeIntervalSince1970: 1_700_000_000))
-
-        let refScopedSnapshot = UsageSnapshot(
-            primary: RateWindow(usedPercent: 60, windowMinutes: 300, resetsAt: nil, resetDescription: nil),
-            secondary: nil,
-            updatedAt: Date())
-        let refScopedKey = try #require(
-            UsageStore._claudeOAuthPlanUtilizationAccountKeyForTesting(persistentRefHash: "current-ref"))
-        await store.recordPlanUtilizationHistorySample(
-            provider: .claude,
-            snapshot: refScopedSnapshot,
-            claudeOAuthPersistentRefHash: "current-ref",
-            isClaudeOAuthSample: true,
-            now: Date(timeIntervalSince1970: 1_700_007_200))
-
-        let identifiedSnapshot = UsageSnapshot(
-            primary: RateWindow(usedPercent: 10, windowMinutes: 300, resetsAt: nil, resetDescription: nil),
-            secondary: nil,
-            updatedAt: Date(),
-            identity: ProviderIdentitySnapshot(
-                providerID: .claude,
-                accountEmail: "alice@example.com",
-                accountOrganization: nil,
-                loginMethod: "max"))
-        let identifiedKey = try #require(
-            UsageStore._planUtilizationAccountKeyForTesting(provider: .claude, snapshot: identifiedSnapshot))
-        await store.recordPlanUtilizationHistorySample(
-            provider: .claude,
-            snapshot: identifiedSnapshot,
-            now: Date(timeIntervalSince1970: 1_700_014_400))
-
-        let buckets = try #require(store.planUtilizationHistory[.claude])
-        #expect(findSeries(buckets.unscoped, name: .session, windowMinutes: 300)?.entries.map(\.usedPercent) == [75])
-        #expect(findSeries(buckets.accounts[refScopedKey] ?? [], name: .session, windowMinutes: 300)?
-            .entries.map(\.usedPercent) == [60])
-        #expect(findSeries(buckets.accounts[identifiedKey] ?? [], name: .session, windowMinutes: 300)?
-            .entries.map(\.usedPercent) == [10])
+        let reloaded = self.makeReloadedStoreWithConfiguredTokenAccount(buckets: buckets)
+        let selection = reloaded.planUtilizationHistorySelection(for: .claude)
+        #expect(selection.accountKey == replacementKey)
+        #expect(findSeries(selection.histories, name: .session, windowMinutes: 300)?
+            .entries.map(\.usedPercent) == [80])
+        #expect(reloaded.planUtilizationHistory[.claude]?.accounts[originalKey] != nil)
     }
 
     @Test
-    func `claude oauth history key is stable across fingerprint metadata changes`() throws {
+    func `claude oauth history key is stable for one credential owner`() throws {
+        let owner = self.oauthOwnerIdentifier("a")
         let first = try #require(
-            UsageStore._claudeOAuthPlanUtilizationAccountKeyForTesting(persistentRefHash: "ABC123"))
+            UsageStore._claudeOAuthPlanUtilizationAccountKeyForTesting(historyOwnerIdentifier: owner))
         let refreshed = try #require(
-            UsageStore._claudeOAuthPlanUtilizationAccountKeyForTesting(persistentRefHash: " abc123 "))
+            UsageStore._claudeOAuthPlanUtilizationAccountKeyForTesting(
+                historyOwnerIdentifier: " \(owner.uppercased()) "))
         let switched = try #require(
-            UsageStore._claudeOAuthPlanUtilizationAccountKeyForTesting(persistentRefHash: "different-ref"))
+            UsageStore._claudeOAuthPlanUtilizationAccountKeyForTesting(
+                historyOwnerIdentifier: self.oauthOwnerIdentifier("b")))
 
         #expect(first == refreshed)
         #expect(first != switched)
-        #expect(first != "abc123")
+        #expect(first != owner)
         #expect(first.hasPrefix("__claude_oauth__:"))
         #expect(first.dropFirst("__claude_oauth__:".count).count == 64)
     }
@@ -708,6 +687,10 @@ struct UsageStorePlanUtilizationClaudeIdentityTests {
         #expect(buckets.accounts[legacyKey] == nil)
         #expect(buckets.accounts[accountKey] == [legacyWeekly])
         #expect(buckets.preferredAccountKey == accountKey)
+    }
+
+    private func oauthOwnerIdentifier(_ character: Character) -> String {
+        String(repeating: String(character), count: 64)
     }
 
     private func identitylessClaudeSnapshot(usedPercent: Double) -> UsageSnapshot {

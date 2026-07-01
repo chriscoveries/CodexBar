@@ -104,6 +104,9 @@ public struct ProviderFetchResult: Sendable {
     /// Transient account ownership evidence for plan-utilization history.
     /// The raw Keychain reference never enters the persisted usage snapshot.
     public let claudeOAuthKeychainPersistentRefHash: String?
+    /// A one-way discriminator derived from the winning Claude OAuth credential.
+    /// Raw access and refresh tokens never enter the fetch result or persisted history.
+    public let claudeOAuthHistoryOwnerIdentifier: String?
 
     public init(
         usage: UsageSnapshot,
@@ -112,7 +115,8 @@ public struct ProviderFetchResult: Sendable {
         sourceLabel: String,
         strategyID: String,
         strategyKind: ProviderFetchKind,
-        claudeOAuthKeychainPersistentRefHash: String? = nil)
+        claudeOAuthKeychainPersistentRefHash: String? = nil,
+        claudeOAuthHistoryOwnerIdentifier: String? = nil)
     {
         self.usage = usage
         self.credits = credits
@@ -121,6 +125,7 @@ public struct ProviderFetchResult: Sendable {
         self.strategyID = strategyID
         self.strategyKind = strategyKind
         self.claudeOAuthKeychainPersistentRefHash = claudeOAuthKeychainPersistentRefHash
+        self.claudeOAuthHistoryOwnerIdentifier = claudeOAuthHistoryOwnerIdentifier
     }
 }
 

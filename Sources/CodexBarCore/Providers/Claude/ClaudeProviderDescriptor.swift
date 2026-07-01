@@ -377,7 +377,8 @@ struct ClaudeOAuthFetchStrategy: ProviderFetchStrategy {
             sourceLabel: "oauth",
             strategyID: self.id,
             strategyKind: self.kind,
-            claudeOAuthKeychainPersistentRefHash: usage.oauthKeychainPersistentRefHash)
+            claudeOAuthKeychainPersistentRefHash: usage.oauthKeychainPersistentRefHash,
+            claudeOAuthHistoryOwnerIdentifier: usage.oauthHistoryOwnerIdentifier)
     }
 
     func shouldFallback(on _: Error, context: ProviderFetchContext) -> Bool {

@@ -25,6 +25,8 @@ public struct ClaudeUsageSnapshot: Sendable {
     public let rawText: String?
     /// Present only when the credential used for this OAuth fetch matches the current Claude Keychain item.
     public let oauthKeychainPersistentRefHash: String?
+    /// One-way, high-entropy ownership evidence derived from the exact credential used for this OAuth fetch.
+    public let oauthHistoryOwnerIdentifier: String?
 
     public init(
         primary: RateWindow,
@@ -38,7 +40,8 @@ public struct ClaudeUsageSnapshot: Sendable {
         accountOrganization: String?,
         loginMethod: String?,
         rawText: String?,
-        oauthKeychainPersistentRefHash: String? = nil)
+        oauthKeychainPersistentRefHash: String? = nil,
+        oauthHistoryOwnerIdentifier: String? = nil)
     {
         self.primary = primary
         self.primaryWindowKind = primaryWindowKind
@@ -52,6 +55,7 @@ public struct ClaudeUsageSnapshot: Sendable {
         self.loginMethod = loginMethod
         self.rawText = rawText
         self.oauthKeychainPersistentRefHash = oauthKeychainPersistentRefHash
+        self.oauthHistoryOwnerIdentifier = oauthHistoryOwnerIdentifier
     }
 }
 
@@ -960,6 +964,8 @@ extension ClaudeUsageFetcher {
         credentials: ClaudeOAuthCredentials,
         oauthKeychainPersistentRefHash: String? = nil) throws -> ClaudeUsageSnapshot
     {
+        let oauthHistoryOwnerIdentifier = credentials.historyOwnerIdentifier
+
         func makeWindow(_ window: OAuthUsageWindow?, windowMinutes: Int?) -> RateWindow? {
             guard let window,
                   let utilization = window.utilization
@@ -1001,7 +1007,8 @@ extension ClaudeUsageFetcher {
                     accountOrganization: nil,
                     loginMethod: loginMethod,
                     rawText: nil,
-                    oauthKeychainPersistentRefHash: oauthKeychainPersistentRefHash)
+                    oauthKeychainPersistentRefHash: oauthKeychainPersistentRefHash,
+                    oauthHistoryOwnerIdentifier: oauthHistoryOwnerIdentifier)
             }
             throw ClaudeUsageError.parseFailed("missing session data")
         }
@@ -1023,7 +1030,8 @@ extension ClaudeUsageFetcher {
             accountOrganization: nil,
             loginMethod: loginMethod,
             rawText: nil,
-            oauthKeychainPersistentRefHash: oauthKeychainPersistentRefHash)
+            oauthKeychainPersistentRefHash: oauthKeychainPersistentRefHash,
+            oauthHistoryOwnerIdentifier: oauthHistoryOwnerIdentifier)
     }
 
     private static func oauthExtraUsageCost(
@@ -1300,7 +1308,8 @@ extension ClaudeUsageFetcher {
                     accountOrganization: snapshot.accountOrganization,
                     loginMethod: snapshot.loginMethod,
                     rawText: snapshot.rawText,
-                    oauthKeychainPersistentRefHash: snapshot.oauthKeychainPersistentRefHash)
+                    oauthKeychainPersistentRefHash: snapshot.oauthKeychainPersistentRefHash,
+                    oauthHistoryOwnerIdentifier: snapshot.oauthHistoryOwnerIdentifier)
             }
         } catch {
             Self.log.debug("Claude web extras fetch failed: \(error.localizedDescription)")
