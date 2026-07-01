@@ -8,16 +8,11 @@ extension UsageStore {
     private nonisolated static let weeklyWindowMinutes = 7 * 24 * 60
     private nonisolated static let planUtilizationUnscopedPreferredKey = "__unscoped__"
     private nonisolated static let claudeOAuthPlanUtilizationAccountKeyPrefix = "__claude_oauth__:"
-    private nonisolated static let sessionWindowMinutesRange = 295...305
-
-    private nonisolated static func isSessionWindow(_ windowMinutes: Int?) -> Bool {
-        guard let windowMinutes else { return false }
-        return self.sessionWindowMinutesRange.contains(windowMinutes)
-    }
 
     struct LimitResetDetectorState: Codable, Equatable {
         let wasAboveThreshold: Bool
         let lastObservedAt: Date
+        let sourceRawValue: String?
     }
 
     func supportsPlanUtilizationHistory(for provider: UsageProvider) -> Bool {
@@ -58,7 +53,13 @@ extension UsageStore {
         let account: ProviderTokenAccount?
         let snapshot: UsageSnapshot
         let accountKey: String?
-        let samples: [PlanUtilizationSeriesSample]
+        let capturedAt: Date
+    }
+
+    private struct LimitResetObservation {
+        let usedPercent: Double
+        let observedAt: Date
+        let source: SessionQuotaWindowSource?
     }
 
     private struct LimitResetDetectionDescriptor {
@@ -158,8 +159,6 @@ extension UsageStore {
         async
     {
         let samples = self.planUtilizationSeriesSamples(provider: provider, snapshot: snapshot, capturedAt: now)
-        guard !samples.isEmpty else { return }
-
         let detectorAccountKey = if provider == .claude, isClaudeOAuthSample {
             Self.claudeOAuthPlanUtilizationAccountKey(
                 historyOwnerIdentifier: claudeOAuthHistoryOwnerIdentifier,
@@ -174,15 +173,19 @@ extension UsageStore {
             // Persisting without a high-entropy owner would merge unrelated OAuth accounts into `unscoped`.
             return
         }
+        let detectorContext = LimitResetDetectionContext(
+            provider: provider,
+            account: account,
+            snapshot: snapshot,
+            accountKey: detectorAccountKey,
+            capturedAt: now)
         await MainActor.run {
             self.postLimitResetCelebrationsIfNeeded(
-                provider: provider,
-                account: account,
-                snapshot: snapshot,
-                accountKey: detectorAccountKey,
+                context: detectorContext,
                 samples: samples)
         }
 
+        guard !samples.isEmpty else { return }
         guard self.shouldRecordPlanUtilizationHistory(for: provider) else { return }
         guard !self.shouldDeferClaudePlanUtilizationHistory(provider: provider) else { return }
 
@@ -353,40 +356,57 @@ extension UsageStore {
     }
 
     private func postLimitResetCelebrationsIfNeeded(
-        provider: UsageProvider,
-        account: ProviderTokenAccount?,
-        snapshot: UsageSnapshot,
-        accountKey: String?,
+        context: LimitResetDetectionContext,
         samples: [PlanUtilizationSeriesSample])
     {
-        let context = LimitResetDetectionContext(
-            provider: provider,
-            account: account,
-            snapshot: snapshot,
-            accountKey: accountKey,
-            samples: samples)
+        let sessionObservation: LimitResetObservation? = if context.provider == .codex {
+            samples.last(where: { $0.name == .session }).map {
+                LimitResetObservation(
+                    usedPercent: $0.entry.usedPercent,
+                    observedAt: $0.entry.capturedAt,
+                    source: nil)
+            }
+        } else {
+            self.sessionQuotaWindow(provider: context.provider, snapshot: context.snapshot).flatMap { resolved in
+                Self.clampedPercent(resolved.window.usedPercent).map {
+                    LimitResetObservation(
+                        usedPercent: $0,
+                        observedAt: context.capturedAt,
+                        source: resolved.source)
+                }
+            }
+        }
         self.postLimitResetCelebrationIfNeeded(
             states: &self.sessionLimitResetDetectorStates,
             context: context,
             descriptor: LimitResetDetectionDescriptor(
                 seriesName: .session,
                 defaultsKey: Self.sessionLimitResetDetectorDefaultsKey,
-                resetKind: "session"))
+                resetKind: "session"),
+            observation: sessionObservation)
+        let weeklyObservation = samples.last(where: { $0.name == .weekly }).map {
+            LimitResetObservation(
+                usedPercent: $0.entry.usedPercent,
+                observedAt: $0.entry.capturedAt,
+                source: nil)
+        }
         self.postLimitResetCelebrationIfNeeded(
             states: &self.weeklyLimitResetDetectorStates,
             context: context,
             descriptor: LimitResetDetectionDescriptor(
                 seriesName: .weekly,
                 defaultsKey: Self.weeklyLimitResetDetectorDefaultsKey,
-                resetKind: "weekly"))
+                resetKind: "weekly"),
+            observation: weeklyObservation)
     }
 
     private func postLimitResetCelebrationIfNeeded(
         states: inout [String: LimitResetDetectorState],
         context: LimitResetDetectionContext,
-        descriptor: LimitResetDetectionDescriptor)
+        descriptor: LimitResetDetectionDescriptor,
+        observation: LimitResetObservation?)
     {
-        guard let sample = context.samples.last(where: { $0.name == descriptor.seriesName }) else { return }
+        guard let observation else { return }
 
         let accountIdentifier = self.limitResetAccountIdentifier(
             provider: context.provider,
@@ -396,8 +416,8 @@ extension UsageStore {
         let detectorKey = Self.limitResetDetectorStateKey(
             provider: context.provider,
             accountIdentifier: accountIdentifier)
-        let currentUsed = sample.entry.usedPercent
-        let currentObservedAt = sample.entry.capturedAt
+        let currentUsed = observation.usedPercent
+        let currentObservedAt = observation.observedAt
         let wasAboveThreshold = currentUsed > Self.limitResetThreshold
         if let existingState = states[detectorKey],
            currentObservedAt <= existingState.lastObservedAt
@@ -405,11 +425,18 @@ extension UsageStore {
             return
         }
 
-        let shouldPost = states[detectorKey]?.wasAboveThreshold == true
+        let previousState = states[detectorKey]
+        let sourceRawValue = observation.source?.rawValue
+        let sourceChanged = descriptor.seriesName == .session
+            && previousState?.sourceRawValue != nil
+            && previousState?.sourceRawValue != sourceRawValue
+        let shouldPost = !sourceChanged
+            && previousState?.wasAboveThreshold == true
             && !wasAboveThreshold
         states[detectorKey] = LimitResetDetectorState(
             wasAboveThreshold: wasAboveThreshold,
-            lastObservedAt: currentObservedAt)
+            lastObservedAt: currentObservedAt,
+            sourceRawValue: sourceRawValue)
         self.persistLimitResetDetectorStates(
             states,
             defaultsKey: descriptor.defaultsKey,
@@ -479,22 +506,6 @@ extension UsageStore {
                     resetsAt: window.resetsAt))
         }
 
-        // Providers whose session lanes are not modeled explicitly above still expose a
-        // 5-hour session window through the standard or extra rate windows. Surface it so
-        // session-limit reset detection (and its confetti) works for them too.
-        func appendGenericSessionWindow() {
-            let standardSessionWindow = [snapshot.primary, snapshot.secondary, snapshot.tertiary]
-                .compactMap(\.self)
-                .first { Self.isSessionWindow($0.windowMinutes) }
-            let extraSessionWindow = snapshot.extraRateWindows?
-                .lazy
-                .first { $0.usageKnown && Self.isSessionWindow($0.window.windowMinutes) }?
-                .window
-            if let sessionWindow = standardSessionWindow ?? extraSessionWindow {
-                appendWindow(sessionWindow, name: .session)
-            }
-        }
-
         switch provider {
         case .codex:
             let projection = self.codexConsumerProjection(
@@ -524,7 +535,6 @@ extension UsageStore {
                     appendWindow(window, name: .weekly)
                 }
             }
-            appendGenericSessionWindow()
         default:
             let standardWeeklyWindow = [snapshot.primary, snapshot.secondary, snapshot.tertiary]
                 .compactMap(\.self)
@@ -536,7 +546,6 @@ extension UsageStore {
             if let weeklyWindow = standardWeeklyWindow ?? extraWeeklyWindow {
                 appendWindow(weeklyWindow, name: .weekly)
             }
-            appendGenericSessionWindow()
         }
 
         return samplesByKey.values.sorted { lhs, rhs in
