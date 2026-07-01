@@ -208,7 +208,8 @@ extension UsageStore {
             changedDuringFetch: claudeAuthChangedDuringFetch)
         let claudeOAuthHistoryPersistentRefHash = Self.stableClaudeKeychainPersistentRefHash(
             beforeFetch: claudeAuthStateBeforeFetch,
-            afterFetch: claudeKeychainPersistentRefHashAfterFetch)
+            afterFetchFingerprintToken: claudeAuthFingerprintAfterFetch,
+            afterFetchPersistentRefHash: claudeKeychainPersistentRefHashAfterFetch)
         guard self.isCurrentProviderRefreshGeneration(provider, generation: generation) else { return }
         await self.applyProviderRefreshOutcome(
             provider: provider,
@@ -426,15 +427,36 @@ extension UsageStore {
 
     private nonisolated static func stableClaudeKeychainPersistentRefHash(
         beforeFetch: ClaudeRefreshAuthState?,
-        afterFetch: String?) -> String?
+        afterFetchFingerprintToken: String?,
+        afterFetchPersistentRefHash: String?) -> String?
     {
-        guard let beforeFetch = beforeFetch?.keychainPersistentRefHash,
-              beforeFetch == afterFetch
+        guard let beforeFetch,
+              beforeFetch.fingerprintToken == afterFetchFingerprintToken,
+              let beforeFetchPersistentRefHash = beforeFetch.keychainPersistentRefHash,
+              beforeFetchPersistentRefHash == afterFetchPersistentRefHash
         else {
             return nil
         }
-        return beforeFetch
+        return beforeFetchPersistentRefHash
     }
+
+    #if DEBUG
+    nonisolated static func _stableClaudeKeychainPersistentRefHashForTesting(
+        beforeFetchFingerprintToken: String,
+        afterFetchFingerprintToken: String,
+        beforeFetchPersistentRefHash: String?,
+        afterFetchPersistentRefHash: String?) -> String?
+    {
+        self.stableClaudeKeychainPersistentRefHash(
+            beforeFetch: ClaudeRefreshAuthState(
+                fingerprintToken: beforeFetchFingerprintToken,
+                credentialsFileChanged: false,
+                keychainFingerprintChanged: false,
+                keychainPersistentRefHash: beforeFetchPersistentRefHash),
+            afterFetchFingerprintToken: afterFetchFingerprintToken,
+            afterFetchPersistentRefHash: afterFetchPersistentRefHash)
+    }
+    #endif
 
     private nonisolated static func invalidateClaudeCredentialsFileCacheIfChanged() async -> Bool {
         await withTaskGroup(of: Bool.self, returning: Bool.self) { group in

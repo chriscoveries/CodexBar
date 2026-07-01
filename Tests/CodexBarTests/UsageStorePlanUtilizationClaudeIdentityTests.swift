@@ -504,6 +504,23 @@ struct UsageStorePlanUtilizationClaudeIdentityTests {
     }
 
     @Test
+    func `claude oauth history scope requires full auth fingerprint stability`() {
+        let stablePersistentRefHash = UsageStore._stableClaudeKeychainPersistentRefHashForTesting(
+            beforeFetchFingerprintToken: "stable-fingerprint",
+            afterFetchFingerprintToken: "stable-fingerprint",
+            beforeFetchPersistentRefHash: "stable-ref",
+            afterFetchPersistentRefHash: "stable-ref")
+        let changedFingerprintPersistentRefHash = UsageStore._stableClaudeKeychainPersistentRefHashForTesting(
+            beforeFetchFingerprintToken: "before-fingerprint",
+            afterFetchFingerprintToken: "after-fingerprint",
+            beforeFetchPersistentRefHash: "stable-ref",
+            afterFetchPersistentRefHash: "stable-ref")
+
+        #expect(stablePersistentRefHash == "stable-ref")
+        #expect(changedFingerprintPersistentRefHash == nil)
+    }
+
+    @Test
     func `same claude email separates team and personal plan history keys`() throws {
         let team = UsageSnapshot(
             primary: nil,
