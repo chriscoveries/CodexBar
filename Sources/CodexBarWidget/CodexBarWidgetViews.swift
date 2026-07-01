@@ -347,6 +347,14 @@ private struct SwitcherSmallUsageView: View {
                     percentLeft: codeReview,
                     color: WidgetColors.color(for: self.entry.provider))
             }
+            if let token = WidgetUsageRow.compactTokenUsage(for: self.entry) {
+                ValueLine(
+                    title: token.sessionLabel,
+                    value: WidgetFormat.costAndTokens(
+                        cost: token.sessionCostUSD,
+                        tokens: token.sessionTokens,
+                        currencyCode: token.currencyCode))
+            }
         }
     }
 }
@@ -442,6 +450,14 @@ private struct SmallUsageView: View {
                     title: "Code review",
                     percentLeft: codeReview,
                     color: WidgetColors.color(for: self.entry.provider))
+            }
+            if let token = WidgetUsageRow.compactTokenUsage(for: self.entry) {
+                ValueLine(
+                    title: token.sessionLabel,
+                    value: WidgetFormat.costAndTokens(
+                        cost: token.sessionCostUSD,
+                        tokens: token.sessionTokens,
+                        currencyCode: token.currencyCode))
             }
         }
         .padding(12)
@@ -611,6 +627,17 @@ struct WidgetUsageRow: Identifiable, Equatable {
             return selected
         }
         return Array(rows.prefix(max(0, limit)))
+    }
+
+    static func compactTokenUsage(
+        for entry: WidgetSnapshot.ProviderEntry) -> WidgetSnapshot.TokenUsageSummary?
+    {
+        guard self.rows(for: entry).isEmpty,
+              entry.codeReviewRemainingPercent == nil
+        else {
+            return nil
+        }
+        return entry.tokenUsage
     }
 
     private static func antigravityQuotaFamily(for row: WidgetUsageRow) -> AntigravityQuotaFamily? {
