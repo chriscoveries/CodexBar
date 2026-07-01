@@ -87,6 +87,29 @@ struct SettingsStoreTests {
     }
 
     @Test
+    func `refresh on open defaults off and persists`() throws {
+        let suite = "SettingsStoreTests-refresh-on-open"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        let configStore = testConfigStore(suiteName: suite)
+        let store = SettingsStore(
+            userDefaults: defaults,
+            configStore: configStore,
+            zaiTokenStore: NoopZaiTokenStore(),
+            syntheticTokenStore: NoopSyntheticTokenStore())
+
+        #expect(store.refreshAllProvidersOnMenuOpen == false)
+        store.refreshAllProvidersOnMenuOpen = true
+
+        let reloaded = SettingsStore(
+            userDefaults: defaults,
+            configStore: configStore,
+            zaiTokenStore: NoopZaiTokenStore(),
+            syntheticTokenStore: NoopSyntheticTokenStore())
+        #expect(reloaded.refreshAllProvidersOnMenuOpen == true)
+    }
+
+    @Test
     func `weekly confetti setting defaults off and persists`() throws {
         let suite = "SettingsStoreTests-weekly-confetti"
         let defaultsA = try #require(UserDefaults(suiteName: suite))
