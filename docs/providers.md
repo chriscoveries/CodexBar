@@ -278,6 +278,7 @@ headers, source selection, provider ordering, and token accounts are stored in `
 - Parses JSONL response lines and extracts customer data from the embedded tRPC payload.
 - Shows the 4-hour Base bucket and monthly Overage bucket documented in the T3 Chat FAQ.
 - Status: none yet.
+- Details: `docs/t3chat.md`.
 
 ## Ollama
 - Web settings page (`https://ollama.com/settings`) via browser cookies.
