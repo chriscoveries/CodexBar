@@ -203,8 +203,7 @@ Wondering if CodexBar scans your disk? It doesn’t crawl your filesystem; it re
 Requires macOS 14+ and Swift 6.2+.
 
 ```bash
-./Scripts/package_app.sh        # builds CodexBar.app in-place
-CODEXBAR_SIGNING=adhoc ./Scripts/package_app.sh  # ad-hoc signing (no Apple Developer account)
+./Scripts/package_app.sh        # builds CodexBar.app in-place with ad-hoc signing
 open CodexBar.app
 ```
 
