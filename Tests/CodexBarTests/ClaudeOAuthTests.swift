@@ -81,6 +81,7 @@ struct ClaudeOAuthTests {
         #expect(snap.opus?.usedPercent == 5)
         #expect(snap.primary.resetsAt != nil)
         #expect(snap.loginMethod == "Claude Pro")
+        #expect(snap.oauthHistoryOwnerIdentifier?.count == 64)
     }
 
     @Test
