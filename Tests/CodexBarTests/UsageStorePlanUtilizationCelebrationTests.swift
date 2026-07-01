@@ -519,6 +519,102 @@ extension UsageStorePlanUtilizationTests {
 
     @MainActor
     @Test
+    func `session quota celebration uses generic provider canonical primary without history sample`() async {
+        let store = Self.makeStore()
+        let accountLabel = "zai-session-reset-org"
+        let recorder = SessionLimitResetEventRecorder(provider: .zai, accountLabel: accountLabel)
+        defer { recorder.invalidate() }
+
+        func snapshot(usedPercent: Double, updatedAt: Date) -> UsageSnapshot {
+            UsageSnapshot(
+                primary: RateWindow(
+                    usedPercent: usedPercent,
+                    windowMinutes: 300,
+                    resetsAt: nil,
+                    resetDescription: nil),
+                secondary: nil,
+                updatedAt: updatedAt,
+                identity: ProviderIdentitySnapshot(
+                    providerID: .zai,
+                    accountEmail: nil,
+                    accountOrganization: accountLabel,
+                    loginMethod: "pro"))
+        }
+
+        let before = snapshot(usedPercent: 88, updatedAt: Date(timeIntervalSince1970: 1_700_000_000))
+        let after = snapshot(usedPercent: 0, updatedAt: Date(timeIntervalSince1970: 1_700_003_600))
+
+        await store.recordPlanUtilizationHistorySample(provider: .zai, snapshot: before, now: before.updatedAt)
+        await store.recordPlanUtilizationHistorySample(provider: .zai, snapshot: after, now: after.updatedAt)
+
+        #expect(recorder.events.count == 1)
+        #expect(recorder.events.first?.usedPercent == 0)
+        #expect(store.planUtilizationHistory(for: .zai).isEmpty)
+    }
+
+    @MainActor
+    @Test
+    func `session quota celebration keeps account baselines isolated`() async {
+        let store = Self.makeStore()
+        let accountLabel = "session-reset-b@example.com"
+        let recorder = SessionLimitResetEventRecorder(provider: .claude, accountLabel: accountLabel)
+        defer { recorder.invalidate() }
+
+        func snapshot(account: String, usedPercent: Double, updatedAt: Date) -> UsageSnapshot {
+            UsageSnapshot(
+                primary: RateWindow(
+                    usedPercent: usedPercent,
+                    windowMinutes: 300,
+                    resetsAt: nil,
+                    resetDescription: nil),
+                secondary: RateWindow(
+                    usedPercent: 20,
+                    windowMinutes: 10080,
+                    resetsAt: nil,
+                    resetDescription: nil),
+                updatedAt: updatedAt,
+                identity: ProviderIdentitySnapshot(
+                    providerID: .claude,
+                    accountEmail: account,
+                    accountOrganization: nil,
+                    loginMethod: "max"))
+        }
+
+        let firstDate = Date(timeIntervalSince1970: 1_700_000_000)
+        let accountAHigh = snapshot(account: "session-reset-a@example.com", usedPercent: 80, updatedAt: firstDate)
+        let accountBLow = snapshot(account: accountLabel, usedPercent: 0, updatedAt: firstDate.addingTimeInterval(3600))
+        let accountBHigh = snapshot(
+            account: accountLabel,
+            usedPercent: 80,
+            updatedAt: firstDate.addingTimeInterval(7200))
+        let accountBReset = snapshot(
+            account: accountLabel,
+            usedPercent: 0,
+            updatedAt: firstDate.addingTimeInterval(10800))
+
+        await store.recordPlanUtilizationHistorySample(
+            provider: .claude,
+            snapshot: accountAHigh,
+            now: accountAHigh.updatedAt)
+        await store.recordPlanUtilizationHistorySample(
+            provider: .claude,
+            snapshot: accountBLow,
+            now: accountBLow.updatedAt)
+        #expect(recorder.events.isEmpty)
+
+        await store.recordPlanUtilizationHistorySample(
+            provider: .claude,
+            snapshot: accountBHigh,
+            now: accountBHigh.updatedAt)
+        await store.recordPlanUtilizationHistorySample(
+            provider: .claude,
+            snapshot: accountBReset,
+            now: accountBReset.updatedAt)
+        #expect(recorder.events.count == 1)
+    }
+
+    @MainActor
+    @Test
     func `session quota celebration does not infer arbitrary secondary session lane`() async {
         let store = Self.makeStore()
         let recorder = SessionLimitResetEventRecorder(provider: .zai, accountLabel: nil)
