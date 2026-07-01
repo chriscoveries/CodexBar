@@ -2,6 +2,37 @@ import AppKit
 import CodexBarCore
 import SwiftUI
 
+struct QuotaWarningAlertPresentationState {
+    struct Presentation: Equatable {
+        let generation: UInt
+        let title: String
+        let message: String
+    }
+
+    private(set) var current: Presentation?
+    private var nextGeneration: UInt = 0
+
+    mutating func present(title: String, message: String) -> Presentation {
+        self.nextGeneration &+= 1
+        let presentation = Presentation(
+            generation: self.nextGeneration,
+            title: title,
+            message: message)
+        self.current = presentation
+        return presentation
+    }
+
+    mutating func dismiss(generation: UInt) -> Bool {
+        guard self.current?.generation == generation else { return false }
+        self.current = nil
+        return true
+    }
+
+    mutating func dismiss() {
+        self.current = nil
+    }
+}
+
 /// Presents a transient, centered text alert when a quota warning threshold is crossed.
 ///
 /// Modeled after ``ScreenConfettiOverlayController``: it shows a borderless, click-through
@@ -12,6 +43,7 @@ final class QuotaWarningAlertOverlayController {
     private static let overlayLifetime: TimeInterval = 4.5
 
     private let logger = CodexBarLog.logger(LogCategories.sessionQuotaNotifications)
+    private var presentationState = QuotaWarningAlertPresentationState()
     private var window: NSWindow?
     private var dismissalTask: Task<Void, Never>?
 
@@ -22,6 +54,8 @@ final class QuotaWarningAlertOverlayController {
             self.logger.error("Cannot present quota warning overlay because no screens were found")
             return
         }
+
+        let presentation = self.presentationState.present(title: title, message: message)
 
         let frame = screen.frame
         let contentView = QuotaWarningAlertOverlayView(title: title, message: message)
@@ -58,17 +92,20 @@ final class QuotaWarningAlertOverlayController {
 
         self.dismissalTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(Self.overlayLifetime))
-            // A newer alert cancels this task in `show()`; bail out so we don't
-            // tear down the replacement overlay that took our place.
             guard !Task.isCancelled else { return }
-            self?.dismiss()
+            guard let self, self.presentationState.dismiss(generation: presentation.generation) else { return }
+            self.closeWindow()
         }
     }
 
     func dismiss() {
         self.dismissalTask?.cancel()
         self.dismissalTask = nil
+        self.presentationState.dismiss()
+        self.closeWindow()
+    }
 
+    private func closeWindow() {
         guard let window = self.window else { return }
         window.orderOut(nil)
         window.close()
@@ -94,6 +131,7 @@ private struct QuotaWarningAlertOverlayView: View {
     let title: String
     let message: String
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var appeared = false
 
     var body: some View {
@@ -119,12 +157,19 @@ private struct QuotaWarningAlertOverlayView: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.08)))
         .shadow(color: .black.opacity(0.25), radius: 24, y: 8)
-        .scaleEffect(self.appeared ? 1 : 0.92)
-        .opacity(self.appeared ? 1 : 0)
+        .scaleEffect(self.reduceMotion || self.appeared ? 1 : 0.92)
+        .opacity(self.reduceMotion || self.appeared ? 1 : 0)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         .padding(40)
         .allowsHitTesting(false)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(self.title)
+        .accessibilityValue(self.message)
         .task {
+            guard !self.reduceMotion else {
+                self.appeared = true
+                return
+            }
             withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                 self.appeared = true
             }

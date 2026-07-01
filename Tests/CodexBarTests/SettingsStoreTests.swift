@@ -683,12 +683,36 @@ struct SettingsStoreTests {
         #expect(store.quotaWarningWindowEnabled(.session) == true)
         #expect(store.quotaWarningWindowEnabled(.weekly) == true)
         #expect(store.quotaWarningSoundEnabled == true)
+        #expect(store.quotaWarningOnScreenAlertEnabled == false)
         #expect(store.quotaWarningMarkersVisible == true)
         #expect(defaults.array(forKey: "quotaWarningThresholds") as? [Int] == [50, 20])
         #expect(defaults.object(forKey: "quotaWarningSessionEnabled") as? Bool == true)
         #expect(defaults.object(forKey: "quotaWarningWeeklyEnabled") as? Bool == true)
         #expect(defaults.bool(forKey: "quotaWarningSoundEnabled") == true)
+        #expect(defaults.object(forKey: "quotaWarningOnScreenAlertEnabled") as? Bool == false)
         #expect(defaults.object(forKey: "quotaWarningMarkersVisible") as? Bool == true)
+    }
+
+    @Test
+    func `on-screen quota warning preference persists`() throws {
+        let suite = "SettingsStoreTests-quota-warning-on-screen-alert"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        let configStore = testConfigStore(suiteName: suite)
+        let store = SettingsStore(
+            userDefaults: defaults,
+            configStore: configStore,
+            zaiTokenStore: NoopZaiTokenStore(),
+            syntheticTokenStore: NoopSyntheticTokenStore())
+
+        store.quotaWarningOnScreenAlertEnabled = true
+
+        let reloaded = SettingsStore(
+            userDefaults: defaults,
+            configStore: configStore,
+            zaiTokenStore: NoopZaiTokenStore(),
+            syntheticTokenStore: NoopSyntheticTokenStore())
+        #expect(reloaded.quotaWarningOnScreenAlertEnabled == true)
     }
 
     @Test

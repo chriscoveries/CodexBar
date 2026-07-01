@@ -340,6 +340,7 @@ struct UsageStoreSessionQuotaTransitionTests {
         settings.refreshFrequency = .manual
         settings.statusChecksEnabled = false
         settings.quotaWarningNotificationsEnabled = true
+        settings.quotaWarningOnScreenAlertEnabled = true
         settings.quotaWarningThresholds = [50, 20]
         settings.setQuotaWarningWindowEnabled(.session, enabled: true)
         settings.setQuotaWarningWindowEnabled(.weekly, enabled: true)
@@ -389,6 +390,7 @@ struct UsageStoreSessionQuotaTransitionTests {
         #expect(notifier.quotaWarningPosts.first?.event.window == .session)
         #expect(notifier.quotaWarningPosts.first?.event.threshold == 50)
         #expect(notifier.quotaWarningPosts.first?.event.accountDisplayName == "person@example.com")
+        #expect(notifier.quotaWarningPosts.first?.onScreenAlertEnabled == true)
     }
 
     @Test
