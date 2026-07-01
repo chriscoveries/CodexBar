@@ -26,6 +26,7 @@
 - Usage display: keep positive values below one percent visible instead of rounding them to zero. Thanks @Max0633!
 - Menu bar: show pace as `0%` instead of a signed `+0%` or `-0%` when the pace delta rounds to zero. Thanks @devYRPauli!
 - Menu: align the persistent Refresh row with native actions, keep Settings, About, and Quit keyboard-navigable, and use a narrower Usage Dashboard icon. Thanks @Zihao-Qi!
+- Menu: match the persistent Refresh symbol size, weight, and icon column to native action rows across standard and narrow provider menus. Thanks @micnem!
 - Claude: stop installed-version checks from invoking a login shell and triggering unwanted Keychain prompts. Thanks @enieuwy!
 - Localization: reject blank translated values and restore the affected Vietnamese provider prompts. Thanks @kiranmagic7!
 - Usage totals: keep Today tied to the current local calendar day across cost, Admin API, and Poe surfaces instead of showing the latest historical bucket. Thanks @Zihao-Qi!
