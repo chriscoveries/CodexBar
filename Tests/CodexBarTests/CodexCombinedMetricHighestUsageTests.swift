@@ -203,10 +203,15 @@ struct CodexCombinedMetricHighestUsageTests {
                 updatedAt: Date()),
             provider: .codex)
         // Claude spend-limit-only account: exhausted providerCost, no secondary/tertiary, and an
-        // unflagged 0% 5h placeholder primary. The metric resolves to the (exhausted) spend-limit window.
+        // explicitly marked 0% 5h placeholder primary. The metric resolves to the exhausted spend-limit window.
         store._setSnapshotForTesting(
             UsageSnapshot(
-                primary: RateWindow(usedPercent: 0, windowMinutes: 300, resetsAt: nil, resetDescription: nil),
+                primary: RateWindow(
+                    usedPercent: 0,
+                    windowMinutes: 300,
+                    resetsAt: nil,
+                    resetDescription: nil,
+                    isSyntheticPlaceholder: true),
                 secondary: nil,
                 providerCost: ProviderCostSnapshot(
                     used: 100,
@@ -218,7 +223,7 @@ struct CodexCombinedMetricHighestUsageTests {
             provider: .claude)
 
         // The spend limit is exhausted and there are no real lanes, so Claude must be excluded from
-        // ranking (the unflagged 0% placeholder must not keep it eligible); Codex surfaces instead.
+        // ranking (the marked 0% placeholder must not keep it eligible); Codex surfaces instead.
         let highest = store.providerWithHighestUsage()
         #expect(highest?.provider == .codex)
         #expect(highest?.usedPercent == 80)

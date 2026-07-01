@@ -1473,7 +1473,12 @@ struct StatusItemAnimationTests {
 
         let now = Date()
         let snapshot = UsageSnapshot(
-            primary: RateWindow(usedPercent: 0, windowMinutes: 300, resetsAt: nil, resetDescription: nil),
+            primary: RateWindow(
+                usedPercent: 0,
+                windowMinutes: 300,
+                resetsAt: nil,
+                resetDescription: nil,
+                isSyntheticPlaceholder: true),
             secondary: nil,
             providerCost: ProviderCostSnapshot(
                 used: 45,
