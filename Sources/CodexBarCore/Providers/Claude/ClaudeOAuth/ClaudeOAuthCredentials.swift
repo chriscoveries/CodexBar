@@ -411,7 +411,7 @@ public enum ClaudeOAuthCredentialsStore {
                     guard fallbackDecision.allowed else { return nil }
                 }
 
-                if ClaudeOAuthCredentialsStore.shouldShowClaudeKeychainPreAlert() {
+                if ClaudeOAuthCredentialsStore.shouldNotifyClaudeKeychainPreAlert() {
                     KeychainPromptHandler.notify(
                         KeychainPromptContext(
                             kind: .claudeOAuth,
@@ -2265,6 +2265,14 @@ extension ClaudeOAuthCredentialsStore {
         case .allowed, .notFound:
             false
         }
+    }
+
+    private static func shouldNotifyClaudeKeychainPreAlert() -> Bool {
+        let mode = ClaudeOAuthKeychainPromptPreference.current()
+        guard self.shouldAllowClaudeCodeKeychainAccess(mode: mode) else { return false }
+        // Attribute-only preflight can report success even when reading the secret will prompt. Explicit user
+        // actions are rare and intentional, so always explain the read before Security.framework can show UI.
+        return ProviderInteractionContext.current == .userInitiated || self.shouldShowClaudeKeychainPreAlert()
     }
 
     /// Refresh the access token using a refresh token.

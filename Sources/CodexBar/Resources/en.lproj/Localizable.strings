@@ -996,6 +996,8 @@
 "Enterprise host" = "Enterprise host";
 "Extra usage balance: %@" = "Extra usage balance: %@";
 "Keychain Access Required" = "Keychain Access Required";
+"keychain_prompt_learn_more" = "Learn More…";
+"keychain_prompt_privacy_note" = "macOS—not CodexBar—handles any Mac login password entry. You can disable all Keychain access at any time in Settings → Advanced.";
 "Kiro menu bar value" = "Kiro menu bar value";
 "Label" = "Label";
 "No organizations loaded. Click Refresh after setting your API key." = "No organizations loaded. Click Refresh after setting your API key.";

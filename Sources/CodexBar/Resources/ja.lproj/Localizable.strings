@@ -990,6 +990,8 @@
 "Enterprise host" = "Enterprise ホスト";
 "Extra usage balance: %@" = "追加使用量の残高: %@";
 "Keychain Access Required" = "キーチェーンへのアクセスが必要です";
+"keychain_prompt_learn_more" = "詳しく見る…";
+"keychain_prompt_privacy_note" = "Macのログインパスワード入力を処理するのはCodexBarではなくmacOSです。キーチェーンへのアクセスは「設定」→「詳細」でいつでも無効にできます。";
 "Kiro menu bar value" = "Kiro メニューバー表示値";
 "Label" = "ラベル";
 "No organizations loaded. Click Refresh after setting your API key." = "組織が読み込まれていません。API キーを設定してから「更新」をクリックしてください。";
