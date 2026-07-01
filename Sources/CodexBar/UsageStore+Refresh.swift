@@ -307,6 +307,8 @@ extension UsageStore {
                 self.recordCodexHistoricalSampleIfNeeded(snapshot: backfilled)
             }
         case let .failure(error):
+            // Superseded or explicitly cancelled refreshes are control flow, not provider failures.
+            guard !Self.errorIsCancellation(error) else { return }
             if provider == .codex,
                let codexExpectedGuard = context.codexExpectedGuard,
                !self.shouldApplyCodexScopedFailure(expectedGuard: codexExpectedGuard)

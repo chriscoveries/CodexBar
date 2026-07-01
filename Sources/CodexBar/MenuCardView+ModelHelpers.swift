@@ -329,7 +329,8 @@ extension UsageMenuCardView.Model {
         let currentError = lastError ?? input.lastError
         if let currentError = currentError?.trimmingCharacters(in: .whitespacesAndNewlines),
            !currentError.isEmpty,
-           !UsageError.isNoRateLimitsFoundDescription(currentError)
+           !UsageError.isNoRateLimitsFoundDescription(currentError),
+           !ClaudeStatusProbe.isSubscriptionQuotaUnavailableDescription(currentError)
         {
             return false
         }

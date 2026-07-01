@@ -5,6 +5,67 @@ import Testing
 
 struct ClaudeResilienceTests {
     @Test
+    func `cancelled Claude refresh never publishes an error`() async throws {
+        try await ClaudeOAuthCredentialsStore.withIsolatedCredentialsFileTrackingForTesting {
+            let tempDir = FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString, isDirectory: true)
+            try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+            let fileURL = tempDir.appendingPathComponent("missing-credentials.json")
+
+            try await ClaudeOAuthCredentialsStore.withCredentialsURLOverrideForTesting(fileURL) {
+                let store = try await MainActor.run {
+                    let settings = Self.makeSettingsStore(suite: "ClaudeResilienceTests-cancellation")
+                    settings.refreshFrequency = .manual
+                    settings.statusChecksEnabled = false
+                    settings.claudeUsageDataSource = .cli
+                    settings.claudeOAuthKeychainPromptMode = .never
+
+                    let metadata = ProviderRegistry.shared.metadata
+                    for provider in UsageProvider.allCases {
+                        try settings.setProviderEnabled(
+                            provider: provider,
+                            metadata: #require(metadata[provider]),
+                            enabled: provider == .claude)
+                    }
+
+                    let store = UsageStore(
+                        fetcher: UsageFetcher(environment: [:]),
+                        browserDetection: BrowserDetection(cacheTTL: 0),
+                        settings: settings,
+                        startupBehavior: .testing,
+                        environmentBase: [:])
+                    let baseSpec = try #require(store.providerSpecs[.claude])
+                    let descriptor = ProviderDescriptor(
+                        id: .claude,
+                        metadata: baseSpec.descriptor.metadata,
+                        branding: baseSpec.descriptor.branding,
+                        tokenCost: baseSpec.descriptor.tokenCost,
+                        fetchPlan: ProviderFetchPlan(
+                            sourceModes: [.cli],
+                            pipeline: ProviderFetchPipeline { _ in [CancellationFetchStrategy()] }),
+                        cli: baseSpec.descriptor.cli)
+                    store.providerSpecs[.claude] = ProviderSpec(
+                        style: baseSpec.style,
+                        isEnabled: baseSpec.isEnabled,
+                        descriptor: descriptor,
+                        makeFetchContext: baseSpec.makeFetchContext)
+                    return store
+                }
+
+                await store.refreshProvider(.claude)
+                let result = await MainActor.run {
+                    (
+                        hasSnapshot: store.snapshot(for: .claude) != nil,
+                        error: store.error(for: .claude))
+                }
+
+                #expect(!result.hasSnapshot)
+                #expect(result.error == nil)
+            }
+        }
+    }
+
+    @Test
     func `suppresses single flake when prior data exists`() {
         var gate = ConsecutiveFailureGate()
         let firstFailure = gate.shouldSurfaceError(onFailureWithPriorData: true)
@@ -1028,6 +1089,23 @@ private struct TimeoutFetchStrategy: ProviderFetchStrategy {
 
     func fetch(_: ProviderFetchContext) async throws -> ProviderFetchResult {
         throw ClaudeStatusProbeError.timedOut
+    }
+
+    func shouldFallback(on _: Error, context _: ProviderFetchContext) -> Bool {
+        false
+    }
+}
+
+private struct CancellationFetchStrategy: ProviderFetchStrategy {
+    let id = "test.cancellation"
+    let kind: ProviderFetchKind = .cli
+
+    func isAvailable(_: ProviderFetchContext) async -> Bool {
+        true
+    }
+
+    func fetch(_: ProviderFetchContext) async throws -> ProviderFetchResult {
+        throw CancellationError()
     }
 
     func shouldFallback(on _: Error, context _: ProviderFetchContext) -> Bool {

@@ -504,7 +504,7 @@ extension UsageStore {
         return false
     }
 
-    private static func errorIsCancellation(_ error: any Error) -> Bool {
+    nonisolated static func errorIsCancellation(_ error: any Error) -> Bool {
         if error is CancellationError {
             return true
         }
