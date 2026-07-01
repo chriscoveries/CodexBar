@@ -388,6 +388,9 @@ struct QoderWebFetchStrategy: ProviderFetchStrategy {
     }
 
     private static func containsCurlExecutableText(_ text: String) -> Bool {
+        if self.shellTokens(text).contains(where: self.isCurlExecutableToken) {
+            return true
+        }
         let pattern = #"(^|[\s;])(?:[^\s;=]+/)?curl($|[\s;])"#
         return text.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
     }

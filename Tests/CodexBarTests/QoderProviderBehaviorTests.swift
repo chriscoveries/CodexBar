@@ -526,6 +526,18 @@ struct QoderManualCookieRoutingTests {
         #expect(QoderWebFetchStrategy
             .site(
                 forManualCookieHeader:
+                "\"curl\" https://qoder.com.cn -A $AGENT -H 'Cookie: sid=abc'") == nil)
+        #expect(QoderWebFetchStrategy
+            .site(
+                forManualCookieHeader:
+                "'/usr/bin/curl' https://qoder.com.cn -A $AGENT -H 'Cookie: sid=abc'") == nil)
+        #expect(QoderWebFetchStrategy
+            .site(
+                forManualCookieHeader:
+                "\\curl https://qoder.com.cn -A $AGENT -H 'Cookie: sid=abc'") == nil)
+        #expect(QoderWebFetchStrategy
+            .site(
+                forManualCookieHeader:
                 "QODER_AGENT=$AGENT \\\ncurl https://qoder.com.cn -H 'Cookie: sid=abc'") == nil)
         #expect(QoderWebFetchStrategy
             .site(
