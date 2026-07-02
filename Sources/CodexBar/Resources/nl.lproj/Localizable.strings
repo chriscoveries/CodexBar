@@ -730,6 +730,8 @@
 "reset_tomorrow_format" = "morgen, %@";
 "Lasts until reset" = "Gaat mee tot reset";
 "Updated %@" = "Bijgewerkt %@";
+"Updated relative %@" = "Bijgewerkt %@";
+"Updated absolute %@" = "Bijgewerkt %@";
 "Updated %@h ago" = "%@u geleden bijgewerkt";
 "Updated %@m ago" = "%@m geleden bijgewerkt";
 "Updated just now" = "Zojuist bijgewerkt";

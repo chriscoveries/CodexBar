@@ -70,7 +70,7 @@ struct UsageMenuCardView: View {
             }
 
             var percentLabel: String {
-                "\(UsageFormatter.percentString(self.percent)) \(self.percentStyle.labelSuffix)"
+                UsageFormatter.percentText(self.percent, suffix: self.percentStyle.labelSuffix)
             }
         }
 
@@ -809,7 +809,10 @@ extension UsageMenuCardView.Model {
                 credits: input.credits,
                 error: input.creditsError)
         }
-        let creditsText = PersonalInfoRedactor.redactEmails(in: rawCreditsText, isEnabled: input.hidePersonalInfo)
+        let creditsText = Self.redactedCreditsText(
+            rawCreditsText,
+            provider: input.provider,
+            hidePersonalInfo: input.hidePersonalInfo)
         let creditsProgressPercent = Self.creditsProgressPercent(credits: input.credits)
         let creditsScaleText = Self.creditsScaleText(credits: input.credits)
         let codexCreditLimitDetail = Self.codexCreditLimitDetail(credits: input.credits, now: input.now)
@@ -1059,17 +1062,33 @@ extension UsageMenuCardView.Model {
         let creditsHintCopyText: String?
     }
 
+    private static func redactedCreditsText(
+        _ text: String?,
+        provider: UsageProvider,
+        hidePersonalInfo: Bool) -> String?
+    {
+        let redacted = PersonalInfoRedactor.redactEmails(in: text, isEnabled: hidePersonalInfo)
+        guard hidePersonalInfo, provider == .amp, let redacted else { return redacted }
+
+        let workspaceHiddenPrefix = "\(L("Workspace")) \(PersonalInfoRedactor.emailPlaceholder):"
+        return redacted
+            .components(separatedBy: "\n")
+            .map { line in
+                guard line.hasPrefix(workspaceHiddenPrefix) else { return line }
+                return "\(L("Workspace")):\(line.dropFirst(workspaceHiddenPrefix.count))"
+            }
+            .joined(separator: "\n")
+    }
+
     private static func redactedText(
         input: Input,
         subtitle: (text: String, style: SubtitleStyle)) -> RedactedText
     {
-        let email = PersonalInfoRedactor.redactEmail(
-            Self.email(
-                for: input.provider,
-                snapshot: input.snapshot,
-                account: input.account,
-                metadata: input.metadata),
-            isEnabled: input.hidePersonalInfo)
+        let email = input.hidePersonalInfo ? "" : Self.email(
+            for: input.provider,
+            snapshot: input.snapshot,
+            account: input.account,
+            metadata: input.metadata)
         let subtitleText = PersonalInfoRedactor.redactEmails(in: subtitle.text, isEnabled: input.hidePersonalInfo)
             ?? subtitle.text
         let creditsHintText = PersonalInfoRedactor.redactEmails(

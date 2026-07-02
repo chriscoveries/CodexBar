@@ -138,7 +138,7 @@ extension UsageStore {
                     } else {
                         self.credits = nil
                         self.lastCreditsSource = .none
-                        self.lastCreditsError = "Codex credits are still loading; will retry shortly."
+                        self.lastCreditsError = L("Codex credits are still loading; will retry shortly.")
                     }
                 }
                 return
@@ -152,8 +152,10 @@ extension UsageStore {
                 {
                     self.credits = cached
                     let stamp = cached.updatedAt.formatted(date: .abbreviated, time: .shortened)
-                    self.lastCreditsError =
-                        "Last Codex credits refresh failed: \(message). Cached values from \(stamp)."
+                    self.lastCreditsError = L(
+                        "Last Codex credits refresh failed: %1$@. Cached values from %2$@.",
+                        message,
+                        stamp)
                     self.lastCodexAccountScopedRefreshGuard = expectedGuard
                 } else {
                     self.lastCreditsError = message

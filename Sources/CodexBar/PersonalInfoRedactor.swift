@@ -1,7 +1,9 @@
 import Foundation
 
 enum PersonalInfoRedactor {
-    static let emailPlaceholder = ""
+    static var emailPlaceholder: String {
+        L("Hidden")
+    }
 
     private static let emailRegex: NSRegularExpression? = {
         let pattern = #"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}"#

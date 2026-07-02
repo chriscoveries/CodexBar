@@ -486,10 +486,9 @@ struct MenuDescriptor {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let loginMethodText = snapshot?.loginMethod(for: provider)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let redactedEmail = PersonalInfoRedactor.redactEmail(emailText, isEnabled: hidePersonalInfo)
 
-        if let emailText, !emailText.isEmpty, !redactedEmail.isEmpty {
-            entries.append(.text("\(L("Account")): \(redactedEmail)", .secondary))
+        if !hidePersonalInfo, let emailText, !emailText.isEmpty {
+            entries.append(.text("\(L("Account")): \(emailText)", .secondary))
         }
         if provider == .kiro {
             if let plan = snapshot?.kiroUsage?.displayPlanName,
@@ -535,11 +534,13 @@ struct MenuDescriptor {
         }
 
         if metadata.usesAccountFallback {
-            if emailText?.isEmpty ?? true, let fallbackEmail = fallback.email, !fallbackEmail.isEmpty {
-                let redacted = PersonalInfoRedactor.redactEmail(fallbackEmail, isEnabled: hidePersonalInfo)
-                if !redacted.isEmpty {
-                    entries.append(.text("\(L("Account")): \(redacted)", .secondary))
-                }
+            if !hidePersonalInfo,
+               emailText?.isEmpty ?? true,
+               let fallbackEmail = fallback.email,
+               !fallbackEmail.isEmpty
+            {
+                entries.append(
+                    .text("\(L("Account")): \(fallbackEmail)", .secondary))
             }
             if loginMethodText?.isEmpty ?? true, let fallbackPlan = fallback.plan, !fallbackPlan.isEmpty {
                 entries.append(
