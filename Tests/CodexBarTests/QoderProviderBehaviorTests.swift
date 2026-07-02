@@ -478,6 +478,31 @@ struct QoderManualCookieRoutingTests {
             .site(
                 forManualCookieHeader:
                 "curl https://qoder.com.cn --expand-config '{{config}}' -H 'Cookie: sid=abc'") == nil)
+        #expect(QoderWebFetchStrategy
+            .site(
+                forManualCookieHeader:
+                "curl https://qoder.com.cn ; echo -H 'Cookie: sid=global'") == nil)
+        #expect(QoderWebFetchStrategy
+            .site(
+                forManualCookieHeader:
+                "curl https://qoder.com.cn | cat -H 'Cookie: sid=global'") == nil)
+        #expect(QoderWebFetchStrategy
+            .site(
+                forManualCookieHeader:
+                "curl https://qoder.com.cn > headers.txt -H 'Cookie: sid=abc'") == nil)
+        #expect(QoderWebFetchStrategy
+            .site(
+                forManualCookieHeader:
+                "curl https://qoder.com && echo done -H 'Cookie: sid=abc'") == nil)
+        #expect(QoderWebFetchStrategy
+            .site(
+                forManualCookieHeader:
+                "curl 'https://qoder.com/account/usage?a=1&b=2;next=ok' -H 'Cookie: sid=abc'") ==
+            .international)
+        #expect(QoderWebFetchStrategy
+            .site(
+                forManualCookieHeader:
+                "curl https://qoder.com -H 'X-Note: a;b|c&d=<e>' -H 'Cookie: sid=abc'") == .international)
     }
 
     @Test
@@ -637,6 +662,32 @@ extension QoderProviderBehaviorTests {
     }
 
     @Test
+    func `auto cookie source label trusts authoritative suffix over browser label text`() async throws {
+        let recorder = Recorder()
+        let strategy = QoderWebFetchStrategy(
+            usageLoader: { _, site, _ in
+                recorder.appendSite(site)
+                return QoderUsageSnapshot(
+                    usedCredits: 125,
+                    totalCredits: 500,
+                    remainingCredits: 375,
+                    usagePercentage: 25,
+                    unit: "credit")
+            },
+            cookieResolver: { _, _, _ in
+                QoderResolvedCookie(
+                    cookieHeader: "sid=global",
+                    sourceLabel: "Chrome Profile qoder.com.cn / qoder.com")
+            })
+
+        let result = try await strategy.fetch(self.makeContext(settings: .make(
+            qoder: .init(cookieSource: .auto, manualCookieHeader: nil))))
+
+        #expect(recorder.sitesSnapshot() == [.international])
+        #expect(result.sourceLabel == "Chrome Profile qoder.com.cn / qoder.com")
+    }
+
+    @Test
     func `auto cookie fetch retries freshly imported session after stale cache`() async throws {
         let sourceLabel = "Chrome Default / qoder.com"
         let recorder = Recorder()
@@ -739,6 +790,32 @@ extension QoderProviderBehaviorTests {
                     manualCookieHeader: "curl --proxy-header 'X: https://qoder.com.cn' https://qoder.com"))))
         }
 
+        #expect(recorder.sitesSnapshot().isEmpty)
+    }
+
+    @Test
+    func `manual curl with appended command does not resolve cookie or send request`() async {
+        let recorder = Recorder()
+        let strategy = QoderWebFetchStrategy(
+            usageLoader: { cookieHeader, site, _ in
+                recorder.appendCookieHeader(cookieHeader)
+                recorder.appendSite(site)
+                return QoderUsageSnapshot(
+                    usedCredits: 0,
+                    totalCredits: 300,
+                    remainingCredits: 300,
+                    usagePercentage: 0,
+                    unit: "credit")
+            })
+
+        await #expect(throws: QoderUsageError.invalidCredentials) {
+            try await strategy.fetch(self.makeContext(settings: .make(
+                qoder: .init(
+                    cookieSource: .manual,
+                    manualCookieHeader: "curl https://qoder.com.cn ; echo -H 'Cookie: sid=global'"))))
+        }
+
+        #expect(recorder.cookieHeadersSnapshot().isEmpty)
         #expect(recorder.sitesSnapshot().isEmpty)
     }
 

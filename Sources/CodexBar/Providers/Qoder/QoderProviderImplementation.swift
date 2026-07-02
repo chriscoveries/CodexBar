@@ -7,6 +7,13 @@ struct QoderProviderImplementation: ProviderImplementation {
     let id: UsageProvider = .qoder
 
     @MainActor
+    static func usageDashboardURL(settings: SettingsStore) -> URL {
+        QoderProviderDescriptor.dashboardURL(
+            settings: settings.qoderSettingsSnapshot(tokenOverride: nil),
+            sourceLabel: nil)
+    }
+
+    @MainActor
     func observeSettings(_ settings: SettingsStore) {
         _ = settings.qoderCookieSource
         _ = settings.qoderCookieHeader
@@ -86,9 +93,7 @@ struct QoderProviderImplementation: ProviderImplementation {
                         style: .link,
                         isVisible: nil,
                         perform: {
-                            if let url = URL(string: "https://qoder.com/account/usage") {
-                                NSWorkspace.shared.open(url)
-                            }
+                            NSWorkspace.shared.open(Self.usageDashboardURL(settings: context.settings))
                         }),
                 ],
                 isVisible: { context.settings.qoderCookieSource == .manual },

@@ -177,10 +177,11 @@ struct QoderWebFetchStrategy: ProviderFetchStrategy {
     {
         if context.settings?.qoder?.cookieSource == .manual {
             let rawHeader = context.settings?.qoder?.manualCookieHeader
+            let sites = try Self.sites(forManualCookieHeader: rawHeader)
             guard let manual = CookieHeaderNormalizer.normalize(rawHeader) else {
                 throw QoderUsageError.missingCredentials
             }
-            for site in try Self.sites(forManualCookieHeader: rawHeader) {
+            for site in sites {
                 let sourceLabel = Self.sourceLabel(browserLabel: "manual", site: site)
                 guard Self.shouldUseSourceLabel(sourceLabel, skipping: skippingSourceLabels) else {
                     continue
@@ -663,7 +664,9 @@ struct QoderWebFetchStrategy: ProviderFetchStrategy {
                     return nil
                 }
             case nil:
-                if scalar == "'" {
+                if self.isUnsupportedShellControlOperator(scalar) {
+                    return nil
+                } else if scalar == "'" {
                     quote = .single
                 } else if scalar == "\"" {
                     quote = .double
@@ -680,6 +683,10 @@ struct QoderWebFetchStrategy: ProviderFetchStrategy {
         }
 
         return quote == nil ? String(output) : nil
+    }
+
+    private static func isUnsupportedShellControlOperator(_ scalar: UnicodeScalar) -> Bool {
+        ";|&<>".unicodeScalars.contains(scalar)
     }
 
     private static func isSupportedEscapedShellLiteral(_ scalar: UnicodeScalar) -> Bool {
@@ -833,7 +840,13 @@ struct QoderWebFetchStrategy: ProviderFetchStrategy {
     }
 
     static func site(for sourceLabel: String) -> QoderWebSite {
-        sourceLabel.contains("qoder.com.cn") ? .china : .international
+        if sourceLabel == "qoder.com.cn" || sourceLabel.hasSuffix(" / qoder.com.cn") {
+            return .china
+        }
+        if sourceLabel == "qoder.com" || sourceLabel.hasSuffix(" / qoder.com") {
+            return .international
+        }
+        return .international
     }
 
     private static func shouldUseSourceLabel(_ sourceLabel: String, skipping skippedLabels: Set<String>) -> Bool {
