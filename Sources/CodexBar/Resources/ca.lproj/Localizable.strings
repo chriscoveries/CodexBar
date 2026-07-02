@@ -1118,6 +1118,8 @@
 "Unavailable" = "No disponible";
 "Update ready, restart now?" = "Actualització a punt, voleu reiniciar ara?";
 "Updated %@" = "Actualitzat %@";
+"Updated relative %@" = "Actualitzat %@";
+"Updated absolute %@" = "Actualitzat %@";
 "Updated %@h ago" = "Actualitzat fa %@h";
 "Updated %@m ago" = "Actualitzat fa %@m";
 "Updated just now" = "Actualitzat ara mateix";

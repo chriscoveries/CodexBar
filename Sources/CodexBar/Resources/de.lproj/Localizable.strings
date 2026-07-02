@@ -730,6 +730,8 @@
 "reset_tomorrow_format" = "morgen, %@";
 "Lasts until reset" = "Hält bis zum Zurücksetzen an";
 "Updated %@" = "Aktualisiert %@";
+"Updated relative %@" = "Aktualisiert %@";
+"Updated absolute %@" = "Aktualisiert %@";
 "Updated %@h ago" = "Vor %@h aktualisiert";
 "Updated %@m ago" = "Vor %@m aktualisiert";
 "Updated just now" = "Gerade erst aktualisiert";

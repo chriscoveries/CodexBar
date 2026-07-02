@@ -726,6 +726,8 @@
 "reset_tomorrow_format" = "ngày mai, %@";
 "Lasts until reset" = "Kéo dài cho đến Đặt lại";
 "Updated %@" = "Đã cập nhật %@";
+"Updated relative %@" = "Đã cập nhật %@";
+"Updated absolute %@" = "Đã cập nhật %@";
 "Updated %@h ago" = "Đã cập nhật %@ h trước";
 "Updated %@m ago" = "Đã cập nhật %@ tháng trước";
 "Updated just now" = "Vừa cập nhật";
