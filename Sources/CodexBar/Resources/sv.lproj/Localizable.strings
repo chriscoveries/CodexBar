@@ -729,6 +729,8 @@
 "reset_tomorrow_format" = "imorgon %@";
 "Lasts until reset" = "Räcker till återställning";
 "Updated %@" = "Uppdaterad %@";
+"Updated relative %@" = "Uppdaterad %@";
+"Updated absolute %@" = "Uppdaterad %@";
 "Updated %@h ago" = "Uppdaterad för %@ h sedan";
 "Updated %@m ago" = "Uppdaterad för %@ min sedan";
 "Updated just now" = "Uppdaterad nyss";

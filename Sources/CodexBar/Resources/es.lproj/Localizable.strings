@@ -320,6 +320,9 @@
 "Unsupported" = "No compatible";
 "Update Channel" = "Canal de actualizaciones";
 "Updated" = "Actualizado";
+"Updated %@" = "Actualizado %@";
+"Updated relative %@" = "Actualizado %@";
+"Updated absolute %@" = "Actualizado %@";
 "Updates unavailable in this build." = "Actualizaciones no disponibles en esta compilación.";
 "Usage" = "Uso";
 "Usage breakdown" = "Desglose de uso";

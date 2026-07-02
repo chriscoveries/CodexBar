@@ -727,6 +727,8 @@
 "reset_tomorrow_format" = "明日 %@";
 "Lasts until reset" = "リセットまで持続";
 "Updated %@" = "%@ に更新";
+"Updated relative %@" = "%@ に更新";
+"Updated absolute %@" = "%@ に更新";
 "Updated %@h ago" = "%@時間前に更新";
 "Updated %@m ago" = "%@分前に更新";
 "Updated just now" = "たった今更新";
