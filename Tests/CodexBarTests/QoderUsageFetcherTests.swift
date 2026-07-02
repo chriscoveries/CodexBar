@@ -62,10 +62,51 @@ struct QoderUsageFetcherTests {
     }
 
     @Test
-    func `zero total without percentage is invalid`() {
-        #expect(throws: QoderUsageError.parseFailed("total quota must be positive")) {
+    func `zero total zero usage without percentage is exhausted`() throws {
+        let snapshot = try QoderUsageFetcher.parseUsage(
+            data: Data(Self.zeroTotalQuotaJSON.utf8),
+            now: Self.now)
+        let usage = snapshot.toUsageSnapshot()
+
+        #expect(snapshot.usedCredits == 0)
+        #expect(snapshot.totalCredits == 0)
+        #expect(snapshot.remainingCredits == 0)
+        #expect(snapshot.usagePercentage == 100)
+        #expect(usage.primary?.usedPercent == 100)
+        #expect(usage.primary?.resetDescription == "0 / 0 credits")
+    }
+
+    @Test
+    func `negative quota values are invalid`() {
+        #expect(throws: QoderUsageError.parseFailed("quota values must be nonnegative")) {
             try QoderUsageFetcher.parseUsage(
-                data: Data(Self.zeroTotalQuotaJSON.utf8),
+                data: Data(Self.zeroTotalQuotaJSON.replacing("\"usedValue\": 0", with: "\"usedValue\": -1").utf8),
+                now: Self.now)
+        }
+        #expect(throws: QoderUsageError.parseFailed("quota values must be nonnegative")) {
+            try QoderUsageFetcher.parseUsage(
+                data: Data(Self.zeroTotalQuotaJSON.replacing("\"limitValue\": 0", with: "\"limitValue\": -1").utf8),
+                now: Self.now)
+        }
+        #expect(throws: QoderUsageError.parseFailed("quota values must be nonnegative")) {
+            try QoderUsageFetcher.parseUsage(
+                data: Data(Self.zeroTotalQuotaJSON.replacing("\"remainingValue\": 0", with: "\"remainingValue\": -1")
+                    .utf8),
+                now: Self.now)
+        }
+    }
+
+    @Test
+    func `zero total with positive usage is invalid`() {
+        #expect(throws: QoderUsageError.parseFailed("zero total quota must have zero usage and remaining")) {
+            try QoderUsageFetcher.parseUsage(
+                data: Data(Self.zeroTotalQuotaJSON.replacing("\"usedValue\": 0", with: "\"usedValue\": 1").utf8),
+                now: Self.now)
+        }
+        #expect(throws: QoderUsageError.parseFailed("zero total quota must have zero usage and remaining")) {
+            try QoderUsageFetcher.parseUsage(
+                data: Data(Self.zeroTotalQuotaJSON.replacing("\"remainingValue\": 0", with: "\"remainingValue\": 1")
+                    .utf8),
                 now: Self.now)
         }
     }

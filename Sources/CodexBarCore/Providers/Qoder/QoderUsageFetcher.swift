@@ -134,13 +134,14 @@ public enum QoderUsageFetcher {
     {
         let baseUsed = base.usedValue
         let baseTotal = base.limitValue
-        let baseRemaining = base.remainingValue ?? max(0, baseTotal - baseUsed)
+        let baseRemaining = try Self.remainingCredits(for: base)
 
         guard let shared else {
-            guard baseTotal > 0 else {
-                throw QoderUsageError.parseFailed("total quota must be positive")
-            }
-            let percentage = base.usagePercentage ?? (baseUsed / baseTotal) * 100
+            let percentage = try Self.usagePercentage(
+                used: baseUsed,
+                total: baseTotal,
+                remaining: baseRemaining,
+                provided: base.usagePercentage)
             return MergedQuota(
                 usedCredits: baseUsed,
                 totalCredits: baseTotal,
@@ -151,20 +152,49 @@ public enum QoderUsageFetcher {
 
         let sharedUsed = shared.usedValue
         let sharedTotal = shared.limitValue
-        let sharedRemaining = shared.remainingValue ?? max(0, sharedTotal - sharedUsed)
+        let sharedRemaining = try Self.remainingCredits(for: shared)
         let used = baseUsed + sharedUsed
         let total = baseTotal + sharedTotal
-        guard total > 0 else {
-            throw QoderUsageError.parseFailed("total quota must be positive")
-        }
         let remaining = baseRemaining + sharedRemaining
-        let percentage = (used / total) * 100
+        let percentage = try Self.usagePercentage(
+            used: used,
+            total: total,
+            remaining: remaining,
+            provided: nil)
         return MergedQuota(
             usedCredits: used,
             totalCredits: total,
             remainingCredits: remaining,
             usagePercentage: percentage,
             unit: base.unit ?? shared.unit)
+    }
+
+    private static func remainingCredits(for summary: QoderQuotaSummary) throws -> Double {
+        guard summary.usedValue >= 0,
+              summary.limitValue >= 0,
+              summary.remainingValue.map({ $0 >= 0 }) ?? true
+        else {
+            throw QoderUsageError.parseFailed("quota values must be nonnegative")
+        }
+        return summary.remainingValue ?? max(0, summary.limitValue - summary.usedValue)
+    }
+
+    private static func usagePercentage(
+        used: Double,
+        total: Double,
+        remaining: Double,
+        provided: Double?) throws -> Double
+    {
+        guard used >= 0, total >= 0, remaining >= 0 else {
+            throw QoderUsageError.parseFailed("quota values must be nonnegative")
+        }
+        guard total > 0 else {
+            guard used == 0, remaining == 0 else {
+                throw QoderUsageError.parseFailed("zero total quota must have zero usage and remaining")
+            }
+            return provided ?? 100
+        }
+        return provided ?? (used / total) * 100
     }
 }
 
