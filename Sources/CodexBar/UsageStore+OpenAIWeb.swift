@@ -182,10 +182,8 @@ extension UsageStore {
                 self.openAIDashboard = cached
                 self.openAIDashboardAttachmentAuthorized = self.lastOpenAIDashboardAttachmentAuthorized
                 let stamp = cached.updatedAt.formatted(date: .abbreviated, time: .shortened)
-                self.lastOpenAIDashboardError = L(
-                    "Last OpenAI dashboard refresh failed: %1$@. Cached values from %2$@.",
-                    message,
-                    stamp)
+                self.lastOpenAIDashboardError =
+                    "Last OpenAI dashboard refresh failed: \(message). Cached values from \(stamp)."
             } else {
                 self.lastOpenAIDashboardError = message
                 self.openAIDashboard = nil
