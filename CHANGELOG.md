@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- CrossModel: add API-key wallet balance and UTC daily, weekly, and monthly spend tracking. Thanks @hujuncheng!
 - Localization: complete Traditional Chinese provider and menu coverage, and route remaining provider UI copy through localized formatters. Thanks @jack24254029!
 - Menu: add an opt-in setting to refresh provider usage whenever the menu opens without changing the periodic refresh clock. Thanks @dstier-git!
 - Qoder: add big-model credit usage from qoder.com and qoder.com.cn browser sessions or manual cookies. Thanks @Yuxin-Qiao!
