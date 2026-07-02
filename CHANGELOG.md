@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- Doubao: add signed Volcengine AK/SK support for Coding Plan session, weekly, and monthly usage. Thanks @LeoLin990405!
 - CrossModel: add API-key wallet balance and UTC daily, weekly, and monthly spend tracking. Thanks @hujuncheng!
 - Localization: complete Traditional Chinese provider and menu coverage, and route remaining provider UI copy through localized formatters. Thanks @jack24254029!
 - Menu: add an opt-in setting to refresh provider usage whenever the menu opens without changing the periodic refresh clock. Thanks @dstier-git!
