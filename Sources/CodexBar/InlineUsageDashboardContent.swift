@@ -443,7 +443,6 @@ extension UsageMenuCardView.Model {
                 value: value,
                 accessibilityValue: "\(label): \(usage.currencyString(value))")
         }
-        guard !points.isEmpty else { return nil }
         return InlineUsageDashboardModel(
             accessibilityLabel: L("CrossModel API spend trend"),
             valueStyle: Self.costValueStyle(currencyCode: usage.currency),
@@ -734,9 +733,11 @@ struct InlineUsageDashboardContent: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             self.kpis
-            MiniUsageBars(model: self.model)
-                .frame(height: 58)
-                .accessibilityLabel(self.model.accessibilityLabel)
+            if !self.model.points.isEmpty {
+                MiniUsageBars(model: self.model)
+                    .frame(height: 58)
+                    .accessibilityLabel(self.model.accessibilityLabel)
+            }
             self.detailLines
         }
         .frame(maxWidth: .infinity, alignment: .leading)

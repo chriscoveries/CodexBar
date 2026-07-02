@@ -138,6 +138,45 @@ struct MenuDescriptorCrossModelTests {
         #expect(model.creditsText == nil)
     }
 
+    @Test
+    func `crossmodel menu card preserves balance when optional usage is unavailable`() throws {
+        let now = Date()
+        let metadata = try #require(ProviderDefaults.metadata[.crossmodel])
+        let usage = CrossModelUsageSnapshot(
+            currency: "USD",
+            balance: 8.059489,
+            uncollected: 0,
+            daily: nil,
+            weekly: nil,
+            monthly: nil,
+            updatedAt: now)
+
+        let model = UsageMenuCardView.Model.make(.init(
+            provider: .crossmodel,
+            metadata: metadata,
+            snapshot: usage.toUsageSnapshot(),
+            credits: nil,
+            creditsError: nil,
+            dashboard: nil,
+            dashboardError: nil,
+            tokenSnapshot: nil,
+            tokenError: nil,
+            account: AccountInfo(email: nil, plan: nil),
+            isRefreshing: false,
+            lastError: nil,
+            usageBarsShowUsed: false,
+            resetTimeDisplayStyle: .countdown,
+            tokenCostUsageEnabled: false,
+            showOptionalCreditsAndExtraUsage: true,
+            hidePersonalInfo: false,
+            now: now))
+
+        let dashboard = try #require(model.inlineUsageDashboard)
+        #expect(dashboard.kpis.map(\.value) == ["$8.06", "—", "—", "—"])
+        #expect(dashboard.points.isEmpty)
+        #expect(model.creditsText == nil)
+    }
+
     private static func window(
         cost: Double,
         totalTokens: Int,
