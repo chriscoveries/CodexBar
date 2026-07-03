@@ -8,6 +8,14 @@
 ### Changed
 - Website: redesign codexbar.app around faster download, provider discovery, feature, CLI, and widget paths with responsive dark/light and localized layouts. Thanks @vyctorbrzezowski!
 - Architecture: accept a bounded opt-in adaptive refresh design with a deterministic 2–30-minute cadence and no behavioral telemetry. Thanks @hhh2210!
+- Architecture: define the security and identity boundaries required before custom HTTP JSON providers can be implemented safely.
+- Claude: accept a display-only multi-account design based on read-only `claude-swap --list --json`, without account switching or credential storage.
+- Notifications: accept a default-off predictive pace warning design that alerts once per risk episode and re-arms only after authoritative recovery.
+- OpenCode Go: accept bounded automatic multi-workspace fan-out while preserving the configured workspace as an exact single-workspace override.
+- Xiaomi MiMo: require authoritative cadence evidence before showing reserve or deficit projections, avoiding guesses from plan dates or names.
+
+### Fixed
+- Claude: block background delegated CLI OAuth refresh when the keychain holds MCP-only state (`mcpOAuth` without `claudeAiOauth`) while preserving explicit Refresh recovery (#1844). Thanks @Yuxin-Qiao!
 
 ## 0.38.0 — 2026-07-03
 
@@ -32,7 +40,6 @@
 
 ### Fixed
 - Usage refresh: refresh provider data shortly after known quota reset boundaries instead of leaving expired reset times visible until the next normal poll. Thanks @pavbar!
-- Claude: block background delegated CLI OAuth refresh when the keychain holds MCP-only state (`mcpOAuth` without `claudeAiOauth`) while preserving explicit Refresh recovery (#1844). Thanks @Yuxin-Qiao!
 - Settings: align General-pane controls, show compact installed terminal app icons, and enlarge the window to fit more options.
 - Sakana AI: parse server-rendered quota reset timestamps as UTC instead of device-local time (#1826). Thanks @ss251!
 - Cursor: hide misleading pace and run-out details once a billing-cycle quota is fully depleted. Thanks @Yuxin-Qiao!
