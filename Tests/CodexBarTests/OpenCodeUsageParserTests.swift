@@ -53,11 +53,11 @@ struct OpenCodeUsageParserTests {
         #expect(snapshot.weeklyResetInSec == 7200)
     }
 
-    @Test
-    func `ignores nonfinite reset timestamps`() throws {
+    @Test(arguments: ["1e309", "1e308"])
+    func `ignores reset timestamps outside integer range`(resetAt: String) throws {
         let text = """
         {
-          "rollingUsage": { "usagePercent": 17, "resetAt": "1e309" },
+          "rollingUsage": { "usagePercent": 17, "resetAt": "\(resetAt)" },
           "weeklyUsage": { "usagePercent": 75, "resetInSec": 7200 }
         }
         """
