@@ -2,6 +2,9 @@
 
 ## 0.38.1 — Unreleased
 
+### Changed
+- Website: redesign codexbar.app around faster download, provider discovery, feature, CLI, and widget paths with responsive dark/light and localized layouts. Thanks @vyctorbrzezowski!
+
 ## 0.38.0 — 2026-07-03
 
 ### Added
