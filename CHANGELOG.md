@@ -24,6 +24,7 @@
 - z.ai: parse successful BigModel CN quota responses that omit the optional message field, while preserving useful API-code errors. Thanks @joeVenner!
 - Claude: block background delegated CLI OAuth refresh when the keychain holds MCP-only state (`mcpOAuth` without `claudeAiOauth`) while preserving explicit Refresh recovery (#1844). Thanks @Yuxin-Qiao!
 - OpenAI API: reject non-finite cost values before they can corrupt usage totals or JSON output. Thanks @joeVenner!
+- OpenCode: ignore non-finite and out-of-range reset timestamps instead of crashing usage parsing, while preserving valid quota windows. Thanks @joeVenner!
 
 ## 0.38.0 — 2026-07-03
 

@@ -245,6 +245,8 @@ struct OpenCodeGoUsageParserTests {
             text: text,
             now: Date(timeIntervalSince1970: 1_700_000_000))
 
+        #expect(snapshot.rollingUsagePercent == 17)
+        #expect(snapshot.weeklyUsagePercent == 75)
         #expect(snapshot.rollingResetInSec == 0)
         #expect(snapshot.weeklyResetInSec == 7200)
     }
