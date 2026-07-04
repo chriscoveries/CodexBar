@@ -5,6 +5,7 @@
 ### Added
 - Sakana AI: show best-effort pay-as-you-go credit balance and recent usage without delaying subscription quota refreshes. Thanks @ss251!
 - Kimi: show monthly subscription usage alongside weekly and five-hour limits with a short total budget for the optional membership request. Thanks @zhiyue!
+- Mistral: show available credit balance from the authenticated billing session while preserving API spend and Monthly Plan usage. Thanks @Zihao-Qi!
 
 ### Changed
 - Repository: reject oversized tracked blobs and generated release/build artifacts during checks. Thanks @joeVenner!
