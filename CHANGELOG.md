@@ -3,6 +3,7 @@
 ## 0.38.1 — Unreleased
 
 ### Added
+- Kimi: show monthly subscription usage alongside weekly and five-hour limits with a short total budget for the optional membership request. Thanks @zhiyue!
 - Localization: add complete Russian coverage for the app and redesigned website. Thanks @Kirchberg!
 - Localization: add Galician app translations and language selection. Thanks @B1NAR10!
 - ClawRouter: add API-key tracking for monthly budget, spend, requests, tokens, and routed-provider usage.
