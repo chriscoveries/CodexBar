@@ -2,6 +2,9 @@
 
 ## 0.39.1 — Unreleased
 
+### Fixed
+- Mistral: reject non-finite and overflowing credit balances before they can reach menu, CLI, or widget formatting. Thanks @joeVenner!
+
 ## 0.39.0 — 2026-07-04
 
 ### Added
