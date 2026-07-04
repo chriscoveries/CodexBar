@@ -9,18 +9,19 @@ tracked_files=0
 cd "$ROOT_DIR"
 
 while IFS= read -r -d '' path; do
-  [[ -f "$path" && ! -L "$path" ]] || continue
   tracked_files=$((tracked_files + 1))
 
   case "$path" in
-    *.app | *.app/* | *.dSYM | *.dSYM/* | *.xcarchive/* | *.xcresult/* | *.zip | *.delta | *.dmg | *.pkg | \
-      *.tar.gz | *.tgz)
+    *.app | *.app/* | *.dSYM | *.dSYM/* | *.xcarchive/* | *.xcresult/* | *.ipa | *.zip | *.delta | *.dmg | \
+      *.pkg | *.tar.gz | *.tgz)
       printf 'ERROR: generated artifact is tracked: %s\n' "$path" >&2
       failures=$((failures + 1))
       ;;
   esac
 
-  size=$(wc -c < "$path" | tr -d '[:space:]')
+  [[ -f "$path" && ! -L "$path" ]] || continue
+
+  size=$(wc -c < "$path")
   if ((size > MAX_BYTES)); then
     printf 'ERROR: tracked file exceeds %d bytes: %s (%d bytes)\n' "$MAX_BYTES" "$path" "$size" >&2
     failures=$((failures + 1))
