@@ -15,6 +15,7 @@
 - Repository: reject oversized tracked blobs and generated release/build artifacts during checks. Thanks @joeVenner!
 
 ### Fixed
+- Alibaba: keep the browser Safe Storage keychain read non-interactive and honor the "Disable Keychain access" setting, so cookie import can never trigger a Keychain prompt.
 - Tests: block real Keychain and `security` CLI access by default so test runs cannot display password prompts.
 - Mistral: discard non-finite and overflowing billing costs so malformed price data cannot poison spend totals or charts. Thanks @joeVenner!
 - Claude: notify on model-scoped weekly and Daily Routines quota thresholds using independent warning state. Thanks @cleanerzkp!
