@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.38.2 — Unreleased
+## 0.39.0 — 2026-07-04
 
 ### Added
 - Codex: show every available reset-credit expiry in menus and provider settings, including non-expiring credits, and summarize credits nearing expiry. Thanks @brahimhamichan!
