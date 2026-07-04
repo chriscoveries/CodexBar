@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.38.1 — Unreleased
+## 0.38.1 — 2026-07-04
 
 ### Added
 - Localization: add complete Russian coverage for the app and redesigned website. Thanks @Kirchberg!
