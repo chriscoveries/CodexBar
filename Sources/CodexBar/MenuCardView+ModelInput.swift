@@ -16,6 +16,7 @@ extension UsageMenuCardView.Model {
         let account: AccountInfo
         let isRefreshing: Bool
         let lastError: String?
+        let limitsAvailability: UsageLimitsAvailability?
         let usageBarsShowUsed: Bool
         let resetTimeDisplayStyle: ResetTimeDisplayStyle
         let tokenCostUsageEnabled: Bool
@@ -47,6 +48,7 @@ extension UsageMenuCardView.Model {
             account: AccountInfo,
             isRefreshing: Bool,
             lastError: String?,
+            limitsAvailability: UsageLimitsAvailability? = nil,
             usageBarsShowUsed: Bool,
             resetTimeDisplayStyle: ResetTimeDisplayStyle,
             tokenCostUsageEnabled: Bool,
@@ -77,6 +79,7 @@ extension UsageMenuCardView.Model {
             self.account = account
             self.isRefreshing = isRefreshing
             self.lastError = lastError
+            self.limitsAvailability = limitsAvailability
             self.usageBarsShowUsed = usageBarsShowUsed
             self.resetTimeDisplayStyle = resetTimeDisplayStyle
             self.tokenCostUsageEnabled = tokenCostUsageEnabled

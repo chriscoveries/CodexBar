@@ -153,7 +153,7 @@ struct MenuDescriptor {
             if let primary = snap.primary {
                 let primaryDetail = primary.resetDescription?.trimmingCharacters(in: .whitespacesAndNewlines)
                 let primaryDescriptionIsDetail = provider == .warp || provider == .kilo || provider == .abacus ||
-                    provider == .deepseek || provider == .azureopenai || provider == .mimo
+                    provider == .deepseek || provider == .azureopenai || provider == .mimo || provider == .qoder
                 let primaryWindow = if primaryDescriptionIsDetail {
                     // Some providers use resetDescription for non-reset detail
                     // (e.g., "Unlimited", "X/Y credits"). Avoid rendering it as a "Resets ..." line.
@@ -187,7 +187,7 @@ struct MenuDescriptor {
                 if provider == .abacus,
                    let pace = store.weeklyPace(provider: provider, window: primary)
                 {
-                    let paceSummary = UsagePaceText.weeklySummary(pace: pace)
+                    let paceSummary = UsagePaceText.weeklySummary(provider: provider, pace: pace)
                     entries.append(.text(paceSummary, .secondary))
                 }
                 if let paceSummary = UsagePaceText.sessionSummary(provider: provider, window: primary) {
@@ -220,7 +220,7 @@ struct MenuDescriptor {
                     entries.append(.text(detail, .secondary))
                 }
                 if let pace = store.weeklyPace(provider: provider, window: weekly) {
-                    let paceSummary = UsagePaceText.weeklySummary(pace: pace)
+                    let paceSummary = UsagePaceText.weeklySummary(provider: provider, pace: pace)
                     entries.append(.text(paceSummary, .secondary))
                 }
             }
@@ -238,10 +238,17 @@ struct MenuDescriptor {
                     resetOverride: opusResetOverride)
             }
 
-            Self.appendProviderUsageSummaries(entries: &entries, snapshot: snap)
+            Self.appendProviderUsageSummaries(
+                entries: &entries,
+                snapshot: snap,
+                showOptionalUsage: settings.showOptionalCreditsAndExtraUsage)
             if snap.rateLimitsUnavailable(for: provider) {
                 entries.append(.text(L("Limits not available"), .secondary))
             }
+        } else if !store.isStale(provider: provider),
+                  store.knownLimitsAvailability(for: provider)?.isUnavailable == true
+        {
+            entries.append(.text(L("Limits not available"), .secondary))
         } else {
             entries.append(.text(L("No usage yet"), .secondary))
         }
@@ -260,7 +267,8 @@ struct MenuDescriptor {
 
     private static func appendProviderUsageSummaries(
         entries: inout [Entry],
-        snapshot: UsageSnapshot)
+        snapshot: UsageSnapshot,
+        showOptionalUsage: Bool)
     {
         if let cost = snapshot.providerCost {
             if cost.currencyCode == "Quota" {
@@ -278,6 +286,18 @@ struct MenuDescriptor {
         if let openRouterUsage = snapshot.openRouterUsage {
             Self.appendOpenRouterUsageSummary(entries: &entries, usage: openRouterUsage)
         }
+        if let clawRouterUsage = snapshot.clawRouterUsage {
+            entries.append(.text(
+                "\(UsageFormatter.tokenCountString(clawRouterUsage.requestCount)) \(L("requests")) · " +
+                    "\(UsageFormatter.tokenCountString(clawRouterUsage.totalTokens)) \(L("tokens"))",
+                .secondary))
+            if !clawRouterUsage.providers.isEmpty {
+                let mix = clawRouterUsage.providers.prefix(5)
+                    .map { "\($0.provider): \(UsageFormatter.tokenCountString($0.requestCount))" }
+                    .joined(separator: " · ")
+                entries.append(.text("Routed providers: \(mix)", .secondary))
+            }
+        }
         if let poeUsage = snapshot.poeUsage, !poeUsage.daily.isEmpty {
             Self.appendPoeUsageSummary(entries: &entries, usage: poeUsage)
         }
@@ -286,6 +306,18 @@ struct MenuDescriptor {
         }
         if let mimoUsage = snapshot.mimoUsage {
             entries.append(.text("\(L("Balance")): \(mimoUsage.balanceDetail)", .primary))
+        }
+        // Sakana pay-as-you-go is optional data gated by "Show optional credits and extra usage".
+        // Gate the render on the setting too, not just the fetch: toggling the setting off only
+        // rebuilds the menu, it does not immediately refetch, so a previously-populated
+        // sakanaPayAsYouGo would otherwise linger in the cached snapshot until the next refresh.
+        if showOptionalUsage, let sakanaPayAsYouGo = snapshot.sakanaPayAsYouGo {
+            entries.append(.text("\(L("Balance")): \(sakanaPayAsYouGo.balanceDetail)", .primary))
+            if let periodUsageTotal = sakanaPayAsYouGo.periodUsageTotal {
+                entries.append(.text(
+                    "\(L("Usage")): \(UsageFormatter.usdString(periodUsageTotal))",
+                    .secondary))
+            }
         }
     }
 
@@ -509,6 +541,10 @@ struct MenuDescriptor {
             for detail in kiloLogin.details {
                 entries.append(.text("\(L("Activity")): \(detail)", .secondary))
             }
+        } else if provider == .crossmodel {
+            if let loginMethodText, !loginMethodText.isEmpty {
+                entries.append(.text("\(L("Auth")): \(loginMethodText)", .secondary))
+            }
         } else if let loginMethodText, !loginMethodText.isEmpty {
             if provider == .openrouter || provider == .mimo || provider == .poe,
                loginMethodText.localizedCaseInsensitiveContains("balance:")
@@ -709,9 +745,13 @@ struct MenuDescriptor {
         if provider == .factory, snapshot.tertiary != nil {
             return ("5-hour", L("Weekly"), L("Monthly"), true)
         }
-        let primaryLabel = provider == .grok
-            ? GrokProviderDescriptor.primaryLabel(window: snapshot.primary) ?? metadata.sessionLabel
-            : metadata.sessionLabel
+        let primaryLabel = if provider == .grok {
+            GrokProviderDescriptor.primaryLabel(window: snapshot.primary) ?? metadata.sessionLabel
+        } else if provider == .doubao {
+            DoubaoProviderDescriptor.primaryLabel(window: snapshot.primary) ?? metadata.sessionLabel
+        } else {
+            metadata.sessionLabel
+        }
         return (
             L(primaryLabel),
             L(metadata.weeklyLabel),

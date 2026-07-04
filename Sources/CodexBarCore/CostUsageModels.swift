@@ -33,6 +33,7 @@ public struct CostUsageTokenSnapshot: Sendable, Equatable {
     public let historyDays: Int
     public let historyLabel: String?
     public let daily: [CostUsageDailyReport.Entry]
+    public let projects: [CostUsageProjectBreakdown]
     public let updatedAt: Date
 
     public init(
@@ -46,6 +47,7 @@ public struct CostUsageTokenSnapshot: Sendable, Equatable {
         historyDays: Int = 30,
         historyLabel: String? = nil,
         daily: [CostUsageDailyReport.Entry],
+        projects: [CostUsageProjectBreakdown] = [],
         updatedAt: Date)
     {
         self.sessionTokens = sessionTokens
@@ -60,6 +62,7 @@ public struct CostUsageTokenSnapshot: Sendable, Equatable {
         self.historyDays = historyDays
         self.historyLabel = historyLabel
         self.daily = daily
+        self.projects = projects
         self.updatedAt = updatedAt
     }
 
@@ -141,6 +144,67 @@ public struct CostUsageTokenSnapshot: Sendable, Equatable {
         }
         guard let parsed = CostUsageDateParser.parse(trimmed) else { return nil }
         return CostUsageLocalDay.key(from: parsed, calendar: calendar)
+    }
+}
+
+public struct CostUsageProjectBreakdown: Sendable, Equatable {
+    public static let unknownProjectName = "Unknown project"
+
+    public let name: String
+    public let path: String?
+    public let totalTokens: Int?
+    public let totalCostUSD: Double?
+    public let daily: [CostUsageDailyReport.Entry]
+    public let modelBreakdowns: [CostUsageDailyReport.ModelBreakdown]?
+    public let sources: [CostUsageProjectSourceBreakdown]
+
+    public init(
+        name: String,
+        path: String?,
+        totalTokens: Int?,
+        totalCostUSD: Double?,
+        daily: [CostUsageDailyReport.Entry],
+        modelBreakdowns: [CostUsageDailyReport.ModelBreakdown]?,
+        sources: [CostUsageProjectSourceBreakdown] = [])
+    {
+        self.name = name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? Self.unknownProjectName
+            : name
+        let cleanPath = path?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.path = cleanPath?.isEmpty == true ? nil : cleanPath
+        self.totalTokens = totalTokens
+        self.totalCostUSD = totalCostUSD
+        self.daily = daily
+        self.modelBreakdowns = modelBreakdowns
+        self.sources = sources
+    }
+}
+
+public struct CostUsageProjectSourceBreakdown: Sendable, Equatable {
+    public let name: String
+    public let path: String?
+    public let totalTokens: Int?
+    public let totalCostUSD: Double?
+    public let daily: [CostUsageDailyReport.Entry]
+    public let modelBreakdowns: [CostUsageDailyReport.ModelBreakdown]?
+
+    public init(
+        name: String,
+        path: String?,
+        totalTokens: Int?,
+        totalCostUSD: Double?,
+        daily: [CostUsageDailyReport.Entry],
+        modelBreakdowns: [CostUsageDailyReport.ModelBreakdown]?)
+    {
+        self.name = name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? CostUsageProjectBreakdown.unknownProjectName
+            : name
+        let cleanPath = path?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.path = cleanPath?.isEmpty == true ? nil : cleanPath
+        self.totalTokens = totalTokens
+        self.totalCostUSD = totalCostUSD
+        self.daily = daily
+        self.modelBreakdowns = modelBreakdowns
     }
 }
 
