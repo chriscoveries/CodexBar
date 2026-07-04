@@ -3,6 +3,7 @@
 ## 0.38.2 — Unreleased
 
 ### Added
+- Sakana AI: show best-effort pay-as-you-go credit balance and recent usage without delaying subscription quota refreshes. Thanks @ss251!
 - Kimi: show monthly subscription usage alongside weekly and five-hour limits with a short total budget for the optional membership request. Thanks @zhiyue!
 
 ### Changed
