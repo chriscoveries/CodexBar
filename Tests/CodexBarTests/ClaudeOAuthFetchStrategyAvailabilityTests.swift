@@ -144,7 +144,9 @@ struct ClaudeOAuthFetchStrategyAvailabilityTests {
             _ = await ClaudeOAuthFetchStrategy.$nonInteractiveCredentialRecordOverride
                 .withValue(recordWithoutRequiredScope) {
                     await ProviderInteractionContext.$current.withValue(.userInitiated) {
-                        await strategy.isAvailable(context)
+                        await ClaudeOAuthCredentialsStore.withKeychainAccessOverrideForTesting(true) {
+                            await strategy.isAvailable(context)
+                        }
                     }
                 }
 
@@ -181,9 +183,11 @@ struct ClaudeOAuthFetchStrategyAvailabilityTests {
                     await ClaudeOAuthCredentialsStore.withCredentialsURLOverrideForTesting(fileURL) {
                         await ClaudeOAuthKeychainReadStrategyPreference.withTaskOverrideForTesting(.securityFramework) {
                             await ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.onlyOnUserAction) {
-                                await ProviderRefreshContext.$current.withValue(.startup) {
-                                    await ProviderInteractionContext.$current.withValue(.background) {
-                                        await strategy.isAvailable(context)
+                                await ClaudeOAuthCredentialsStore.withKeychainAccessOverrideForTesting(true) {
+                                    await ProviderRefreshContext.$current.withValue(.startup) {
+                                        await ProviderInteractionContext.$current.withValue(.background) {
+                                            await strategy.isAvailable(context)
+                                        }
                                     }
                                 }
                             }
@@ -246,9 +250,11 @@ struct ClaudeOAuthFetchStrategyAvailabilityTests {
                     await ClaudeOAuthCredentialsStore.withCredentialsURLOverrideForTesting(fileURL) {
                         await ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.onlyOnUserAction) {
                             await ClaudeOAuthCredentialsStore.withSecurityCLIReadOverrideForTesting(.nonZeroExit) {
-                                await ProviderRefreshContext.$current.withValue(.startup) {
-                                    await ProviderInteractionContext.$current.withValue(.background) {
-                                        await strategy.isAvailable(context)
+                                await ClaudeOAuthCredentialsStore.withKeychainAccessOverrideForTesting(true) {
+                                    await ProviderRefreshContext.$current.withValue(.startup) {
+                                        await ProviderInteractionContext.$current.withValue(.background) {
+                                            await strategy.isAvailable(context)
+                                        }
                                     }
                                 }
                             }
