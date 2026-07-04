@@ -2,6 +2,7 @@ import CodexBarCore
 import Foundation
 import Testing
 @testable import CodexBar
+@testable import CodexBarCLI
 
 struct ClawRouterUsageFetcherTests {
     @Test
@@ -133,6 +134,52 @@ struct ClawRouterUsageFetcherTests {
 
         #expect(decoded.clawRouterUsage == parsed)
         #expect(decoded.identity?.providerID == .clawrouter)
+    }
+
+    @Test
+    func `text CLI renders budgeted spend and routed usage`() throws {
+        let parsed = try ClawRouterUsageFetcher._parseSnapshotForTesting(
+            Data(Self.budgetedResponse.utf8),
+            updatedAt: Date(timeIntervalSince1970: 1))
+
+        let output = Self.renderText(parsed.toUsageSnapshot())
+
+        #expect(output.contains("Spend: $0.01 / $25.00"))
+        #expect(output.contains("Usage: 6 requests · 54K tokens"))
+        #expect(output.contains("Results: 5 succeeded · 1 failed"))
+        #expect(output.contains("Routed providers: openai: 4 · anthropic: 2"))
+    }
+
+    @Test
+    func `text CLI renders unmetered and zero spend without a zero limit`() throws {
+        let unmetered = try ClawRouterUsageFetcher._parseSnapshotForTesting(
+            Data(Self.unmeteredResponse.utf8),
+            updatedAt: Date(timeIntervalSince1970: 1))
+        let zeroSpend = try ClawRouterUsageFetcher._parseSnapshotForTesting(
+            Data(Self.unmeteredResponse.replacingOccurrences(of: "1250000", with: "0").utf8),
+            updatedAt: Date(timeIntervalSince1970: 1))
+
+        let unmeteredOutput = Self.renderText(unmetered.toUsageSnapshot())
+        let zeroSpendOutput = Self.renderText(zeroSpend.toUsageSnapshot())
+
+        #expect(unmeteredOutput.contains("Spend: $1.25"))
+        #expect(unmeteredOutput.contains("Usage: 3 requests · 0 tokens"))
+        #expect(!unmeteredOutput.contains(" / 0.0"))
+        #expect(zeroSpendOutput.contains("Spend: $0.00"))
+        #expect(zeroSpendOutput.contains("Usage: 3 requests · 0 tokens"))
+        #expect(!zeroSpendOutput.contains(" / 0.0"))
+    }
+
+    private static func renderText(_ snapshot: UsageSnapshot) -> String {
+        CLIRenderer.renderText(
+            provider: .clawrouter,
+            snapshot: snapshot,
+            credits: nil,
+            context: RenderContext(
+                header: "ClawRouter (api)",
+                status: nil,
+                useColor: false,
+                resetStyle: .countdown))
     }
 
     private static let budgetedResponse = """
