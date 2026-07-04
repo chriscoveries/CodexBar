@@ -111,7 +111,7 @@ struct OpenAIAPIUsageFetcherTests {
         #expect(snapshot.topModels.first?.totalTokens == 1800)
     }
 
-    @Test(arguments: ["NaN", "Infinity", "1e309"])
+    @Test(arguments: ["NaN", "Infinity", "-Infinity", "1e309", "-1e309"])
     func `rejects nonfinite cost strings`(value: String) {
         let costs = """
         {
