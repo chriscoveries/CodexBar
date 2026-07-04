@@ -144,7 +144,7 @@ struct ClaudeOAuthFetchStrategyAvailabilityTests {
             _ = await ClaudeOAuthFetchStrategy.$nonInteractiveCredentialRecordOverride
                 .withValue(recordWithoutRequiredScope) {
                     await ProviderInteractionContext.$current.withValue(.userInitiated) {
-                        await ClaudeOAuthCredentialsStore.withKeychainAccessOverrideForTesting(true) {
+                        await self.withAvailabilityKeychainDoubles {
                             await strategy.isAvailable(context)
                         }
                     }
@@ -183,7 +183,7 @@ struct ClaudeOAuthFetchStrategyAvailabilityTests {
                     await ClaudeOAuthCredentialsStore.withCredentialsURLOverrideForTesting(fileURL) {
                         await ClaudeOAuthKeychainReadStrategyPreference.withTaskOverrideForTesting(.securityFramework) {
                             await ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.onlyOnUserAction) {
-                                await ClaudeOAuthCredentialsStore.withKeychainAccessOverrideForTesting(true) {
+                                await self.withAvailabilityKeychainDoubles {
                                     await ProviderRefreshContext.$current.withValue(.startup) {
                                         await ProviderInteractionContext.$current.withValue(.background) {
                                             await strategy.isAvailable(context)
@@ -250,7 +250,7 @@ struct ClaudeOAuthFetchStrategyAvailabilityTests {
                     await ClaudeOAuthCredentialsStore.withCredentialsURLOverrideForTesting(fileURL) {
                         await ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.onlyOnUserAction) {
                             await ClaudeOAuthCredentialsStore.withSecurityCLIReadOverrideForTesting(.nonZeroExit) {
-                                await ClaudeOAuthCredentialsStore.withKeychainAccessOverrideForTesting(true) {
+                                await self.withAvailabilityKeychainDoubles {
                                     await ProviderRefreshContext.$current.withValue(.startup) {
                                         await ProviderInteractionContext.$current.withValue(.background) {
                                             await strategy.isAvailable(context)
@@ -370,6 +370,16 @@ struct ClaudeOAuthFetchStrategyAvailabilityTests {
         }
 
         #expect(available == false)
+    }
+
+    private func withAvailabilityKeychainDoubles<T>(
+        operation: () async throws -> T) async rethrows -> T
+    {
+        KeychainCacheStore.setTestStoreForTesting(true)
+        defer { KeychainCacheStore.setTestStoreForTesting(false) }
+        return try await ClaudeOAuthCredentialsStore.withKeychainAccessOverrideForTesting(
+            true,
+            operation: operation)
     }
 }
 #endif

@@ -62,9 +62,37 @@ struct KeychainPromptSafetyAuditTests {
         #expect(callSites.isEmpty == false)
         for callSite in callSites {
             let failureMessage = "\(callSite.file.path):\(callSite.lineNumber) calls strategy.isAvailable(context) "
-                + "with test keychain access enabled and no scoped keychain double"
-            #expect(Self.hasOpenKeychainTestDouble(lines: lines, before: callSite.lineNumber), "\(failureMessage)")
+                + "with test keychain access enabled and incomplete scoped keychain isolation"
+            #expect(
+                Self.hasOpenAvailabilityKeychainIsolation(lines: lines, before: callSite.lineNumber),
+                "\(failureMessage)")
         }
+    }
+
+    @Test
+    func `availability audit rejects a Claude-only keychain override`() {
+        let lines: [Substring] = [
+            "KeychainAccessGate.withTaskOverrideForTesting(false) {",
+            "ClaudeOAuthCredentialsStore.withKeychainAccessOverrideForTesting(true) {",
+            "strategy.isAvailable(context)",
+            "}",
+            "}",
+        ]
+
+        #expect(Self.hasOpenAvailabilityKeychainIsolation(lines: lines, before: 3) == false)
+    }
+
+    @Test
+    func `availability audit accepts combined cache and Claude keychain doubles`() {
+        let lines: [Substring] = [
+            "KeychainAccessGate.withTaskOverrideForTesting(false) {",
+            "self.withAvailabilityKeychainDoubles {",
+            "strategy.isAvailable(context)",
+            "}",
+            "}",
+        ]
+
+        #expect(Self.hasOpenAvailabilityKeychainIsolation(lines: lines, before: 3))
     }
 
     @Test
@@ -129,6 +157,26 @@ struct KeychainPromptSafetyAuditTests {
         return helperNames.contains { helperName in
             self.hasOpenScope(containing: helperName, lines: lines, before: oneBasedLineNumber)
         }
+    }
+
+    private static func hasOpenAvailabilityKeychainIsolation(
+        lines: [Substring],
+        before oneBasedLineNumber: Int) -> Bool
+    {
+        if self.hasOpenScope(
+            containing: "withAvailabilityKeychainDoubles",
+            lines: lines,
+            before: oneBasedLineNumber)
+        {
+            return true
+        }
+
+        let bypassesCacheKeychain = self.hasOpenScope(
+            containing: "nonInteractiveCredentialRecordOverride",
+            lines: lines,
+            before: oneBasedLineNumber)
+        return bypassesCacheKeychain
+            && self.hasOpenKeychainTestDouble(lines: lines, before: oneBasedLineNumber)
     }
 
     private static func hasOpenScope(
