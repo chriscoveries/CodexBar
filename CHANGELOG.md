@@ -3,6 +3,7 @@
 ## 0.38.1 — Unreleased
 
 ### Added
+- Usage refresh: add an opt-in Adaptive cadence that polls every 2–30 minutes based on recent menu use, Low Power Mode, and thermal state. Thanks @hhh2210!
 - Codex: show a conservative 1.5× pace-headroom hint in menus and CLI output when usage is safely ahead of the reset curve. Thanks @astuteprogrammer!
 
 ### Changed
@@ -21,7 +22,6 @@
 - Settings: recover collapsed sidebars and undersized saved window frames when reopening Settings. Thanks @ProspectOre!
 - z.ai: parse successful BigModel CN quota responses that omit the optional message field, while preserving useful API-code errors. Thanks @joeVenner!
 - Claude: block background delegated CLI OAuth refresh when the keychain holds MCP-only state (`mcpOAuth` without `claudeAiOauth`) while preserving explicit Refresh recovery (#1844). Thanks @Yuxin-Qiao!
-
 ## 0.38.0 — 2026-07-03
 
 ### Added
