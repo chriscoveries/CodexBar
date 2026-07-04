@@ -52,6 +52,50 @@ struct MenuCardCostComparisonTests {
         #expect(section.comparisonLines.isEmpty)
     }
 
+    @Test
+    func `inline dashboard shows enabled comparison periods`() throws {
+        let now = Date(timeIntervalSince1970: 1_783_123_200)
+        let snapshot = CostUsageTokenSnapshot(
+            sessionTokens: 400,
+            sessionCostUSD: 4,
+            last30DaysTokens: 1000,
+            last30DaysCostUSD: 10,
+            historyDays: 90,
+            daily: [
+                Self.entry(day: "2026-06-01", cost: 1, tokens: 100),
+                Self.entry(day: "2026-06-25", cost: 2, tokens: 200),
+                Self.entry(day: "2026-07-01", cost: 4, tokens: 400),
+            ],
+            updatedAt: now)
+        let metadata = try #require(ProviderDefaults.metadata[.codex])
+
+        let model = UsageMenuCardView.Model.make(.init(
+            provider: .codex,
+            metadata: metadata,
+            snapshot: nil,
+            credits: nil,
+            creditsError: nil,
+            dashboard: nil,
+            dashboardError: nil,
+            tokenSnapshot: snapshot,
+            tokenError: nil,
+            account: AccountInfo(email: nil, plan: nil),
+            isRefreshing: false,
+            lastError: nil,
+            usageBarsShowUsed: false,
+            resetTimeDisplayStyle: .countdown,
+            tokenCostUsageEnabled: true,
+            costComparisonPeriodsEnabled: true,
+            showOptionalCreditsAndExtraUsage: true,
+            hidePersonalInfo: false,
+            now: now))
+
+        #expect(model.inlineUsageDashboard?.detailLines.prefix(2) == [
+            "Last 7 days: $4.00 · 400 tokens",
+            "Last 30 days: $6.00 · 600 tokens",
+        ])
+    }
+
     private static func entry(day: String, cost: Double, tokens: Int) -> CostUsageDailyReport.Entry {
         CostUsageDailyReport.Entry(
             date: day,

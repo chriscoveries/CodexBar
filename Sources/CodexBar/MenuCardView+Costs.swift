@@ -154,7 +154,7 @@ extension UsageMenuCardView.Model {
             errorCopyText: (error?.isEmpty ?? true) ? nil : error)
     }
 
-    private static func costWindowLine(summary: CostUsageWindowSummary, currencyCode: String) -> String {
+    static func costWindowLine(summary: CostUsageWindowSummary, currencyCode: String) -> String {
         let label = Self.costHistoryWindowLabel(days: summary.days)
         let cost = summary.totalCostUSD.map {
             UsageFormatter.currencyString($0, currencyCode: currencyCode)
