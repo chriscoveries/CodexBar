@@ -2,6 +2,9 @@
 
 ## 0.39.1 — Unreleased
 
+### Added
+- Widgets: make Mistral available in provider selection and switching. Thanks @joeVenner!
+
 ### Fixed
 - Mistral: reject non-finite and overflowing credit balances before they can reach menu, CLI, or widget formatting. Thanks @joeVenner!
 
