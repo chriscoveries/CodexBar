@@ -85,10 +85,12 @@ struct OllamaUsageFetcherRetryMappingTests {
     }
 
     @Test(arguments: [401, 403])
-    func `api fetch describes rejected key as invalid or revoked`(statusCode: Int) async throws {
-        let url = try #require(URL(string: "https://ollama.com/api/tags"))
+    func `api fetch sends bearer token and rejects unauthorized key`(statusCode: Int) async throws {
+        let url = try #require(URL(string: "https://ollama.com/api/web_search"))
         let transport = ProviderHTTPTransportHandler { request in
             #expect(request.url == url)
+            #expect(request.httpMethod == "POST")
+            #expect(request.httpBody == Data(#"{"query":""}"#.utf8))
             #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer ollama-test")
             let response = HTTPURLResponse(
                 url: url,
@@ -110,6 +112,42 @@ struct OllamaUsageFetcherRetryMappingTests {
         } catch {
             Issue.record("Expected OllamaUsageError.apiUnauthorized, got \(error)")
         }
+    }
+
+    @Test
+    func `authorized validation continues to model catalog`() async throws {
+        let validationURL = try #require(URL(string: "https://ollama.test/api/web_search"))
+        let tagsURL = try #require(URL(string: "https://ollama.test/api/tags"))
+        let transport = ProviderHTTPTransportHandler { request in
+            let statusCode: Int
+            let data: Data
+            switch request.url {
+            case validationURL:
+                statusCode = 400
+                data = Data(#"{"error":"query is required"}"#.utf8)
+            case tagsURL:
+                statusCode = 200
+                data = Data(#"{"models":[{}]}"#.utf8)
+            default:
+                Issue.record("Unexpected Ollama API URL")
+                statusCode = 500
+                data = Data()
+            }
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: statusCode,
+                httpVersion: "HTTP/1.1",
+                headerFields: nil)!
+            return (data, response)
+        }
+
+        let snapshot = try await OllamaAPIUsageFetcher.fetchUsage(
+            apiKey: "ollama-test",
+            tagsURL: tagsURL,
+            validationURL: validationURL,
+            transport: transport)
+
+        #expect(snapshot.modelCount == 1)
     }
 
     @Test
