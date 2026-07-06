@@ -615,7 +615,11 @@ extension StatusItemController {
             supportsAverage: self.settings.menuBarMetricSupportsAverage(for: provider))
     }
 
-    func menuBarCreditsRemainingForIcon(provider: UsageProvider, snapshot: UsageSnapshot?) -> Double? {
+    func menuBarCreditsRemainingForIcon(
+        provider: UsageProvider,
+        snapshot: UsageSnapshot?,
+        now: Date = Date()) -> Double?
+    {
         // Derive the menu-bar credits fallback from the same Codex projection path the rendered
         // icon and menu use (`codexConsumerProjection` -> `menuBarFallback`), instead of a
         // hand-rolled rate-window predicate. The projection is pure value composition over
@@ -626,7 +630,7 @@ extension StatusItemController {
         guard provider == .codex else { return nil }
         return self.store.codexMenuBarCreditsRemaining(
             snapshotOverride: snapshot,
-            now: snapshot?.updatedAt ?? Date())
+            now: now)
     }
 
     func quotaWarningFlashActive(provider: UsageProvider, now: Date = Date()) -> Bool {
@@ -720,7 +724,11 @@ extension StatusItemController {
         return hasImage && !value.isEmpty ? " \(value)" : value
     }
 
-    func menuBarDisplayText(for provider: UsageProvider, snapshot: UsageSnapshot?) -> String? {
+    func menuBarDisplayText(
+        for provider: UsageProvider,
+        snapshot: UsageSnapshot?,
+        now: Date = .init()) -> String?
+    {
         let mode = self.settings.menuBarDisplayMode
         if provider == .openrouter,
            self.settings.menuBarMetricPreference(for: provider, snapshot: snapshot) == .automatic,
@@ -789,8 +797,7 @@ extension StatusItemController {
             return spend
         }
 
-        let percentWindow = self.menuBarPercentWindow(for: provider, snapshot: snapshot)
-        let now = Date()
+        let percentWindow = self.menuBarPercentWindow(for: provider, snapshot: snapshot, now: now)
         let codexProjection = self.store.codexConsumerProjectionIfNeeded(
             for: provider,
             surface: .menuBar,
@@ -1055,10 +1062,10 @@ extension StatusItemController {
         return value.isEmpty ? nil : value
     }
 
-    private func menuBarPercentWindow(for provider: UsageProvider, snapshot: UsageSnapshot?)
+    private func menuBarPercentWindow(for provider: UsageProvider, snapshot: UsageSnapshot?, now: Date)
         -> RateWindow?
     {
-        self.menuBarMetricWindow(for: provider, snapshot: snapshot)
+        self.menuBarMetricWindow(for: provider, snapshot: snapshot, now: now)
     }
 
     /// Resolves the session (5h) and weekly (7d) lanes for the combined "Session + Weekly" menu-bar
@@ -1083,8 +1090,11 @@ extension StatusItemController {
             return nil
         }
         let session = Self.combinedSessionLane(snapshot: snapshot, projection: projection)
-        let weekly = projection?.rateWindow(for: .weekly)
-            ?? Self.rateWindow(in: snapshot, matchingCadenceMinutes: Self.weeklyWindowMinutes)
+        let weekly: RateWindow? = if let projection {
+            projection.menuBarSelectableRateWindow(for: .weekly)
+        } else {
+            Self.rateWindow(in: snapshot, matchingCadenceMinutes: Self.weeklyWindowMinutes)
+        }
         return (session, weekly)
     }
 
@@ -1097,8 +1107,8 @@ extension StatusItemController {
         snapshot: UsageSnapshot?,
         projection: CodexConsumerProjection?) -> RateWindow?
     {
-        if let projected = projection?.rateWindow(for: .session) {
-            return projected
+        if let projection {
+            return projection.menuBarSelectableRateWindow(for: .session)
         }
         guard let session = Self.rateWindow(in: snapshot, matchingCadenceMinutes: Self.sessionWindowMinutes)
         else { return nil }
@@ -1120,7 +1130,7 @@ extension StatusItemController {
         percentWindow: RateWindow?) -> RateWindow?
     {
         if let projection {
-            return projection.rateWindow(for: .weekly)
+            return projection.menuBarSelectableRateWindow(for: .weekly)
         }
         if provider == .abacus {
             return snapshot?.primary
