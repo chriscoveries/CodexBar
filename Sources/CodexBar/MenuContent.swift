@@ -169,11 +169,11 @@ struct PersistentRefreshRowMetrics: Equatable {
         selectionVerticalInset: 0,
         selectionCornerRadius: 7,
         // Align the custom row's image/title frames with native NSMenuItem columns.
-        leadingPadding: 17,
+        leadingPadding: 15,
         trailingPadding: 8,
-        iconWidth: 14,
-        iconSymbolPointSize: 12,
-        iconSymbolWeight: .semibold,
+        iconWidth: 16,
+        iconSymbolPointSize: 16,
+        iconSymbolWeight: .regular,
         iconTitleSpacing: 4.5,
         shortcutFontSize: 13,
         shortcutXOffset: -9.5,
@@ -231,19 +231,23 @@ struct StatusIconView: View {
     }
 
     private var icon: NSImage {
+        let now = Date()
         let snapshot = self.store.snapshot(for: self.provider)
         let remaining = snapshot.map {
-            IconRemainingResolver.resolvedRemaining(snapshot: $0, style: self.store.style(for: self.provider))
+            IconRemainingResolver.resolvedRemaining(
+                snapshot: $0,
+                style: self.store.style(for: self.provider),
+                now: now)
         }
         let creditsProjection = self.store.codexConsumerProjectionIfNeeded(
             for: self.provider,
             surface: .menuBar,
             snapshotOverride: snapshot,
-            now: snapshot?.updatedAt ?? Date())
+            now: now)
         let creditsRemaining = creditsProjection?.menuBarFallback == .creditsBalance
             ? self.store.codexMenuBarCreditsRemaining(
                 snapshotOverride: snapshot,
-                now: snapshot?.updatedAt ?? Date())
+                now: now)
             : nil
         return IconRenderer.makeIcon(
             primaryRemaining: remaining?.primary,

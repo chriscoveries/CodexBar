@@ -14,13 +14,17 @@ extension UsageMenuCardView.Model {
         let tokenSnapshot: CostUsageTokenSnapshot?
         let tokenError: String?
         let account: AccountInfo
+        let accountIsAuthoritative: Bool
+        let planOverride: String?
         let isRefreshing: Bool
         let lastError: String?
+        let limitsAvailability: UsageLimitsAvailability?
         let usageBarsShowUsed: Bool
         let resetTimeDisplayStyle: ResetTimeDisplayStyle
         let tokenCostUsageEnabled: Bool
         let tokenCostInlineDashboardEnabled: Bool
         let tokenCostMenuSectionEnabled: Bool
+        let costComparisonPeriodsEnabled: Bool
         let showOptionalCreditsAndExtraUsage: Bool
         let copilotBudgetExtrasEnabled: Bool
         let sourceLabel: String?
@@ -44,13 +48,17 @@ extension UsageMenuCardView.Model {
             tokenSnapshot: CostUsageTokenSnapshot?,
             tokenError: String?,
             account: AccountInfo,
+            accountIsAuthoritative: Bool = false,
+            planOverride: String? = nil,
             isRefreshing: Bool,
             lastError: String?,
+            limitsAvailability: UsageLimitsAvailability? = nil,
             usageBarsShowUsed: Bool,
             resetTimeDisplayStyle: ResetTimeDisplayStyle,
             tokenCostUsageEnabled: Bool,
             tokenCostInlineDashboardEnabled: Bool? = nil,
             tokenCostMenuSectionEnabled: Bool? = nil,
+            costComparisonPeriodsEnabled: Bool = false,
             showOptionalCreditsAndExtraUsage: Bool,
             copilotBudgetExtrasEnabled: Bool = false,
             sourceLabel: String? = nil,
@@ -73,13 +81,17 @@ extension UsageMenuCardView.Model {
             self.tokenSnapshot = tokenSnapshot
             self.tokenError = tokenError
             self.account = account
+            self.accountIsAuthoritative = accountIsAuthoritative
+            self.planOverride = planOverride
             self.isRefreshing = isRefreshing
             self.lastError = lastError
+            self.limitsAvailability = limitsAvailability
             self.usageBarsShowUsed = usageBarsShowUsed
             self.resetTimeDisplayStyle = resetTimeDisplayStyle
             self.tokenCostUsageEnabled = tokenCostUsageEnabled
             self.tokenCostInlineDashboardEnabled = tokenCostInlineDashboardEnabled ?? tokenCostUsageEnabled
             self.tokenCostMenuSectionEnabled = tokenCostMenuSectionEnabled ?? tokenCostUsageEnabled
+            self.costComparisonPeriodsEnabled = costComparisonPeriodsEnabled
             self.showOptionalCreditsAndExtraUsage = showOptionalCreditsAndExtraUsage
             self.copilotBudgetExtrasEnabled = copilotBudgetExtrasEnabled
             self.sourceLabel = sourceLabel

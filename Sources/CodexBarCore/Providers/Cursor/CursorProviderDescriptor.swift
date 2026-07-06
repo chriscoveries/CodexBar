@@ -33,7 +33,7 @@ public enum CursorProviderDescriptor {
                 supportsTokenCost: true,
                 noDataMessage: { "No Cursor cost usage found. Sign in to Cursor in your browser or the Cursor app." }),
             fetchPlan: ProviderFetchPlan(
-                sourceModes: [.auto, .cli],
+                sourceModes: [.auto, .cli, .web],
                 pipeline: ProviderFetchPipeline(resolveStrategies: { _ in [CursorStatusFetchStrategy()] })),
             cli: ProviderCLIConfig(
                 name: "cursor",

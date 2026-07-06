@@ -35,8 +35,15 @@ enum CLIRenderer {
             lines: &lines)
         self.appendTertiaryLines(snapshot: snapshot, labels: labels, context: context, now: now, lines: &lines)
         self.appendMiMoBalanceLine(snapshot: snapshot, useColor: context.useColor, lines: &lines)
+        self.appendCrossModelUsageLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
+        self.appendClawRouterUsageLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendDeepgramLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendAmpBalanceLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
+        self.appendDevinOverageBalanceLine(
+            provider: provider,
+            snapshot: snapshot,
+            useColor: context.useColor,
+            lines: &lines)
         self.appendLimitsUnavailableLine(
             provider: provider,
             snapshot: snapshot,
@@ -110,7 +117,11 @@ enum CLIRenderer {
             return
         }
 
-        guard let cost = snapshot.providerCost else { return }
+        guard
+            provider != .clawrouter,
+            let cost = snapshot.providerCost,
+            !(provider == .devin && cost.period == "Extra usage balance")
+        else { return }
         // Fallback to cost/quota display if no primary rate window.
         let label = cost.currencyCode == "Quota" ? "Quota" : "Cost"
         let value = "\(String(format: "%.1f", cost.used)) / \(String(format: "%.1f", cost.limit))"
@@ -144,6 +155,113 @@ enum CLIRenderer {
     {
         guard let usage = snapshot.mimoUsage else { return }
         lines.append(self.labelValueLine("Balance", value: usage.balanceDetail, useColor: useColor))
+    }
+
+    private static func appendDevinOverageBalanceLine(
+        provider: UsageProvider,
+        snapshot: UsageSnapshot,
+        useColor: Bool,
+        lines: inout [String])
+    {
+        guard provider == .devin,
+              let cost = snapshot.providerCost,
+              cost.period == "Extra usage balance"
+        else { return }
+        let balance = UsageFormatter.currencyString(cost.used, currencyCode: cost.currencyCode)
+        lines.append(self.labelValueLine("Extra usage", value: balance, useColor: useColor))
+    }
+
+    private static func appendCrossModelUsageLines(
+        snapshot: UsageSnapshot,
+        useColor: Bool,
+        lines: inout [String])
+    {
+        guard let usage = snapshot.crossModelUsage else { return }
+
+        lines.append(self.labelValueLine("Balance", value: usage.balanceDisplay, useColor: useColor))
+        if let daily = usage.daily {
+            lines.append(self.crossModelUsageLine(
+                title: "Today",
+                usage: usage,
+                window: daily,
+                metric: .tokens,
+                useColor: useColor))
+        }
+        if let weekly = usage.weekly {
+            lines.append(self.crossModelUsageLine(
+                title: "Week",
+                usage: usage,
+                window: weekly,
+                metric: .requests,
+                useColor: useColor))
+        }
+        if let monthly = usage.monthly {
+            lines.append(self.crossModelUsageLine(
+                title: "Month",
+                usage: usage,
+                window: monthly,
+                metric: .requests,
+                useColor: useColor))
+        }
+    }
+
+    private static func appendClawRouterUsageLines(
+        snapshot: UsageSnapshot,
+        useColor: Bool,
+        lines: inout [String])
+    {
+        guard let usage = snapshot.clawRouterUsage else { return }
+
+        let spend = usage.budgetSpentUSD ?? usage.actualCostUSD
+        let spendValue = UsageFormatter.currencyString(spend, currencyCode: "USD")
+        if let limit = usage.budgetLimitUSD, limit > 0 {
+            let limitValue = UsageFormatter.currencyString(limit, currencyCode: "USD")
+            lines.append(self.labelValueLine("Spend", value: "\(spendValue) / \(limitValue)", useColor: useColor))
+        } else {
+            lines.append(self.labelValueLine("Spend", value: spendValue, useColor: useColor))
+        }
+
+        let requests = UsageFormatter.tokenCountString(usage.requestCount)
+        let tokens = UsageFormatter.tokenCountString(usage.totalTokens)
+        lines.append(self.labelValueLine("Usage", value: "\(requests) requests · \(tokens) tokens", useColor: useColor))
+
+        if usage.errorCount > 0 {
+            lines.append(self.labelValueLine(
+                "Results",
+                value: "\(usage.successCount) succeeded · \(usage.errorCount) failed",
+                useColor: useColor))
+        }
+
+        if !usage.providers.isEmpty {
+            let providerMix = usage.providers.prefix(5)
+                .map { "\($0.provider): \(UsageFormatter.tokenCountString($0.requestCount))" }
+                .joined(separator: " · ")
+            lines.append(self.labelValueLine("Routed providers", value: providerMix, useColor: useColor))
+        }
+    }
+
+    private enum CrossModelMetric {
+        case tokens
+        case requests
+    }
+
+    private static func crossModelUsageLine(
+        title: String,
+        usage: CrossModelUsageSnapshot,
+        window: CrossModelUsageWindow,
+        metric: CrossModelMetric,
+        useColor: Bool) -> String
+    {
+        let metricText = switch metric {
+        case .tokens:
+            "\(UsageFormatter.tokenCountString(window.totalTokens)) tokens"
+        case .requests:
+            "\(UsageFormatter.tokenCountString(window.requestCount)) requests"
+        }
+        return self.labelValueLine(
+            title,
+            value: "\(usage.currencyString(window.cost)) · \(metricText)",
+            useColor: useColor)
     }
 
     private static func appendTertiaryLines(
@@ -250,14 +368,14 @@ enum CLIRenderer {
         lines: inout [String])
     {
         guard provider == .codex, let resetCredits = snapshot.codexResetCredits else { return }
-        let value = if resetCredits.availableCount == 1 {
+        let inventory = resetCredits.availableInventory(at: now)
+        let value = if inventory.count == 1 {
             "1 available"
         } else {
-            "\(resetCredits.availableCount) available"
+            "\(inventory.count) available"
         }
         lines.append(self.labelValueLine("Limit Reset Credits", value: value, useColor: useColor))
-        guard resetCredits.availableCount > 0,
-              let expiresAt = resetCredits.nextExpiringAvailableCredit?.expiresAt
+        guard let expiresAt = inventory.nextExpiringCredit?.expiresAt
         else {
             return
         }
@@ -351,6 +469,7 @@ enum CLIRenderer {
         lines: inout [String])
     {
         if provider == .warp || provider == .kilo || provider == .mistral || provider == .deepseek ||
+            provider == .qoder ||
             provider == .crof
         {
             if let reset = self.resetLineForDetailBackedWindow(window: window, style: context.resetStyle, now: now) {
@@ -495,12 +614,17 @@ enum CLIRenderer {
         return pace
     }
 
-    private static func paceSummary(for pace: UsagePace, kind: PaceKind, now: Date) -> String {
+    private static func paceSummary(
+        provider: UsageProvider,
+        for pace: UsagePace,
+        kind: PaceKind,
+        now: Date) -> String
+    {
         let expected = Int(pace.expectedUsedPercent.rounded())
         var parts: [String] = []
         parts.append(Self.paceLeftLabel(for: pace))
         parts.append("Expected \(expected)% used")
-        if let rightLabel = Self.paceRightLabel(for: pace, kind: kind, now: now) {
+        if let rightLabel = Self.paceRightLabel(provider: provider, for: pace, kind: kind, now: now) {
             parts.append(rightLabel)
         }
         return parts.joined(separator: " | ")
@@ -521,7 +645,7 @@ enum CLIRenderer {
             weeklyWorkDays: weeklyWorkDays,
             now: now) else { return nil }
         let label = self.label("Pace", useColor: useColor)
-        return "\(label): \(self.paceSummary(for: pace, kind: kind, now: now))"
+        return "\(label): \(self.paceSummary(provider: provider, for: pace, kind: kind, now: now))"
     }
 
     private static func pacePayload(
@@ -544,7 +668,7 @@ enum CLIRenderer {
             willLastToReset: pace.willLastToReset,
             etaSeconds: pace.etaSeconds.map { $0.rounded() },
             runOutProbability: pace.runOutProbability,
-            summary: self.paceSummary(for: pace, kind: kind, now: now))
+            summary: self.paceSummary(provider: provider, for: pace, kind: kind, now: now))
     }
 
     private static func stageString(_ stage: UsagePace.Stage) -> String {
@@ -571,8 +695,13 @@ enum CLIRenderer {
         }
     }
 
-    private static func paceRightLabel(for pace: UsagePace, kind: PaceKind, now: Date) -> String? {
-        if pace.willLastToReset { return "Lasts until reset" }
+    private static func paceRightLabel(
+        provider: UsageProvider,
+        for pace: UsagePace,
+        kind: PaceKind,
+        now: Date) -> String?
+    {
+        if pace.willLastToReset { return self.combinedLastsLabel(for: pace, provider: provider) }
         guard let etaSeconds = pace.etaSeconds else { return nil }
         let etaText = Self.paceDurationText(seconds: etaSeconds, now: now)
         switch kind {
@@ -581,6 +710,22 @@ enum CLIRenderer {
         case .weekly:
             return etaText == "now" ? "Runs out now" : "Runs out in \(etaText)"
         }
+    }
+
+    private static func combinedLastsLabel(for pace: UsagePace, provider: UsageProvider) -> String {
+        guard provider == .codex else { return "Lasts until reset" }
+        guard let speedLabel = speedHintLabel(for: pace) else {
+            return "Lasts until reset"
+        }
+        return "Lasts until reset | \(speedLabel)"
+    }
+
+    private static func speedHintLabel(for pace: UsagePace) -> String? {
+        guard pace.deltaPercent < -15,
+              let multiplier = pace.speedMultiplierToReset,
+              multiplier >= 1.5
+        else { return nil }
+        return "1.5× headroom"
     }
 
     private static func paceDurationText(seconds: TimeInterval, now: Date) -> String {

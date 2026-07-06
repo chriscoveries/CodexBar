@@ -88,15 +88,15 @@ extension StatusItemController {
     }
 
     static func costMenuTooltipLines(tokenUsage: UsageMenuCardView.Model.TokenUsageSection?) -> [String] {
-        [
+        let lines = [
             tokenUsage?.sessionLine,
             tokenUsage?.monthLine,
             tokenUsage?.meteredLine,
-            tokenUsage?.hintLine,
-            tokenUsage?.errorLine,
         ]
             .compactMap(\.self)
-            .filter { !$0.isEmpty }
+            + (tokenUsage?.comparisonLines ?? [])
+            + [tokenUsage?.hintLine, tokenUsage?.errorLine].compactMap(\.self)
+        return lines.filter { !$0.isEmpty }
     }
 
     static func costMenuVisibleDetailLines(
@@ -104,13 +104,14 @@ extension StatusItemController {
         hasSubmenu: Bool) -> [String]
     {
         guard !hasSubmenu else { return [] }
-        let primaryLines = [
+        let primaryLines = ([
             tokenUsage?.sessionLine,
             tokenUsage?.monthLine,
             tokenUsage?.meteredLine,
-            tokenUsage?.errorLine,
         ]
             .compactMap(\.self)
+            + (tokenUsage?.comparisonLines ?? [])
+            + [tokenUsage?.errorLine].compactMap(\.self))
             .filter { !$0.isEmpty }
         guard primaryLines.isEmpty else { return primaryLines }
         return [tokenUsage?.hintLine]

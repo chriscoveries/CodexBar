@@ -30,6 +30,9 @@ struct InlineUsageDashboardModel: Equatable {
     /// Provider branding color used to fill the mini usage bars. When nil the bars fall back to a
     /// neutral palette derived from `valueStyle`.
     var barColor: Color?
+    /// ISO 4217 currency code for cost dashboards. When non-nil, `MiniUsageBars` shows a max-cost scale label.
+    /// Nil for token/points dashboards.
+    var currencyCode: String?
 }
 
 extension UsageMenuCardView.Model {
@@ -44,6 +47,25 @@ extension UsageMenuCardView.Model {
            let usage = input.snapshot?.deepgramUsage
         {
             return usage.displayLines
+        }
+
+        if input.provider == .clawrouter,
+           let usage = input.snapshot?.clawRouterUsage
+        {
+            var notes = [
+                "\(UsageFormatter.tokenCountString(usage.requestCount)) \(L("requests")) · " +
+                    "\(UsageFormatter.tokenCountString(usage.totalTokens)) \(L("tokens"))",
+            ]
+            if usage.errorCount > 0 {
+                notes.append("\(usage.successCount) succeeded · \(usage.errorCount) failed")
+            }
+            if !usage.providers.isEmpty {
+                let mix = usage.providers.prefix(5)
+                    .map { "\($0.provider): \(UsageFormatter.tokenCountString($0.requestCount))" }
+                    .joined(separator: " · ")
+                notes.append("Routed providers: \(mix)")
+            }
+            return notes
         }
 
         if input.provider == .minimax,
@@ -165,7 +187,10 @@ extension UsageMenuCardView.Model {
            let tokenSnapshot = primaryCostHistorySnapshot(input: input),
            !tokenSnapshot.daily.isEmpty
         {
-            return self.costHistoryInlineDashboard(provider: input.provider, snapshot: tokenSnapshot)
+            return self.costHistoryInlineDashboard(
+                provider: input.provider,
+                snapshot: tokenSnapshot,
+                comparisonPeriodsEnabled: input.costComparisonPeriodsEnabled)
         }
         if input.provider == .claude,
            let usage = input.snapshot?.claudeAdminAPIUsage
@@ -176,6 +201,11 @@ extension UsageMenuCardView.Model {
            let usage = input.snapshot?.openRouterUsage
         {
             return Self.openRouterInlineDashboard(usage)
+        }
+        if input.provider == .crossmodel,
+           let usage = input.snapshot?.crossModelUsage
+        {
+            return Self.crossModelInlineDashboard(usage)
         }
         if input.provider == .zai,
            let modelUsage = input.snapshot?.zaiUsage?.modelUsage
@@ -207,7 +237,10 @@ extension UsageMenuCardView.Model {
            let tokenSnapshot = input.tokenSnapshot,
            !tokenSnapshot.daily.isEmpty
         {
-            return Self.costHistoryInlineDashboard(provider: input.provider, snapshot: tokenSnapshot)
+            return Self.costHistoryInlineDashboard(
+                provider: input.provider,
+                snapshot: tokenSnapshot,
+                comparisonPeriodsEnabled: input.costComparisonPeriodsEnabled)
         }
         return nil
     }
@@ -295,7 +328,8 @@ extension UsageMenuCardView.Model {
 
     private static func costHistoryInlineDashboard(
         provider: UsageProvider,
-        snapshot: CostUsageTokenSnapshot) -> InlineUsageDashboardModel
+        snapshot: CostUsageTokenSnapshot,
+        comparisonPeriodsEnabled: Bool) -> InlineUsageDashboardModel
     {
         let historyDays = max(1, min(365, snapshot.historyDays))
         let historyTitle = snapshot.historyLabel
@@ -330,6 +364,11 @@ extension UsageMenuCardView.Model {
         let usesLatestPrimary = provider == .bedrock || provider == .mistral
         let primaryCostUSD = usesLatestPrimary ? latest?.costUSD : snapshot.sessionCostUSD
         var details: [String] = []
+        if comparisonPeriodsEnabled {
+            details.append(contentsOf: snapshot.comparisonSummaries().map {
+                Self.costWindowLine(summary: $0, currencyCode: snapshot.currencyCode)
+            })
+        }
         if let topModel = Self.topCostModel(from: snapshot.daily) {
             details.append("\(L("Top model")): \(Self.shortModelName(topModel))")
         }
@@ -342,7 +381,7 @@ extension UsageMenuCardView.Model {
             details.append(L("cost_estimate_hint"))
         }
         let providerName = ProviderDefaults.metadata[provider]?.displayName ?? provider.rawValue
-        return InlineUsageDashboardModel(
+        var model = InlineUsageDashboardModel(
             accessibilityLabel: "\(providerName) \(periodLabel) cost trend",
             valueStyle: Self.costValueStyle(currencyCode: snapshot.currencyCode),
             kpis: [
@@ -362,6 +401,8 @@ extension UsageMenuCardView.Model {
             ] + Self.costHistoryTrailingKPIs(snapshot: snapshot, latest: latest),
             points: points,
             detailLines: details)
+        model.currencyCode = snapshot.currencyCode
+        return model
     }
 
     private static func costHistoryTrailingKPIs(
@@ -405,7 +446,7 @@ extension UsageMenuCardView.Model {
         if let topModel = usage.topModels.first {
             details.append("\(L("Top model")): \(Self.shortModelName(topModel.name))")
         }
-        return InlineUsageDashboardModel(
+        var model = InlineUsageDashboardModel(
             accessibilityLabel: L("Claude Admin API 30 day spend trend"),
             valueStyle: .currencyUSD,
             kpis: [
@@ -422,6 +463,46 @@ extension UsageMenuCardView.Model {
             ],
             points: points,
             detailLines: details)
+        model.currencyCode = "USD"
+        return model
+    }
+
+    private static func crossModelInlineDashboard(_ usage: CrossModelUsageSnapshot) -> InlineUsageDashboardModel? {
+        let periodValues: [(String, String, Double?)] = [
+            ("day", L("Today"), usage.daily?.cost),
+            ("week", L("Week"), usage.weekly?.cost),
+            ("month", L("Month"), usage.monthly?.cost),
+        ]
+        let points = periodValues.compactMap { id, label, value -> InlineUsageDashboardModel.Point? in
+            guard let value else { return nil }
+            return InlineUsageDashboardModel.Point(
+                id: id,
+                label: label,
+                value: value,
+                accessibilityValue: "\(label): \(usage.currencyString(value))")
+        }
+        var model = InlineUsageDashboardModel(
+            accessibilityLabel: L("CrossModel API spend trend"),
+            valueStyle: Self.costValueStyle(currencyCode: usage.currency),
+            kpis: [
+                .init(title: L("Balance"), value: usage.balanceDisplay, emphasis: true),
+                .init(
+                    title: L("Today"),
+                    value: usage.daily.map { usage.currencyString($0.cost) } ?? "—",
+                    emphasis: false),
+                .init(
+                    title: L("Week"),
+                    value: usage.weekly.map { usage.currencyString($0.cost) } ?? "—",
+                    emphasis: false),
+                .init(
+                    title: L("Month"),
+                    value: usage.monthly.map { usage.currencyString($0.cost) } ?? "—",
+                    emphasis: false),
+            ],
+            points: points,
+            detailLines: [])
+        model.currencyCode = usage.currency
+        return model
     }
 
     private static func openRouterInlineDashboard(_ usage: OpenRouterUsageSnapshot) -> InlineUsageDashboardModel? {
@@ -432,11 +513,12 @@ extension UsageMenuCardView.Model {
         ]
         let points = periodValues.compactMap { id, label, value -> InlineUsageDashboardModel.Point? in
             guard let value else { return nil }
+            let formattedValue = Self.openRouterCurrencyString(value)
             return InlineUsageDashboardModel.Point(
                 id: id,
                 label: label,
                 value: value,
-                accessibilityValue: "\(label): \(Self.openRouterCurrencyString(value))")
+                accessibilityValue: String(format: L("%@: %@"), label, formattedValue))
         }
         guard !points.isEmpty else { return nil }
         var details: [String] = []
@@ -446,14 +528,17 @@ extension UsageMenuCardView.Model {
         switch usage.keyQuotaStatus {
         case .available:
             if let remaining = usage.keyRemaining {
-                details.append("\(L("Key remaining")): \(Self.openRouterCurrencyString(remaining))")
+                details.append(String(
+                    format: L("%@: %@"),
+                    L("Key remaining"),
+                    Self.openRouterCurrencyString(remaining)))
             }
         case .noLimitConfigured:
             details.append(L("No limit set for the API key"))
         case .unavailable:
             details.append(L("API key limit unavailable right now"))
         }
-        return InlineUsageDashboardModel(
+        var model = InlineUsageDashboardModel(
             accessibilityLabel: L("OpenRouter API key spend trend"),
             valueStyle: .currencyUSD,
             kpis: [
@@ -473,6 +558,8 @@ extension UsageMenuCardView.Model {
             ],
             points: points,
             detailLines: details)
+        model.currencyCode = "USD"
+        return model
     }
 
     private static func zaiInlineDashboard(modelUsage: ZaiModelUsageData, now: Date) -> InlineUsageDashboardModel? {
@@ -692,9 +779,11 @@ struct InlineUsageDashboardContent: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             self.kpis
-            MiniUsageBars(model: self.model)
-                .frame(height: 58)
-                .accessibilityLabel(self.model.accessibilityLabel)
+            if !self.model.points.isEmpty {
+                MiniUsageBars(model: self.model)
+                    .frame(height: 58)
+                    .accessibilityLabel(self.model.accessibilityLabel)
+            }
             self.detailLines
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -754,32 +843,48 @@ struct InlineUsageDashboardContent: View {
         @Environment(\.menuItemHighlighted) private var isHighlighted
 
         var body: some View {
-            let maxValue = max(self.model.points.map(\.value).max() ?? 0, 1)
-            HStack(alignment: .bottom, spacing: 2) {
-                ForEach(self.model.points) { point in
-                    RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                        .fill(self.fill(for: point, maxValue: maxValue))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: self.height(for: point, maxValue: maxValue))
-                        .accessibilityLabel(point.accessibilityValue)
+            let scale = UsageChartScale(values: self.model.points.map(\.value))
+            VStack(alignment: .trailing, spacing: 2) {
+                if let currencyCode = self.model.currencyCode, scale.maximum > 0 {
+                    Text(UsageFormatter.compactCurrencyString(scale.maximum, currencyCode: currencyCode))
+                        .font(.caption2)
+                        .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .allowsTightening(true)
+                }
+                GeometryReader { geometry in
+                    HStack(alignment: .bottom, spacing: 2) {
+                        ForEach(self.model.points) { point in
+                            RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                                .fill(self.fill(for: point, scale: scale))
+                                .frame(maxWidth: .infinity)
+                                .frame(height: self.height(for: point, scale: scale, available: geometry.size.height))
+                                .accessibilityLabel(point.accessibilityValue)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .overlay(alignment: .bottomLeading) {
+                        Rectangle()
+                            .fill(MenuHighlightStyle.secondary(self.isHighlighted).opacity(0.22))
+                            .frame(height: 1)
+                    }
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-            .overlay(alignment: .bottomLeading) {
-                Rectangle()
-                    .fill(MenuHighlightStyle.secondary(self.isHighlighted).opacity(0.22))
-                    .frame(height: 1)
-            }
         }
 
-        private func height(for point: InlineUsageDashboardModel.Point, maxValue: Double) -> CGFloat {
-            let ratio = point.value / maxValue
+        private func height(
+            for point: InlineUsageDashboardModel.Point,
+            scale: UsageChartScale,
+            available: CGFloat) -> CGFloat
+        {
+            let ratio = scale.fraction(for: point.value)
             guard ratio > 0 else { return 1 }
-            return CGFloat(max(3, min(58, ratio * 58)))
+            return max(3, CGFloat(ratio) * available)
         }
 
-        private func fill(for point: InlineUsageDashboardModel.Point, maxValue: Double) -> Color {
-            let ratio = max(0.18, min(1, point.value / maxValue))
+        private func fill(for point: InlineUsageDashboardModel.Point, scale: UsageChartScale) -> Color {
+            let ratio = max(0.18, scale.fraction(for: point.value))
             if self.isHighlighted {
                 return Color.white.opacity(0.55 + ratio * 0.35)
             }

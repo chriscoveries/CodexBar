@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Testing
 @testable import CodexBarCore
@@ -13,6 +14,17 @@ struct CostUsageScannerBreakdownTests {
             "timestamp": timestamp,
             "payload": [
                 "model": model,
+            ],
+        ]
+    }
+
+    private func codexSessionMeta(timestamp: String, id: String, cwd: String) -> [String: Any] {
+        [
+            "type": "session_meta",
+            "timestamp": timestamp,
+            "payload": [
+                "id": id,
+                "cwd": cwd,
             ],
         ]
     }
@@ -195,6 +207,186 @@ struct CostUsageScannerBreakdownTests {
     }
 
     @Test
+    func `codex project breakdowns group by cwd and preserve daily totals`() throws {
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+
+        let day = try env.makeLocalNoon(year: 2026, month: 4, day: 2)
+        let iso0 = env.isoString(for: day)
+        let iso1 = env.isoString(for: day.addingTimeInterval(1))
+        let iso2 = env.isoString(for: day.addingTimeInterval(2))
+        let model = "gpt-5.4"
+        let projectA = env.root.appendingPathComponent("client-a", isDirectory: true).path
+        let projectB = env.root.appendingPathComponent("client-b", isDirectory: true).path
+        let projectAWorktree = env.root
+            .appendingPathComponent(".codex/worktrees/abcd/client-a", isDirectory: true)
+            .path
+
+        try self.makeGitRepositoryWithWorktree(projectPath: projectA, worktreePath: projectAWorktree)
+
+        func sessionMeta(id: String, cwd: String?) -> [String: Any] {
+            var payload: [String: Any] = ["id": id]
+            if let cwd { payload["cwd"] = cwd }
+            return [
+                "type": "session_meta",
+                "timestamp": iso0,
+                "payload": payload,
+            ]
+        }
+
+        let firstA = try env.writeCodexSessionFile(
+            day: day,
+            filename: "client-a-1.jsonl",
+            contents: env.jsonl([
+                sessionMeta(id: "client-a-1", cwd: projectA),
+                self.codexTurnContext(timestamp: iso0, model: model),
+                self.codexTokenCount(
+                    timestamp: iso1,
+                    model: model,
+                    total: (input: 10, cached: 0, output: 1)),
+            ]))
+        _ = try env.writeCodexSessionFile(
+            day: day,
+            filename: "client-a-2.jsonl",
+            contents: env.jsonl([
+                sessionMeta(id: "client-a-2", cwd: projectA + "/."),
+                self.codexTurnContext(timestamp: iso0, model: model),
+                self.codexTokenCount(
+                    timestamp: iso1,
+                    model: model,
+                    total: (input: 20, cached: 0, output: 2)),
+            ]))
+        _ = try env.writeCodexSessionFile(
+            day: day,
+            filename: "client-a-worktree.jsonl",
+            contents: env.jsonl([
+                sessionMeta(id: "client-a-worktree", cwd: projectAWorktree),
+                self.codexTurnContext(timestamp: iso0, model: model),
+                self.codexTokenCount(
+                    timestamp: iso1,
+                    model: model,
+                    total: (input: 12, cached: 0, output: 1)),
+            ]))
+        _ = try env.writeCodexSessionFile(
+            day: day,
+            filename: "client-b.jsonl",
+            contents: env.jsonl([
+                sessionMeta(id: "client-b", cwd: projectB),
+                self.codexTurnContext(timestamp: iso0, model: model),
+                self.codexTokenCount(
+                    timestamp: iso1,
+                    model: model,
+                    total: (input: 5, cached: 0, output: 5)),
+            ]))
+        _ = try env.writeCodexSessionFile(
+            day: day,
+            filename: "unknown.jsonl",
+            contents: env.jsonl([
+                sessionMeta(id: "unknown", cwd: nil),
+                self.codexTurnContext(timestamp: iso0, model: model),
+                self.codexTokenCount(
+                    timestamp: iso1,
+                    model: model,
+                    total: (input: 7, cached: 0, output: 3)),
+            ]))
+
+        var options = CostUsageScanner.Options(
+            codexSessionsRoot: env.codexSessionsRoot,
+            claudeProjectsRoots: nil,
+            cacheRoot: env.cacheRoot,
+            codexTraceDatabaseURL: env.root.appendingPathComponent("missing-traces.sqlite"))
+        options.refreshMinIntervalSeconds = 0
+
+        let report = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day,
+            options: options)
+        #expect(report.summary?.totalTokens == 66)
+
+        var cache = CostUsageCacheIO.load(provider: .codex, cacheRoot: env.cacheRoot)
+        var projects = CostUsageScanner.buildCodexProjectBreakdownsFromCache(
+            cache: cache,
+            range: CostUsageScanner.CostUsageDayRange(since: day, until: day),
+            modelsDevCacheRoot: env.cacheRoot)
+        let projectABreakdown = projects.first { $0.path == projectA }
+        #expect(projectABreakdown?.totalTokens == 46)
+        #expect(projectABreakdown?.sources.count == 2)
+        #expect(projectABreakdown?.sources.first(where: { $0.path == projectA })?.totalTokens == 33)
+        #expect(projectABreakdown?.sources.first(where: { $0.path == projectAWorktree })?.totalTokens == 13)
+        #expect(projects.first(where: { $0.path == projectB })?.totalTokens == 10)
+        #expect(projects.first(where: { $0.path == nil })?.name == CostUsageProjectBreakdown.unknownProjectName)
+        #expect(projects.first(where: { $0.path == nil })?.totalTokens == 10)
+        #expect(cache.files.values.first(where: { $0.projectPath == projectAWorktree })?
+            .canonicalProjectPath == projectA)
+        #expect(cache.codexProjectMetadataVersion == 1)
+
+        let appended = try "\n" + env.jsonl([
+            self.codexTokenCount(
+                timestamp: iso2,
+                model: model,
+                total: (input: 15, cached: 0, output: 2)),
+        ])
+        let handle = try FileHandle(forWritingTo: firstA)
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data(appended.utf8))
+        try handle.close()
+
+        _ = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day,
+            options: options)
+        cache = CostUsageCacheIO.load(provider: .codex, cacheRoot: env.cacheRoot)
+        projects = CostUsageScanner.buildCodexProjectBreakdownsFromCache(
+            cache: cache,
+            range: CostUsageScanner.CostUsageDayRange(since: day, until: day),
+            modelsDevCacheRoot: env.cacheRoot)
+        #expect(projects.first(where: { $0.path == projectA })?.totalTokens == 52)
+    }
+
+    private func makeGitRepositoryWithWorktree(projectPath: String, worktreePath: String) throws {
+        try FileManager.default.createDirectory(
+            at: URL(fileURLWithPath: projectPath, isDirectory: true),
+            withIntermediateDirectories: true)
+        try self.runGit(["init", projectPath])
+        try self.runGit(["-C", projectPath, "config", "user.email", "codexbar-test@example.com"])
+        try self.runGit(["-C", projectPath, "config", "user.name", "CodexBar Test"])
+        try self.runGit(["-C", projectPath, "config", "commit.gpgsign", "false"])
+        try "test\n".write(
+            to: URL(fileURLWithPath: projectPath).appendingPathComponent("README.md"),
+            atomically: false,
+            encoding: .utf8)
+        try self.runGit(["-C", projectPath, "add", "README.md"])
+        try self.runGit(["-C", projectPath, "commit", "-m", "init"])
+        try FileManager.default.createDirectory(
+            at: URL(fileURLWithPath: worktreePath).deletingLastPathComponent(),
+            withIntermediateDirectories: true)
+        try self.runGit(["-C", projectPath, "worktree", "add", "-b", "codex-test", worktreePath])
+    }
+
+    private func runGit(_ arguments: [String]) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["git"] + arguments
+        let output = Pipe()
+        process.standardOutput = output
+        process.standardError = output
+        try process.run()
+        process.waitUntilExit()
+        if process.terminationStatus != 0 {
+            let data = output.fileHandleForReading.readDataToEndOfFile()
+            let message = String(data: data, encoding: .utf8) ?? ""
+            throw NSError(
+                domain: "CodexBarTests.Git",
+                code: Int(process.terminationStatus),
+                userInfo: [NSLocalizedDescriptionKey: message])
+        }
+    }
+
+    @Test
     func `codex incremental append falls back to rescan when fork metadata appears late`() throws {
         let env = try CostUsageTestEnvironment()
         defer { env.cleanup() }
@@ -314,7 +506,7 @@ struct CostUsageScannerBreakdownTests {
             until: day,
             now: day,
             options: options)
-        let oldDailyCost = (100.0 / 1_000_000.0) + (20.0 * 0.5 / 1_000_000.0)
+        let oldDailyCost = (80.0 / 1_000_000.0) + (20.0 * 0.5 / 1_000_000.0)
             + (10.0 * 2.0 / 1_000_000.0)
         let costTolerance = 0.000000001
         #expect(abs((first.summary?.totalCostUSD ?? 0) - (oldDailyCost * 2)) < costTolerance)
@@ -347,7 +539,7 @@ struct CostUsageScannerBreakdownTests {
             until: day,
             now: day.addingTimeInterval(2),
             options: options)
-        let newDailyCost = (100.0 * 10.0 / 1_000_000.0)
+        let newDailyCost = (80.0 * 10.0 / 1_000_000.0)
             + (20.0 * 5.0 / 1_000_000.0)
             + (10.0 * 20.0 / 1_000_000.0)
         #expect(abs((narrowRepriced.summary?.totalCostUSD ?? 0) - newDailyCost) < costTolerance)
@@ -360,6 +552,77 @@ struct CostUsageScannerBreakdownTests {
             options: options)
 
         #expect(abs((wideRepriced.summary?.totalCostUSD ?? 0) - (newDailyCost * 2)) < costTolerance)
+    }
+
+    @Test
+    func `codex daily report reprices cached costs when cost formula version changes`() throws {
+        // Costs are persisted per file as precomputed nanos and only recomputed when the pricing
+        // key changes. A formula-only fix (rates unchanged) must still invalidate caches written
+        // by an older formula, otherwise stale (e.g. inflated) costs would be reused indefinitely.
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+
+        let day = try env.makeLocalNoon(year: 2026, month: 5, day: 10)
+        let iso0 = env.isoString(for: day)
+        let iso1 = env.isoString(for: day.addingTimeInterval(1))
+        let model = "gpt-5.5"
+        _ = try env.writeCodexSessionFile(
+            day: day,
+            filename: "session.jsonl",
+            contents: env.jsonl([
+                self.codexTurnContext(timestamp: iso0, model: model),
+                self.codexTokenCount(timestamp: iso1, model: model, last: (input: 100, cached: 20, output: 10)),
+            ]))
+
+        var options = CostUsageScanner.Options(
+            codexSessionsRoot: env.codexSessionsRoot,
+            claudeProjectsRoots: nil,
+            cacheRoot: env.cacheRoot,
+            codexTraceDatabaseURL: env.root.appendingPathComponent("missing-traces.sqlite"))
+        options.refreshMinIntervalSeconds = 0
+
+        let first = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day,
+            options: options)
+        // gpt-5.5 built-in: only the 80 non-cached input tokens bill at the input rate.
+        let correctCost = (80.0 * 5e-6) + (20.0 * 5e-7) + (10.0 * 3e-5)
+        let tolerance = 0.000000001
+        #expect(abs((first.summary?.totalCostUSD ?? 0) - correctCost) < tolerance)
+
+        // Simulate a cache written by the previous formula. Its key hashed only the rates, so
+        // derive that exact legacy key and verify the formula version makes the current key differ.
+        var cache = CostUsageCacheIO.load(provider: .codex, cacheRoot: env.cacheRoot)
+        let legacyPricingKey = "builtin-\(Self.sha256Hex(CostUsagePricing.codexBuiltInPricingFingerprint()))"
+        let currentPricingKey = try #require(cache.codexPricingKey)
+        #expect(currentPricingKey != legacyPricingKey)
+        cache.codexPricingKey = legacyPricingKey
+        for (path, usage) in cache.files {
+            guard let costNanos = usage.codexCostNanos else { continue }
+            var inflated = costNanos
+            for (dayKey, models) in costNanos {
+                for (modelKey, value) in models {
+                    inflated[dayKey]?[modelKey] = value * 10
+                }
+            }
+            var updated = usage
+            updated.codexCostNanos = inflated
+            cache.files[path] = updated
+        }
+        CostUsageCacheIO.save(provider: .codex, cache: cache, cacheRoot: env.cacheRoot)
+
+        // A time-only refresh is suppressed (interval 60s), so repricing here is driven solely by
+        // the pricing-key mismatch from the formula version bump.
+        options.refreshMinIntervalSeconds = 60
+        let repriced = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day.addingTimeInterval(1),
+            options: options)
+        #expect(abs((repriced.summary?.totalCostUSD ?? 0) - correctCost) < tolerance)
     }
 
     @Test
@@ -854,6 +1117,99 @@ struct CostUsageScannerBreakdownTests {
             now: day.addingTimeInterval(2),
             options: options)
         #expect(repeatedWide.summary?.totalTokens == 32)
+    }
+
+    @Test
+    func `codex project metadata migration drops unscanned legacy files`() throws {
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+
+        let olderDay = try env.makeLocalNoon(year: 2026, month: 5, day: 10)
+        let day = try env.makeLocalNoon(year: 2026, month: 5, day: 18)
+        let model = "gpt-5.4"
+        let olderProject = env.root.appendingPathComponent("older-project", isDirectory: true).path
+        let currentProject = env.root.appendingPathComponent("current-project", isDirectory: true).path
+        let olderFile = try env.writeCodexSessionFile(
+            day: olderDay,
+            filename: "older-project.jsonl",
+            contents: env.jsonl([
+                self.codexSessionMeta(timestamp: env.isoString(for: olderDay), id: "older", cwd: olderProject),
+                self.codexTurnContext(timestamp: env.isoString(for: olderDay), model: model),
+                self.codexTokenCount(
+                    timestamp: env.isoString(for: olderDay.addingTimeInterval(1)),
+                    model: model,
+                    last: (input: 20, cached: 0, output: 0)),
+            ]))
+        _ = try env.writeCodexSessionFile(
+            day: day,
+            filename: "current-project.jsonl",
+            contents: env.jsonl([
+                self.codexSessionMeta(timestamp: env.isoString(for: day), id: "current", cwd: currentProject),
+                self.codexTurnContext(timestamp: env.isoString(for: day), model: model),
+                self.codexTokenCount(
+                    timestamp: env.isoString(for: day.addingTimeInterval(1)),
+                    model: model,
+                    last: (input: 10, cached: 0, output: 0)),
+            ]))
+
+        var options = CostUsageScanner.Options(
+            codexSessionsRoot: env.codexSessionsRoot,
+            claudeProjectsRoots: nil,
+            cacheRoot: env.cacheRoot,
+            codexTraceDatabaseURL: env.root.appendingPathComponent("missing-traces.sqlite"))
+        options.refreshMinIntervalSeconds = 0
+
+        let wide = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: olderDay,
+            until: day,
+            now: day,
+            options: options)
+        #expect(wide.summary?.totalTokens == 30)
+
+        var cache = CostUsageCacheIO.load(provider: .codex, cacheRoot: env.cacheRoot)
+        cache.codexProjectMetadataVersion = nil
+        for key in cache.files.keys {
+            cache.files[key]?.projectPath = nil
+            cache.files[key]?.canonicalProjectPath = nil
+        }
+        CostUsageCacheIO.save(provider: .codex, cache: cache, cacheRoot: env.cacheRoot)
+
+        options.refreshMinIntervalSeconds = 60
+        let narrow = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day.addingTimeInterval(1),
+            options: options)
+        #expect(narrow.summary?.totalTokens == 10)
+
+        cache = CostUsageCacheIO.load(provider: .codex, cacheRoot: env.cacheRoot)
+        #expect(cache.codexProjectMetadataVersion == 1)
+        #expect(cache.scanSinceKey == "2026-05-17")
+        #expect(cache.scanUntilKey == "2026-05-19")
+        #expect(cache.files[olderFile.path] == nil)
+        let migratedProjects = CostUsageScanner.buildCodexProjectBreakdownsFromCache(
+            cache: cache,
+            range: CostUsageScanner.CostUsageDayRange(since: olderDay, until: day),
+            modelsDevCacheRoot: env.cacheRoot)
+        #expect(!migratedProjects.contains(where: { $0.path == olderProject }))
+        #expect(migratedProjects.first(where: { $0.path == currentProject })?.totalTokens == 10)
+
+        let repeatedWide = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: olderDay,
+            until: day,
+            now: day.addingTimeInterval(2),
+            options: options)
+        #expect(repeatedWide.summary?.totalTokens == 30)
+        cache = CostUsageCacheIO.load(provider: .codex, cacheRoot: env.cacheRoot)
+        let rescannedProjects = CostUsageScanner.buildCodexProjectBreakdownsFromCache(
+            cache: cache,
+            range: CostUsageScanner.CostUsageDayRange(since: olderDay, until: day),
+            modelsDevCacheRoot: env.cacheRoot)
+        #expect(rescannedProjects.first(where: { $0.path == olderProject })?.totalTokens == 20)
+        #expect(rescannedProjects.first(where: { $0.path == currentProject })?.totalTokens == 10)
     }
 
     @Test
@@ -4145,6 +4501,10 @@ struct CostUsageScannerBreakdownTests {
         }
         """
         return try JSONDecoder().decode(ModelsDevCatalog.self, from: Data(json.utf8))
+    }
+
+    private static func sha256Hex(_ value: String) -> String {
+        SHA256.hash(data: Data(value.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 }
 

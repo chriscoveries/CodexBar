@@ -56,6 +56,10 @@ extension UsageStore {
             return ZaiSettingsError.missingToken.errorDescription
         case .openrouter:
             return OpenRouterSettingsError.missingToken.errorDescription
+        case .crossmodel:
+            return CrossModelSettingsError.missingToken.errorDescription
+        case .clawrouter:
+            return ClawRouterUsageError.missingCredentials.errorDescription
         case .azureopenai:
             return AzureOpenAISettingsError.missingAPIKey.errorDescription
         case .elevenlabs:

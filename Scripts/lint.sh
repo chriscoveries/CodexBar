@@ -25,6 +25,10 @@ check_package_strip() {
   "${ROOT_DIR}/Scripts/test_package_strip.sh"
 }
 
+check_package_signing() {
+  "${ROOT_DIR}/Scripts/test_package_signing.sh"
+}
+
 check_release_dsym_paths() {
   "${ROOT_DIR}/Scripts/test_release_dsym_paths.sh"
 }
@@ -39,6 +43,11 @@ check_swift_test_sharding() {
 
 check_ci_path_gate() {
   "${ROOT_DIR}/Scripts/test_ci_path_gate.sh"
+}
+
+check_repository_size() {
+  "${ROOT_DIR}/Scripts/check_repository_size.sh"
+  "${ROOT_DIR}/Scripts/test_repository_size.sh"
 }
 
 check_shell_scripts() {
@@ -74,10 +83,12 @@ run_portable_checks() {
   check_codex_parser_hash
   check_package_product_paths
   check_package_strip
+  check_package_signing
   check_release_dsym_paths
   check_sparkle_signing_paths
   check_swift_test_sharding
   check_ci_path_gate
+  check_repository_size
   check_shell_scripts
   check_documentation_links
   check_llms_index
