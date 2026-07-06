@@ -376,7 +376,7 @@ struct CodexBarWidgetProviderTests {
     }
 
     @Test
-    func `small and medium Kimi widgets keep all persisted quota rows`() {
+    func `compact Kimi widgets keep established row fit while large widgets show all quotas`() {
         let now = Date(timeIntervalSince1970: 1_700_000_000)
         let entry = WidgetSnapshot.ProviderEntry(
             provider: .kimi,
@@ -401,11 +401,13 @@ struct CodexBarWidgetProviderTests {
         let mediumRows = WidgetUsageRow.rows(
             for: entry,
             limit: WidgetUsageRow.mediumWidgetRowLimit(for: entry))
+        let largeRows = WidgetUsageRow.rows(for: entry)
 
-        #expect(WidgetUsageRow.smallWidgetRowLimit(for: entry) == 4)
-        #expect(WidgetUsageRow.mediumWidgetRowLimit(for: entry) == 4)
-        #expect(smallRows.map(\.id) == ["primary", "secondary", "kimi-monthly", "kimi-code-7d"])
+        #expect(WidgetUsageRow.smallWidgetRowLimit(for: entry) == 3)
+        #expect(WidgetUsageRow.mediumWidgetRowLimit(for: entry) == 3)
+        #expect(smallRows.map(\.id) == ["primary", "secondary", "kimi-monthly"])
         #expect(mediumRows == smallRows)
+        #expect(largeRows.map(\.id) == ["primary", "secondary", "kimi-monthly", "kimi-code-7d"])
     }
 
     @Test

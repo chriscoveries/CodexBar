@@ -4,7 +4,7 @@
 
 ### Added
 - Widgets: make Kimi available with Weekly, Rate Limit, and Monthly quota rows. Thanks @joeVenner!
-- Kimi: show the subscription 7-day Code quota from the membership stats endpoint. Thanks @skyzer!
+- Kimi: show the subscription 7-day Code quota in menus and large widgets. Thanks @skyzer!
 
 ### Fixed
 - Amp: open the current Usage page from the menu dashboard action. Thanks @3kh0!
