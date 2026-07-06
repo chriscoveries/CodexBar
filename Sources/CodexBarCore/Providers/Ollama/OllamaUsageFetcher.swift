@@ -710,11 +710,13 @@ public struct OllamaAPIUsageSnapshot: Sendable {
 
 public enum OllamaAPIUsageFetcher {
     public static let tagsURL = URL(string: "https://ollama.com/api/tags")!
+    public static let validationURL = URL(string: "https://ollama.com/api/web_search")!
     private static let timeoutSeconds: TimeInterval = 20
 
     public static func fetchUsage(
         apiKey: String,
         tagsURL: URL = Self.tagsURL,
+        validationURL: URL = Self.validationURL,
         transport: any ProviderHTTPTransport = ProviderHTTPClient.shared,
         now: Date = Date()) async throws -> OllamaAPIUsageSnapshot
     {
@@ -722,6 +724,8 @@ public enum OllamaAPIUsageFetcher {
         guard !trimmed.isEmpty else {
             throw OllamaUsageError.missingAPIKey
         }
+
+        try await self.validateAPIKey(trimmed, validationURL: validationURL, transport: transport)
 
         var request = URLRequest(url: tagsURL)
         request.httpMethod = "GET"
@@ -740,6 +744,37 @@ public enum OllamaAPIUsageFetcher {
         switch response.statusCode {
         case 200:
             return try Self.parseTags(data: response.data, now: now)
+        case 401, 403:
+            throw OllamaUsageError.apiUnauthorized
+        default:
+            throw OllamaUsageError.networkError("HTTP \(response.statusCode)")
+        }
+    }
+
+    private static func validateAPIKey(
+        _ apiKey: String,
+        validationURL: URL,
+        transport: any ProviderHTTPTransport) async throws
+    {
+        var request = URLRequest(url: validationURL)
+        request.httpMethod = "POST"
+        request.timeoutInterval = Self.timeoutSeconds
+        request.httpBody = Data(#"{"query":""}"#.utf8)
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("CodexBar/1.0", forHTTPHeaderField: "User-Agent")
+
+        let response: ProviderHTTPResponse
+        do {
+            response = try await transport.response(for: request)
+        } catch {
+            throw OllamaUsageError.networkError(error.localizedDescription)
+        }
+
+        switch response.statusCode {
+        case 200, 400, 422:
+            return
         case 401, 403:
             throw OllamaUsageError.apiUnauthorized
         default:
