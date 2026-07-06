@@ -75,19 +75,27 @@ struct UsageStoreWidgetSnapshotTests {
             tertiary: nil,
             extraRateWindows: [
                 NamedRateWindow(
-                    id: "kimi-monthly",
-                    title: "Monthly",
-                    window: RateWindow(
-                        usedPercent: 75,
-                        windowMinutes: nil,
-                        resetsAt: nil,
-                        resetDescription: nil)),
-                NamedRateWindow(
                     id: "kimi-code-7d",
                     title: "Code 7-day",
                     window: RateWindow(
                         usedPercent: 10,
                         windowMinutes: 7 * 24 * 60,
+                        resetsAt: nil,
+                        resetDescription: nil)),
+                NamedRateWindow(
+                    id: "kimi-future-quota",
+                    title: "Future quota",
+                    window: RateWindow(
+                        usedPercent: 5,
+                        windowMinutes: nil,
+                        resetsAt: nil,
+                        resetDescription: nil)),
+                NamedRateWindow(
+                    id: "kimi-monthly",
+                    title: "Monthly",
+                    window: RateWindow(
+                        usedPercent: 75,
+                        windowMinutes: nil,
                         resetsAt: nil,
                         resetDescription: nil)),
             ],

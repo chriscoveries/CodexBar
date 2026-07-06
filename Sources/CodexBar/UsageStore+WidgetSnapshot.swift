@@ -182,12 +182,16 @@ extension UsageStore {
                 percentLeft: snapshot.tertiary?.remainingPercent))
         }
         if provider == .kimi {
-            rows.append(contentsOf: snapshot.extraRateWindows?.filter(\.usageKnown).map { window in
-                WidgetSnapshot.WidgetUsageRowSnapshot(
+            // Keep persisted widget order stable and include only Kimi's intentional subscription lanes.
+            let kimiWindowIDs = ["kimi-monthly", "kimi-code-7d"]
+            rows.append(contentsOf: kimiWindowIDs.compactMap { id in
+                guard let window = snapshot.extraRateWindows?.first(where: { $0.id == id }), window.usageKnown
+                else { return nil }
+                return WidgetSnapshot.WidgetUsageRowSnapshot(
                     id: window.id,
                     title: window.title,
                     percentLeft: window.window.remainingPercent)
-            } ?? [])
+            })
         }
         return rows.filter { $0.percentLeft != nil }
     }

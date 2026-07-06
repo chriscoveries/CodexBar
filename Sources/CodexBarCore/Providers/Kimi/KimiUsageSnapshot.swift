@@ -95,7 +95,7 @@ extension KimiUsageSnapshot {
             // the pool is shared across features, so amountUsedRatio is the real "subscription remaining".
             guard balance.feature == nil || balance.feature == "FEATURE_OMNI" else { return nil }
             guard balance.type == nil || balance.type == "SUBSCRIPTION" else { return nil }
-            guard let ratio = balance.amountUsedRatio else { return nil }
+            guard let ratio = balance.amountUsedRatio, ratio.isFinite else { return nil }
             let window = RateWindow(
                 usedPercent: Self.clampedPercent(ratio * 100),
                 windowMinutes: nil,
@@ -106,7 +106,7 @@ extension KimiUsageSnapshot {
 
         let subscriptionCodeWeeklyWindow = self.subscriptionCodeWeeklyLimit.flatMap { limit -> NamedRateWindow? in
             guard limit.enabled != false else { return nil }
-            guard let ratio = limit.ratio else { return nil }
+            guard let ratio = limit.ratio, ratio.isFinite else { return nil }
             let window = RateWindow(
                 usedPercent: Self.clampedPercent(ratio * 100),
                 windowMinutes: 7 * 24 * 60,

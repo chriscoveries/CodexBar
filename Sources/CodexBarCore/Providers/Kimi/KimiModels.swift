@@ -9,7 +9,7 @@ struct KimiCodeAPIUsageResponse: Codable {
     let limits: [KimiRateLimit]?
 }
 
-struct KimiSubscriptionStatResponse: Codable {
+struct KimiSubscriptionStatsResponse: Codable {
     let subscriptionBalance: KimiSubscriptionBalance?
     let ratelimitCode7d: KimiSubscriptionRateLimit?
 }
