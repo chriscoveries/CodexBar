@@ -369,6 +369,7 @@ extension SettingsStore {
         return hadExistingConfig
     }
 
+    // swiftlint:disable:next function_body_length
     private static func loadDefaultsState(userDefaults: UserDefaults) -> SettingsDefaultsState {
         let refreshDefault = userDefaults.string(forKey: "refreshFrequency")
             .flatMap(RefreshFrequency.init(rawValue:))
@@ -460,6 +461,8 @@ extension SettingsStore {
         let providersSortedAlphabetically = userDefaults.object(
             forKey: "providersSortedAlphabetically") as? Bool ?? false
         let appLanguageRaw = userDefaults.string(forKey: "appLanguage")
+        let agentSessionsEnabled = userDefaults.object(forKey: "agentSessionsEnabled") as? Bool ?? true
+        let agentSessionsManualHosts = userDefaults.string(forKey: "agentSessionsManualHosts") ?? ""
         return SettingsDefaultsState(
             refreshFrequency: refreshFrequency,
             refreshAllProvidersOnMenuOpen: refreshAllProvidersOnMenuOpen,
@@ -519,7 +522,9 @@ extension SettingsStore {
             providerDetectionCompleted: providerDetectionCompleted,
             providersSortedAlphabetically: providersSortedAlphabetically,
             appLanguageRaw: appLanguageRaw,
-            terminalAppRaw: userDefaults.string(forKey: "terminalApp"))
+            terminalAppRaw: userDefaults.string(forKey: "terminalApp"),
+            agentSessionsEnabled: agentSessionsEnabled,
+            agentSessionsManualHosts: agentSessionsManualHosts)
     }
 
     private static func loadCostSummaryDisplayStyleRaw(
