@@ -453,6 +453,11 @@
 "quota_warning_notification_title" = "انخفاض حصة %2$@ لدى %1$@";
 "quota_warning_notification_body" = "%1$@ متبقٍ. تم بلوغ حد التحذير البالغ %2$d%% لحصة %3$@.";
 "quota_warning_notification_body_with_account" = "الحساب %1$@. متبقٍ %2$@. تم بلوغ حد التحذير البالغ %3$d%% لحصة %4$@.";
+"predictive_pace_warnings_title" = "Predictive pace warnings";
+"predictive_pace_warnings_subtitle" = "Warns for Codex and Claude when session or weekly pace may run out before reset.";
+"predictive_pace_warning_notification_title" = "%1$@ %2$@ pace warning";
+"predictive_pace_warning_notification_body" = "At the current pace, this quota may run out in %1$@, before it resets.";
+"predictive_pace_warning_notification_body_with_account" = "Account %1$@. At the current pace, this quota may run out in %2$@, before it resets.";
 "session_depleted_notification_title" = "جلسة %@ استنزفت";
 "session_depleted_notification_body" = "المتبقي 0%. سنبلغك عندما تصبح الحصة متاحة مجددًا.";
 "session_restored_notification_title" = "%@ الجلسة التي استعادت";

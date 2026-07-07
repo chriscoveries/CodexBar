@@ -447,6 +447,11 @@
 "quota_warning_notification_title" = "%1$@ %2$@ 할당량 부족";
 "quota_warning_notification_body" = "%1$@ 남음. %2$d%% %3$@ 경고 임곗값에 도달했습니다.";
 "quota_warning_notification_body_with_account" = "계정 %1$@. %2$@ 남음. %3$d%% %4$@ 경고 임곗값에 도달했습니다.";
+"predictive_pace_warnings_title" = "Predictive pace warnings";
+"predictive_pace_warnings_subtitle" = "Warns for Codex and Claude when session or weekly pace may run out before reset.";
+"predictive_pace_warning_notification_title" = "%1$@ %2$@ pace warning";
+"predictive_pace_warning_notification_body" = "At the current pace, this quota may run out in %1$@, before it resets.";
+"predictive_pace_warning_notification_body_with_account" = "Account %1$@. At the current pace, this quota may run out in %2$@, before it resets.";
 "session_depleted_notification_title" = "%@ 세션 소진됨";
 "session_depleted_notification_body" = "0% 남음. 다시 사용할 수 있게 되면 알립니다.";
 "session_restored_notification_title" = "%@ 세션 복원됨";

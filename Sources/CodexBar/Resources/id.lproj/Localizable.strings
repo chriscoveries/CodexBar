@@ -455,6 +455,11 @@
 "quota_warning_notification_title" = "%1$@ kuota %2$@ rendah";
 "quota_warning_notification_body" = "%1$@ tersisa. Mencapai ambang batas peringatan %3$@ %2$d%% Anda.";
 "quota_warning_notification_body_with_account" = "Akun %1$@. %2$@ tersisa. Mencapai ambang batas peringatan %4$@ %3$d%% Anda.";
+"predictive_pace_warnings_title" = "Predictive pace warnings";
+"predictive_pace_warnings_subtitle" = "Warns for Codex and Claude when session or weekly pace may run out before reset.";
+"predictive_pace_warning_notification_title" = "%1$@ %2$@ pace warning";
+"predictive_pace_warning_notification_body" = "At the current pace, this quota may run out in %1$@, before it resets.";
+"predictive_pace_warning_notification_body_with_account" = "Account %1$@. At the current pace, this quota may run out in %2$@, before it resets.";
 "session_depleted_notification_title" = "Sesi %@ habis";
 "session_depleted_notification_body" = "0% tersisa. Akan memberi tahu saat tersedia kembali.";
 "session_restored_notification_title" = "Sesi %@ pulih";

@@ -449,6 +449,11 @@
 "quota_warning_notification_title" = "%1$@ の%2$@クォータが残りわずか";
 "quota_warning_notification_body" = "残り %1$@。設定した %2$d%% の%3$@警告しきい値に達しました。";
 "quota_warning_notification_body_with_account" = "アカウント %1$@。残り %2$@。設定した %3$d%% の%4$@警告しきい値に達しました。";
+"predictive_pace_warnings_title" = "Predictive pace warnings";
+"predictive_pace_warnings_subtitle" = "Warns for Codex and Claude when session or weekly pace may run out before reset.";
+"predictive_pace_warning_notification_title" = "%1$@ %2$@ pace warning";
+"predictive_pace_warning_notification_body" = "At the current pace, this quota may run out in %1$@, before it resets.";
+"predictive_pace_warning_notification_body_with_account" = "Account %1$@. At the current pace, this quota may run out in %2$@, before it resets.";
 "session_depleted_notification_title" = "%@ のセッションを使い切りました";
 "session_depleted_notification_body" = "残り 0% です。再び利用可能になったら通知します。";
 "session_restored_notification_title" = "%@ のセッションが回復しました";

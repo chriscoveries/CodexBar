@@ -452,6 +452,11 @@
 "quota_warning_notification_title" = "%1$@ %2$@ квота низька";
 "quota_warning_notification_body" = "%1$@ залишилося. Досягнуто %2$d%% %3$@ порогового значення попередження.";
 "quota_warning_notification_body_with_account" = "Рахунок %1$@. Залишилося %2$@. Досягнуто %3$d%% %4$@ порогового значення попередження.";
+"predictive_pace_warnings_title" = "Predictive pace warnings";
+"predictive_pace_warnings_subtitle" = "Warns for Codex and Claude when session or weekly pace may run out before reset.";
+"predictive_pace_warning_notification_title" = "%1$@ %2$@ pace warning";
+"predictive_pace_warning_notification_body" = "At the current pace, this quota may run out in %1$@, before it resets.";
+"predictive_pace_warning_notification_body_with_account" = "Account %1$@. At the current pace, this quota may run out in %2$@, before it resets.";
 "session_depleted_notification_title" = "%@ сеанс вичерпано";
 "session_depleted_notification_body" = "Залишилося 0%. Надішле сповіщення, коли знову стане доступним.";
 "session_restored_notification_title" = "%@ сеанс відновлено";

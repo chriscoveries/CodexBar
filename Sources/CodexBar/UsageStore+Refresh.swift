@@ -270,6 +270,7 @@ extension UsageStore {
                 let backfilled = stabilized.backfillingResetTimes(from: resetBackfillSource)
                 self.handleQuotaWarningTransitions(provider: provider, snapshot: backfilled)
                 self.handleSessionQuotaTransition(provider: provider, snapshot: backfilled)
+                self.handlePredictivePaceWarningTransitions(provider: provider, snapshot: backfilled)
                 if provider == .codex {
                     self.handleCodexResetCreditNotifications(snapshot: backfilled)
                 }
@@ -378,6 +379,8 @@ extension UsageStore {
             self.statusComponents.removeValue(forKey: provider)
             self.lastKnownSessionRemaining.removeValue(forKey: provider)
             self.lastKnownSessionWindowSource.removeValue(forKey: provider)
+            self.predictivePaceWarningNotifiedKeys = Set(
+                self.predictivePaceWarningNotifiedKeys.filter { $0.provider != provider })
             self.quotaWarningState = self.quotaWarningState.filter { $0.key.provider != provider }
             self.lastTokenFetchAt.removeValue(forKey: provider)
         }

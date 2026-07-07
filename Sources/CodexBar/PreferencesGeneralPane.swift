@@ -147,6 +147,12 @@ struct GeneralPane: View {
                         subtitle: L("quota_warning_notifications_subtitle"))
                 }
 
+                Toggle(isOn: self.$settings.predictivePaceWarningNotificationsEnabled) {
+                    SettingsRowLabel(
+                        L("predictive_pace_warnings_title"),
+                        subtitle: L("predictive_pace_warnings_subtitle"))
+                }
+
                 if self.settings.quotaWarningNotificationsEnabled {
                     GlobalQuotaWarningSettingsView(settings: self.settings)
                 }

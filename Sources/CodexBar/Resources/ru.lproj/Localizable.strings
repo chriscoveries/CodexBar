@@ -453,6 +453,11 @@
 "quota_warning_notification_title" = "Низкая квота %1$@ %2$@";
 "quota_warning_notification_body" = "Осталось %1$@. Достигнут порог предупреждения %2$d%% для %3$@.";
 "quota_warning_notification_body_with_account" = "Аккаунт %1$@. Осталось %2$@. Достигнут порог предупреждения %3$d%% для %4$@.";
+"predictive_pace_warnings_title" = "Predictive pace warnings";
+"predictive_pace_warnings_subtitle" = "Warns for Codex and Claude when session or weekly pace may run out before reset.";
+"predictive_pace_warning_notification_title" = "%1$@ %2$@ pace warning";
+"predictive_pace_warning_notification_body" = "At the current pace, this quota may run out in %1$@, before it resets.";
+"predictive_pace_warning_notification_body_with_account" = "Account %1$@. At the current pace, this quota may run out in %2$@, before it resets.";
 "session_depleted_notification_title" = "Сеанс %@ исчерпан";
 "session_depleted_notification_body" = "Осталось 0%. Сообщим, когда квота снова станет доступна.";
 "session_restored_notification_title" = "Сеанс %@ восстановлен";

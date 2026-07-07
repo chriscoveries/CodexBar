@@ -455,6 +455,11 @@
 "quota_warning_notification_title" = "Niski limit %1$@ (%2$@)";
 "quota_warning_notification_body" = "Pozostało %1$@. Osiągnięto próg ostrzeżenia %2$d%% dla %3$@.";
 "quota_warning_notification_body_with_account" = "Konto %1$@. Pozostało %2$@. Osiągnięto próg ostrzeżenia %3$d%% dla %4$@.";
+"predictive_pace_warnings_title" = "Predictive pace warnings";
+"predictive_pace_warnings_subtitle" = "Warns for Codex and Claude when session or weekly pace may run out before reset.";
+"predictive_pace_warning_notification_title" = "%1$@ %2$@ pace warning";
+"predictive_pace_warning_notification_body" = "At the current pace, this quota may run out in %1$@, before it resets.";
+"predictive_pace_warning_notification_body_with_account" = "Account %1$@. At the current pace, this quota may run out in %2$@, before it resets.";
 "session_depleted_notification_title" = "Wyczerpano limit sesji (%@)";
 "session_depleted_notification_body" = "Pozostało 0%. Powiadomimy, gdy limit będzie ponownie dostępny.";
 "session_restored_notification_title" = "Przywrócono limit sesji (%@)";

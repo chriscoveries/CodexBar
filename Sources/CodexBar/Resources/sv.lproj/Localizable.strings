@@ -452,6 +452,11 @@
 "quota_warning_notification_title" = "%1$@ %2$@-kvot låg";
 "quota_warning_notification_body" = "%1$@ kvar. Din varningströskel på %2$d %% för %3$@ har nåtts.";
 "quota_warning_notification_body_with_account" = "Konto %1$@. %2$@ kvar. Din varningströskel på %3$d %% för %4$@ har nåtts.";
+"predictive_pace_warnings_title" = "Predictive pace warnings";
+"predictive_pace_warnings_subtitle" = "Warns for Codex and Claude when session or weekly pace may run out before reset.";
+"predictive_pace_warning_notification_title" = "%1$@ %2$@ pace warning";
+"predictive_pace_warning_notification_body" = "At the current pace, this quota may run out in %1$@, before it resets.";
+"predictive_pace_warning_notification_body_with_account" = "Account %1$@. At the current pace, this quota may run out in %2$@, before it resets.";
 "session_depleted_notification_title" = "%@-sessionen är slut";
 "session_depleted_notification_body" = "0 % kvar. Du får en avisering när den är tillgänglig igen.";
 "session_restored_notification_title" = "%@-sessionen är återställd";

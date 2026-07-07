@@ -1127,6 +1127,11 @@
 "providers_on_count" = "%d activados";
 "quota_warning_notification_body" = "Queda %1$@. Acadaches o limiar de aviso do %2$d%% para a cota %3$@.";
 "quota_warning_notification_body_with_account" = "Conta %1$@. Queda %2$@. Acadaches o limiar de aviso do %3$d%% para a cota %4$@.";
+"predictive_pace_warnings_title" = "Predictive pace warnings";
+"predictive_pace_warnings_subtitle" = "Warns for Codex and Claude when session or weekly pace may run out before reset.";
+"predictive_pace_warning_notification_title" = "%1$@ %2$@ pace warning";
+"predictive_pace_warning_notification_body" = "At the current pace, this quota may run out in %1$@, before it resets.";
+"predictive_pace_warning_notification_body_with_account" = "Account %1$@. At the current pace, this quota may run out in %2$@, before it resets.";
 "quota_warning_notification_title" = "Cota %2$@ de %1$@ baixa";
 "quota_warning_onscreen_alert" = "Amosar unha alerta de texto en pantalla";
 "refresh_adaptive" = "Adaptativa";

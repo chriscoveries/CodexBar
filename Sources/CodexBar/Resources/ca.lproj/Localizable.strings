@@ -1094,6 +1094,11 @@
 "Quit" = "Sortiu";
 "quota_warning_notification_body" = "Queda un %1$@. Heu assolit el llindar d'avís del %2$d%% (%3$@).";
 "quota_warning_notification_body_with_account" = "Compte %1$@. Queda un %2$@. Heu assolit el llindar d'avís del %3$d%% (%4$@).";
+"predictive_pace_warnings_title" = "Predictive pace warnings";
+"predictive_pace_warnings_subtitle" = "Warns for Codex and Claude when session or weekly pace may run out before reset.";
+"predictive_pace_warning_notification_title" = "%1$@ %2$@ pace warning";
+"predictive_pace_warning_notification_body" = "At the current pace, this quota may run out in %1$@, before it resets.";
+"predictive_pace_warning_notification_body_with_account" = "Account %1$@. At the current pace, this quota may run out in %2$@, before it resets.";
 "quota_warning_notification_title" = "Quota baixa de %1$@ (%2$@)";
 "Refreshing" = "S'està actualitzant";
 "Request quota: %@ / %@" = "Quota de sol·licituds: %@ / %@";

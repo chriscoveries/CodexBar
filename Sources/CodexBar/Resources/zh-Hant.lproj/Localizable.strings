@@ -457,6 +457,11 @@
 "quota_warning_notification_title" = "%1$@ %2$@配額偏低";
 "quota_warning_notification_body" = "剩餘 %1$@。已達到 %2$d%% %3$@提醒門檻。";
 "quota_warning_notification_body_with_account" = "帳號 %1$@。剩餘 %2$@。已達到 %3$d%% %4$@提醒門檻。";
+"predictive_pace_warnings_title" = "Predictive pace warnings";
+"predictive_pace_warnings_subtitle" = "Warns for Codex and Claude when session or weekly pace may run out before reset.";
+"predictive_pace_warning_notification_title" = "%1$@ %2$@ pace warning";
+"predictive_pace_warning_notification_body" = "At the current pace, this quota may run out in %1$@, before it resets.";
+"predictive_pace_warning_notification_body_with_account" = "Account %1$@. At the current pace, this quota may run out in %2$@, before it resets.";
 "session_depleted_notification_title" = "%@ 工作階段已用完";
 "session_depleted_notification_body" = "剩餘 0%。恢復可用時會再通知。";
 "session_restored_notification_title" = "%@ 工作階段已恢復";
