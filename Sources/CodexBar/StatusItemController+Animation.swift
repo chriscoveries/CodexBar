@@ -250,14 +250,12 @@ extension StatusItemController {
 
         // IconRenderer treats these values as a left-to-right "progress fill" percentage; depending on the
         // user setting we pass either "percent left" or "percent used".
-        let resolved = snapshot.map {
-            IconRemainingResolver.resolvedPercents(
-                snapshot: $0,
-                style: resolverStyle,
-                showUsed: showUsed,
-                renderingStyle: style,
-                secondaryOverrideWindowID: self.settings.copilotIconSecondaryWindowOverrideID(snapshot: $0))
-        }
+        let resolved = self.resolvedMenuBarIconPercents(
+            provider: primaryProvider,
+            snapshot: snapshot,
+            style: resolverStyle,
+            showUsed: showUsed,
+            renderingStyle: style)
         var primary = resolved?.primary
         var weekly = resolved?.secondary
         var credits = self.menuBarCreditsRemainingForIcon(provider: primaryProvider, snapshot: snapshot)
@@ -462,13 +460,11 @@ extension StatusItemController {
         self.setButtonTitle(nil, for: button)
 
         // OpenRouter always gets a meter here — the brand-logo fallback was removed on purpose.
-        let resolved = snapshot.map {
-            IconRemainingResolver.resolvedPercents(
-                snapshot: $0,
-                style: style,
-                showUsed: showUsed,
-                secondaryOverrideWindowID: self.settings.copilotIconSecondaryWindowOverrideID(snapshot: $0))
-        }
+        let resolved = self.resolvedMenuBarIconPercents(
+            provider: provider,
+            snapshot: snapshot,
+            style: style,
+            showUsed: showUsed)
         var primary = resolved?.primary
         var weekly = resolved?.secondary
         var credits = self.menuBarCreditsRemainingForIcon(provider: provider, snapshot: snapshot)
@@ -573,7 +569,57 @@ extension StatusItemController {
         return String(format: "%.3f", value)
     }
 
-    func menuBarCreditsRemainingForIcon(provider: UsageProvider, snapshot: UsageSnapshot?) -> Double? {
+    func resolvedMenuBarIconPercents(
+        provider: UsageProvider,
+        snapshot: UsageSnapshot?,
+        style: IconStyle,
+        showUsed: Bool,
+        renderingStyle: IconStyle? = nil)
+        -> (primary: Double?, secondary: Double?)?
+    {
+        guard let snapshot else { return nil }
+        let preference = self.settings.menuBarMetricPreference(for: provider, snapshot: snapshot)
+        if preference == .monthlyPlan {
+            guard let metricWindow = self.menuBarMetricWindowForIconOverride(
+                preference: preference,
+                provider: provider,
+                snapshot: snapshot)
+            else {
+                return (primary: nil, secondary: nil)
+            }
+            return (
+                primary: showUsed ? metricWindow.usedPercent : metricWindow.remainingPercent,
+                secondary: nil)
+        }
+        if provider == .mistral {
+            return (primary: nil, secondary: nil)
+        }
+        return IconRemainingResolver.resolvedPercents(
+            snapshot: snapshot,
+            style: style,
+            showUsed: showUsed,
+            renderingStyle: renderingStyle,
+            secondaryOverrideWindowID: self.settings.copilotIconSecondaryWindowOverrideID(snapshot: snapshot))
+    }
+
+    private func menuBarMetricWindowForIconOverride(
+        preference: MenuBarMetricPreference,
+        provider: UsageProvider,
+        snapshot: UsageSnapshot)
+        -> RateWindow?
+    {
+        MenuBarMetricWindowResolver.rateWindow(
+            preference: preference,
+            provider: provider,
+            snapshot: snapshot,
+            supportsAverage: self.settings.menuBarMetricSupportsAverage(for: provider))
+    }
+
+    func menuBarCreditsRemainingForIcon(
+        provider: UsageProvider,
+        snapshot: UsageSnapshot?,
+        now: Date = Date()) -> Double?
+    {
         // Derive the menu-bar credits fallback from the same Codex projection path the rendered
         // icon and menu use (`codexConsumerProjection` -> `menuBarFallback`), instead of a
         // hand-rolled rate-window predicate. The projection is pure value composition over
@@ -584,7 +630,7 @@ extension StatusItemController {
         guard provider == .codex else { return nil }
         return self.store.codexMenuBarCreditsRemaining(
             snapshotOverride: snapshot,
-            now: snapshot?.updatedAt ?? Date())
+            now: now)
     }
 
     func quotaWarningFlashActive(provider: UsageProvider, now: Date = Date()) -> Bool {
@@ -652,7 +698,11 @@ extension StatusItemController {
     }
 
     private func setButtonTitle(_ title: String?, for button: NSStatusBarButton) {
-        let value = Self.buttonTitle(title, hasImage: button.image != nil)
+        let isDebugApp = Self.isDebugApp(bundleIdentifier: Bundle.main.bundleIdentifier)
+        let value = Self.buttonTitle(
+            title,
+            hasImage: button.image != nil || title == nil,
+            isDebugApp: isDebugApp)
         if button.title != value {
             button.title = value
         }
@@ -662,12 +712,23 @@ extension StatusItemController {
         }
     }
 
-    nonisolated static func buttonTitle(_ title: String?, hasImage: Bool) -> String {
-        guard let title, !title.isEmpty else { return "" }
-        return hasImage ? " \(title)" : title
+    nonisolated static func buttonTitle(_ title: String?, hasImage: Bool, isDebugApp: Bool = false) -> String {
+        var parts: [String] = []
+        if let title, !title.isEmpty {
+            parts.append(title)
+        }
+        if isDebugApp {
+            parts.append("D")
+        }
+        let value = parts.joined(separator: " ")
+        return hasImage && !value.isEmpty ? " \(value)" : value
     }
 
-    func menuBarDisplayText(for provider: UsageProvider, snapshot: UsageSnapshot?) -> String? {
+    func menuBarDisplayText(
+        for provider: UsageProvider,
+        snapshot: UsageSnapshot?,
+        now: Date = .init()) -> String?
+    {
         let mode = self.settings.menuBarDisplayMode
         if provider == .openrouter,
            self.settings.menuBarMetricPreference(for: provider, snapshot: snapshot) == .automatic,
@@ -710,8 +771,8 @@ extension StatusItemController {
         }
         if provider == .mistral {
             let preference = self.settings.menuBarMetricPreference(for: provider, snapshot: snapshot)
-            let hasMonthlyWindow = snapshot?.extraRateWindows?.contains { $0.id == "mistral-monthly-plan" } == true
-            if preference != .monthlyPlan || !hasMonthlyWindow,
+            let hasMonthlyPlan = snapshot?.extraRateWindows?.contains { $0.id == "mistral-monthly-plan" } == true
+            if preference != .monthlyPlan || !hasMonthlyPlan,
                let spend = Self.mistralSpendDisplayText(snapshot: snapshot)
             {
                 return spend
@@ -736,8 +797,7 @@ extension StatusItemController {
             return spend
         }
 
-        let percentWindow = self.menuBarPercentWindow(for: provider, snapshot: snapshot)
-        let now = Date()
+        let percentWindow = self.menuBarPercentWindow(for: provider, snapshot: snapshot, now: now)
         let codexProjection = self.store.codexConsumerProjectionIfNeeded(
             for: provider,
             surface: .menuBar,
@@ -1002,10 +1062,10 @@ extension StatusItemController {
         return value.isEmpty ? nil : value
     }
 
-    private func menuBarPercentWindow(for provider: UsageProvider, snapshot: UsageSnapshot?)
+    private func menuBarPercentWindow(for provider: UsageProvider, snapshot: UsageSnapshot?, now: Date)
         -> RateWindow?
     {
-        self.menuBarMetricWindow(for: provider, snapshot: snapshot)
+        self.menuBarMetricWindow(for: provider, snapshot: snapshot, now: now)
     }
 
     /// Resolves the session (5h) and weekly (7d) lanes for the combined "Session + Weekly" menu-bar
@@ -1030,8 +1090,11 @@ extension StatusItemController {
             return nil
         }
         let session = Self.combinedSessionLane(snapshot: snapshot, projection: projection)
-        let weekly = projection?.rateWindow(for: .weekly)
-            ?? Self.rateWindow(in: snapshot, matchingCadenceMinutes: Self.weeklyWindowMinutes)
+        let weekly: RateWindow? = if let projection {
+            projection.menuBarSelectableRateWindow(for: .weekly)
+        } else {
+            Self.rateWindow(in: snapshot, matchingCadenceMinutes: Self.weeklyWindowMinutes)
+        }
         return (session, weekly)
     }
 
@@ -1044,8 +1107,8 @@ extension StatusItemController {
         snapshot: UsageSnapshot?,
         projection: CodexConsumerProjection?) -> RateWindow?
     {
-        if let projected = projection?.rateWindow(for: .session) {
-            return projected
+        if let projection {
+            return projection.menuBarSelectableRateWindow(for: .session)
         }
         guard let session = Self.rateWindow(in: snapshot, matchingCadenceMinutes: Self.sessionWindowMinutes)
         else { return nil }
@@ -1067,7 +1130,7 @@ extension StatusItemController {
         percentWindow: RateWindow?) -> RateWindow?
     {
         if let projection {
-            return projection.rateWindow(for: .weekly)
+            return projection.menuBarSelectableRateWindow(for: .weekly)
         }
         if provider == .abacus {
             return snapshot?.primary

@@ -234,7 +234,7 @@ public enum CodexBarConfigValidator {
 
     private static func providerSupportsEnterpriseHost(_ provider: UsageProvider) -> Bool {
         switch provider {
-        case .azureopenai, .copilot, .kimi, .llmproxy, .litellm:
+        case .azureopenai, .copilot, .kimi, .llmproxy, .litellm, .clawrouter:
             true
         default:
             false
@@ -270,6 +270,13 @@ public enum CodexBarConfigValidator {
                 provider: provider,
                 isValid: AlibabaCodingPlanAPIRegion(rawValue: region) != nil,
                 displayName: "Alibaba Coding Plan",
+                issues: &issues)
+        case .alibabatokenplan:
+            self.validateKnownRegion(
+                region,
+                provider: provider,
+                isValid: AlibabaTokenPlanAPIRegion(rawValue: region) != nil,
+                displayName: "Alibaba Token Plan",
                 issues: &issues)
         case .moonshot:
             self.validateKnownRegion(

@@ -12,11 +12,24 @@ public struct LongCatUsageFetcher: Sendable {
     private static let tokenUsagePath = "/api/lc-platform/v1/tokenUsage"
     private static let pendingFuelPath = "/api/lc-platform/v1/pending-fuel-packages"
 
+    /// LongCat fetches run on an isolated, ephemeral, cookie-free session so the
+    /// console's `Set-Cookie` responses never enter the shared provider cookie jar;
+    /// auth is carried solely by the explicit request `Cookie` header. Mirrors the
+    /// Sakana provider's isolated transport.
+    private static let defaultTransport: ProviderHTTPClient = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpCookieStorage = nil
+        configuration.httpShouldSetCookies = false
+        let session = ProviderHTTPClient.redirectGuardedSession(configuration: configuration)
+        return ProviderHTTPClient(session: session)
+    }()
+
     public static func fetchUsage(
         cookieHeader: String,
-        transport: any ProviderHTTPTransport = ProviderHTTPClient.shared,
+        transport transportOverride: (any ProviderHTTPTransport)? = nil,
         now: Date = Date()) async throws -> LongCatUsageSnapshot
     {
+        let transport = transportOverride ?? Self.defaultTransport
         // Account name. The user-current payload also carries a session token and
         // phone number, so its body is never logged. This is the required probe:
         // a Meituan envelope with HTTP 200 but code 401/403 surfaces as

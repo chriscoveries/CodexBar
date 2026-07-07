@@ -17,6 +17,9 @@ extension UsageStore {
         _ = self.accountSnapshots
         _ = self.codexAccountSnapshots
         _ = self.kiloScopeSnapshots
+        _ = self.claudeSwapAccountSnapshots
+        _ = self.claudeSwapLastError
+        _ = self.claudeSwapRevision
         _ = self.tokenSnapshots
         _ = self.tokenErrors
         _ = self.tokenRefreshInFlight
@@ -107,6 +110,9 @@ extension UsageStore {
 @MainActor
 @Observable
 final class UsageStore {
+    nonisolated static let resetBoundaryRefreshGraceSeconds: TimeInterval = 30
+    nonisolated static let resetBoundaryRefreshMinimumDelaySeconds: TimeInterval = 5
+
     private struct ProviderAvailabilityCacheEntry {
         let available: Bool
         let configRevision: Int
@@ -135,12 +141,20 @@ final class UsageStore {
 
     var snapshots: [UsageProvider: UsageSnapshot] = [:]
     var errors: [UsageProvider: String] = [:]
+    var geminiObservedConsumerTierDeprecation = false
     var knownLimitsAvailabilityByProvider: [UsageProvider: UsageLimitsAvailability] = [:]
     var lastSourceLabels: [UsageProvider: String] = [:]
     var lastFetchAttempts: [UsageProvider: [ProviderFetchAttempt]] = [:]
     var accountSnapshots: [UsageProvider: [TokenAccountUsageSnapshot]] = [:]
     var codexAccountSnapshots: [CodexAccountUsageSnapshot] = []
     var kiloScopeSnapshots: [KiloScopeSnapshot] = []
+    var claudeSwapAccountSnapshots: [ProviderAccountUsageSnapshot] = []
+    var claudeSwapLastRefreshAt: Date?
+    var claudeSwapLastError: String?
+    var claudeSwapDetectedVersion: String?
+    var claudeSwapRevision: UInt64 = 0
+    @ObservationIgnored var claudeSwapRefreshTask: Task<Void, Never>?
+    @ObservationIgnored var claudeSwapTransientState = ClaudeSwapTransientState()
     var tokenSnapshots: [UsageProvider: CostUsageTokenSnapshot] = [:]
     var tokenErrors: [UsageProvider: String] = [:]
     var tokenRefreshInFlight: Set<UsageProvider> = []
@@ -203,6 +217,7 @@ final class UsageStore {
         Bool,
         TimeInterval) async throws -> OpenAIDashboardSnapshot)?
     @ObservationIgnored var _test_codexCreditsLoaderOverride: (@MainActor () async throws -> CreditsSnapshot)?
+    @ObservationIgnored var _test_codexResetCreditsFetcherOverride: CodexResetCreditsFetcher?
     @ObservationIgnored var _test_widgetSnapshotSaveOverride: (@MainActor (WidgetSnapshot) async -> Void)?
     @ObservationIgnored var _test_providerRefreshOverride: (@MainActor (UsageProvider) async -> Void)?
     @ObservationIgnored var _test_tokenUsageRefreshOverride: (@MainActor (UsageProvider, Bool) async -> Void)?
@@ -226,6 +241,7 @@ final class UsageStore {
     @ObservationIgnored private let tokenCostLogger = CodexBarLog.logger(LogCategories.tokenCost)
     @ObservationIgnored let augmentLogger = CodexBarLog.logger(LogCategories.augment)
     @ObservationIgnored let providerLogger = CodexBarLog.logger(LogCategories.providers)
+    @ObservationIgnored let adaptiveRefreshLogger = CodexBarLog.logger(LogCategories.adaptiveRefresh)
     @ObservationIgnored var openAIWebDebugLines: [String] = []
     @ObservationIgnored var failureGates: [UsageProvider: ConsecutiveFailureGate] = [:]
     @ObservationIgnored var tokenFailureGates: [UsageProvider: ConsecutiveFailureGate] = [:]
@@ -236,6 +252,9 @@ final class UsageStore {
     @ObservationIgnored private var providerAvailabilityCache: [UsageProvider: ProviderAvailabilityCacheEntry] = [:]
     @ObservationIgnored var accountInfoCache: [UsageProvider: AccountInfoCacheEntry] = [:]
     @ObservationIgnored private var timerTask: Task<Void, Never>?
+    /// In-memory only; resets on every launch.
+    @ObservationIgnored private(set) var lastMenuOpenAt: Date?
+    @ObservationIgnored var adaptiveRefreshScheduledAt: Date?
     @ObservationIgnored private var tokenTimerTask: Task<Void, Never>?
     @ObservationIgnored private var tokenRefreshSequenceTask: Task<Void, Never>?
     @ObservationIgnored private var tokenRefreshSequenceProvider: UsageProvider?
@@ -252,6 +271,9 @@ final class UsageStore {
     @ObservationIgnored var lastStorageRefreshAt: Date?
     @ObservationIgnored var managedCodexAccountsForStorageOverride: [ManagedCodexAccount]?
     @ObservationIgnored private var pathDebugRefreshTask: Task<Void, Never>?
+    @ObservationIgnored var resetBoundaryRefreshTask: Task<Void, Never>?
+    @ObservationIgnored var scheduledResetBoundaryRefreshAt: Date?
+    @ObservationIgnored var attemptedResetBoundaryRefreshes: Set<Date> = []
     @ObservationIgnored var codexPlanHistoryBackfillTask: Task<Void, Never>?
     @ObservationIgnored let historicalUsageHistoryStore: HistoricalUsageHistoryStore
     @ObservationIgnored let planUtilizationHistoryStore: PlanUtilizationHistoryStore
@@ -271,7 +293,7 @@ final class UsageStore {
     @ObservationIgnored private var hasCompletedInitialRefresh: Bool = false
     @ObservationIgnored private let providerAvailabilityCacheTTL: TimeInterval = 1
     @ObservationIgnored let accountInfoCacheTTL: TimeInterval = 30
-    @ObservationIgnored private let tokenFetchTTL: TimeInterval = 60 * 60
+    @ObservationIgnored let tokenFetchTTL: TimeInterval = 60 * 60
     @ObservationIgnored private let tokenFetchTimeout: TimeInterval = 10 * 60
     @ObservationIgnored let startupBehavior: StartupBehavior
     @ObservationIgnored let planUtilizationPersistenceCoordinator: PlanUtilizationHistoryPersistenceCoordinator
@@ -386,10 +408,6 @@ final class UsageStore {
     /// Known subscription indicators: Max, Pro, Ultra, Team (case-insensitive).
     nonisolated static func isSubscriptionPlan(_ loginMethod: String?) -> Bool {
         ClaudePlan.isSubscriptionLoginMethod(loginMethod)
-    }
-
-    func version(for provider: UsageProvider) -> String? {
-        self.versions[provider]
     }
 
     var preferredSnapshot: UsageSnapshot? {
@@ -571,6 +589,27 @@ final class UsageStore {
         await self.runRefresh(forceTokenUsage: forceTokenUsage, startupConnectivityRetryAttempt: nil)
     }
 
+    func noteMenuOpened(at date: Date = Date()) {
+        self.lastMenuOpenAt = date
+        guard self.settings.refreshFrequency == .adaptive else { return }
+
+        let decision = Self.adaptiveRefreshDecision(
+            now: date,
+            lastMenuOpenAt: date,
+            lowPowerModeEnabled: ProcessInfo.processInfo.isLowPowerModeEnabled,
+            thermalState: ProcessInfo.processInfo.thermalState)
+        let candidate = date.addingTimeInterval(TimeInterval(decision.delay.components.seconds))
+        guard Self.shouldAdvanceAdaptiveTimer(
+            scheduledAt: self.adaptiveRefreshScheduledAt,
+            candidate: candidate)
+        else { return }
+        self.startTimer(preservingResetBoundaryRefresh: true)
+    }
+
+    #if DEBUG
+    @ObservationIgnored private(set) var completedRefreshCountForTesting = 0
+    #endif
+
     func runRefresh(
         forceTokenUsage: Bool = false,
         startupConnectivityRetryAttempt: Int?,
@@ -673,12 +712,18 @@ final class UsageStore {
             self.persistWidgetSnapshot(reason: "refresh")
         }
 
+        self.scheduleResetBoundaryRefreshIfNeeded(
+            normalRefreshInterval: self.normalRefreshIntervalForHeuristics())
+
         if allowsStartupConnectivityRetry {
             self.completeStartupConnectivityRetryPass(currentAttempt: startupConnectivityRetryAttempt ?? 0)
         }
         if refreshPhase == .startup {
             self.scheduleMemoryPressureRelief()
         }
+        #if DEBUG
+        self.completedRefreshCountForTesting += 1
+        #endif
     }
 
     /// For demo/testing: drop the snapshot so the loading animation plays, then restore the last snapshot.
@@ -701,14 +746,56 @@ final class UsageStore {
         self.observeSettingsChanges()
     }
 
-    private func startTimer() {
+    #if DEBUG
+    @ObservationIgnored private(set) var refreshTimerSleepOverrideForTesting: Duration?
+
+    /// Sets this store's timer sleep override and restarts the timer with it applied, so tests can
+    /// observe multiple fixed/adaptive ticks without waiting real minutes. The reason/delay a tick
+    /// computes and logs is unaffected; only how long it sleeps before acting on that decision
+    /// changes. Instance-scoped (not a shared global) so concurrently running tests, each with their
+    /// own `UsageStore`, cannot clobber one another's override.
+    func restartTimerWithSleepOverrideForTesting(_ duration: Duration?) {
+        self.refreshTimerSleepOverrideForTesting = duration
+        self.startTimer()
+    }
+    #endif
+
+    private func startTimer(preservingResetBoundaryRefresh: Bool = false) {
         self.timerTask?.cancel()
-        guard let wait = self.settings.refreshFrequency.seconds else { return }
+        self.adaptiveRefreshScheduledAt = nil
+        if !preservingResetBoundaryRefresh {
+            self.cancelResetBoundaryRefresh()
+        }
+
+        let frequency = self.settings.refreshFrequency
+        guard frequency != .manual else { return }
+
+        if frequency == .adaptive {
+            // Background poller so the menu stays responsive; canceled when settings change or store
+            // deallocates. Delay is recomputed before every tick from live power/thermal state and the
+            // in-memory menu-open signal; the policy itself stays pure (Input is built here). `self` is
+            // only strongly held for the brief, synchronous decision computation below, never across
+            // the sleep — a weak reference lets the store deallocate mid-sleep, same as fixed mode.
+            self.timerTask = Task.detached(priority: .utility) { [weak self] in
+                while !Task.isCancelled {
+                    guard let sleepDuration = await Self.nextAdaptiveTimerSleepDuration(for: self) else { return }
+                    try? await Task.sleep(for: sleepDuration)
+                    guard !Task.isCancelled else { return }
+                    await self?.refresh()
+                }
+            }
+            return
+        }
+
+        guard let wait = frequency.seconds else { return }
 
         // Background poller so the menu stays responsive; canceled when settings change or store deallocates.
+        // `self` is only briefly borrowed to read the (DEBUG-only) sleep override, never held across the sleep.
         self.timerTask = Task.detached(priority: .utility) { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(wait))
+                let sleepDuration = await self?.effectiveTimerSleepDuration(.seconds(wait)) ?? .seconds(wait)
+                try? await Task.sleep(for: sleepDuration)
+                guard !Task.isCancelled else { return }
                 await self?.refresh()
             }
         }
@@ -782,6 +869,7 @@ final class UsageStore {
         self.startupConnectivityRetryTask?.cancel()
         self.storageRefreshTask?.cancel()
         self.codexPlanHistoryBackfillTask?.cancel()
+        self.resetBoundaryRefreshTask?.cancel()
     }
 
     enum SessionQuotaWindowSource: String {
@@ -795,6 +883,17 @@ final class UsageStore {
     struct QuotaWarningStateKey: Hashable {
         let provider: UsageProvider
         let window: QuotaWarningWindow
+        /// Distinguishes independent extra rate windows that share a provider/window lane
+        /// (e.g. multiple `claude-weekly-scoped-*` windows) so their fired-threshold state
+        /// does not clobber each other or the primary session/weekly lanes. `nil` for the
+        /// primary session and weekly lanes.
+        let windowID: String?
+
+        init(provider: UsageProvider, window: QuotaWarningWindow, windowID: String? = nil) {
+            self.provider = provider
+            self.window = window
+            self.windowID = windowID
+        }
     }
 
     struct QuotaWarningState {
@@ -1047,6 +1146,7 @@ extension UsageStore {
                 .litellm: "LiteLLM debug log not yet implemented",
                 .deepgram: "Deepgram debug log not yet implemented",
                 .chutes: "Chutes debug log not yet implemented",
+                .clawrouter: "ClawRouter debug log not yet implemented",
             ]
             let buildText = {
                 switch provider {
@@ -1127,7 +1227,8 @@ extension UsageStore {
                      .vertexai, .kilo, .kiro, .kimi, .kimik2, .moonshot, .jetbrains, .perplexity, .mimo, .doubao,
                      .sakana, .abacus, .mistral, .codebuff, .crof, .windsurf, .venice, .manus, .commandcode, .qoder,
                      .stepfun,
-                     .bedrock, .grok, .groq, .t3chat, .llmproxy, .litellm, .zed, .deepgram, .poe, .chutes, .longcat:
+                     .bedrock, .grok, .groq, .t3chat, .llmproxy, .litellm, .zed, .deepgram, .poe, .chutes,
+                     .clawrouter, .longcat:
                     return unimplementedDebugLogMessages[provider] ?? "Debug log not yet implemented"
                 }
             }

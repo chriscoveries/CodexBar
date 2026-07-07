@@ -2,6 +2,10 @@ import CodexBarCore
 import Foundation
 
 extension UsageStore {
+    func version(for provider: UsageProvider) -> String? {
+        self.versions[provider]
+    }
+
     var codexSnapshot: UsageSnapshot? {
         self.snapshots[.codex]
     }
@@ -58,6 +62,8 @@ extension UsageStore {
             return OpenRouterSettingsError.missingToken.errorDescription
         case .crossmodel:
             return CrossModelSettingsError.missingToken.errorDescription
+        case .clawrouter:
+            return ClawRouterUsageError.missingCredentials.errorDescription
         case .azureopenai:
             return AzureOpenAISettingsError.missingAPIKey.errorDescription
         case .elevenlabs:
