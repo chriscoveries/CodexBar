@@ -81,30 +81,36 @@ If automatic import fails:
 ```
 CodexBar/
 ├── Sources/CodexBar/          # Main app (SwiftUI + AppKit)
-│   ├── CodexBarApp.swift      # App entry point
-│   ├── StatusItemController.swift  # Menu bar icon
-│   ├── UsageStore.swift       # Usage data management
-│   ├── SettingsStore.swift    # User preferences
-│   ├── Providers/             # Provider-specific code
-│   │   ├── Augment/           # Augment Code integration
-│   │   ├── Claude/            # Anthropic Claude
-│   │   ├── Codex/             # OpenAI Codex
-│   │   └── ...
-│   └── KeychainMigration.swift  # One-time keychain migration
-├── Sources/CodexBarCore/      # Shared business logic
+│   ├── CodexbarApp.swift      # App entry point
+│   ├── StatusItemController*.swift  # Menu bar icon, menu rendering, and actions
+│   ├── UsageStore*.swift      # Usage refresh, caching, widgets, and history
+│   ├── SettingsStore*.swift   # User preferences and config persistence
+│   ├── Providers/             # App-side provider settings/runtime glue
+│   └── Resources/             # Assets and localized strings
+├── Sources/CodexBarCore/      # Shared business logic used by app, CLI, and widgets
+│   ├── Config/                # Config file model, reader, writer, and validation
+│   ├── Providers/             # Provider descriptors, fetchers, parsers, and status probes
+│   ├── OpenAIWeb/             # OpenAI dashboard integration helpers
+│   ├── WebKit/                # Web session helpers
+│   └── Vendored/              # Embedded support code
+├── Sources/CodexBarCLI/       # Bundled codexbar command-line tool
+├── Sources/CodexBarWidget/    # WidgetKit support
 ├── Tests/CodexBarTests/       # XCTest suite
+├── TestsLinux/                # Linux-specific CLI/core test coverage
 └── Scripts/                   # Build and packaging scripts
 ```
 
 ## Common Tasks
 
 ### Add a New Provider
-1. Add a `UsageProvider` case in `Sources/CodexBarCore/Providers/Providers.swift`
-2. Add core descriptor/fetcher wiring under `Sources/CodexBarCore/Providers/YourProvider/`
-3. Add app-side implementation under `Sources/CodexBar/Providers/YourProvider/`
-4. Register the descriptor in `ProviderDescriptorRegistry`
-5. Register the implementation in `ProviderImplementationRegistry`
-6. Add icon assets such as `Resources/ProviderIcon-yourprovider.svg`
+1. Add the provider identity to `Sources/CodexBarCore/Providers/Providers.swift`.
+2. Add descriptor, fetcher/parser, settings reader, and status-probe code under
+   `Sources/CodexBarCore/Providers/YourProvider/`.
+3. Register the descriptor from `Sources/CodexBarCore/Providers/ProviderDescriptor.swift`.
+4. Add app-side settings/runtime glue under `Sources/CodexBar/Providers/YourProvider/` when the provider needs UI or
+   macOS-specific integration.
+5. Add icon assets under `Sources/CodexBar/Resources/`.
+6. Add focused tests under `Tests/CodexBarTests/` and, for CLI/core behavior that must run on Linux, `TestsLinux/`.
 
 ### Debug Cookie Issues
 1. Enable Debug → Logging → "Enable file logging" or raise verbosity in the app settings.
