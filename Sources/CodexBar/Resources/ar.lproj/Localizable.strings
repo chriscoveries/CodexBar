@@ -470,6 +470,8 @@
 "quota_warning_depleted_only" = "مستنزف فقط";
 "quota_warning_upper" = "أعلى";
 "quota_warning_lower" = "الأسفل";
+"quota_warning_warning" = "تحذير";
+"quota_warning_critical" = "حرج";
 "apply" = "قدم";
 "quit_app" = "إنهاء CodexBar";
 

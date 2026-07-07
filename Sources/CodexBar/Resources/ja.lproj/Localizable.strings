@@ -466,6 +466,8 @@
 "quota_warning_depleted_only" = "枯渇時のみ";
 "quota_warning_upper" = "高め";
 "quota_warning_lower" = "下限";
+"quota_warning_warning" = "警告";
+"quota_warning_critical" = "重大";
 "apply" = "適用";
 "quit_app" = "CodexBar を終了";
 

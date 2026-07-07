@@ -470,6 +470,8 @@
 "quota_warning_depleted_only" = "только при исчерпании";
 "quota_warning_upper" = "Выше";
 "quota_warning_lower" = "Нижний порог";
+"quota_warning_warning" = "Предупреждение";
+"quota_warning_critical" = "Критично";
 "apply" = "Применить";
 "quit_app" = "Выйти из CodexBar";
 

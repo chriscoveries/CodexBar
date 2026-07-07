@@ -470,6 +470,8 @@
 "quota_warning_depleted_only" = "yalnızca tükenme";
 "quota_warning_upper" = "Daha yüksek";
 "quota_warning_lower" = "Alt";
+"quota_warning_warning" = "Uyarı";
+"quota_warning_critical" = "Kritik";
 "apply" = "Uygula";
 "quit_app" = "CodexBar'dan Çık";
 

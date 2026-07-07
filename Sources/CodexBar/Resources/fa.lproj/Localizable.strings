@@ -470,6 +470,8 @@
 "quota_warning_depleted_only" = "فقط کاهش یافته";
 "quota_warning_upper" = "بالاتر";
 "quota_warning_lower" = "پایین تر";
+"quota_warning_warning" = "هشدار";
+"quota_warning_critical" = "بحرانی";
 "apply" = "درخواست بده";
 "quit_app" = "خروج از CodexBar";
 

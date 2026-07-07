@@ -136,13 +136,13 @@ struct PreferencesPaneSmokeTests {
     }
 
     @Test
-    func `quota warning compact rows build with long localized labels`() {
-        let settings = Self.makeSettingsStore(suite: "PreferencesPaneSmokeTests-quota-warning-localized-labels")
+    func `quota warning compact rows build with semantic threshold labels`() {
+        let settings = Self.makeSettingsStore(suite: "PreferencesPaneSmokeTests-quota-warning-semantic-labels")
         settings.quotaWarningNotificationsEnabled = true
 
         CodexBarLocalizationOverride.$appLanguage.withValue("ru") {
-            let label = String(format: L("quota_warning_window_warn_at"), L("quota_warning_session_capitalized"))
-            #expect(label.count > 20)
+            #expect(L("quota_warning_warning") == "Предупреждение")
+            #expect(L("quota_warning_critical") == "Критично")
 
             _ = GlobalQuotaWarningSettingsView(settings: settings).body
         }

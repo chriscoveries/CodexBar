@@ -472,6 +472,8 @@
 "quota_warning_depleted_only" = "tylko wyczerpanie";
 "quota_warning_upper" = "Wyższy";
 "quota_warning_lower" = "Dolny";
+"quota_warning_warning" = "Ostrzeżenie";
+"quota_warning_critical" = "Krytyczny";
 "apply" = "Zastosuj";
 "quit_app" = "Zakończ aplikację";
 

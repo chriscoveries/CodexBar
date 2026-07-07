@@ -456,6 +456,8 @@
 "quota_warning_depleted_only" = "só esgotado";
 "quota_warning_upper" = "Máis alto";
 "quota_warning_lower" = "Inferior";
+"quota_warning_warning" = "Aviso";
+"quota_warning_critical" = "Crítico";
 "apply" = "Aplicar";
 "quit_app" = "Saír de CodexBar";
 

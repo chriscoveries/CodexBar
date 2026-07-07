@@ -94,9 +94,7 @@ struct ProviderQuotaWarningSettingsView: View {
 
                 if self.settings.quotaWarningEnabled(provider: self.provider, window: window) {
                     QuotaWarningThresholdField(
-                        title: String(
-                            format: L("quota_warning_window_warn_at"),
-                            window.localizedCapitalizedDisplayName),
+                        title: window.localizedCapitalizedDisplayName,
                         subtitle: "",
                         shouldCommitOnDisappear: {
                             self.settings.hasQuotaWarningOverride(provider: self.provider, window: window)
@@ -130,8 +128,17 @@ struct ProviderQuotaWarningSettingsView: View {
 
     private static func thresholdText(_ thresholds: [Int], enabled: Bool) -> String {
         guard enabled else { return L("quota_warning_off") }
-        let text = QuotaWarningThresholds.active(thresholds).map { "\($0)%" }.joined(separator: ", ")
-        return text.isEmpty ? L("quota_warning_depleted_only") : text
+        let activeThresholds = QuotaWarningThresholds.active(thresholds)
+        guard let upperThreshold = activeThresholds.first else {
+            return L("quota_warning_depleted_only")
+        }
+
+        var parts: [String] = []
+        parts.append("\(L("quota_warning_warning")) \(upperThreshold)%")
+        if let lowerThreshold = activeThresholds.dropFirst().first {
+            parts.append("\(L("quota_warning_critical")) \(lowerThreshold)%")
+        }
+        return parts.joined(separator: ", ")
     }
 }
 
@@ -181,7 +188,7 @@ private struct QuotaWarningWindowThresholdRows: View {
                 get: { self.settings.quotaWarningWindowEnabled(window) },
                 set: { self.settings.setQuotaWarningWindowEnabled(window, enabled: $0) }))
             {
-                Text(String(format: L("quota_warning_window_warn_at"), window.localizedCapitalizedDisplayName))
+                Text(window.localizedCapitalizedDisplayName)
                     .font(.footnote.weight(.semibold))
                     .fixedSize(horizontal: true, vertical: false)
             }
@@ -191,9 +198,7 @@ private struct QuotaWarningWindowThresholdRows: View {
             QuotaWarningThresholdField(
                 title: "",
                 subtitle: "",
-                accessibilityContext: String(
-                    format: L("quota_warning_window_warn_at"),
-                    window.localizedCapitalizedDisplayName),
+                accessibilityContext: window.localizedCapitalizedDisplayName,
                 thresholds: { self.settings.quotaWarningThresholds(window) },
                 setThresholds: { self.settings.setQuotaWarningThresholds(window, thresholds: $0) })
                 .disabled(!self.settings.quotaWarningWindowEnabled(window))
@@ -252,8 +257,8 @@ private struct QuotaWarningThresholdField: View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             self.titleView
 
-            self.lowerField
             self.upperField
+            self.lowerField
         }
         .fixedSize(horizontal: true, vertical: false)
     }
@@ -269,7 +274,7 @@ private struct QuotaWarningThresholdField: View {
 
     private var upperField: some View {
         self.thresholdInput(
-            label: L("quota_warning_upper"),
+            label: L("quota_warning_warning"),
             placeholder: "50",
             text: self.$upperText,
             field: .upper)
@@ -277,7 +282,7 @@ private struct QuotaWarningThresholdField: View {
 
     private var lowerField: some View {
         self.thresholdInput(
-            label: L("quota_warning_lower"),
+            label: L("quota_warning_critical"),
             placeholder: "20",
             text: self.$lowerText,
             field: .lower)

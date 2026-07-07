@@ -470,6 +470,8 @@
 "quota_warning_depleted_only" = "depleted only";
 "quota_warning_upper" = "Higher";
 "quota_warning_lower" = "Lower";
+"quota_warning_warning" = "Warning";
+"quota_warning_critical" = "Critical";
 "apply" = "Apply";
 "quit_app" = "Quit CodexBar";
 

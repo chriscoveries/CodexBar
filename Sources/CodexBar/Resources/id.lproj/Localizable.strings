@@ -472,6 +472,8 @@
 "quota_warning_depleted_only" = "hanya habis";
 "quota_warning_upper" = "Lebih tinggi";
 "quota_warning_lower" = "Bawah";
+"quota_warning_warning" = "Peringatan";
+"quota_warning_critical" = "Kritis";
 "apply" = "Terapkan";
 "quit_app" = "Keluar CodexBar";
 

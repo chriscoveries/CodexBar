@@ -469,6 +469,8 @@
 "quota_warning_depleted_only" = "alleen maar uitgeput";
 "quota_warning_upper" = "Hoger";
 "quota_warning_lower" = "Lager";
+"quota_warning_warning" = "Waarschuwing";
+"quota_warning_critical" = "Kritiek";
 "apply" = "Toepassen";
 "quit_app" = "Sluit CodexBar af";
 
