@@ -27,16 +27,26 @@ extension SettingsStore {
     }
 
     func setQuotaWarningThresholds(provider: UsageProvider, window: QuotaWarningWindow, thresholds: [Int]?) {
+        let sanitizedThresholds = thresholds.map(QuotaWarningThresholds.sanitized)
+        let currentConfig = self.quotaWarningConfig(for: provider)
+        let currentThresholds: [Int]? = switch window {
+        case .session:
+            currentConfig.session?.thresholds.map(QuotaWarningThresholds.sanitized)
+        case .weekly:
+            currentConfig.weekly?.thresholds.map(QuotaWarningThresholds.sanitized)
+        }
+        guard currentThresholds != sanitizedThresholds else { return }
+
         self.updateProviderConfig(provider: provider) { entry in
             var config = entry.quotaWarnings ?? QuotaWarningConfig()
             switch window {
             case .session:
                 var windowConfig = config.session ?? QuotaWarningWindowConfig()
-                windowConfig.thresholds = thresholds.map(QuotaWarningThresholds.sanitized)
+                windowConfig.thresholds = sanitizedThresholds
                 config.session = windowConfig.hasOverride ? windowConfig : nil
             case .weekly:
                 var windowConfig = config.weekly ?? QuotaWarningWindowConfig()
-                windowConfig.thresholds = thresholds.map(QuotaWarningThresholds.sanitized)
+                windowConfig.thresholds = sanitizedThresholds
                 config.weekly = windowConfig.hasOverride ? windowConfig : nil
             }
             entry.quotaWarnings = config.isEmpty ? nil : config

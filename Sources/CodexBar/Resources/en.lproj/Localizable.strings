@@ -468,7 +468,7 @@
 "quota_warning_off" = "Off";
 "quota_warning_inherited" = "Inherited: %@";
 "quota_warning_depleted_only" = "depleted only";
-"quota_warning_upper" = "Upper";
+"quota_warning_upper" = "Higher";
 "quota_warning_lower" = "Lower";
 "apply" = "Apply";
 "quit_app" = "Quit CodexBar";

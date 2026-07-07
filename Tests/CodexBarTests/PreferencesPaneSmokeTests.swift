@@ -35,6 +35,7 @@ struct PreferencesPaneSmokeTests {
         settings.debugDisableKeychainAccess = true
         settings.claudeOAuthKeychainPromptMode = .always
         settings.refreshFrequency = .manual
+        settings.quotaWarningNotificationsEnabled = true
 
         let store = Self.makeUsageStore(settings: settings)
         store._setErrorForTesting("Example error", provider: .codex)
@@ -100,6 +101,51 @@ struct PreferencesPaneSmokeTests {
         #expect(!CostHistoryDaysEditor.title(days: 365).contains("%d"))
 
         _ = CostHistoryDaysEditor(settings: settings).body
+    }
+
+    @Test
+    func `quota warning compact threshold text filters and persists typed values`() {
+        let suite = "PreferencesPaneSmokeTests-quota-warning-threshold-editor"
+        let settings = Self.makeSettingsStore(suite: suite)
+
+        #expect(QuotaWarningThresholdEditorText.filteredIntegerText("9a8b7") == "98")
+        #expect(QuotaWarningThresholdEditorText.resolvedThresholds(upperText: "", lowerText: "12") == [50, 12])
+
+        let typedThresholds = QuotaWarningThresholdEditorText.resolvedThresholds(upperText: "75", lowerText: "15")
+        settings.setQuotaWarningThresholds(.session, thresholds: typedThresholds)
+
+        #expect(settings.quotaWarningThresholds(.session) == [75, 15])
+        let reloaded = Self.makeSettingsStore(suite: suite, reset: false)
+        #expect(reloaded.quotaWarningThresholds(.session) == [75, 15])
+    }
+
+    @Test
+    func `quota warning compact window toggle keeps thresholds while disabled`() {
+        let settings = Self.makeSettingsStore(suite: "PreferencesPaneSmokeTests-quota-warning-disabled-window")
+
+        settings.setQuotaWarningThresholds(.weekly, thresholds: [80, 30])
+        settings.setQuotaWarningWindowEnabled(.weekly, enabled: false)
+
+        #expect(settings.quotaWarningWindowEnabled(.weekly) == false)
+        #expect(settings.quotaWarningThresholds(.weekly) == [80, 30])
+
+        settings.setQuotaWarningWindowEnabled(.weekly, enabled: true)
+
+        #expect(settings.quotaWarningWindowEnabled(.weekly) == true)
+        #expect(settings.quotaWarningThresholds(.weekly) == [80, 30])
+    }
+
+    @Test
+    func `quota warning compact rows build with long localized labels`() {
+        let settings = Self.makeSettingsStore(suite: "PreferencesPaneSmokeTests-quota-warning-localized-labels")
+        settings.quotaWarningNotificationsEnabled = true
+
+        CodexBarLocalizationOverride.$appLanguage.withValue("ru") {
+            let label = String(format: L("quota_warning_window_warn_at"), L("quota_warning_session_capitalized"))
+            #expect(label.count > 20)
+
+            _ = GlobalQuotaWarningSettingsView(settings: settings).body
+        }
     }
 
     @Test

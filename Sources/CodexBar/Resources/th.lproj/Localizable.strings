@@ -468,7 +468,7 @@
 "quota_warning_off" = "ปิด";
 "quota_warning_inherited" = "สืบทอด: %@";
 "quota_warning_depleted_only" = "หมดลงเท่านั้น";
-"quota_warning_upper" = "ด้านบน";
+"quota_warning_upper" = "สูงกว่า";
 "quota_warning_lower" = "ต่ํากว่า";
 "apply" = "สมัคร";
 "quit_app" = "ออกจาก CodexBar";

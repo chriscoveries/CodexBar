@@ -461,7 +461,7 @@
 "quota_warning_off" = "Desactivado";
 "quota_warning_inherited" = "Heredado: %@";
 "quota_warning_depleted_only" = "solo agotado";
-"quota_warning_upper" = "Superior";
+"quota_warning_upper" = "Más alto";
 "quota_warning_lower" = "Inferior";
 "apply" = "Aplicar";
 "quit_app" = "Salir de CodexBar";

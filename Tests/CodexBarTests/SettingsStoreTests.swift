@@ -1271,6 +1271,33 @@ struct SettingsStoreTests {
     }
 
     @Test
+    func `quota warning threshold setters ignore unchanged values`() async throws {
+        let suite = "SettingsStoreTests-observation-quota-threshold-noop"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        let configStore = testConfigStore(suiteName: suite)
+
+        let store = SettingsStore(
+            userDefaults: defaults,
+            configStore: configStore,
+            zaiTokenStore: NoopZaiTokenStore(),
+            syntheticTokenStore: NoopSyntheticTokenStore())
+        store.setQuotaWarningThresholds(.session, thresholds: [70, 30])
+
+        let didChange = ObservationFlag()
+        withObservationTracking {
+            _ = store.menuObservationToken
+        } onChange: {
+            didChange.set()
+        }
+
+        store.setQuotaWarningThresholds(.session, thresholds: [70, 30])
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        #expect(didChange.get() == false)
+    }
+
+    @Test
     func `menu observation token updates on weekly progress work days changes`() async throws {
         let suite = "SettingsStoreTests-observation-weekly-progress-work-days"
         let defaults = try #require(UserDefaults(suiteName: suite))

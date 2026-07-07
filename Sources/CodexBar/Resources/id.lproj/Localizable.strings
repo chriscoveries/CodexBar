@@ -470,7 +470,7 @@
 "quota_warning_off" = "Mati";
 "quota_warning_inherited" = "Diwariskan: %@";
 "quota_warning_depleted_only" = "hanya habis";
-"quota_warning_upper" = "Atas";
+"quota_warning_upper" = "Lebih tinggi";
 "quota_warning_lower" = "Bawah";
 "apply" = "Terapkan";
 "quit_app" = "Keluar CodexBar";

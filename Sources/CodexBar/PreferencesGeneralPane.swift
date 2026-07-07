@@ -185,5 +185,6 @@ struct GeneralPane: View {
         .formStyle(.grouped)
         .toggleStyle(.switch)
         .scrollContentBackground(.hidden)
+        .background(FocusResigningBackground())
     }
 }

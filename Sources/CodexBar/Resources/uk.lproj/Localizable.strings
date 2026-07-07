@@ -467,7 +467,7 @@
 "quota_warning_off" = "Вимкнено";
 "quota_warning_inherited" = "Успадковано: %@";
 "quota_warning_depleted_only" = "лише виснажені";
-"quota_warning_upper" = "Верхній";
+"quota_warning_upper" = "Вищий";
 "quota_warning_lower" = "Нижній";
 "apply" = "Застосувати";
 "quit_app" = "Закрийте CodexBar";

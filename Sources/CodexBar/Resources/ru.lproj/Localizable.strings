@@ -468,7 +468,7 @@
 "quota_warning_off" = "Выкл.";
 "quota_warning_inherited" = "Унаследовано: %@";
 "quota_warning_depleted_only" = "только при исчерпании";
-"quota_warning_upper" = "Верхний порог";
+"quota_warning_upper" = "Выше";
 "quota_warning_lower" = "Нижний порог";
 "apply" = "Применить";
 "quit_app" = "Выйти из CodexBar";

@@ -465,7 +465,7 @@
 "quota_warning_off" = "Aus";
 "quota_warning_inherited" = "Geerbt: %@";
 "quota_warning_depleted_only" = "nur erschöpft";
-"quota_warning_upper" = "Obere";
+"quota_warning_upper" = "Höher";
 "quota_warning_lower" = "Untere";
 "apply" = "Anwenden";
 "quit_app" = "CodexBar beenden";
