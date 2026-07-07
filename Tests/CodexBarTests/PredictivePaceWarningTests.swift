@@ -248,6 +248,41 @@ struct PredictivePaceWarningTests {
     }
 
     @Test
+    func `store isolates no-email Claude OAuth risk episodes by owner discriminator`() {
+        let now = Date(timeIntervalSince1970: 1_780_000_000)
+        let settings = self.makeSettings(suiteName: "PredictivePaceWarningTests-claude-oauth-owner")
+        settings.predictivePaceWarningNotificationsEnabled = true
+        let notifier = NotifierSpy()
+        let store = self.makeStore(settings: settings, notifier: notifier)
+        let firstOwner = UsageStore.predictivePaceWarningClaudeOAuthAccountDiscriminator(
+            ownerIdentifier: "owner-a")
+        let secondOwner = UsageStore.predictivePaceWarningClaudeOAuthAccountDiscriminator(
+            ownerIdentifier: "owner-b")
+        let snapshot = self.snapshot(
+            now: now,
+            sessionUsed: 80,
+            weeklyUsed: 20,
+            accountEmail: nil)
+
+        store.handlePredictivePaceWarningTransitions(
+            provider: .claude,
+            snapshot: snapshot,
+            accountDiscriminatorOverride: firstOwner)
+        store.handlePredictivePaceWarningTransitions(
+            provider: .claude,
+            snapshot: snapshot,
+            accountDiscriminatorOverride: firstOwner)
+        store.handlePredictivePaceWarningTransitions(
+            provider: .claude,
+            snapshot: snapshot,
+            accountDiscriminatorOverride: secondOwner)
+
+        #expect(notifier.predictivePosts.map(\.event.window) == [.session, .session])
+        #expect(notifier.predictivePosts.allSatisfy { $0.provider == .claude })
+        #expect(notifier.predictivePosts.allSatisfy { $0.event.accountDisplayName == nil })
+    }
+
+    @Test
     func `store keeps identity out of copy when personal info is hidden`() throws {
         let now = Date(timeIntervalSince1970: 1_780_000_000)
         let settings = self.makeSettings(suiteName: "PredictivePaceWarningTests-hidden-info")
@@ -311,7 +346,7 @@ struct PredictivePaceWarningTests {
         now: Date,
         sessionUsed: Double,
         weeklyUsed: Double,
-        accountEmail: String,
+        accountEmail: String?,
         provider: UsageProvider = .claude) -> UsageSnapshot
     {
         UsageSnapshot(

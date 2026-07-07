@@ -81,7 +81,11 @@ enum PredictivePaceWarningNotificationLogic {
 
 @MainActor
 extension UsageStore {
-    func handlePredictivePaceWarningTransitions(provider: UsageProvider, snapshot: UsageSnapshot) {
+    func handlePredictivePaceWarningTransitions(
+        provider: UsageProvider,
+        snapshot: UsageSnapshot,
+        accountDiscriminatorOverride: String? = nil)
+    {
         guard self.settings.predictivePaceWarningNotificationsEnabled else {
             self.predictivePaceWarningNotifiedKeys = Set(
                 self.predictivePaceWarningNotifiedKeys.filter { $0.provider != provider })
@@ -90,7 +94,8 @@ extension UsageStore {
         guard provider == .codex || provider == .claude else { return }
         guard let accountDiscriminator = self.predictivePaceWarningAccountDiscriminator(
             provider: provider,
-            snapshot: snapshot)
+            snapshot: snapshot,
+            accountDiscriminatorOverride: accountDiscriminatorOverride)
         else { return }
 
         let candidates = self.predictivePaceWarningCandidates(provider: provider, snapshot: snapshot)
@@ -171,7 +176,8 @@ extension UsageStore {
 
     private func predictivePaceWarningAccountDiscriminator(
         provider: UsageProvider,
-        snapshot: UsageSnapshot) -> String?
+        snapshot: UsageSnapshot,
+        accountDiscriminatorOverride: String? = nil) -> String?
     {
         if provider == .codex {
             return self.codexOwnershipContext(
@@ -180,12 +186,27 @@ extension UsageStore {
                 .canonicalKey
         }
 
+        if let accountDiscriminatorOverride = accountDiscriminatorOverride?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !accountDiscriminatorOverride.isEmpty
+        {
+            return accountDiscriminatorOverride
+        }
+
         guard let account = snapshot.accountEmail(for: provider)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased(),
             !account.isEmpty
         else { return nil }
         return "email:\(account)"
+    }
+
+    static func predictivePaceWarningClaudeOAuthAccountDiscriminator(ownerIdentifier: String?) -> String? {
+        guard let ownerIdentifier = ownerIdentifier?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !ownerIdentifier.isEmpty
+        else { return nil }
+        return "claude-oauth:\(ownerIdentifier)"
     }
 
     private func predictivePaceWarningAccountDisplayName(provider: UsageProvider, snapshot: UsageSnapshot) -> String? {
