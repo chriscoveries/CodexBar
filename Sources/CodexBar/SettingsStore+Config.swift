@@ -53,6 +53,15 @@ extension SettingsStore {
         }
     }
 
+    func setQuotaWarningThresholdsIfOverridden(
+        provider: UsageProvider,
+        window: QuotaWarningWindow,
+        thresholds: [Int]?)
+    {
+        guard self.hasQuotaWarningOverride(provider: provider, window: window) else { return }
+        self.setQuotaWarningThresholds(provider: provider, window: window, thresholds: thresholds)
+    }
+
     func setQuotaWarningOverride(
         provider: UsageProvider,
         window: QuotaWarningWindow,

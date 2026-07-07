@@ -782,6 +782,31 @@ struct SettingsStoreTests {
     }
 
     @Test
+    func `provider quota warning stale editor save does not restore cleared override`() throws {
+        let suite = "SettingsStoreTests-quota-warning-provider-cleared-override"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        let configStore = testConfigStore(suiteName: suite)
+        let store = SettingsStore(
+            userDefaults: defaults,
+            configStore: configStore,
+            zaiTokenStore: NoopZaiTokenStore(),
+            syntheticTokenStore: NoopSyntheticTokenStore())
+        store.quotaWarningThresholds = [50, 20]
+        store.setQuotaWarningOverride(provider: .codex, window: .session, thresholds: [70, 30], enabled: true)
+        let staleEditorThresholds = store.resolvedQuotaWarningThresholds(provider: .codex, window: .session)
+
+        store.setQuotaWarningOverride(provider: .codex, window: .session, thresholds: nil, enabled: nil)
+        store.setQuotaWarningThresholdsIfOverridden(
+            provider: .codex,
+            window: .session,
+            thresholds: staleEditorThresholds)
+
+        #expect(store.hasQuotaWarningOverride(provider: .codex, window: .session) == false)
+        #expect(store.resolvedQuotaWarningThresholds(provider: .codex, window: .session) == [50, 20])
+    }
+
+    @Test
     func `global quota warning thresholds resolve independently by window`() throws {
         let suite = "SettingsStoreTests-quota-warning-window-thresholds"
         let defaults = try #require(UserDefaults(suiteName: suite))

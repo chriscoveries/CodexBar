@@ -98,11 +98,14 @@ struct ProviderQuotaWarningSettingsView: View {
                             format: L("quota_warning_window_warn_at"),
                             window.localizedCapitalizedDisplayName),
                         subtitle: "",
+                        shouldCommitOnDisappear: {
+                            self.settings.hasQuotaWarningOverride(provider: self.provider, window: window)
+                        },
                         thresholds: {
                             self.settings.resolvedQuotaWarningThresholds(provider: self.provider, window: window)
                         },
                         setThresholds: {
-                            self.settings.setQuotaWarningThresholds(
+                            self.settings.setQuotaWarningThresholdsIfOverridden(
                                 provider: self.provider,
                                 window: window,
                                 thresholds: $0)
@@ -207,6 +210,7 @@ private struct QuotaWarningThresholdField: View {
     let title: String
     let subtitle: String
     var accessibilityContext: String = ""
+    var shouldCommitOnDisappear: () -> Bool = { true }
     let thresholds: () -> [Int]
     let setThresholds: ([Int]) -> Void
 
@@ -237,7 +241,9 @@ private struct QuotaWarningThresholdField: View {
             }
         }
         .onDisappear {
-            self.commit(normalizeText: true)
+            if self.shouldCommitOnDisappear() {
+                self.commit(normalizeText: true)
+            }
         }
         .background(self.focusMonitor)
     }
