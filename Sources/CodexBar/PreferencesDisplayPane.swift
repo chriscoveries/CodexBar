@@ -41,12 +41,18 @@ struct DisplayPane: View {
                         subtitle: L("menu_bar_shows_percent_subtitle"))
                 }
 
-                Picker(L("display_mode_title"), selection: self.$settings.menuBarDisplayMode) {
-                    ForEach(MenuBarDisplayMode.allCases) { mode in
-                        Text(mode.label).tag(mode)
-                    }
-                }
-                .disabled(!self.settings.menuBarShowsBrandIconWithPercent)
+                SettingsMenuPicker(
+                    selection: self.$settings.menuBarDisplayMode,
+                    options: MenuBarDisplayMode.allCases,
+                    label: {
+                        SettingsRowLabel(
+                            L("display_mode_title"),
+                            subtitle: self.settings.menuBarDisplayMode.description)
+                    },
+                    optionLabel: { mode in
+                        Text(mode.label)
+                    })
+                    .disabled(!self.settings.menuBarShowsBrandIconWithPercent)
             } header: {
                 Text(L("section_menu_bar"))
             }
