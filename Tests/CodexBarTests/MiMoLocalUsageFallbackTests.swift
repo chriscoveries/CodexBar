@@ -119,4 +119,56 @@ struct MiMoLocalUsageFallbackTests {
         #expect(plan.contains("total"))
         #expect(plan.contains("100 sessions"))
     }
+
+    @Test
+    func `flags a cache that has not refreshed within the stale window`() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("mimo-fallback-test-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("stale.json")
+        let payload: [String: Any] = [
+            "updated_at": "2026-07-05T10:00:00.000000+00:00",
+            "sessions_scanned": 42,
+            "windows": [
+                "today": ["input": 0, "output": 0, "cache_read": 0],
+                "week": ["input": 0, "output": 0, "cache_read": 0],
+                "all_time": ["input": 1000, "output": 500, "cache_read": 0],
+            ],
+        ]
+        try JSONSerialization.data(withJSONObject: payload).write(to: file)
+
+        // now is two days after updated_at, well past the stale threshold.
+        let now = try #require(ISO8601DateFormatter().date(from: "2026-07-07T10:00:00Z"))
+        let snap = try #require(MiMoLocalUsageFallback.snapshot(cachePath: file.path, now: now))
+        let plan = try #require(snap.planCode)
+        #expect(plan.contains("stale"))
+        #expect(plan.contains("2d"))
+        #expect(plan.contains("42 sessions"))
+    }
+
+    @Test
+    func `does not flag a freshly refreshed cache`() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("mimo-fallback-test-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("fresh.json")
+        let payload: [String: Any] = [
+            "updated_at": "2026-07-07T09:30:00.000000+00:00",
+            "sessions_scanned": 7,
+            "windows": [
+                "today": ["input": 100, "output": 50, "cache_read": 0],
+                "week": ["input": 100, "output": 50, "cache_read": 0],
+                "all_time": ["input": 100, "output": 50, "cache_read": 0],
+            ],
+        ]
+        try JSONSerialization.data(withJSONObject: payload).write(to: file)
+
+        // now is 30 minutes after updated_at, inside the stale threshold.
+        let now = try #require(ISO8601DateFormatter().date(from: "2026-07-07T10:00:00Z"))
+        let snap = try #require(MiMoLocalUsageFallback.snapshot(cachePath: file.path, now: now))
+        let plan = try #require(snap.planCode)
+        #expect(!plan.contains("stale"))
+    }
 }

@@ -2,6 +2,9 @@
 
 ## 0.41.1 — Unreleased
 
+### Fixed
+- MiMo: flag a stale local-fallback cache in the summary (e.g. `stale 34d`) so a tracker that has not been refreshed by `Scripts/mimo-usage.py` is not misread as live usage. Thanks @LeoLin990405!
+
 ## 0.41.0 — 2026-07-06
 
 ### Added
