@@ -28,13 +28,9 @@ extension SettingsStore {
 
     func setQuotaWarningThresholds(provider: UsageProvider, window: QuotaWarningWindow, thresholds: [Int]?) {
         let sanitizedThresholds = thresholds.map(QuotaWarningThresholds.sanitized)
-        let currentConfig = self.quotaWarningConfig(for: provider)
-        let currentThresholds: [Int]? = switch window {
-        case .session:
-            currentConfig.session?.thresholds.map(QuotaWarningThresholds.sanitized)
-        case .weekly:
-            currentConfig.weekly?.thresholds.map(QuotaWarningThresholds.sanitized)
-        }
+        let currentThresholds = self.quotaWarningWindowConfig(provider: provider, window: window)?
+            .thresholds
+            .map(QuotaWarningThresholds.sanitized)
         guard currentThresholds != sanitizedThresholds else { return }
 
         self.updateProviderConfig(provider: provider) { entry in
@@ -58,7 +54,17 @@ extension SettingsStore {
         window: QuotaWarningWindow,
         thresholds: [Int]?)
     {
-        guard self.hasQuotaWarningOverride(provider: provider, window: window) else { return }
+        guard let windowConfig = self.quotaWarningWindowConfig(provider: provider, window: window),
+              windowConfig.hasOverride
+        else { return }
+
+        let sanitizedThresholds = thresholds.map(QuotaWarningThresholds.sanitized)
+        let currentThresholds = windowConfig.thresholds.map(QuotaWarningThresholds.sanitized)
+        let inheritedThresholds = QuotaWarningThresholds.sanitized(self.quotaWarningThresholds(window))
+        if currentThresholds == nil, sanitizedThresholds == inheritedThresholds {
+            return
+        }
+
         self.setQuotaWarningThresholds(provider: provider, window: window, thresholds: thresholds)
     }
 
@@ -112,6 +118,21 @@ extension SettingsStore {
         }
         set {
             self.updateProviderTokenAccounts(newValue)
+        }
+    }
+}
+
+extension SettingsStore {
+    private func quotaWarningWindowConfig(
+        provider: UsageProvider,
+        window: QuotaWarningWindow) -> QuotaWarningWindowConfig?
+    {
+        let config = self.quotaWarningConfig(for: provider)
+        switch window {
+        case .session:
+            return config.session
+        case .weekly:
+            return config.weekly
         }
     }
 }

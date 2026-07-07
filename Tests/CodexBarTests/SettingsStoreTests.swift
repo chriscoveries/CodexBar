@@ -807,6 +807,34 @@ struct SettingsStoreTests {
     }
 
     @Test
+    func `provider quota warning inherited thresholds stay inherited after no-op editor save`() throws {
+        let suite = "SettingsStoreTests-quota-warning-provider-inherited-thresholds"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        let configStore = testConfigStore(suiteName: suite)
+        let store = SettingsStore(
+            userDefaults: defaults,
+            configStore: configStore,
+            zaiTokenStore: NoopZaiTokenStore(),
+            syntheticTokenStore: NoopSyntheticTokenStore())
+        store.quotaWarningThresholds = [50, 20]
+        store.setQuotaWarningOverride(provider: .codex, window: .session, thresholds: nil, enabled: true)
+
+        let resolvedEditorThresholds = store.resolvedQuotaWarningThresholds(provider: .codex, window: .session)
+        store.setQuotaWarningThresholdsIfOverridden(
+            provider: .codex,
+            window: .session,
+            thresholds: resolvedEditorThresholds)
+
+        let sessionConfig = store.providerConfig(for: .codex)?.quotaWarnings?.session
+        #expect(sessionConfig?.enabled == true)
+        #expect(sessionConfig?.thresholds == nil)
+
+        store.quotaWarningThresholds = [80, 40]
+        #expect(store.resolvedQuotaWarningThresholds(provider: .codex, window: .session) == [80, 40])
+    }
+
+    @Test
     func `global quota warning thresholds resolve independently by window`() throws {
         let suite = "SettingsStoreTests-quota-warning-window-thresholds"
         let defaults = try #require(UserDefaults(suiteName: suite))
