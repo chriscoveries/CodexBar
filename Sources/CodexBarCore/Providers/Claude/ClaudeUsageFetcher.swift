@@ -1346,7 +1346,7 @@ extension ClaudeUsageFetcher {
             primary: primary,
             secondary: weekly,
             opus: opus,
-            extraRateWindows: [],
+            extraRateWindows: snap.extraRateWindows,
             providerCost: nil,
             updatedAt: Date(),
             accountEmail: snap.accountEmail,
@@ -1375,8 +1375,9 @@ extension ClaudeUsageFetcher {
                     }
                 }
             // Only merge usage/cost extras; keep identity fields from the primary data source.
-            let mergedExtraRateWindows = snapshot.extraRateWindows.isEmpty ? webData.extraRateWindows : snapshot
-                .extraRateWindows
+            let mergedExtraRateWindows = Self.mergeExtraRateWindows(
+                primary: snapshot.extraRateWindows,
+                web: webData.extraRateWindows)
             let mergedProviderCost = snapshot.providerCost ?? webData.extraUsageCost
             if mergedProviderCost != snapshot.providerCost || mergedExtraRateWindows != snapshot.extraRateWindows {
                 return ClaudeUsageSnapshot(
@@ -1401,6 +1402,21 @@ extension ClaudeUsageFetcher {
             Self.log.debug("Claude web extras fetch failed: \(error.localizedDescription)")
         }
         return snapshot
+    }
+
+    private static func mergeExtraRateWindows(
+        primary: [NamedRateWindow],
+        web: [NamedRateWindow]) -> [NamedRateWindow]
+    {
+        guard !primary.isEmpty else { return web }
+        guard !web.isEmpty else { return primary }
+
+        var seenIDs = Set(primary.map(\.id))
+        var merged = primary
+        for window in web where seenIDs.insert(window.id).inserted {
+            merged.append(window)
+        }
+        return merged
     }
 
     // MARK: - Process helpers
@@ -1468,6 +1484,13 @@ extension ClaudeUsageFetcher {
 
 #if DEBUG
 extension ClaudeUsageFetcher {
+    public static func _mergeExtraRateWindowsForTesting(
+        primary: [NamedRateWindow],
+        web: [NamedRateWindow]) -> [NamedRateWindow]
+    {
+        Self.mergeExtraRateWindows(primary: primary, web: web)
+    }
+
     public static func _mapOAuthUsageForTesting(
         _ data: Data,
         rateLimitTier: String? = nil,
