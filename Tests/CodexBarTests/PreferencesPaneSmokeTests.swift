@@ -201,10 +201,6 @@ struct PreferencesPaneSmokeTests {
 
         CodexBarLocalizationOverride.$appLanguage.withValue("ru") {
             #expect(L("quota_warning_global") == "Глобально")
-            #expect(String(format: L("quota_warning_global_summary"), "Off") == "Глобально: Off")
-            #expect(String(
-                format: L("quota_warning_mode_accessibility"),
-                L("quota_warning_session_capitalized")) == "Режим предупреждений квоты для Сеанс")
             #expect(L("quota_warning_warning") == "Предупреждение")
             #expect(L("quota_warning_critical") == "Критично")
 
@@ -218,8 +214,8 @@ struct PreferencesPaneSmokeTests {
             let thresholdText = ProviderQuotaWarningSettingsView.thresholdText([80, 50, 20], enabled: true)
 
             #expect(thresholdText == "Warning 80%, Critical 50%, 20%")
-            #expect(String(format: L("quota_warning_global_summary"), thresholdText)
-                == "Global: Warning 80%, Critical 50%, 20%")
+            #expect(String(format: L("quota_warning_inherited"), thresholdText)
+                == "Inherited: Warning 80%, Critical 50%, 20%")
         }
     }
 

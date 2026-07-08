@@ -460,6 +460,7 @@
 "quota_warning_sound" = "Reproducir sonido de notificación";
 "quota_warning_onscreen_alert" = "Mostrar alerta de texto en pantalla";
 "quota_warning_provider_inherits" = "Usa los ajustes globales de aviso de cuota salvo que se personalice una ventana aquí.";
+"quota_warning_global" = "Global";
 "quota_warning_customize_thresholds" = "Personalizar umbrales de %@";
 "quota_warning_enable_warnings" = "Activar avisos de %@";
 "quota_warning_window_warn_at" = "%@ avisar al";

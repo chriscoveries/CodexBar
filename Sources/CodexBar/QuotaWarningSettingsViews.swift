@@ -86,7 +86,7 @@ struct ProviderQuotaWarningSettingsView: View {
                 .frame(minHeight: Self.windowRowMinHeight, alignment: .center)
                 .gridColumnAlignment(.leading)
 
-            Picker("", selection: self.overrideModeBinding(for: window)) {
+            Picker(window.localizedCapitalizedDisplayName, selection: self.overrideModeBinding(for: window)) {
                 Text(L("quota_warning_global")).tag(ProviderQuotaWarningOverrideMode.global)
                 Text(L("Custom")).tag(ProviderQuotaWarningOverrideMode.custom)
                 Text(L("quota_warning_off")).tag(ProviderQuotaWarningOverrideMode.off)
@@ -96,9 +96,6 @@ struct ProviderQuotaWarningSettingsView: View {
             .controlSize(.small)
             .fixedSize()
             .frame(minHeight: Self.windowRowMinHeight, alignment: .center)
-            .accessibilityLabel(Text(String(
-                format: L("quota_warning_mode_accessibility"),
-                window.localizedCapitalizedDisplayName)))
             .gridColumnAlignment(.leading)
 
             self.windowDetail(window)
@@ -111,31 +108,29 @@ struct ProviderQuotaWarningSettingsView: View {
     private func windowDetail(_ window: QuotaWarningWindow) -> some View {
         switch self.overrideMode(for: window) {
         case .custom:
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                QuotaWarningThresholdField(
-                    title: "",
-                    subtitle: "",
-                    accessibilityContext: window.localizedCapitalizedDisplayName,
-                    shouldCommitOnDisappear: {
-                        self.shouldCommitThresholdEditorOnDisappear(for: window)
-                    },
-                    thresholds: {
-                        self.settings.resolvedQuotaWarningThresholds(provider: self.provider, window: window)
-                    },
-                    setThresholds: {
-                        self.settings.setQuotaWarningThresholdsIfOverridden(
-                            provider: self.provider,
-                            window: window,
-                            thresholds: $0)
-                    },
-                    fieldWidth: Self.thresholdFieldWidth,
-                    controlFont: .subheadline)
-            }
-            .fixedSize(horizontal: true, vertical: false)
+            QuotaWarningThresholdField(
+                title: "",
+                subtitle: "",
+                accessibilityContext: window.localizedCapitalizedDisplayName,
+                shouldCommitOnDisappear: {
+                    self.shouldCommitThresholdEditorOnDisappear(for: window)
+                },
+                thresholds: {
+                    self.settings.resolvedQuotaWarningThresholds(provider: self.provider, window: window)
+                },
+                setThresholds: {
+                    self.settings.setQuotaWarningThresholdsIfOverridden(
+                        provider: self.provider,
+                        window: window,
+                        thresholds: $0)
+                },
+                fieldWidth: Self.thresholdFieldWidth,
+                controlFont: .subheadline)
+                .fixedSize(horizontal: true, vertical: false)
         case .off:
             EmptyView()
         case .global:
-            Text(String(format: L("quota_warning_global_summary"), Self.thresholdText(
+            Text(String(format: L("quota_warning_inherited"), Self.thresholdText(
                 self.settings.quotaWarningThresholds(window),
                 enabled: self.settings.quotaWarningWindowEnabled(window))))
                 .font(.subheadline)

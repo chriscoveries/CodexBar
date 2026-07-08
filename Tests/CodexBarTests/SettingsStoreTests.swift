@@ -790,11 +790,14 @@ struct SettingsStoreTests {
         store.quotaWarningThresholds = [50, 20]
 
         #expect(store.resolvedQuotaWarningThresholds(provider: .codex, window: .session) == [50, 20])
+        #expect(store.explicitQuotaWarningThresholds(provider: .codex, window: .session) == nil)
         store.setQuotaWarningThresholds(provider: .codex, window: .session, thresholds: [10])
+        #expect(store.explicitQuotaWarningThresholds(provider: .codex, window: .session) == [10])
         #expect(store.resolvedQuotaWarningThresholds(provider: .codex, window: .session) == [10])
         #expect(store.resolvedQuotaWarningThresholds(provider: .codex, window: .weekly) == [50, 20])
 
         store.setQuotaWarningThresholds(provider: .codex, window: .session, thresholds: nil)
+        #expect(store.explicitQuotaWarningThresholds(provider: .codex, window: .session) == nil)
         #expect(store.resolvedQuotaWarningThresholds(provider: .codex, window: .session) == [50, 20])
     }
 
