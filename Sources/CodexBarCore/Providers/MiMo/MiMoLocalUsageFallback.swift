@@ -53,9 +53,15 @@ public enum MiMoLocalUsageFallback {
         let updatedAt = Self.updatedAt(json: json, url: url, fallback: now)
 
         var parts = ["Local"]
-        if todayTotal > 0 { parts.append("\(Self.fmtTokens(todayTotal)) today") }
-        if weekTotal > 0 { parts.append("\(Self.fmtTokens(weekTotal)) week") }
-        if allTotal > 0 { parts.append("\(Self.fmtTokens(allTotal)) total") }
+        if todayTotal > 0 {
+            parts.append("\(Self.fmtTokens(todayTotal)) today")
+        }
+        if weekTotal > 0 {
+            parts.append("\(Self.fmtTokens(weekTotal)) week")
+        }
+        if allTotal > 0 {
+            parts.append("\(Self.fmtTokens(allTotal)) total")
+        }
         parts.append("\(sessionsScanned) sessions")
         // The cache is only as fresh as the last `Scripts/mimo-usage.py` run; flag a
         // frozen cache so the row is not misread as live accounting.
@@ -77,8 +83,12 @@ public enum MiMoLocalUsageFallback {
     }
 
     private static func fmtTokens(_ n: Int) -> String {
-        if n >= 1_000_000 { return String(format: "%.1fM", Double(n) / 1_000_000) }
-        if n >= 1000 { return String(format: "%.1fk", Double(n) / 1000) }
+        if n >= 1_000_000 {
+            return String(format: "%.1fM", Double(n) / 1_000_000)
+        }
+        if n >= 1000 {
+            return String(format: "%.1fk", Double(n) / 1000)
+        }
         return "\(n)"
     }
 
@@ -96,10 +106,11 @@ public enum MiMoLocalUsageFallback {
 
     private static func fmtAge(_ seconds: TimeInterval) -> String {
         let total = max(0, Int(seconds))
-        let day = 86400, hour = 3600, minute = 60
-        if total >= day { return "\(total / day)d" }
-        if total >= hour { return "\(total / hour)h" }
-        return "\(max(1, total / minute))m"
+        let day = 86400, hour = 3600
+        if total >= day {
+            return "\(total / day)d"
+        }
+        return "\(max(1, total / hour))h"
     }
 
     private static func total(for window: [String: Any]) -> Int {
@@ -110,7 +121,9 @@ public enum MiMoLocalUsageFallback {
     }
 
     private static func intValue(_ raw: Any?) -> Int {
-        if let i = raw as? Int { return max(0, i) }
+        if let i = raw as? Int {
+            return max(0, i)
+        }
         if let d = raw as? Double,
            d.isFinite,
            d >= 0,
@@ -118,7 +131,9 @@ public enum MiMoLocalUsageFallback {
         {
             return Int(d)
         }
-        if let s = raw as? String, let i = Int(s) { return max(0, i) }
+        if let s = raw as? String, let i = Int(s) {
+            return max(0, i)
+        }
         return 0
     }
 

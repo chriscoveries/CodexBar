@@ -904,7 +904,7 @@ enum CLIRenderer {
     }
 
     private static func nonCodexPlanDisplay(provider: UsageProvider, plan: String) -> String {
-        if provider == .gemini {
+        if provider == .gemini || provider == .mimo {
             return UsageFormatter.cleanPlanName(plan)
         }
         return plan.capitalized
