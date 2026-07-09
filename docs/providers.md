@@ -299,8 +299,10 @@ headers, source selection, provider ordering, and token accounts are stored in `
 
 ## Synthetic
 - API key from `~/.codexbar/config.json` (`providers[].apiKey`) or `SYNTHETIC_API_KEY`.
-- Shows rolling five-hour, weekly token, search-hourly, and cost/credit quota lanes when present.
-- Status: none yet.
+- The menu card shows rolling five-hour, weekly token, and search-hourly quota lanes when present. The compact menu bar
+  metric uses the five-hour or weekly lane; weekly credit regeneration details appear when returned.
+- External status page: `https://status.synthetic.new` (not linked or auto-polled by CodexBar).
+- Details: `docs/synthetic.md`.
 
 ## OpenRouter
 - API token from `~/.codexbar/config.json` (`providers[].apiKey`) or `OPENROUTER_API_KEY` env var.
