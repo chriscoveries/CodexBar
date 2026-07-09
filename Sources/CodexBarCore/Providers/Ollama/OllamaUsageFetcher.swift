@@ -791,7 +791,16 @@ public enum OllamaAPIUsageFetcher {
 
     private static func resolveValidationURL(tagsURL: URL, override: URL?) throws -> URL {
         let validationURL = override
-            ?? tagsURL.deletingLastPathComponent().appendingPathComponent("web_search")
+            ?? (tagsURL == Self.tagsURL
+                ? Self.validationURL
+                : tagsURL.deletingLastPathComponent().appendingPathComponent("web_search"))
+        let endpointValidator = ProviderEndpointOverrideValidator()
+        guard endpointValidator.validatedURLAllowingLoopbackHTTP(tagsURL.absoluteString) != nil,
+              endpointValidator.validatedURLAllowingLoopbackHTTP(validationURL.absoluteString) != nil
+        else {
+            throw OllamaUsageError.networkError(
+                "Ollama API endpoints must use HTTPS or loopback HTTP.")
+        }
         guard self.sameOrigin(tagsURL, validationURL) else {
             throw OllamaUsageError.networkError(
                 "Ollama key validation and model catalog endpoints must share an origin.")

@@ -150,6 +150,37 @@ struct OllamaUsageFetcherRetryMappingTests {
         #expect(snapshot.modelCount == 1)
     }
 
+    @Test(arguments: [401, 403])
+    func `authorized validation still rejects unauthorized model catalog`(statusCode: Int) async throws {
+        let validationURL = try #require(URL(string: "https://ollama.test/api/web_search"))
+        let tagsURL = try #require(URL(string: "https://ollama.test/api/tags"))
+        let transport = ProviderHTTPTransportHandler { request in
+            let responseStatus = request.url == validationURL ? 400 : statusCode
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: responseStatus,
+                httpVersion: "HTTP/1.1",
+                headerFields: nil)!
+            return (Data("{}".utf8), response)
+        }
+
+        do {
+            _ = try await OllamaAPIUsageFetcher.fetchUsage(
+                apiKey: "ollama-test",
+                tagsURL: tagsURL,
+                validationURL: validationURL,
+                transport: transport)
+            Issue.record("Expected unauthorized model catalog error")
+        } catch let error as OllamaUsageError {
+            guard case .apiUnauthorized = error else {
+                Issue.record("Expected apiUnauthorized, got \(error)")
+                return
+            }
+        } catch {
+            Issue.record("Expected OllamaUsageError.apiUnauthorized, got \(error)")
+        }
+    }
+
     @Test
     func `custom catalog derives validation on the same origin`() async throws {
         let tagsURL = try #require(URL(string: "https://private.example/prefix/api/tags"))
@@ -208,6 +239,31 @@ struct OllamaUsageFetcherRetryMappingTests {
                 return
             }
             #expect(message == "Ollama key validation and model catalog endpoints must share an origin.")
+        } catch {
+            Issue.record("Expected OllamaUsageError.networkError, got \(error)")
+        }
+    }
+
+    @Test
+    func `non loopback HTTP catalog is rejected before sending credentials`() async throws {
+        let tagsURL = try #require(URL(string: "http://private.example/api/tags"))
+        let transport = ProviderHTTPTransportHandler { _ in
+            Issue.record("Insecure non-loopback endpoints must fail before transport")
+            throw URLError(.badURL)
+        }
+
+        do {
+            _ = try await OllamaAPIUsageFetcher.fetchUsage(
+                apiKey: "private-key",
+                tagsURL: tagsURL,
+                transport: transport)
+            Issue.record("Expected an insecure endpoint error")
+        } catch let error as OllamaUsageError {
+            guard case let .networkError(message) = error else {
+                Issue.record("Expected networkError, got \(error)")
+                return
+            }
+            #expect(message == "Ollama API endpoints must use HTTPS or loopback HTTP.")
         } catch {
             Issue.record("Expected OllamaUsageError.networkError, got \(error)")
         }
