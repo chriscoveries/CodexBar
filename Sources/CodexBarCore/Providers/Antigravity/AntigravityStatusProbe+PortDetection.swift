@@ -29,12 +29,12 @@ public enum ProcNetTCPListeningPortParser {
             let columns = line.split(separator: " ", omittingEmptySubsequences: true)
             // Columns: sl local_address rem_address st ... uid timeout inode
             guard columns.count > 9,
-                columns[3] == listenState,
-                socketInodes.contains(String(columns[9]))
+                  columns[3] == self.listenState,
+                  socketInodes.contains(String(columns[9]))
             else { continue }
             let localAddress = columns[1]
             guard let separator = localAddress.lastIndex(of: ":"),
-                let port = Int(localAddress[localAddress.index(after: separator)...], radix: 16)
+                  let port = Int(localAddress[localAddress.index(after: separator)...], radix: 16)
             else { continue }
             ports.insert(port)
         }
