@@ -145,11 +145,11 @@ public struct WayfinderUsageSnapshot: Codable, Sendable, Equatable {
         return mix.isEmpty ? nil : mix
     }
 
-    /// "$4.12 · 38.2% vs always-cloud" when priced, percent-only otherwise.
+    /// "$4.12 · 38.2% vs highest-cost route" when priced; percent-only otherwise.
     /// Savings in relative (unpriced) units are never rendered as dollars.
     public var savedSummary: String? {
         guard self.requests > 0, self.saved > 0 else { return nil }
-        let pct = "\(Self.percentText(self.savedPct))% vs always-cloud"
+        let pct = "\(Self.percentText(self.savedPct))% vs highest-cost route"
         guard self.priced else { return pct }
         let amount = self.saved < 0.01
             ? "<$0.01"

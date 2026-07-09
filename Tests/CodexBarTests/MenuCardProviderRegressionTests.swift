@@ -113,7 +113,7 @@ struct MenuCardProviderRegressionTests {
         #expect(model.usageNotes == [
             "Gateway: ok · 2 models · dry run",
             "Routed: local: 10 · cloud: 4",
-            "Saved: <$0.01 · 61.5% vs always-cloud",
+            "Saved: <$0.01 · 61.5% vs highest-cost route",
             "Avg decision: 0.1 ms",
         ])
     }

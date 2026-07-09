@@ -31,7 +31,7 @@ struct WayfinderProviderLinuxTests {
         #expect(snapshot.displayLines == [
             "Gateway: ok · 2 models",
             "Routed: local: 10 · cloud: 4",
-            "Saved: <$0.01 · 61.5% vs always-cloud",
+            "Saved: <$0.01 · 61.5% vs highest-cost route",
             "Avg decision: 0.1 ms",
         ])
 
@@ -74,7 +74,7 @@ struct WayfinderProviderLinuxTests {
     func `unpriced savings never render dollars`() throws {
         let snapshot = try Self.makeSnapshot(savingsData: Self.savingsUnpriced)
         #expect(!snapshot.priced)
-        #expect(snapshot.savedSummary == "40% vs always-cloud")
+        #expect(snapshot.savedSummary == "40% vs highest-cost route")
         #expect(snapshot.toUsageSnapshot().providerCost == nil)
     }
 
@@ -82,7 +82,7 @@ struct WayfinderProviderLinuxTests {
     func `sub-cent priced savings render below one cent`() throws {
         let snapshot = try Self.makeSnapshot()
         #expect(snapshot.routedSummary == "local: 10 · cloud: 4")
-        #expect(snapshot.savedSummary == "<$0.01 · 61.5% vs always-cloud")
+        #expect(snapshot.savedSummary == "<$0.01 · 61.5% vs highest-cost route")
         #expect(snapshot.avgDecisionSummary == "0.1 ms")
     }
 
@@ -312,7 +312,7 @@ struct WayfinderProviderLinuxTests {
 
         #expect(output.contains("Gateway: ok · 2 models"))
         #expect(output.contains("Routed: local: 10 · cloud: 4"))
-        #expect(output.contains("Saved: <$0.01 · 61.5% vs always-cloud"))
+        #expect(output.contains("Saved: <$0.01 · 61.5% vs highest-cost route"))
         #expect(output.contains("Avg decision: 0.1 ms"))
         #expect(!output.contains("Cost:"))
     }
