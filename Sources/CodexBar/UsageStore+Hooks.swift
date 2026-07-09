@@ -78,6 +78,21 @@ extension UsageStore {
         }
     }
 
+    /// True when the user has an enabled hook rule for this event and provider.
+    ///
+    /// Used to run quota transition detection even when the matching notification
+    /// preference is off, so hooks fire independently of notifications. Returns
+    /// false for everyone who has not configured such a rule, so notification
+    /// behavior is unchanged for them.
+    func hasQuotaHookRule(event: HookEventType, provider: UsageProvider) -> Bool {
+        guard let hooks = self.settings.config.hooks, hooks.enabled else { return false }
+        return hooks.events.contains { rule in
+            rule.enabled
+                && rule.event == event
+                && (rule.provider == nil || rule.provider == provider.rawValue)
+        }
+    }
+
     /// Account label for a hook payload, redacted when the user hides personal info.
     func hookAccountDisplayName(provider: UsageProvider, snapshot: UsageSnapshot) -> String? {
         guard !self.settings.hidePersonalInfo else { return nil }

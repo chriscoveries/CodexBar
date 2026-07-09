@@ -898,7 +898,11 @@ final class UsageStore {
             self.lastKnownSessionWindowSource[provider] = currentSource
         }
 
-        guard self.settings.sessionQuotaNotificationsEnabled else {
+        // Hooks have their own enable switch, so a configured quota_reached hook must
+        // fire on a real depletion even when session quota notifications are off.
+        let notificationsEnabled = self.settings.sessionQuotaNotificationsEnabled
+        let hooksActive = self.hasQuotaHookRule(event: .quotaReached, provider: provider)
+        guard notificationsEnabled || hooksActive else {
             if SessionQuotaNotificationLogic.isDepleted(currentRemaining) ||
                 SessionQuotaNotificationLogic.isDepleted(previousRemaining)
             {
@@ -916,7 +920,9 @@ final class UsageStore {
                 let providerText = provider.rawValue
                 let message = "startup depleted: provider=\(providerText) curr=\(currentRemaining)"
                 self.sessionQuotaLogger.info(message)
-                self.sessionQuotaNotifier.post(transition: .depleted, provider: provider, badge: nil)
+                if notificationsEnabled {
+                    self.sessionQuotaNotifier.post(transition: .depleted, provider: provider, badge: nil)
+                }
                 self.emitQuotaReachedHook(provider: provider, sessionWindow: sessionWindow, snapshot: snapshot)
             }
             return
@@ -945,7 +951,9 @@ final class UsageStore {
             "prev=\(previousRemaining ?? -1) curr=\(currentRemaining)"
         self.sessionQuotaLogger.info(message)
 
-        self.sessionQuotaNotifier.post(transition: transition, provider: provider, badge: nil)
+        if notificationsEnabled {
+            self.sessionQuotaNotifier.post(transition: transition, provider: provider, badge: nil)
+        }
         if transition == .depleted {
             self.emitQuotaReachedHook(provider: provider, sessionWindow: sessionWindow, snapshot: snapshot)
         }

@@ -87,7 +87,11 @@ extension SettingsStore {
     // MARK: - Hooks
 
     var hooksConfig: HooksConfig {
-        self.configSnapshot.hooks ?? HooksConfig()
+        // Observe both revisions: local hook edits bump hooksRevision (no provider
+        // refresh), external config syncs bump configRevision.
+        _ = self.hooksRevision
+        _ = self.configRevision
+        return self.config.hooks ?? HooksConfig()
     }
 
     var hooksEnabled: Bool {
@@ -121,11 +125,14 @@ extension SettingsStore {
     }
 
     private func updateHooks(_ mutate: (inout HooksConfig) -> Void) {
-        self.updateConfig(reason: "hooks") { config in
-            var hooks = config.hooks ?? HooksConfig()
-            mutate(&hooks)
-            config.hooks = (hooks.enabled || !hooks.events.isEmpty) ? hooks : nil
-        }
+        guard !self.configLoading else { return }
+        // Hooks never affect provider fetching, so persist and notify the UI without
+        // bumping configRevision (which would trigger a provider refresh).
+        var hooks = self.config.hooks ?? HooksConfig()
+        mutate(&hooks)
+        self.config.hooks = (hooks.enabled || !hooks.events.isEmpty) ? hooks : nil
+        self.schedulePersistConfig()
+        self.hooksRevision &+= 1
     }
 
     var tokenAccountsByProvider: [UsageProvider: ProviderTokenAccountData] {

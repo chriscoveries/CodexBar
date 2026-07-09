@@ -210,6 +210,9 @@ final class SettingsStore {
     var defaultsState: SettingsDefaultsState
     var configRevision: Int = 0
     var backgroundWorkSettingsRevision: Int = 0
+    /// Bumped on hook-rule edits so the Hooks pane re-renders. Kept separate from
+    /// `configRevision` so editing a hook does not trigger a provider refresh.
+    var hooksRevision: Int = 0
     var providerOrder: [UsageProvider] = []
     var providerEnablement: [UsageProvider: Bool] = [:]
 
