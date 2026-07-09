@@ -21,6 +21,7 @@
 "Animation pattern" = "Patró d'animació";
 "Antigravity login is managed in the app" = "L'inici de sessió d'Antigravity es gestiona a l'app";
 "Applies only to the Security.framework OAuth keychain reader." = "Només s'aplica al lector de Clauer OAuth de Security.framework.";
+"Alternatively, set a custom path in Settings." = "Alternativament, definiu un camí personalitzat a la configuració.";
 "Auto falls back to the next source if the preferred one fails." = "Auto recorre a la font següent si la preferida falla.";
 "Auto uses API first, then falls back to CLI on auth failures." = "Auto fa servir primer l'API i recorre a la CLI si falla l'autenticació.";
 "Auto-detect" = "Detecció automàtica";
@@ -147,6 +148,7 @@
 "Install the Claude CLI (npm i -g @anthropic-ai/claude-code) and try again." = "Instal·leu la CLI de Claude (npm i -g @anthropic-ai/claude-code) i torneu-ho a provar.";
 "Install the Codex CLI (npm i -g @openai/codex) and try again." = "Instal·leu la CLI de Codex (npm i -g @openai/codex) i torneu-ho a provar.";
 "Install the Gemini CLI (npm i -g @google/gemini-cli) and try again." = "Instal·leu la CLI de Gemini (npm i -g @google/gemini-cli) i torneu-ho a provar.";
+"Install a JetBrains IDE with AI Assistant enabled, then refresh CodexBar." = "Instal·leu un IDE de JetBrains amb l'AI Assistant activat i després actualitzeu el CodexBar.";
 "JetBrains AI is ready" = "JetBrains AI està a punt";
 "JetBrains IDE" = "IDE de JetBrains";
 "Keep CLI sessions alive" = "Mantingueu actives les sessions de la CLI";
@@ -280,6 +282,7 @@
 "Show provider icons in the switcher (otherwise show a weekly progress line)." = "Mostreu les icones de proveïdor al selector (si no, mostreu una línia de progrés setmanal).";
 "Show reset time as clock" = "Mostreu l'hora de reinici com a rellotge";
 "Show usage as used" = "Mostreu l'ús com a consumit";
+"Sign in with Claude Code..." = "Inicieu sessió amb Claude Code...";
 "Sign in via button below" = "Inicieu la sessió amb el botó de sota";
 "Skip teardown between probes (debug-only)." = "Ometeu el tancament entre sondeigs (només depuració).";
 "Stack token accounts in the menu (otherwise show an account switcher bar)." = "Apileu els comptes amb token al menú (si no, mostreu una barra de canvi de compte).";
@@ -433,7 +436,7 @@
 "refresh_cadence_subtitle" = "Amb quina freqüència el CodexBar consulta els proveïdors en segon pla.";
 "manual_refresh_hint" = "L'actualització automàtica està desactivada; feu servir l'ordre Actualitza del menú.";
 "refresh_on_open_title" = "Actualitza en obrir el menú";
-"refresh_on_open_subtitle" = "Obté l'ús més recent de cada proveïdor cada vegada que obres el menú.";
+"refresh_on_open_subtitle" = "Obté l'ús més recent de cada proveïdor cada vegada que obriu el menú.";
 "check_provider_status_title" = "Comproveu l'estat del proveïdor";
 "check_provider_status_subtitle" = "Consulta les pàgines d'estat d'OpenAI/Claude i Google Workspace per a Gemini/Antigravity, mostrant incidències a la icona i al menú.";
 "session_quota_notifications_title" = "Notificacions de quota de sessió";
@@ -490,7 +493,7 @@
 "menu_bar_metric_subtitle" = "Trieu quina finestra determina el percentatge de la barra de menús.";
 "menu_bar_metric_subtitle_deepseek" = "Mostra el saldo de DeepSeek a la barra de menús.";
 "menu_bar_metric_subtitle_moonshot" = "Mostra el saldo de l'API de Moonshot / Kimi a la barra de menús.";
-"menu_bar_metric_subtitle_mistral" = "Mostra la despesa de l'API de Mistral del mes actual a la barra de menús.";
+"menu_bar_metric_subtitle_mistral" = "Trieu entre la despesa de l'API de Mistral o l'ús del Monthly Plan per a la barra de menús.";
 "menu_bar_metric_subtitle_kimik2" = "Mostra els crèdits de la clau d'API de Kimi K2 a la barra de menús.";
 "automatic" = "Automàtic";
 "primary_api_key_limit" = "Principal (límit de la clau d'API)";
@@ -855,13 +858,13 @@
 "Drag to reorder" = "Arrossegueu per reordenar";
 "Sort providers alphabetically" = "Ordena els proveïdors alfabèticament";
 "Sort providers alphabetically (enabled first)" = "Ordena els proveïdors alfabèticament (els activats primer)";
-"Sorted alphabetically (enabled first) — click to use your custom order" = "Ordenats alfabèticament (els activats primer) — fes clic per utilitzar l’ordre personalitzat";
+"Sorted alphabetically (enabled first) — click to use your custom order" = "Ordenats alfabèticament (els activats primer) — feu clic per utilitzar l'ordre personalitzat";
 "Endpoint" = "Endpoint";
 "Enterprise host" = "Host Enterprise";
 "Extra usage balance: %@" = "Saldo d'ús extra: %@";
 "Keychain Access Required" = "Cal accés al Clauer";
 "keychain_prompt_learn_more" = "Més informació…";
-"keychain_prompt_privacy_note" = "macOS —no CodexBar— gestiona la introducció de la contrasenya d'inici de sessió del Mac. Pots desactivar l'accés al Clauer en qualsevol moment a Configuració → Avançat.";
+"keychain_prompt_privacy_note" = "macOS —no CodexBar— gestiona la introducció de la contrasenya d'inici de sessió del Mac. Podeu desactivar l'accés al Clauer en qualsevol moment a Configuració → Avançat.";
 "Kiro menu bar value" = "Valor de Kiro a la barra de menús";
 "Label" = "Etiqueta";
 "No organizations loaded. Click Refresh after setting your API key." = "No hi ha organitzacions carregades. Feu clic a Actualitza després de configurar la clau API.";
@@ -998,6 +1001,7 @@
 "%@ left" = "Queden %@";
 "%@ · %@" = "%@ · %@";
 "%@: %@ · %@ tokens" = "%@: %@ · %@ tokens";
+"%@: %@" = "%@: %@";
 "%@: %@%% used" = "%@: %@%% usat";
 "%d more items" = "%d elements més";
 "%d unreadable item(s) skipped" = "%d elements no llegibles omesos";
