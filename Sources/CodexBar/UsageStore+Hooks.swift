@@ -54,6 +54,22 @@ extension UsageStore {
             accountDisplayName: self.hookAccountDisplayName(provider: provider, snapshot: snapshot))
     }
 
+    /// Emits `quota_reset` when a session/weekly limit reset is detected. The
+    /// account label is redacted when the user hides personal info.
+    func emitQuotaResetHook(
+        provider: UsageProvider,
+        window: QuotaWarningWindow,
+        usedPercent: Double,
+        accountLabel: String?)
+    {
+        self.emitHook(
+            .quotaReset,
+            provider: provider,
+            window: window.displayName,
+            usagePercent: usedPercent / 100,
+            accountDisplayName: self.settings.hidePersonalInfo ? nil : accountLabel)
+    }
+
     /// Emits `provider_unavailable` / `provider_recovered` on genuine outage
     /// transitions. `.unknown` (transient/first fetch) and `.maintenance` never
     /// flip the tracked state, so a hiccuped status probe cannot fire a hook.

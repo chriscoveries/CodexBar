@@ -76,13 +76,46 @@ extension UsageStore {
 
     var backgroundWorkSettingsObservationToken: Int {
         _ = self.settings.backgroundWorkSettingsRevision
-        _ = self.settings.configRevision
         return 0
     }
 
     var attachedOpenAIDashboardSnapshot: OpenAIDashboardSnapshot? {
         guard self.openAIDashboardAttachmentAuthorized else { return nil }
         return self.openAIDashboard
+    }
+
+    private static func isRunningTestsProcess() -> Bool {
+        let environment = ProcessInfo.processInfo.environment
+        if environment["XCTestConfigurationFilePath"] != nil { return true }
+        if environment["XCTestSessionIdentifier"] != nil { return true }
+        if environment["SWIFT_TESTING_ENABLED"] != nil { return true }
+        return CommandLine.arguments.contains { argument in
+            argument.contains("xctest") || argument.contains("swift-testing")
+        }
+    }
+
+    /// Returns the login method (plan type) for the specified provider, if available.
+    private func loginMethod(for provider: UsageProvider) -> String? {
+        self.snapshots[provider]?.loginMethod(for: provider)
+    }
+
+    /// Returns true if the Claude account appears to be a subscription (Max, Pro, Ultra, Team).
+    /// Returns false for API users or when plan cannot be determined.
+    func isClaudeSubscription() -> Bool {
+        Self.isSubscriptionPlan(self.loginMethod(for: .claude))
+    }
+
+    /// Determines if a login method string indicates a Claude subscription plan.
+    /// Known subscription indicators: Max, Pro, Ultra, Team (case-insensitive).
+    nonisolated static func isSubscriptionPlan(_ loginMethod: String?) -> Bool {
+        ClaudePlan.isSubscriptionLoginMethod(loginMethod)
+    }
+
+    var preferredSnapshot: UsageSnapshot? {
+        for provider in self.enabledProviders() {
+            if let snap = self.snapshots[provider] { return snap }
+        }
+        return nil
     }
 }
 
@@ -268,6 +301,7 @@ final class UsageStore {
     /// Last observed usage fraction (0...1) per quota-warning lane, used to detect
     /// upward crossings of a quota_low hook rule's own threshold.
     @ObservationIgnored var quotaLowHookUsage: [QuotaWarningStateKey: Double] = [:]
+    @ObservationIgnored var predictivePaceWarningNotifiedKeys: Set<PredictivePaceWarningStateKey> = []
     @ObservationIgnored var lastPermissionPromptNotificationAt: [UsageProvider: Date] = [:]
     @ObservationIgnored var lastTokenFetchAt: [UsageProvider: Date] = [:]
     @ObservationIgnored var lastTokenFetchScope: [UsageProvider: String] = [:]
@@ -365,40 +399,6 @@ final class UsageStore {
         Task { await self.refresh() }
         self.startTimer()
         self.startTokenTimer()
-    }
-
-    private static func isRunningTestsProcess() -> Bool {
-        let environment = ProcessInfo.processInfo.environment
-        if environment["XCTestConfigurationFilePath"] != nil { return true }
-        if environment["XCTestSessionIdentifier"] != nil { return true }
-        if environment["SWIFT_TESTING_ENABLED"] != nil { return true }
-        return CommandLine.arguments.contains { argument in
-            argument.contains("xctest") || argument.contains("swift-testing")
-        }
-    }
-
-    /// Returns the login method (plan type) for the specified provider, if available.
-    private func loginMethod(for provider: UsageProvider) -> String? {
-        self.snapshots[provider]?.loginMethod(for: provider)
-    }
-
-    /// Returns true if the Claude account appears to be a subscription (Max, Pro, Ultra, Team).
-    /// Returns false for API users or when plan cannot be determined.
-    func isClaudeSubscription() -> Bool {
-        Self.isSubscriptionPlan(self.loginMethod(for: .claude))
-    }
-
-    /// Determines if a login method string indicates a Claude subscription plan.
-    /// Known subscription indicators: Max, Pro, Ultra, Team (case-insensitive).
-    nonisolated static func isSubscriptionPlan(_ loginMethod: String?) -> Bool {
-        ClaudePlan.isSubscriptionLoginMethod(loginMethod)
-    }
-
-    var preferredSnapshot: UsageSnapshot? {
-        for provider in self.enabledProviders() {
-            if let snap = self.snapshots[provider] { return snap }
-        }
-        return nil
     }
 
     var iconStyle: IconStyle {
@@ -864,6 +864,15 @@ final class UsageStore {
             onScreenAlertEnabled: self.settings.quotaWarningOnScreenAlertEnabled)
     }
 
+    func postPredictivePaceWarning(_ event: PredictivePaceWarningEvent, provider: UsageProvider, now: Date) {
+        self.sessionQuotaNotifier.postPredictivePaceWarning(
+            event: event,
+            provider: provider,
+            soundEnabled: self.settings.quotaWarningSoundEnabled,
+            onScreenAlertEnabled: self.settings.quotaWarningOnScreenAlertEnabled,
+            now: now)
+    }
+
     func handleSessionQuotaTransition(provider: UsageProvider, snapshot: UsageSnapshot) {
         // Session quota notifications are tied to the primary session window. Copilot free plans can
         // expose only chat quota, so allow Copilot to fall back to secondary for transition tracking.
@@ -1114,6 +1123,7 @@ extension UsageStore {
                 .deepgram: "Deepgram debug log not yet implemented",
                 .chutes: "Chutes debug log not yet implemented",
                 .clawrouter: "ClawRouter debug log not yet implemented",
+                .wayfinder: "Wayfinder debug log not yet implemented",
             ]
             let buildText = {
                 switch provider {
@@ -1195,7 +1205,7 @@ extension UsageStore {
                      .sakana, .abacus, .mistral, .codebuff, .crof, .windsurf, .venice, .manus, .commandcode, .qoder,
                      .stepfun,
                      .bedrock, .grok, .groq, .t3chat, .llmproxy, .litellm, .zed, .deepgram, .poe, .chutes,
-                     .clawrouter:
+                     .clawrouter, .wayfinder:
                     return unimplementedDebugLogMessages[provider] ?? "Debug log not yet implemented"
                 }
             }
@@ -1601,6 +1611,10 @@ extension UsageStore {
             let durationText = String(format: "%.2f", duration)
             let message = "cost usage failed provider=\(providerText) duration=\(durationText)s error=\(msg)"
             self.tokenCostLogger.error(message)
+            if Self.tokenFetchFailureAllowsEarlyRetry(error) {
+                self.lastTokenFetchAt.removeValue(forKey: provider)
+                self.lastTokenFetchScope.removeValue(forKey: provider)
+            }
             let hadPriorData = self.tokenSnapshots[provider] != nil
             let shouldSurface = self.tokenFailureGates[provider]?
                 .shouldSurfaceError(onFailureWithPriorData: hadPriorData) ?? true
@@ -1611,5 +1625,12 @@ extension UsageStore {
                 self.tokenErrors[provider] = nil
             }
         }
+    }
+
+    /// Fast failures may retry on the next scheduled pass instead of waiting out the fetch
+    /// TTL; timed-out scans keep the TTL so a slow corpus cannot thrash back-to-back rescans.
+    nonisolated static func tokenFetchFailureAllowsEarlyRetry(_ error: Error) -> Bool {
+        if case CostUsageError.timedOut = error { return false }
+        return true
     }
 }

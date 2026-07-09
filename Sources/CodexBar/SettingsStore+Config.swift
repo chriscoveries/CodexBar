@@ -27,20 +27,45 @@ extension SettingsStore {
     }
 
     func setQuotaWarningThresholds(provider: UsageProvider, window: QuotaWarningWindow, thresholds: [Int]?) {
+        let sanitizedThresholds = thresholds.map(QuotaWarningThresholds.sanitized)
+        let currentThresholds = self.quotaWarningWindowConfig(provider: provider, window: window)?
+            .thresholds
+            .map(QuotaWarningThresholds.sanitized)
+        guard currentThresholds != sanitizedThresholds else { return }
+
         self.updateProviderConfig(provider: provider) { entry in
             var config = entry.quotaWarnings ?? QuotaWarningConfig()
             switch window {
             case .session:
                 var windowConfig = config.session ?? QuotaWarningWindowConfig()
-                windowConfig.thresholds = thresholds.map(QuotaWarningThresholds.sanitized)
+                windowConfig.thresholds = sanitizedThresholds
                 config.session = windowConfig.hasOverride ? windowConfig : nil
             case .weekly:
                 var windowConfig = config.weekly ?? QuotaWarningWindowConfig()
-                windowConfig.thresholds = thresholds.map(QuotaWarningThresholds.sanitized)
+                windowConfig.thresholds = sanitizedThresholds
                 config.weekly = windowConfig.hasOverride ? windowConfig : nil
             }
             entry.quotaWarnings = config.isEmpty ? nil : config
         }
+    }
+
+    func setQuotaWarningThresholdsIfOverridden(
+        provider: UsageProvider,
+        window: QuotaWarningWindow,
+        thresholds: [Int]?)
+    {
+        guard let windowConfig = self.quotaWarningWindowConfig(provider: provider, window: window),
+              windowConfig.hasOverride
+        else { return }
+
+        let sanitizedThresholds = thresholds.map(QuotaWarningThresholds.sanitized)
+        let currentThresholds = windowConfig.thresholds.map(QuotaWarningThresholds.sanitized)
+        let inheritedThresholds = QuotaWarningThresholds.sanitized(self.quotaWarningThresholds(window))
+        if currentThresholds == nil, sanitizedThresholds == inheritedThresholds {
+            return
+        }
+
+        self.setQuotaWarningThresholds(provider: provider, window: window, thresholds: thresholds)
     }
 
     func setQuotaWarningOverride(
@@ -87,11 +112,7 @@ extension SettingsStore {
     // MARK: - Hooks
 
     var hooksConfig: HooksConfig {
-        // Observe both revisions: local hook edits bump hooksRevision (no provider
-        // refresh), external config syncs bump configRevision.
-        _ = self.hooksRevision
-        _ = self.configRevision
-        return self.config.hooks ?? HooksConfig()
+        self.configSnapshot.hooks ?? HooksConfig()
     }
 
     var hooksEnabled: Bool {
@@ -124,17 +145,6 @@ extension SettingsStore {
         }
     }
 
-    private func updateHooks(_ mutate: (inout HooksConfig) -> Void) {
-        guard !self.configLoading else { return }
-        // Hooks never affect provider fetching, so persist and notify the UI without
-        // bumping configRevision (which would trigger a provider refresh).
-        var hooks = self.config.hooks ?? HooksConfig()
-        mutate(&hooks)
-        self.config.hooks = (hooks.enabled || !hooks.events.isEmpty) ? hooks : nil
-        self.schedulePersistConfig()
-        self.hooksRevision &+= 1
-    }
-
     var tokenAccountsByProvider: [UsageProvider: ProviderTokenAccountData] {
         get {
             Dictionary(uniqueKeysWithValues: self.configSnapshot.providers.compactMap { entry in
@@ -144,6 +154,21 @@ extension SettingsStore {
         }
         set {
             self.updateProviderTokenAccounts(newValue)
+        }
+    }
+}
+
+extension SettingsStore {
+    private func quotaWarningWindowConfig(
+        provider: UsageProvider,
+        window: QuotaWarningWindow) -> QuotaWarningWindowConfig?
+    {
+        let config = self.quotaWarningConfig(for: provider)
+        switch window {
+        case .session:
+            return config.session
+        case .weekly:
+            return config.weekly
         }
     }
 }

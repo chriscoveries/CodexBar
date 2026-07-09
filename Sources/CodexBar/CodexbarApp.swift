@@ -428,6 +428,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func handleSessionLimitResetNotification(_ notification: Notification) {
         guard let event = notification.object as? SessionLimitResetEvent else { return }
+        // Emit the hook regardless of the confetti preference; hooks have their own switch.
+        self.store?.emitQuotaResetHook(
+            provider: event.provider,
+            window: .session,
+            usedPercent: event.usedPercent,
+            accountLabel: event.accountLabel)
         guard self.settings?.confettiOnSessionLimitResetsEnabled == true else { return }
         self.playLimitResetConfetti(
             provider: event.provider,
@@ -437,6 +443,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func handleWeeklyLimitResetNotification(_ notification: Notification) {
         guard let event = notification.object as? WeeklyLimitResetEvent else { return }
+        self.store?.emitQuotaResetHook(
+            provider: event.provider,
+            window: .weekly,
+            usedPercent: event.usedPercent,
+            accountLabel: event.accountLabel)
         guard self.settings?.confettiOnWeeklyLimitResetsEnabled == true else { return }
         self.playLimitResetConfetti(
             provider: event.provider,
