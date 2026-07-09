@@ -464,8 +464,10 @@
 "quota_warning_off" = "关闭";
 "quota_warning_inherited" = "继承：%@";
 "quota_warning_depleted_only" = "仅耗尽时";
-"quota_warning_upper" = "上限";
+"quota_warning_upper" = "较高";
 "quota_warning_lower" = "下限";
+"quota_warning_warning" = "警告";
+"quota_warning_critical" = "严重";
 "apply" = "应用";
 "quit_app" = "退出 CodexBar";
 "tab_general" = "通用";

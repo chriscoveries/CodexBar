@@ -456,8 +456,10 @@
 "quota_warning_off" = "Desactivat";
 "quota_warning_inherited" = "Heretat: %@";
 "quota_warning_depleted_only" = "només esgotat";
-"quota_warning_upper" = "Superior";
+"quota_warning_upper" = "Més alt";
 "quota_warning_lower" = "Inferior";
+"quota_warning_warning" = "Avís";
+"quota_warning_critical" = "Crític";
 "apply" = "Apliqueu";
 "quit_app" = "Sortiu del CodexBar";
 
