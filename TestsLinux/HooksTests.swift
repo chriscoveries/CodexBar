@@ -115,12 +115,32 @@ struct HooksTests {
     // MARK: - Runner
 
     @Test
-    func `runner executes command and passes environment`() async throws {
+    func `only storm-prone events are rate limited`() {
+        #expect(HookEventType.refreshFailed.isRateLimited)
+        #expect(HookEventType.providerUnavailable.isRateLimited)
+        #expect(!HookEventType.quotaLow.isRateLimited)
+        #expect(!HookEventType.quotaReached.isRateLimited)
+        #expect(!HookEventType.quotaReset.isRateLimited)
+        #expect(!HookEventType.providerRecovered.isRateLimited)
+    }
+
+    @Test
+    func `runner executes command and passes event environment`() async throws {
         // /usr/bin/env prints the environment; assert our injected vars reach the child.
         let rule = HookRule(event: .quotaReached, executable: "/usr/bin/env")
         let result = try await HookRunner.run(rule: rule, event: self.event())
         #expect(result.stdout.contains("CODEXBAR_EVENT=quota_reached"))
         #expect(result.stdout.contains("CODEXBAR_PROVIDER=codex"))
+    }
+
+    @Test
+    func `runner does not forward secrets from the base environment`() async throws {
+        let rule = HookRule(event: .quotaReached, executable: "/usr/bin/env")
+        let base = ["PATH": "/usr/bin:/bin", "ANTHROPIC_API_KEY": "sk-should-not-leak"]
+        let result = try await HookRunner.run(rule: rule, event: self.event(), baseEnvironment: base)
+        #expect(result.stdout.contains("PATH=/usr/bin:/bin"))     // safe var forwarded
+        #expect(!result.stdout.contains("sk-should-not-leak"))     // secret dropped
+        #expect(!result.stdout.contains("ANTHROPIC_API_KEY"))
     }
 
     @Test

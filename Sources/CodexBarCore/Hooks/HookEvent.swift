@@ -11,6 +11,19 @@ public enum HookEventType: String, Codable, Sendable, CaseIterable {
     case providerUnavailable = "provider_unavailable"
     case providerRecovered = "provider_recovered"
     case refreshFailed = "refresh_failed"
+
+    /// Events that can repeat on every refresh while a condition persists, so they
+    /// get the rate-limiter backstop. Quota events dedupe upstream and must not be
+    /// throttled here, or a lower remaining-quota warning crossing within the
+    /// window would be dropped.
+    var isRateLimited: Bool {
+        switch self {
+        case .providerUnavailable, .refreshFailed:
+            true
+        case .quotaLow, .quotaReached, .quotaReset, .providerRecovered:
+            false
+        }
+    }
 }
 
 /// A single quota/provider event, with the metadata handed to an external hook

@@ -10,6 +10,15 @@ import Foundation
 public enum HookRunner {
     private static let log = CodexBarLog.logger(LogCategories.hooks)
 
+    /// Environment keys forwarded to a hook. Deliberately narrow: CodexBar's own
+    /// process environment may hold provider API keys/tokens, and hooks must never
+    /// receive secrets. Only these general-purpose vars pass through, plus the
+    /// event's own `CODEXBAR_*` values.
+    private static let forwardedEnvironmentKeys: Set<String> = [
+        "PATH", "HOME", "USER", "LOGNAME", "SHELL",
+        "LANG", "LC_ALL", "LC_CTYPE", "TERM", "TMPDIR",
+    ]
+
     /// Runs a single rule for an event to completion. Throws `SubprocessRunnerError`
     /// on a missing/invalid executable, timeout, or non-zero exit.
     @discardableResult
@@ -18,7 +27,7 @@ public enum HookRunner {
         event: HookEvent,
         baseEnvironment: [String: String] = ProcessInfo.processInfo.environment) async throws -> SubprocessResult
     {
-        var environment = baseEnvironment
+        var environment = baseEnvironment.filter { Self.forwardedEnvironmentKeys.contains($0.key) }
         for (key, value) in event.environmentVariables() {
             environment[key] = value
         }
@@ -50,7 +59,11 @@ public enum HookRunner {
     {
         let rules = config.matchingRules(for: event)
         guard !rules.isEmpty else { return }
-        guard await rateLimiter.allow(event) else {
+        // Quota events already dedupe upstream (threshold-crossing, depletion, and
+        // reset-edge state), and rate-limiting them here would suppress a lower
+        // remaining-quota warning that crosses within the window. Only the events
+        // that can repeat every refresh while a condition persists are throttled.
+        if event.event.isRateLimited, await !rateLimiter.allow(event) {
             self.log.debug("suppressed by rate limiter", metadata: ["event": "\(event.event.rawValue)"])
             return
         }
@@ -64,13 +77,26 @@ public enum HookRunner {
                         "provider": "\(event.provider)",
                     ])
             } catch {
+                // Redacted: never log hook stderr (it can echo the payload/env). Log
+                // only the event and a coarse failure reason.
                 self.log.warning(
                     "hook failed",
                     metadata: [
                         "event": "\(event.event.rawValue)",
-                        "error": "\(error.localizedDescription)",
+                        "provider": "\(event.provider)",
+                        "reason": "\(Self.redactedFailureReason(error))",
                     ])
             }
+        }
+    }
+
+    private static func redactedFailureReason(_ error: Error) -> String {
+        guard let error = error as? SubprocessRunnerError else { return "error" }
+        switch error {
+        case .binaryNotFound: return "executable not found"
+        case .launchFailed: return "launch failed"
+        case .timedOut: return "timed out"
+        case let .nonZeroExit(code, _): return "exit \(code)"
         }
     }
 }
