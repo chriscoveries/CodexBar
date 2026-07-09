@@ -208,6 +208,15 @@ struct PreferencesPaneSmokeTests {
     }
 
     @Test
+    func `quota warning inherited summary keeps additional active thresholds visible`() {
+        CodexBarLocalizationOverride.$appLanguage.withValue("en") {
+            #expect(
+                ProviderQuotaWarningSettingsView.thresholdText([80, 50, 20], enabled: true)
+                    == "Warning 80%, Critical 50%, 20%")
+        }
+    }
+
+    @Test
     func `language preference updates global localization resolver`() {
         let previousLanguage = UserDefaults.standard.object(forKey: "appLanguage")
         let previousAppleLanguages = UserDefaults.standard.object(forKey: "AppleLanguages")

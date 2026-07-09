@@ -126,7 +126,7 @@ struct ProviderQuotaWarningSettingsView: View {
         }
     }
 
-    private static func thresholdText(_ thresholds: [Int], enabled: Bool) -> String {
+    static func thresholdText(_ thresholds: [Int], enabled: Bool) -> String {
         guard enabled else { return L("quota_warning_off") }
         let activeThresholds = QuotaWarningThresholds.active(thresholds)
         guard let upperThreshold = activeThresholds.first else {
@@ -138,6 +138,7 @@ struct ProviderQuotaWarningSettingsView: View {
         if let lowerThreshold = activeThresholds.dropFirst().first {
             parts.append("\(L("quota_warning_critical")) \(lowerThreshold)%")
         }
+        parts.append(contentsOf: activeThresholds.dropFirst(2).map { "\($0)%" })
         return parts.joined(separator: ", ")
     }
 }
