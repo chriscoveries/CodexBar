@@ -353,8 +353,11 @@ extension ClaudeStatusProbe {
             // so scan a larger window than the original 3–4 lines.
             let window = lines.dropFirst(idx).prefix(12)
             for candidate in window {
-                let normalized = self.normalizedForLabelSearch(candidate)
-                if normalized.hasPrefix("current"), !normalized.contains(label) {
+                if self.crossesLabelBoundary(
+                    line: candidate,
+                    labelSubstring: labelSubstring,
+                    normalizedLabel: label)
+                {
                     break
                 }
                 if let pct = self.percentFromLine(candidate) {
@@ -707,9 +710,11 @@ extension ClaudeStatusProbe {
 
             let window = lines.dropFirst(idx).prefix(14)
             for candidate in window {
-                let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
-                let normalized = self.normalizedForLabelSearch(trimmed)
-                if normalized.hasPrefix("current"), !normalized.contains(label) {
+                if self.crossesLabelBoundary(
+                    line: candidate,
+                    labelSubstring: labelSubstring,
+                    normalizedLabel: label)
+                {
                     break
                 }
                 if let reset = self.resetFromLine(candidate) {
@@ -731,6 +736,20 @@ extension ClaudeStatusProbe {
         }
         guard let actualModel = self.weeklyModelName(from: line) else { return false }
         return self.normalizedForLabelSearch(actualModel) == self.normalizedForLabelSearch(expectedModel)
+    }
+
+    private static func crossesLabelBoundary(
+        line: String,
+        labelSubstring: String,
+        normalizedLabel: String) -> Bool
+    {
+        let normalizedLine = self.normalizedForLabelSearch(line)
+        guard normalizedLine.hasPrefix("current") else { return false }
+        guard let expectedModel = self.weeklyModelName(from: labelSubstring) else {
+            return !normalizedLine.contains(normalizedLabel)
+        }
+        guard let actualModel = self.weeklyModelName(from: line) else { return true }
+        return self.normalizedForLabelSearch(actualModel) != self.normalizedForLabelSearch(expectedModel)
     }
 
     private static func weeklyModelName(from line: String) -> String? {

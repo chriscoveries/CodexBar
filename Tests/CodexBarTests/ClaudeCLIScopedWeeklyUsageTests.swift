@@ -182,6 +182,29 @@ struct ClaudeCLIScopedWeeklyUsageTests {
     }
 
     @Test
+    func `incomplete Opus panel does not consume prefixed scoped percentage`() throws {
+        let cliUsage = """
+        Current session
+        9% used
+
+        Current week (all models)
+        20% used
+
+        Current week (Opus)
+        rendering
+
+        Current week (Opus Test Variant)
+        42% used
+        """
+
+        let snapshot = try ClaudeStatusProbe.parse(text: cliUsage)
+
+        #expect(snapshot.opusPercentLeft == nil)
+        #expect(snapshot.extraRateWindows.map(\.title) == ["Opus Test Variant only"])
+        #expect(snapshot.extraRateWindows.first?.window.usedPercent == 42)
+    }
+
+    @Test
     func `later complete scoped panel replaces earlier complete value`() throws {
         let cliUsage = """
         Current session
