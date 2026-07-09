@@ -101,6 +101,7 @@ public enum CodexBarConfigValidator {
         }
 
         if let source = entry.source, source == .api,
+           self.providerRequiresAPIKey(provider),
            entry.apiKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true
         {
             issues.append(CodexBarConfigIssue(
@@ -243,6 +244,10 @@ public enum CodexBarConfigValidator {
 
     private static func providerSupportsEnterpriseHost(_ provider: UsageProvider) -> Bool {
         self.enterpriseHostProviders.contains(provider)
+    }
+
+    private static func providerRequiresAPIKey(_ provider: UsageProvider) -> Bool {
+        provider != .wayfinder
     }
 
     private static var enterpriseHostProviderList: String {

@@ -61,6 +61,18 @@ struct ConfigValidationTests {
     }
 
     @Test
+    func `allows credentialless Wayfinder API source`() {
+        var config = CodexBarConfig.makeDefault()
+        config.setProviderConfig(ProviderConfig(
+            id: .wayfinder,
+            source: .api,
+            enterpriseHost: "http://127.0.0.1:9191"))
+        let issues = CodexBarConfigValidator.validate(config)
+
+        #expect(!issues.contains(where: { $0.provider == .wayfinder && $0.code == "api_key_missing" }))
+    }
+
+    @Test
     func `reports invalid region`() {
         var config = CodexBarConfig.makeDefault()
         config.setProviderConfig(ProviderConfig(id: .minimax, region: "nowhere"))
