@@ -5,6 +5,7 @@
 ### Added
 - Agent Sessions: list and focus live local or SSH-discovered Codex and Claude Code sessions from the menu and CLI.
 - Claude CLI: surface model-scoped weekly limits alongside all-model usage without duplicating matching web limits. Thanks @janpollak!
+- Documentation: add detailed setup and troubleshooting references for Perplexity, Mistral, and Qoder. Thanks @kiranmagic7!
 
 ### Fixed
 - Display settings: keep display mode, work days, multi-account layout, and cost summary selectors interactive on macOS 27. Thanks @jordanschwartz-js!
