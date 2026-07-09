@@ -832,15 +832,25 @@ extension ClaudeStatusProbe {
         calendar.timeZone = formatter.timeZone
 
         if let date = self.parseDate(raw, formats: Self.resetDateTimeWithMinutes, formatter: formatter) {
-            var comps = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+            var comps = calendar.dateComponents([.month, .day, .hour, .minute], from: date)
+            comps.year = calendar.component(.year, from: now)
             comps.second = 0
-            return self.bumpYearIfNeeded(calendar.date(from: comps), now: now, calendar: calendar)
+            return self.nearestOccurrence(
+                calendar.date(from: comps),
+                adjusting: .year,
+                now: now,
+                calendar: calendar)
         }
         if let date = self.parseDate(raw, formats: Self.resetDateTimeHourOnly, formatter: formatter) {
-            var comps = calendar.dateComponents([.year, .month, .day, .hour], from: date)
+            var comps = calendar.dateComponents([.month, .day, .hour], from: date)
+            comps.year = calendar.component(.year, from: now)
             comps.minute = 0
             comps.second = 0
-            return self.bumpYearIfNeeded(calendar.date(from: comps), now: now, calendar: calendar)
+            return self.nearestOccurrence(
+                calendar.date(from: comps),
+                adjusting: .year,
+                now: now,
+                calendar: calendar)
         }
 
         if let time = self.parseDate(raw, formats: Self.resetTimeWithMinutes, formatter: formatter) {
@@ -850,10 +860,7 @@ extension ClaudeStatusProbe {
                 minute: comps.minute ?? 0,
                 second: 0,
                 of: now) else { return nil }
-            if anchored >= now {
-                return anchored
-            }
-            return calendar.date(byAdding: .day, value: 1, to: anchored)
+            return self.nearestOccurrence(anchored, adjusting: .day, now: now, calendar: calendar)
         }
 
         guard let time = self.parseDate(raw, formats: Self.resetTimeHourOnly, formatter: formatter) else { return nil }
@@ -863,22 +870,28 @@ extension ClaudeStatusProbe {
             minute: 0,
             second: 0,
             of: now) else { return nil }
-        if anchored >= now {
-            return anchored
-        }
-        return calendar.date(byAdding: .day, value: 1, to: anchored)
+        return self.nearestOccurrence(anchored, adjusting: .day, now: now, calendar: calendar)
     }
 
-    /// Yearless dates parsed just before New Year's can otherwise land nearly a year in the past.
-    private static func bumpYearIfNeeded(_ date: Date?, now: Date, calendar: Calendar) -> Date? {
+    /// Yearless and time-only resets describe nearby quota boundaries, not distant calendar events.
+    private static func nearestOccurrence(
+        _ date: Date?,
+        adjusting component: Calendar.Component,
+        now: Date,
+        calendar: Calendar) -> Date?
+    {
         guard let date else { return nil }
-        if date >= now {
-            return date
+        let candidates = (-1...1).compactMap { offset in
+            calendar.date(byAdding: component, value: offset, to: date)
         }
-        guard now.timeIntervalSince(date) > 180 * 24 * 60 * 60 else {
-            return date
+        return candidates.min { lhs, rhs in
+            let lhsDistance = abs(lhs.timeIntervalSince(now))
+            let rhsDistance = abs(rhs.timeIntervalSince(now))
+            if lhsDistance != rhsDistance {
+                return lhsDistance < rhsDistance
+            }
+            return lhs >= now && rhs < now
         }
-        return calendar.date(byAdding: .year, value: 1, to: date)
     }
 
     private static let resetTimeWithMinutes = ["h:mma", "h:mm a", "HH:mm", "H:mm"]
