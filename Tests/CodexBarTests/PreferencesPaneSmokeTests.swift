@@ -268,11 +268,18 @@ struct PreferencesPaneSmokeTests {
         #expect(settings.resolvedQuotaWarningThresholds(provider: .codex, window: .session) == [70, 30])
         #expect(view.shouldCommitThresholdEditorOnDisappear(for: .session))
 
+        mode.wrappedValue = .custom
+        #expect(mode.wrappedValue == .custom)
+        #expect(settings.quotaWarningEnabled(provider: .codex, window: .session))
+        #expect(settings.explicitQuotaWarningThresholds(provider: .codex, window: .session) == [70, 30])
+        #expect(settings.resolvedQuotaWarningThresholds(provider: .codex, window: .session) == [70, 30])
+
         mode.wrappedValue = .global
         #expect(mode.wrappedValue == .global)
         #expect(!settings.hasQuotaWarningOverride(provider: .codex, window: .session))
         #expect(settings.quotaWarningEnabled(provider: .codex, window: .session))
         #expect(settings.resolvedQuotaWarningThresholds(provider: .codex, window: .session) == [50, 20])
+        #expect(!view.shouldCommitThresholdEditorOnDisappear(for: .session))
 
         mode.wrappedValue = .custom
         #expect(settings.providerConfig(for: .codex)?.quotaWarnings?.session?.thresholds == nil)
