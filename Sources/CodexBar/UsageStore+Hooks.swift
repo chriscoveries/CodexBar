@@ -176,6 +176,31 @@ extension UsageStore {
         }
     }
 
+    /// Coarse, non-secret category for a refresh failure. Never forwards the raw
+    /// error description, which can include provider response-body previews.
+    nonisolated static func refreshFailureHookStatus(_ error: Error) -> String {
+        if error is CancellationError { return "cancelled" }
+        if isPermissionPromptWaiting(error) { return "auth_required" }
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain {
+            switch nsError.code {
+            case NSURLErrorCancelled:
+                return "cancelled"
+            case NSURLErrorTimedOut:
+                return "timeout"
+            case NSURLErrorNotConnectedToInternet,
+                 NSURLErrorNetworkConnectionLost,
+                 NSURLErrorCannotConnectToHost,
+                 NSURLErrorCannotFindHost,
+                 NSURLErrorDNSLookupFailed:
+                return "offline"
+            default:
+                return "network_error"
+            }
+        }
+        return "error"
+    }
+
     /// Account label for a hook payload, redacted when the user hides personal info.
     func hookAccountDisplayName(provider: UsageProvider, snapshot: UsageSnapshot) -> String? {
         guard !self.settings.hidePersonalInfo else { return nil }
