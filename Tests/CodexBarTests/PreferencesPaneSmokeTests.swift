@@ -141,6 +141,44 @@ struct PreferencesPaneSmokeTests {
     }
 
     @Test
+    func `quota warning compact draft preserves untouched threshold lists`() {
+        var singleThreshold = QuotaWarningThresholdEditorText.Draft(thresholds: [50])
+        var severalThresholds = QuotaWarningThresholdEditorText.Draft(thresholds: [80, 50, 20])
+
+        #expect(singleThreshold.takeResolvedThresholds() == nil)
+        #expect(severalThresholds.takeResolvedThresholds() == nil)
+        #expect(singleThreshold.isDirty == false)
+        #expect(severalThresholds.isDirty == false)
+    }
+
+    @Test
+    func `quota warning compact draft commits only changed text`() {
+        var draft = QuotaWarningThresholdEditorText.Draft(thresholds: [80, 50, 20])
+
+        draft.setText("80", for: .upper)
+        #expect(draft.isDirty == false)
+
+        draft.setText("7a5", for: .upper)
+        #expect(draft.isDirty == true)
+        #expect(draft.takeResolvedThresholds() == [75, 50])
+        #expect(draft.isDirty == false)
+        #expect(draft.text(for: .upper) == "75")
+        #expect(draft.text(for: .lower) == "50")
+    }
+
+    @Test
+    func `quota warning compact draft treats reverted text as unchanged`() {
+        var draft = QuotaWarningThresholdEditorText.Draft(thresholds: [80, 50, 20])
+
+        draft.setText("79", for: .upper)
+        #expect(draft.isDirty == true)
+
+        draft.setText("80", for: .upper)
+        #expect(draft.isDirty == false)
+        #expect(draft.takeResolvedThresholds() == nil)
+    }
+
+    @Test
     func `quota warning compact window toggle keeps thresholds while disabled`() {
         let settings = Self.makeSettingsStore(suite: "PreferencesPaneSmokeTests-quota-warning-disabled-window")
 

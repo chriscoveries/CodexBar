@@ -219,9 +219,8 @@ private struct QuotaWarningThresholdField: View {
     let thresholds: () -> [Int]
     let setThresholds: ([Int]) -> Void
 
-    @State private var upperText: String = ""
-    @State private var lowerText: String = ""
-    @FocusState private var focusedField: Field?
+    @State private var draft = QuotaWarningThresholdEditorText.Draft()
+    @FocusState private var focusedField: QuotaWarningThresholdEditorText.Field?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
@@ -237,7 +236,7 @@ private struct QuotaWarningThresholdField: View {
         .onAppear { self.updateText(from: self.thresholds()) }
         .onChange(of: self.focusedField) { previous, current in
             if previous != nil, current == nil {
-                self.commit(normalizeText: true)
+                self.commit()
             }
         }
         .onChange(of: self.thresholds()) { _, value in
@@ -247,7 +246,7 @@ private struct QuotaWarningThresholdField: View {
         }
         .onDisappear {
             if self.shouldCommitOnDisappear() {
-                self.commit(normalizeText: true)
+                self.commit()
             }
         }
         .background(self.focusMonitor)
@@ -276,7 +275,7 @@ private struct QuotaWarningThresholdField: View {
         self.thresholdInput(
             label: L("quota_warning_warning"),
             placeholder: "50",
-            text: self.$upperText,
+            text: self.thresholdTextBinding(.upper),
             field: .upper)
     }
 
@@ -284,17 +283,22 @@ private struct QuotaWarningThresholdField: View {
         self.thresholdInput(
             label: L("quota_warning_critical"),
             placeholder: "20",
-            text: self.$lowerText,
+            text: self.thresholdTextBinding(.lower),
             field: .lower)
     }
 
-    private func thresholdInput(label: String, placeholder: String, text: Binding<String>, field: Field) -> some View {
+    private func thresholdInput(
+        label: String,
+        placeholder: String,
+        text: Binding<String>,
+        field: QuotaWarningThresholdEditorText.Field) -> some View
+    {
         HStack(alignment: .firstTextBaseline, spacing: 5) {
             Text(label)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 
-            TextField(label, text: self.thresholdTextBinding(text), prompt: Text(verbatim: placeholder))
+            TextField(label, text: text, prompt: Text(verbatim: placeholder))
                 .labelsHidden()
                 .textFieldStyle(.roundedBorder)
                 .font(.footnote)
@@ -302,7 +306,7 @@ private struct QuotaWarningThresholdField: View {
                 .frame(width: Self.fieldWidth)
                 .focused(self.$focusedField, equals: field)
                 .onSubmit {
-                    self.commit(normalizeText: true)
+                    self.commit()
                     self.focusedField = nil
                 }
                 .accessibilityLabel(Text(self.accessibilityLabel(for: label)))
@@ -313,40 +317,26 @@ private struct QuotaWarningThresholdField: View {
         }
     }
 
-    private func thresholdTextBinding(_ text: Binding<String>) -> Binding<String> {
+    private func thresholdTextBinding(_ field: QuotaWarningThresholdEditorText.Field) -> Binding<String> {
         Binding(
-            get: { text.wrappedValue },
-            set: { value in
-                let filtered = QuotaWarningThresholdEditorText.filteredIntegerText(value)
-                text.wrappedValue = filtered
-            })
+            get: { self.draft.text(for: field) },
+            set: { self.draft.setText($0, for: field) })
     }
 
-    private func commit(normalizeText: Bool) {
-        let sanitized = QuotaWarningThresholdEditorText.resolvedThresholds(
-            upperText: self.upperText,
-            lowerText: self.lowerText)
+    private func commit() {
+        guard let sanitized = self.draft.takeResolvedThresholds() else { return }
         self.setThresholds(sanitized)
-        if normalizeText, self.focusedField == nil {
-            self.updateText(from: sanitized)
-        }
+        self.updateText(from: sanitized)
     }
 
     private func updateText(from thresholds: [Int]) {
-        let pair = QuotaWarningThresholdEditorText.displayText(from: thresholds)
-        self.upperText = pair.upper.map(String.init) ?? ""
-        self.lowerText = pair.lower.map(String.init) ?? ""
+        self.draft.update(from: thresholds)
     }
 
     private func accessibilityLabel(for label: String) -> String {
         let context = self.title.isEmpty ? self.accessibilityContext : self.title
         guard !context.isEmpty else { return label }
         return "\(context), \(label)"
-    }
-
-    private enum Field: Hashable {
-        case upper
-        case lower
     }
 
     @ViewBuilder
@@ -466,6 +456,61 @@ extension NSView {
 #endif
 
 enum QuotaWarningThresholdEditorText {
+    enum Field: Hashable {
+        case upper
+        case lower
+    }
+
+    struct Draft {
+        private(set) var upperText: String
+        private(set) var lowerText: String
+        private let initialUpperText: String
+        private let initialLowerText: String
+
+        var isDirty: Bool {
+            self.upperText != self.initialUpperText || self.lowerText != self.initialLowerText
+        }
+
+        init(thresholds: [Int] = QuotaWarningThresholds.defaults) {
+            let pair = QuotaWarningThresholdEditorText.displayText(from: thresholds)
+            let upperText = pair.upper.map(String.init) ?? ""
+            let lowerText = pair.lower.map(String.init) ?? ""
+            self.upperText = upperText
+            self.lowerText = lowerText
+            self.initialUpperText = upperText
+            self.initialLowerText = lowerText
+        }
+
+        func text(for field: Field) -> String {
+            switch field {
+            case .upper: self.upperText
+            case .lower: self.lowerText
+            }
+        }
+
+        mutating func setText(_ value: String, for field: Field) {
+            let filtered = QuotaWarningThresholdEditorText.filteredIntegerText(value)
+            guard self.text(for: field) != filtered else { return }
+            switch field {
+            case .upper: self.upperText = filtered
+            case .lower: self.lowerText = filtered
+            }
+        }
+
+        mutating func update(from thresholds: [Int]) {
+            self = Draft(thresholds: thresholds)
+        }
+
+        mutating func takeResolvedThresholds() -> [Int]? {
+            guard self.isDirty else { return nil }
+            let thresholds = QuotaWarningThresholdEditorText.resolvedThresholds(
+                upperText: self.upperText,
+                lowerText: self.lowerText)
+            self.update(from: thresholds)
+            return thresholds
+        }
+    }
+
     static func displayText(from thresholds: [Int]) -> (upper: Int?, lower: Int?) {
         let sanitized = QuotaWarningThresholds.sanitized(thresholds)
         return (sanitized.first, sanitized.dropFirst().first)
