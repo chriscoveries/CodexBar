@@ -1428,11 +1428,17 @@ extension ClaudeUsageFetcher {
         guard !web.isEmpty else { return primary }
 
         let primaryScopedKeys = Set(primary.compactMap(self.scopedExtraRateWindowMergeKey))
+        var webScopedIDsByKey: [String: Set<String>] = [:]
+        for window in web {
+            guard let scopedKey = self.scopedExtraRateWindowMergeKey(window) else { continue }
+            webScopedIDsByKey[scopedKey, default: []].insert(window.id)
+        }
         var seenIDs = Set(primary.map(\.id))
         var merged = primary
         for window in web where seenIDs.insert(window.id).inserted {
             if let scopedKey = self.scopedExtraRateWindowMergeKey(window),
-               primaryScopedKeys.contains(scopedKey)
+               primaryScopedKeys.contains(scopedKey),
+               webScopedIDsByKey[scopedKey]?.count == 1
             {
                 continue
             }

@@ -67,6 +67,37 @@ struct ClaudeCLIScopedWeeklyUsageTests {
     }
 
     @Test
+    func `compact scoped weekly label is parsed`() throws {
+        let snapshot = try ClaudeStatusProbe.parse(text: """
+        Current session
+        9% used
+
+        Currentweek(Fable)
+        68% used
+        """)
+
+        #expect(snapshot.extraRateWindows.map(\.title) == ["Fable only"])
+        #expect(snapshot.extraRateWindows.first?.window.usedPercent == 68)
+    }
+
+    @Test
+    func `overlapping scoped model names do not cross panel boundaries`() throws {
+        let snapshot = try ClaudeStatusProbe.parse(text: """
+        Current session
+        9% used
+
+        Current week (Example Model)
+        rendering
+
+        Current week (Example Model Plus)
+        42% used
+        """)
+
+        #expect(snapshot.extraRateWindows.map(\.title) == ["Example Model Plus only"])
+        #expect(snapshot.extraRateWindows.first?.window.usedPercent == 42)
+    }
+
+    @Test
     func `later complete scoped panel replaces partial redraw`() throws {
         let spacer = Array(repeating: "rendering", count: 14).joined(separator: "\n")
         let cliUsage = """
@@ -171,6 +202,38 @@ struct ClaudeCLIScopedWeeklyUsageTests {
             web: webLimits)
 
         #expect(merged.map(\.id) == [
+            "claude-weekly-scoped-first-id",
+            "claude-weekly-scoped-second-id",
+        ])
+    }
+
+    @Test
+    func `ambiguous same title web limits survive CLI merge`() {
+        let cli = NamedRateWindow(
+            id: "claude-weekly-scoped-example-model",
+            title: "Example Model only",
+            window: RateWindow(
+                usedPercent: 20,
+                windowMinutes: 7 * 24 * 60,
+                resetsAt: nil,
+                resetDescription: nil))
+        let webLimits = ["first-id", "second-id"].map { id in
+            NamedRateWindow(
+                id: "claude-weekly-scoped-\(id)",
+                title: "Example Model only",
+                window: RateWindow(
+                    usedPercent: 25,
+                    windowMinutes: 7 * 24 * 60,
+                    resetsAt: nil,
+                    resetDescription: nil))
+        }
+
+        let merged = ClaudeUsageFetcher._mergeExtraRateWindowsForTesting(
+            primary: [cli],
+            web: webLimits)
+
+        #expect(merged.map(\.id) == [
+            "claude-weekly-scoped-example-model",
             "claude-weekly-scoped-first-id",
             "claude-weekly-scoped-second-id",
         ])

@@ -403,20 +403,23 @@ extension ClaudeStatusProbe {
 
     private static func extractScopedWeeklyUsages(context: LabelSearchContext) -> [ScopedWeeklyUsage] {
         guard let regex = try? NSRegularExpression(
-            pattern: #"current\s+week\s*\(([^)]+)\)"#,
+            pattern: #"current\s*week\s*\(([^)]+)\)"#,
             options: [.caseInsensitive])
         else { return [] }
 
-        var usageIndexByModel: [String: Int] = [:]
-        var usages: [ScopedWeeklyUsage] = []
-        for (index, line) in context.lines.enumerated() {
+        func extractModelName(from line: String) -> String? {
             let range = NSRange(line.startIndex..<line.endIndex, in: line)
             guard let match = regex.firstMatch(in: line, options: [], range: range),
                   match.numberOfRanges >= 2,
                   let modelRange = Range(match.range(at: 1), in: line)
-            else { continue }
+            else { return nil }
+            return String(line[modelRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
 
-            let modelName = String(line[modelRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+        var usageIndexByModel: [String: Int] = [:]
+        var usages: [ScopedWeeklyUsage] = []
+        for (index, line) in context.lines.enumerated() {
+            guard let modelName = extractModelName(from: line) else { continue }
             let normalizedModel = self.normalizedForLabelSearch(modelName)
             guard normalizedModel != "allmodels", !normalizedModel.isEmpty else { continue }
 
@@ -424,8 +427,9 @@ extension ClaudeStatusProbe {
             var percentLeft: Int?
             var resetDescription: String?
             for candidate in window {
-                let normalized = self.normalizedForLabelSearch(candidate)
-                if normalized.hasPrefix("currentweek"), !normalized.contains(normalizedModel) {
+                if let candidateModel = extractModelName(from: candidate),
+                   self.normalizedForLabelSearch(candidateModel) != normalizedModel
+                {
                     break
                 }
                 if percentLeft == nil {
