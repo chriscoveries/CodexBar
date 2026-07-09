@@ -717,10 +717,7 @@ enum CLIRenderer {
     {
         guard let usage = snapshot.wayfinderUsage else { return }
 
-        var gatewayValue = "\(usage.gatewayStatus) · \(usage.modelCountLabel)"
-        if usage.offline { gatewayValue += " · offline" }
-        if usage.dryRun { gatewayValue += " · dry run" }
-        lines.append(self.labelValueLine("Gateway", value: gatewayValue, useColor: useColor))
+        lines.append(self.labelValueLine("Gateway", value: usage.gatewaySummary, useColor: useColor))
 
         if let routed = usage.routedSummary {
             lines.append(self.labelValueLine("Routed", value: routed, useColor: useColor))

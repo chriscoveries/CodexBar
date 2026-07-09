@@ -5,14 +5,8 @@ extension MenuDescriptor {
         entries: inout [Entry],
         usage: WayfinderUsageSnapshot)
     {
-        if let routed = usage.routedSummary {
-            entries.append(.text("Routed: \(routed)", .secondary))
-        }
-        if let saved = usage.savedSummary {
-            entries.append(.text("Saved: \(saved)", .secondary))
-        }
-        if let avgDecision = usage.avgDecisionSummary {
-            entries.append(.text("Avg decision: \(avgDecision)", .secondary))
+        for line in usage.displayLines {
+            entries.append(.text(line, .secondary))
         }
     }
 }

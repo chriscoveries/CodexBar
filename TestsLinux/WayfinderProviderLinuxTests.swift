@@ -27,6 +27,13 @@ struct WayfinderProviderLinuxTests {
         #expect(snapshot.routes.first { $0.name == "local" }?.requests == 10)
         #expect(snapshot.routes.first { $0.name == "cloud" }?.requests == 4)
         #expect(snapshot.statusLabel == "Local gateway")
+        #expect(snapshot.gatewaySummary == "ok · 2 models")
+        #expect(snapshot.displayLines == [
+            "Gateway: ok · 2 models",
+            "Routed: local: 10 · cloud: 4",
+            "Saved: <$0.01 · 61.5% vs always-cloud",
+            "Avg decision: 0.1 ms",
+        ])
 
         let avgMs = try #require(snapshot.avgDecisionMs)
         #expect(abs(avgMs - 0.0804) < 0.001)

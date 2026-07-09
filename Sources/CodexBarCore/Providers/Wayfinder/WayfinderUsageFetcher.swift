@@ -55,6 +55,40 @@ public struct WayfinderUsageSnapshot: Codable, Sendable, Equatable {
     public let avgDecisionMs: Double?
     public let updatedAt: Date
 
+    public init(
+        gatewayStatus: String,
+        offline: Bool,
+        dryRun: Bool,
+        missingKeys: [String],
+        modelCount: Int,
+        requests: Int,
+        tokens: Int,
+        realized: Double,
+        baseline: Double,
+        saved: Double,
+        savedPct: Double,
+        priced: Bool,
+        routes: [RouteSummary],
+        avgDecisionMs: Double?,
+        updatedAt: Date)
+    {
+        self.gatewayStatus = gatewayStatus
+        self.offline = offline
+        self.dryRun = dryRun
+        self.missingKeys = missingKeys
+        self.modelCount = modelCount
+        self.requests = requests
+        self.tokens = tokens
+        self.realized = realized
+        self.baseline = baseline
+        self.saved = saved
+        self.savedPct = savedPct
+        self.priced = priced
+        self.routes = routes
+        self.avgDecisionMs = avgDecisionMs
+        self.updatedAt = updatedAt
+    }
+
     public var statusLabel: String {
         if self.offline {
             return "Offline mode"
@@ -72,6 +106,31 @@ public struct WayfinderUsageSnapshot: Codable, Sendable, Equatable {
 
     public var modelCountLabel: String {
         self.modelCount == 1 ? "1 model" : "\(self.modelCount) models"
+    }
+
+    public var gatewaySummary: String {
+        var summary = "\(self.gatewayStatus) · \(self.modelCountLabel)"
+        if self.offline {
+            summary += " · offline"
+        }
+        if self.dryRun {
+            summary += " · dry run"
+        }
+        return summary
+    }
+
+    public var displayLines: [String] {
+        var lines = ["Gateway: \(self.gatewaySummary)"]
+        if let routed = self.routedSummary {
+            lines.append("Routed: \(routed)")
+        }
+        if let saved = self.savedSummary {
+            lines.append("Saved: \(saved)")
+        }
+        if let avgDecision = self.avgDecisionSummary {
+            lines.append("Avg decision: \(avgDecision)")
+        }
+        return lines
     }
 
     /// "local: 10 · cloud: 4" — the gateway's own configured route names, not a guessed
