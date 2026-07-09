@@ -78,6 +78,8 @@ If automatic import fails:
 
 ## Project Structure
 
+Key source, test, and packaging paths (not exhaustive):
+
 ```
 CodexBar/
 ├── Sources/CodexBar/          # Main app (SwiftUI + AppKit)
@@ -95,7 +97,8 @@ CodexBar/
 │   └── Vendored/              # Embedded support code
 ├── Sources/CodexBarCLI/       # Bundled codexbar command-line tool
 ├── Sources/CodexBarWidget/    # WidgetKit support
-├── Tests/CodexBarTests/       # XCTest suite
+├── WidgetExtension/           # Xcode wrapper for the packaged widget extension
+├── Tests/CodexBarTests/       # macOS app/core test suite (XCTest + Swift Testing)
 ├── TestsLinux/                # Linux-specific CLI/core test coverage
 └── Scripts/                   # Build and packaging scripts
 ```
@@ -103,14 +106,18 @@ CodexBar/
 ## Common Tasks
 
 ### Add a New Provider
+See the canonical [provider authoring guide](provider.md#adding-a-new-provider-current-flow) for the complete flow.
+
 1. Add the provider identity to `Sources/CodexBarCore/Providers/Providers.swift`.
-2. Add descriptor, fetcher/parser, settings reader, and status-probe code under
+2. Add the descriptor and the fetcher, parser, settings-reader, or status-probe pieces the provider needs under
    `Sources/CodexBarCore/Providers/YourProvider/`.
 3. Register the descriptor from `Sources/CodexBarCore/Providers/ProviderDescriptor.swift`.
-4. Add app-side settings/runtime glue under `Sources/CodexBar/Providers/YourProvider/` when the provider needs UI or
-   macOS-specific integration.
-5. Add icon assets under `Sources/CodexBar/Resources/`.
-6. Add focused tests under `Tests/CodexBarTests/` and, for CLI/core behavior that must run on Linux, `TestsLinux/`.
+4. Add an app-side `ProviderImplementation` under `Sources/CodexBar/Providers/YourProvider/`; implementations can use
+   protocol defaults when no custom UI or macOS integration is needed.
+5. Add the provider's exhaustive switch case to
+   `Sources/CodexBar/Providers/Shared/ProviderImplementationRegistry.swift`.
+6. Add icon assets under `Sources/CodexBar/Resources/`.
+7. Add focused tests under `Tests/CodexBarTests/` and, for CLI/core behavior that must run on Linux, `TestsLinux/`.
 
 ### Debug Cookie Issues
 1. Enable Debug → Logging → "Enable file logging" or raise verbosity in the app settings.
