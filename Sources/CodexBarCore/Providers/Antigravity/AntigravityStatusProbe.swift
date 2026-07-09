@@ -694,6 +694,48 @@ public struct AntigravityPlanInfoSummary: Sendable, Codable, Equatable {
     public let planShortName: String?
 }
 
+/// Parses Linux `/proc/net/tcp{,6}` output to recover the listening ports owned
+/// by a process. Used as a fallback for listening-port detection when `lsof` is
+/// unavailable. The parsing is platform-independent so it can be unit tested on
+/// any host.
+public enum ProcNetTCPListeningPortParser {
+    /// The `st` column value for a socket in the LISTEN state.
+    private static let listenState = "0A"
+
+    /// Extracts the socket inode from a `/proc/<pid>/fd` symlink destination such
+    /// as `socket:[12345]`. Returns nil for non-socket descriptors.
+    public static func socketInode(fromLink destination: String) -> String? {
+        let prefix = "socket:["
+        guard destination.hasPrefix(prefix), destination.hasSuffix("]") else { return nil }
+        let inode = destination.dropFirst(prefix.count).dropLast()
+        return inode.isEmpty ? nil : String(inode)
+    }
+
+    /// Returns the local ports of LISTEN sockets whose inode is in `socketInodes`.
+    ///
+    /// `content` is the raw text of `/proc/net/tcp` or `/proc/net/tcp6`. Each data
+    /// row encodes the local endpoint as `ADDRESS:PORT` with the port as a
+    /// big-endian hex value (for example `0100007F:1F90` → 8080), and the owning
+    /// socket inode in the tenth whitespace-separated column.
+    public static func listeningPorts(_ content: String, socketInodes: Set<String>) -> Set<Int> {
+        var ports: Set<Int> = []
+        for line in content.split(separator: "\n").dropFirst() {
+            let columns = line.split(separator: " ", omittingEmptySubsequences: true)
+            // Columns: sl local_address rem_address st ... uid timeout inode
+            guard columns.count > 9,
+                columns[3] == listenState,
+                socketInodes.contains(String(columns[9]))
+            else { continue }
+            let localAddress = columns[1]
+            guard let separator = localAddress.lastIndex(of: ":"),
+                let port = Int(localAddress[localAddress.index(after: separator)...], radix: 16)
+            else { continue }
+            ports.insert(port)
+        }
+        return ports
+    }
+}
+
 public enum AntigravityStatusProbeError: LocalizedError, Sendable, Equatable {
     case notRunning
     case missingCSRFToken
@@ -1195,10 +1237,22 @@ public struct AntigravityStatusProbe: Sendable {
             FileManager.default.isExecutableFile(atPath: $0)
         })
 
-        guard let lsof else {
-            throw AntigravityStatusProbeError.portDetectionFailed("lsof not available")
+        if let lsof {
+            return try await Self.lsofListeningPorts(lsof: lsof, pid: pid, timeout: timeout)
         }
-        return try await Self.lsofListeningPorts(lsof: lsof, pid: pid, timeout: timeout)
+
+        #if os(Linux)
+        // `lsof` is frequently absent on minimal Linux hosts. Fall back to the
+        // kernel's /proc interface, mirroring the /proc/<pid>/cwd fallback that
+        // LocalAgentSessionScanner.cwdByPID already uses when lsof is missing.
+        let ports = Self.procListeningPorts(pid: pid)
+        if ports.isEmpty {
+            throw AntigravityStatusProbeError.portDetectionFailed("no listening ports found")
+        }
+        return ports
+        #else
+        throw AntigravityStatusProbeError.portDetectionFailed("lsof not available")
+        #endif
     }
 
     private static func lsofListeningPorts(lsof: String, pid: Int, timeout: TimeInterval) async throws -> [Int] {
@@ -1222,6 +1276,36 @@ public struct AntigravityStatusProbe: Sendable {
         }
         return ports
     }
+
+    #if os(Linux)
+    /// Recovers the listening ports owned by `pid` by matching the process's
+    /// socket inodes (from /proc/<pid>/fd) against /proc/net/tcp{,6}.
+    private static func procListeningPorts(pid: Int) -> [Int] {
+        let inodes = Self.socketInodes(pid: pid)
+        guard !inodes.isEmpty else { return [] }
+        var ports: Set<Int> = []
+        for path in ["/proc/net/tcp", "/proc/net/tcp6"] {
+            guard let content = try? String(contentsOfFile: path, encoding: .utf8) else { continue }
+            ports.formUnion(ProcNetTCPListeningPortParser.listeningPorts(content, socketInodes: inodes))
+        }
+        return ports.sorted()
+    }
+
+    /// Collects the socket inodes referenced by the process's open descriptors.
+    private static func socketInodes(pid: Int) -> Set<String> {
+        let fdDirectory = "/proc/\(pid)/fd"
+        guard let entries = try? FileManager.default.contentsOfDirectory(atPath: fdDirectory) else { return [] }
+        var inodes: Set<String> = []
+        for entry in entries {
+            guard let destination = try? FileManager.default.destinationOfSymbolicLink(
+                atPath: "\(fdDirectory)/\(entry)"),
+                let inode = ProcNetTCPListeningPortParser.socketInode(fromLink: destination)
+            else { continue }
+            inodes.insert(inode)
+        }
+        return inodes
+    }
+    #endif
 
     private static func parseListeningPorts(_ output: String) -> [Int] {
         guard let regex = try? NSRegularExpression(pattern: #":(\d+)\s+\(LISTEN\)"#) else { return [] }
