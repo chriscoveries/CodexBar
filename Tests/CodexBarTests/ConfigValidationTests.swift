@@ -134,6 +134,19 @@ struct ConfigValidationTests {
     }
 
     @Test
+    func `unsupported enterprise host warning lists every supported provider`() throws {
+        var config = CodexBarConfig.makeDefault()
+        config.setProviderConfig(ProviderConfig(id: .gemini, enterpriseHost: "https://example.com"))
+        let issue = try #require(CodexBarConfigValidator.validate(config).first(where: {
+            $0.provider == .gemini && $0.code == "enterprise_host_unused"
+        }))
+
+        #expect(issue.message ==
+            "enterpriseHost is set but only azureopenai, clawrouter, copilot, kimi, litellm, llmproxy, and wayfinder " +
+                "support enterpriseHost.")
+    }
+
+    @Test
     func `allows OpenAI API project workspace ID`() {
         var config = CodexBarConfig.makeDefault()
         config.setProviderConfig(ProviderConfig(id: .openai, workspaceID: "proj_abc"))
