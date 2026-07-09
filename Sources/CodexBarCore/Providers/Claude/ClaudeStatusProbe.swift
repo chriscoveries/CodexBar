@@ -163,7 +163,9 @@ public struct ClaudeStatusProbe: Sendable {
         guard !removed.isEmpty else { return }
         Self.log.debug("Claude probe session artifacts removed", metadata: ["count": "\(removed.count)"])
     }
+}
 
+extension ClaudeStatusProbe {
     // MARK: - Parsing helpers
 
     private struct LabelSearchContext {
@@ -229,17 +231,21 @@ public struct ClaudeStatusProbe: Sendable {
         // Fallback: order-based percent scraping when labels are present but the surrounding layout moved.
         // Only apply the fallback when the corresponding label exists in the rendered panel; enterprise accounts
         // may omit the weekly panel entirely, and we should treat that as "unavailable" rather than guessing.
-        let compactContext = usagePanelText.lowercased().filter { !$0.isWhitespace }
-        let hasWeeklyLabel =
-            labelContext.contains("currentweek")
-            || compactContext.contains("currentweek")
+        let hasAllModelsWeeklyLabel = labelContext.contains(
+            self.normalizedForLabelSearch("Current week (all models)"))
         let hasOpusLabel = labelContext.contains("opus") || labelContext.contains("sonnet")
 
-        if sessionPct == nil || (hasWeeklyLabel && weeklyPct == nil) || (hasOpusLabel && opusPct == nil) {
+        if sessionPct == nil || (hasAllModelsWeeklyLabel && weeklyPct == nil) || (hasOpusLabel && opusPct == nil) {
             let ordered = self.allPercents(usagePanelText)
-            if sessionPct == nil, ordered.indices.contains(0) { sessionPct = ordered[0] }
-            if hasWeeklyLabel, weeklyPct == nil, ordered.indices.contains(1) { weeklyPct = ordered[1] }
-            if hasOpusLabel, opusPct == nil, ordered.indices.contains(2) { opusPct = ordered[2] }
+            if sessionPct == nil, ordered.indices.contains(0) {
+                sessionPct = ordered[0]
+            }
+            if hasAllModelsWeeklyLabel, weeklyPct == nil, ordered.indices.contains(1) {
+                weeklyPct = ordered[1]
+            }
+            if hasOpusLabel, opusPct == nil, ordered.indices.contains(2) {
+                opusPct = ordered[2]
+            }
         }
 
         let identity = Self.parseIdentity(usageText: clean, statusText: statusClean)
@@ -260,7 +266,7 @@ public struct ClaudeStatusProbe: Sendable {
         }
 
         let sessionReset = self.extractReset(labelSubstring: "Current session", context: labelContext)
-        let weeklyReset = hasWeeklyLabel
+        let weeklyReset = hasAllModelsWeeklyLabel
             ? self.extractReset(labelSubstring: "Current week (all models)", context: labelContext)
             : nil
         let opusReset = hasOpusLabel
@@ -351,7 +357,9 @@ public struct ClaudeStatusProbe: Sendable {
             // so scan a larger window than the original 3–4 lines.
             let window = lines.dropFirst(idx).prefix(12)
             for candidate in window {
-                if let pct = self.percentFromLine(candidate) { return pct }
+                if let pct = self.percentFromLine(candidate) {
+                    return pct
+                }
             }
         }
         return nil
@@ -380,7 +388,9 @@ public struct ClaudeStatusProbe: Sendable {
 
     private static func extractPercent(labelSubstrings: [String], context: LabelSearchContext) -> Int? {
         for label in labelSubstrings {
-            if let value = self.extractPercent(labelSubstring: label, context: context) { return value }
+            if let value = self.extractPercent(labelSubstring: label, context: context) {
+                return value
+            }
         }
         return nil
     }
@@ -397,7 +407,7 @@ public struct ClaudeStatusProbe: Sendable {
             options: [.caseInsensitive])
         else { return [] }
 
-        var seenModels: Set<String> = []
+        var usageIndexByModel: [String: Int] = [:]
         var usages: [ScopedWeeklyUsage] = []
         for (index, line) in context.lines.enumerated() {
             let range = NSRange(line.startIndex..<line.endIndex, in: line)
@@ -409,14 +419,15 @@ public struct ClaudeStatusProbe: Sendable {
             let modelName = String(line[modelRange]).trimmingCharacters(in: .whitespacesAndNewlines)
             let normalizedModel = self.normalizedForLabelSearch(modelName)
             guard normalizedModel != "allmodels", !normalizedModel.isEmpty else { continue }
-            guard seenModels.insert(normalizedModel).inserted else { continue }
 
             let window = context.lines.dropFirst(index).prefix(14)
             var percentLeft: Int?
             var resetDescription: String?
             for candidate in window {
                 let normalized = self.normalizedForLabelSearch(candidate)
-                if normalized.hasPrefix("currentweek"), !normalized.contains(normalizedModel) { break }
+                if normalized.hasPrefix("currentweek"), !normalized.contains(normalizedModel) {
+                    break
+                }
                 if percentLeft == nil {
                     percentLeft = self.percentFromLine(candidate)
                 }
@@ -425,10 +436,16 @@ public struct ClaudeStatusProbe: Sendable {
                 }
             }
             guard let percentLeft else { continue }
-            usages.append(ScopedWeeklyUsage(
+            let usage = ScopedWeeklyUsage(
                 modelName: modelName,
                 percentLeft: percentLeft,
-                resetDescription: resetDescription))
+                resetDescription: resetDescription)
+            if let existingIndex = usageIndexByModel[normalizedModel] {
+                usages[existingIndex] = usage
+            } else {
+                usageIndexByModel[normalizedModel] = usages.endIndex
+                usages.append(usage)
+            }
         }
         return usages
     }
@@ -476,7 +493,9 @@ public struct ClaudeStatusProbe: Sendable {
     }
 
     private static func percentFromLine(_ line: String, assumeRemainingWhenUnclear: Bool = false) -> Int? {
-        if self.isLikelyStatusContextLine(line) { return nil }
+        if self.isLikelyStatusContextLine(line) {
+            return nil
+        }
 
         // Allow optional Unicode whitespace before % to handle CLI formatting changes.
         let pattern = #"([0-9]{1,3}(?:\.[0-9]+)?)\p{Zs}*%"#
@@ -558,7 +577,9 @@ public struct ClaudeStatusProbe: Sendable {
                 return nil
             }
             // Suppress org if it’s just the email prefix (common in CLI panels).
-            if let email, orgText.lowercased().hasPrefix(email.lowercased()) { return nil }
+            if let email, orgText.lowercased().hasPrefix(email.lowercased()) {
+                return nil
+            }
             return orgText
         }()
         // Prefer explicit login method from /status, then fall back to /usage header heuristics.
@@ -567,7 +588,9 @@ public struct ClaudeStatusProbe: Sendable {
     }
 
     private static func extractUsageError(text: String) -> String? {
-        if let jsonHint = self.extractUsageErrorJSON(text: text) { return jsonHint }
+        if let jsonHint = self.extractUsageErrorJSON(text: text) {
+            return jsonHint
+        }
 
         let lower = text.lowercased()
         let compact = lower.filter { !$0.isWhitespace }
@@ -652,7 +675,9 @@ public struct ClaudeStatusProbe: Sendable {
             || normalized.contains("remaining") || normalized.contains("available")
         let loadingOnly = hasLoading && !hasUsageWindows
         guard hasUsageWindows || hasLoading else { return [] }
-        if loadingOnly { return [] }
+        if loadingOnly {
+            return []
+        }
         guard hasUsagePercentKeywords else { return [] }
 
         // Keep this strict to avoid matching Claude's status-line context meter (e.g. "0%") as session usage when the
@@ -686,8 +711,12 @@ public struct ClaudeStatusProbe: Sendable {
             for candidate in window {
                 let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
                 let normalized = self.normalizedForLabelSearch(trimmed)
-                if normalized.hasPrefix("current"), !normalized.contains(label) { break }
-                if let reset = self.resetFromLine(candidate) { return reset }
+                if normalized.hasPrefix("current"), !normalized.contains(label) {
+                    break
+                }
+                if let reset = self.resetFromLine(candidate) {
+                    return reset
+                }
             }
         }
         return nil
@@ -695,7 +724,9 @@ public struct ClaudeStatusProbe: Sendable {
 
     private static func extractReset(labelSubstrings: [String], context: LabelSearchContext) -> String? {
         for label in labelSubstrings {
-            if let value = self.extractReset(labelSubstring: label, context: context) { return value }
+            if let value = self.extractReset(labelSubstring: label, context: context) {
+                return value
+            }
         }
         return nil
     }
@@ -735,7 +766,9 @@ public struct ClaudeStatusProbe: Sendable {
             options: .regularExpression)
         let openCount = cleaned.count(where: { $0 == "(" })
         let closeCount = cleaned.count(where: { $0 == ")" })
-        if openCount > closeCount { cleaned.append(")") }
+        if openCount > closeCount {
+            cleaned.append(")")
+        }
         return cleaned
     }
 
@@ -770,7 +803,9 @@ public struct ClaudeStatusProbe: Sendable {
                 minute: comps.minute ?? 0,
                 second: 0,
                 of: now) else { return nil }
-            if anchored >= now { return anchored }
+            if anchored >= now {
+                return anchored
+            }
             return calendar.date(byAdding: .day, value: 1, to: anchored)
         }
 
@@ -781,14 +816,18 @@ public struct ClaudeStatusProbe: Sendable {
             minute: 0,
             second: 0,
             of: now) else { return nil }
-        if anchored >= now { return anchored }
+        if anchored >= now {
+            return anchored
+        }
         return calendar.date(byAdding: .day, value: 1, to: anchored)
     }
 
     /// Yearless dates parsed just before New Year's can otherwise land nearly a year in the past.
     private static func bumpYearIfNeeded(_ date: Date?, now: Date, calendar: Calendar) -> Date? {
         guard let date else { return nil }
-        if date >= now { return date }
+        if date >= now {
+            return date
+        }
         return calendar.date(byAdding: .year, value: 1, to: date)
     }
 
@@ -840,7 +879,9 @@ public struct ClaudeStatusProbe: Sendable {
     private static func parseDate(_ text: String, formats: [String], formatter: DateFormatter) -> Date? {
         for pattern in formats {
             formatter.dateFormat = pattern
-            if let date = formatter.date(from: text) { return date }
+            if let date = formatter.date(from: text) {
+                return date
+            }
         }
         return nil
     }
@@ -910,7 +951,9 @@ public struct ClaudeStatusProbe: Sendable {
     @MainActor private static var recentDumps: [String] = []
 
     @MainActor private static func recordDump(_ text: String) {
-        if self.recentDumps.count >= 5 { self.recentDumps.removeFirst() }
+        if self.recentDumps.count >= 5 {
+            self.recentDumps.removeFirst()
+        }
         self.recentDumps.append(text)
     }
 
@@ -962,8 +1005,12 @@ public struct ClaudeStatusProbe: Sendable {
         }
 
         var parts: [String] = []
-        if let message, !message.isEmpty { parts.append(message) }
-        if let code, !code.isEmpty { parts.append("(\(code))") }
+        if let message, !message.isEmpty {
+            parts.append(message)
+        }
+        if let code, !code.isEmpty {
+            parts.append("(\(code))")
+        }
 
         guard !parts.isEmpty else { return nil }
         let hint = parts.joined(separator: " ")
