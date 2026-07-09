@@ -151,6 +151,69 @@ struct OllamaUsageFetcherRetryMappingTests {
     }
 
     @Test
+    func `custom catalog derives validation on the same origin`() async throws {
+        let tagsURL = try #require(URL(string: "https://private.example/prefix/api/tags"))
+        let validationURL = try #require(URL(string: "https://private.example/prefix/api/web_search"))
+        let transport = ProviderHTTPTransportHandler { request in
+            let statusCode: Int
+            let data: Data
+            switch request.url {
+            case validationURL:
+                statusCode = 400
+                data = Data(#"{"error":"query is required"}"#.utf8)
+            case tagsURL:
+                statusCode = 200
+                data = Data(#"{"models":[{}]}"#.utf8)
+            default:
+                Issue.record("Unexpected Ollama API URL")
+                statusCode = 500
+                data = Data()
+            }
+            #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer private-key")
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: statusCode,
+                httpVersion: "HTTP/1.1",
+                headerFields: nil)!
+            return (data, response)
+        }
+
+        let snapshot = try await OllamaAPIUsageFetcher.fetchUsage(
+            apiKey: "private-key",
+            tagsURL: tagsURL,
+            transport: transport)
+
+        #expect(snapshot.modelCount == 1)
+    }
+
+    @Test
+    func `cross origin validation endpoint is rejected before sending credentials`() async throws {
+        let tagsURL = try #require(URL(string: "https://private.example/api/tags"))
+        let validationURL = try #require(URL(string: "https://ollama.com/api/web_search"))
+        let transport = ProviderHTTPTransportHandler { _ in
+            Issue.record("Cross-origin endpoints must fail before transport")
+            throw URLError(.badURL)
+        }
+
+        do {
+            _ = try await OllamaAPIUsageFetcher.fetchUsage(
+                apiKey: "private-key",
+                tagsURL: tagsURL,
+                validationURL: validationURL,
+                transport: transport)
+            Issue.record("Expected a same-origin validation error")
+        } catch let error as OllamaUsageError {
+            guard case let .networkError(message) = error else {
+                Issue.record("Expected networkError, got \(error)")
+                return
+            }
+            #expect(message == "Ollama key validation and model catalog endpoints must share an origin.")
+        } catch {
+            Issue.record("Expected OllamaUsageError.networkError, got \(error)")
+        }
+    }
+
+    @Test
     func `api validation preserves cancellation`() async {
         let transport = ProviderHTTPTransportHandler { _ in
             throw CancellationError()
@@ -187,6 +250,7 @@ struct OllamaUsageFetcherRetryMappingTests {
     @Test
     func `unproven validation status fails closed`() async throws {
         let validationURL = try #require(URL(string: "https://ollama.test/api/web_search"))
+        let tagsURL = try #require(URL(string: "https://ollama.test/api/tags"))
         let transport = ProviderHTTPTransportHandler { request in
             #expect(request.url == validationURL)
             let response = HTTPURLResponse(
@@ -200,6 +264,7 @@ struct OllamaUsageFetcherRetryMappingTests {
         do {
             _ = try await OllamaAPIUsageFetcher.fetchUsage(
                 apiKey: "ollama-test",
+                tagsURL: tagsURL,
                 validationURL: validationURL,
                 transport: transport)
             Issue.record("Expected an HTTP 422 network error")

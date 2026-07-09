@@ -716,7 +716,7 @@ public enum OllamaAPIUsageFetcher {
     public static func fetchUsage(
         apiKey: String,
         tagsURL: URL = Self.tagsURL,
-        validationURL: URL = Self.validationURL,
+        validationURL: URL? = nil,
         transport: any ProviderHTTPTransport = ProviderHTTPClient.shared,
         now: Date = Date()) async throws -> OllamaAPIUsageSnapshot
     {
@@ -725,7 +725,8 @@ public enum OllamaAPIUsageFetcher {
             throw OllamaUsageError.missingAPIKey
         }
 
-        try await self.validateAPIKey(trimmed, validationURL: validationURL, transport: transport)
+        let resolvedValidationURL = try self.resolveValidationURL(tagsURL: tagsURL, override: validationURL)
+        try await self.validateAPIKey(trimmed, validationURL: resolvedValidationURL, transport: transport)
 
         var request = URLRequest(url: tagsURL)
         request.httpMethod = "GET"
@@ -785,6 +786,31 @@ public enum OllamaAPIUsageFetcher {
             throw OllamaUsageError.apiUnauthorized
         default:
             throw OllamaUsageError.networkError("HTTP \(response.statusCode)")
+        }
+    }
+
+    private static func resolveValidationURL(tagsURL: URL, override: URL?) throws -> URL {
+        let validationURL = override
+            ?? tagsURL.deletingLastPathComponent().appendingPathComponent("web_search")
+        guard self.sameOrigin(tagsURL, validationURL) else {
+            throw OllamaUsageError.networkError(
+                "Ollama key validation and model catalog endpoints must share an origin.")
+        }
+        return validationURL
+    }
+
+    private static func sameOrigin(_ lhs: URL, _ rhs: URL) -> Bool {
+        lhs.scheme?.lowercased() == rhs.scheme?.lowercased()
+            && lhs.host?.lowercased() == rhs.host?.lowercased()
+            && self.effectivePort(lhs) == self.effectivePort(rhs)
+    }
+
+    private static func effectivePort(_ url: URL) -> Int? {
+        if let port = url.port { return port }
+        switch url.scheme?.lowercased() {
+        case "https": return 443
+        case "http": return 80
+        default: return nil
         }
     }
 

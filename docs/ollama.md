@@ -39,7 +39,8 @@ Ollama API keys currently do not expire, but they can be revoked from the key se
 
 - API-key mode first probes the authenticated `https://ollama.com/api/web_search` endpoint without performing a
   search, then fetches `https://ollama.com/api/tags` for the model catalog. The catalog endpoint is public and cannot
-  verify a key by itself.
+  verify a key by itself. Custom catalog endpoints derive their validation probe on the same origin; cross-origin
+  validation is rejected before sending credentials.
 - Cookie mode fetches `https://ollama.com/settings` using browser cookies.
 - Cookie discovery recognizes the current WorkOS AuthKit `wos-session` cookie alongside legacy Ollama and NextAuth
   session names.
