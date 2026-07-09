@@ -282,7 +282,7 @@
 "Show provider icons in the switcher (otherwise show a weekly progress line)." = "Mostreu les icones de proveïdor al selector (si no, mostreu una línia de progrés setmanal).";
 "Show reset time as clock" = "Mostreu l'hora de reinici com a rellotge";
 "Show usage as used" = "Mostreu l'ús com a consumit";
-"Sign in with Claude Code..." = "Inicieu sessió amb Claude Code...";
+"Sign in with Claude Code..." = "Inicia sessió amb Claude Code...";
 "Sign in via button below" = "Inicieu la sessió amb el botó de sota";
 "Skip teardown between probes (debug-only)." = "Ometeu el tancament entre sondeigs (només depuració).";
 "Stack token accounts in the menu (otherwise show an account switcher bar)." = "Apileu els comptes amb token al menú (si no, mostreu una barra de canvi de compte).";
@@ -442,7 +442,7 @@
 "session_quota_notifications_title" = "Notificacions de quota de sessió";
 "session_quota_notifications_subtitle" = "Avisa quan la quota de sessió de 5 hores arriba al 0% i quan torna a estar disponible.";
 "quota_warning_notifications_title" = "Notificacions d'avís de quota";
-"quota_warning_notifications_subtitle" = "Avisa quan la quota restant de sessió o setmanal supera els llindars configurats.";
+"quota_warning_notifications_subtitle" = "Avisa quan la quota restant de sessió o setmanal baixa per sota dels llindars configurats.";
 "quota_warnings_title" = "Avisos de quota";
 "quota_warning_session" = "sessió";
 "quota_warning_session_capitalized" = "Sessió";
@@ -559,7 +559,7 @@
 "show_provider_storage_usage_title" = "Mostreu l'ús d'emmagatzematge del proveïdor";
 "show_provider_storage_usage_subtitle" = "Mostreu l'ús de disc local als menús. Analitza en segon pla els camins coneguts del proveïdor.";
 "section_keychain_access" = "Accés al Clauer";
-"keychain_access_caption" = "Desactiveu totes les lectures i escriptures del Clauer. La importació de galetes del navegador no estarà disponible; enganxeu les capçaleres Cookie manualment a Proveïdors.";
+"keychain_access_caption" = "Desactiveu totes les lectures i escriptures del Clauer. Feu-ho si macOS continua mostrant sol·licituds de «Chrome/Brave/Edge Safe Storage» fins i tot després de triar «Permet sempre». La importació de galetes del navegador no estarà disponible mentre aquesta opció estigui activada; enganxeu manualment les capçaleres Cookie a Proveïdors. L'OAuth de Claude/Codex mitjançant la CLI continuarà funcionant.";
 "disable_keychain_access_title" = "Desactiveu l'accés al Clauer";
 "disable_keychain_access_subtitle" = "Impedeix qualsevol accés al Clauer mentre estigui activat.";
 

@@ -209,9 +209,18 @@ struct LocalizationLanguageCatalogTests {
                 "A managed Codex login is already running. Wait for it to finish before adding ":
                     "Ja hi ha un inici de sessió gestionat de Codex en curs. Espereu que acabi abans d'afegir ",
                 "%@: %@": "%@: %@",
+                "Sign in with Claude Code...": "Inicia sessió amb Claude Code...",
+                "keychain_access_caption":
+                    "Desactiveu totes les lectures i escriptures del Clauer. " +
+                    "Feu-ho si macOS continua mostrant sol·licituds de «Chrome/Brave/Edge Safe Storage» " +
+                    "fins i tot després de triar «Permet sempre». La importació de galetes del navegador no " +
+                    "estarà disponible mentre aquesta opció estigui activada; enganxeu manualment les " +
+                    "capçaleres Cookie a Proveïdors. L'OAuth de Claude/Codex mitjançant la CLI continuarà funcionant.",
                 "language_catalan": "Català",
                 "menu_bar_metric_subtitle_mistral":
                     "Trieu entre la despesa de l'API de Mistral i l'ús del Monthly Plan per a la barra de menús.",
+                "quota_warning_notifications_subtitle":
+                    "Avisa quan la quota restant de sessió o setmanal baixa per sota dels llindars configurats.",
                 "refresh_on_open_subtitle":
                     "Obté l'ús més recent de cada proveïdor cada vegada que obriu el menú.",
             ],
