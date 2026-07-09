@@ -416,8 +416,10 @@ extension ClaudeStatusProbe {
             var percentLeft: Int?
             var resetDescription: String?
             for candidate in window {
-                if let candidateModel = self.weeklyModelName(from: candidate),
-                   self.normalizedForLabelSearch(candidateModel) != normalizedModel
+                if self.crossesLabelBoundary(
+                    line: candidate,
+                    labelSubstring: line,
+                    normalizedLabel: self.normalizedForLabelSearch(line))
                 {
                     break
                 }

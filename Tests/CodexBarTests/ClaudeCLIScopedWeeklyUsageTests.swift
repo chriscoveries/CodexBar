@@ -162,6 +162,26 @@ struct ClaudeCLIScopedWeeklyUsageTests {
     }
 
     @Test
+    func `incomplete scoped panel stops at session redraw`() throws {
+        let cliUsage = """
+        Current week (Fable)
+        rendering
+
+        Current session
+        9% used
+
+        Current week (all models)
+        20% used
+        """
+
+        let snapshot = try ClaudeStatusProbe.parse(text: cliUsage)
+
+        #expect(snapshot.sessionPercentLeft == 91)
+        #expect(snapshot.weeklyPercentLeft == 80)
+        #expect(snapshot.extraRateWindows.isEmpty)
+    }
+
+    @Test
     func `incomplete all models panel does not consume scoped percentage`() throws {
         let cliUsage = """
         Current session
