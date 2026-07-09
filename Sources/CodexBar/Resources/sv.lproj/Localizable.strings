@@ -467,8 +467,10 @@
 "quota_warning_off" = "Av";
 "quota_warning_inherited" = "Ärvd: %@";
 "quota_warning_depleted_only" = "bara slut";
-"quota_warning_upper" = "Övre";
+"quota_warning_upper" = "Högre";
 "quota_warning_lower" = "Nedre";
+"quota_warning_warning" = "Varning";
+"quota_warning_critical" = "Kritisk";
 "apply" = "Tillämpa";
 "quit_app" = "Avsluta CodexBar";
 

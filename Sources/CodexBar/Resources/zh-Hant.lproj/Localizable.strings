@@ -472,8 +472,10 @@
 "quota_warning_off" = "關閉";
 "quota_warning_inherited" = "繼承：%@";
 "quota_warning_depleted_only" = "僅用完時";
-"quota_warning_upper" = "上限";
+"quota_warning_upper" = "較高";
 "quota_warning_lower" = "下限";
+"quota_warning_warning" = "警告";
+"quota_warning_critical" = "嚴重";
 "apply" = "套用";
 "quit_app" = "結束 CodexBar";
 "tab_general" = "一般";

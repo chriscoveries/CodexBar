@@ -463,8 +463,10 @@
 "quota_warning_off" = "Tắt";
 "quota_warning_inherited" = "Đã kế thừa: %@";
 "quota_warning_depleted_only" = "chỉ đã cạn";
-"quota_warning_upper" = "Thượng";
+"quota_warning_upper" = "Cao hơn";
 "quota_warning_lower" = "Hạ";
+"quota_warning_warning" = "Cảnh báo";
+"quota_warning_critical" = "Nghiêm trọng";
 "apply" = "Áp dụng";
 "quit_app" = "Thoát CodexBar";
 

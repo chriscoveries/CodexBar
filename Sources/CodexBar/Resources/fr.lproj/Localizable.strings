@@ -467,8 +467,10 @@
 "quota_warning_off" = "Désactivé";
 "quota_warning_inherited" = "Hérité : %@";
 "quota_warning_depleted_only" = "uniquement à l'épuisement";
-"quota_warning_upper" = "Seuil haut";
+"quota_warning_upper" = "Plus haut";
 "quota_warning_lower" = "Seuil bas";
+"quota_warning_warning" = "Avertissement";
+"quota_warning_critical" = "Critique";
 "apply" = "Appliquer";
 "quit_app" = "Quitter CodexBar";
 
