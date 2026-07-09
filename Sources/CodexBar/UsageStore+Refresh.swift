@@ -269,9 +269,10 @@ extension UsageStore {
                     previous: self.snapshots[provider])
                 let backfilled = stabilized.backfillingResetTimes(from: resetBackfillSource)
                 let predictivePaceWarningAccountDiscriminatorOverride: String? = if provider == .claude {
-                    Self.predictivePaceWarningClaudeActiveAccountDiscriminator(
+                    Self.predictivePaceWarningClaudeAccountDiscriminator(
                         strategyKind: result.strategyKind,
-                        observation: context.claudeOAuthActiveAccountObservation)
+                        observation: context.claudeOAuthActiveAccountObservation,
+                        oauthHistoryOwnerIdentifier: result.claudeOAuthHistoryOwnerIdentifier)
                 } else {
                     nil
                 }

@@ -444,22 +444,22 @@ struct PredictivePaceWarningTests {
         settings.predictivePaceWarningNotificationsEnabled = true
         let notifier = NotifierSpy()
         let store = self.makeStore(settings: settings, notifier: notifier)
-        let firstAccount = UsageStore.predictivePaceWarningClaudeActiveAccountDiscriminator(
+        let firstAccount = UsageStore.predictivePaceWarningClaudeAccountDiscriminator(
             strategyKind: .oauth,
             observation: .stable(identity: "account-a"))
-        let secondAccount = UsageStore.predictivePaceWarningClaudeActiveAccountDiscriminator(
+        let secondAccount = UsageStore.predictivePaceWarningClaudeAccountDiscriminator(
             strategyKind: .cli,
             observation: .stable(identity: "account-b"))
-        #expect(UsageStore.predictivePaceWarningClaudeActiveAccountDiscriminator(
+        #expect(UsageStore.predictivePaceWarningClaudeAccountDiscriminator(
             strategyKind: .oauth,
             observation: .stable(identity: nil)) == nil)
-        #expect(UsageStore.predictivePaceWarningClaudeActiveAccountDiscriminator(
+        #expect(UsageStore.predictivePaceWarningClaudeAccountDiscriminator(
             strategyKind: .cli,
             observation: .changed) == nil)
-        #expect(UsageStore.predictivePaceWarningClaudeActiveAccountDiscriminator(
+        #expect(UsageStore.predictivePaceWarningClaudeAccountDiscriminator(
             strategyKind: .web,
             observation: .stable(identity: "account-a")) == nil)
-        #expect(UsageStore.predictivePaceWarningClaudeActiveAccountDiscriminator(
+        #expect(UsageStore.predictivePaceWarningClaudeAccountDiscriminator(
             strategyKind: .apiToken,
             observation: .stable(identity: "account-a")) == nil)
         let noEmailRisk = self.snapshot(
@@ -501,6 +501,28 @@ struct PredictivePaceWarningTests {
 
         #expect(notifier.predictivePosts.map(\.event.window) == [.session, .session, .session])
         #expect(notifier.predictivePosts.allSatisfy { $0.provider == .claude })
+    }
+
+    @Test
+    func `Claude OAuth owner keeps no email warnings account scoped when active metadata is missing`() {
+        let owner = String(repeating: "a", count: 64)
+
+        #expect(UsageStore.predictivePaceWarningClaudeAccountDiscriminator(
+            strategyKind: .oauth,
+            observation: .stable(identity: nil),
+            oauthHistoryOwnerIdentifier: owner) == "claude-oauth-owner:\(owner)")
+        #expect(UsageStore.predictivePaceWarningClaudeAccountDiscriminator(
+            strategyKind: .oauth,
+            observation: .changed,
+            oauthHistoryOwnerIdentifier: "  \(owner.uppercased())  ") == "claude-oauth-owner:\(owner)")
+        #expect(UsageStore.predictivePaceWarningClaudeAccountDiscriminator(
+            strategyKind: .cli,
+            observation: .stable(identity: nil),
+            oauthHistoryOwnerIdentifier: owner) == nil)
+        #expect(UsageStore.predictivePaceWarningClaudeAccountDiscriminator(
+            strategyKind: .web,
+            observation: .stable(identity: nil),
+            oauthHistoryOwnerIdentifier: owner) == nil)
     }
 
     @Test

@@ -222,16 +222,36 @@ extension UsageStore {
         return "email:\(account)"
     }
 
-    static func predictivePaceWarningClaudeActiveAccountDiscriminator(
+    static func predictivePaceWarningClaudeAccountDiscriminator(
         strategyKind: ProviderFetchKind,
-        observation: ClaudeOAuthActiveAccountObservation) -> String?
+        observation: ClaudeOAuthActiveAccountObservation,
+        oauthHistoryOwnerIdentifier: String? = nil) -> String?
     {
         switch strategyKind {
-        case .cli, .oauth:
-            break
+        case .cli:
+            return self.predictivePaceWarningClaudeActiveAccountDiscriminator(observation: observation)
+        case .oauth:
+            if let activeAccount = self.predictivePaceWarningClaudeActiveAccountDiscriminator(
+                observation: observation)
+            {
+                return activeAccount
+            }
+            guard let owner = oauthHistoryOwnerIdentifier?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased(),
+                !owner.isEmpty
+            else { return nil }
+            // OAuth usage has no email. Keep a credential-scoped fallback so predictive warnings still work
+            // when Claude's active-account metadata is unavailable, without merging unrelated accounts.
+            return "claude-oauth-owner:\(owner)"
         case .apiToken, .localProbe, .web, .webDashboard:
             return nil
         }
+    }
+
+    private static func predictivePaceWarningClaudeActiveAccountDiscriminator(
+        observation: ClaudeOAuthActiveAccountObservation) -> String?
+    {
         guard case let .stable(identity) = observation,
               let identity = identity?.trimmingCharacters(in: .whitespacesAndNewlines),
               !identity.isEmpty
