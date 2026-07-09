@@ -143,7 +143,7 @@ struct ConfigValidationTests {
 
         #expect(issue.message ==
             "enterpriseHost is set but only azureopenai, clawrouter, copilot, kimi, litellm, llmproxy, and wayfinder " +
-                "support enterpriseHost.")
+            "support enterpriseHost.")
     }
 
     @Test
