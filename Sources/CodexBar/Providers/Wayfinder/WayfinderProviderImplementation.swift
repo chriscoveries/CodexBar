@@ -5,6 +5,18 @@ struct WayfinderProviderImplementation: ProviderImplementation {
     let id: UsageProvider = .wayfinder
 
     @MainActor
+    static func dashboardURL(
+        settings: SettingsStore,
+        environment: [String: String] = ProcessInfo.processInfo.environment) -> URL
+    {
+        let effectiveEnvironment = ProviderConfigEnvironment.applyProviderConfigOverrides(
+            base: environment,
+            provider: .wayfinder,
+            config: settings.providerConfig(for: .wayfinder))
+        return WayfinderSettingsReader.dashboardURL(environment: effectiveEnvironment)
+    }
+
+    @MainActor
     func presentation(context _: ProviderPresentationContext) -> ProviderPresentation {
         ProviderPresentation { _ in "api" }
     }

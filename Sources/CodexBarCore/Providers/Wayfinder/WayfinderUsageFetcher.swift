@@ -56,8 +56,12 @@ public struct WayfinderUsageSnapshot: Codable, Sendable, Equatable {
     public let updatedAt: Date
 
     public var statusLabel: String {
-        if self.offline { return "Offline mode" }
-        if self.dryRun { return "Dry run" }
+        if self.offline {
+            return "Offline mode"
+        }
+        if self.dryRun {
+            return "Dry run"
+        }
         if self.gatewayStatus == "degraded" {
             let count = self.missingKeys.count
             guard count > 0 else { return "Degraded" }
@@ -185,7 +189,17 @@ public enum WayfinderUsageFetcher {
 
     public static func fetchUsage(
         baseURL: URL,
-        transport: any ProviderHTTPTransport = ProviderHTTPClient.shared,
+        updatedAt: Date = Date()) async throws -> WayfinderUsageSnapshot
+    {
+        try await self.fetchUsage(
+            baseURL: baseURL,
+            transport: self.isolatedTransport,
+            updatedAt: updatedAt)
+    }
+
+    public static func fetchUsage(
+        baseURL: URL,
+        transport: any ProviderHTTPTransport,
         updatedAt: Date = Date()) async throws -> WayfinderUsageSnapshot
     {
         let healthData = try await self.get(path: "healthz", baseURL: baseURL, transport: transport)
@@ -196,13 +210,22 @@ public enum WayfinderUsageFetcher {
             baseURL: baseURL,
             transport: transport)
         // Latency is best-effort: the snapshot must never fail because /metrics is unavailable.
-        let metricsData = try? await self.get(path: "metrics", baseURL: baseURL, transport: transport)
+        // Cancellation is control flow, though, and must still stop the whole refresh.
+        let metricsData: Data?
+        do {
+            metricsData = try await self.get(path: "metrics", baseURL: baseURL, transport: transport)
+        } catch {
+            if self.isCancellation(error) {
+                throw CancellationError()
+            }
+            metricsData = nil
+        }
 
         return try self.makeSnapshot(
             healthData: healthData,
             modelsData: modelsData,
             savingsData: savingsData,
-            metricsText: metricsData.map { String(decoding: $0, as: UTF8.self) },
+            metricsText: metricsData.flatMap { String(data: $0, encoding: .utf8) },
             updatedAt: updatedAt)
     }
 
@@ -257,7 +280,9 @@ public enum WayfinderUsageFetcher {
                     saved: bucket.saved,
                     tokens: bucket.tokens)
             }.sorted {
-                if $0.requests != $1.requests { return $0.requests > $1.requests }
+                if $0.requests != $1.requests {
+                    return $0.requests > $1.requests
+                }
                 return $0.name < $1.name
             },
             avgDecisionMs: avgDecisionMs,
@@ -282,6 +307,9 @@ public enum WayfinderUsageFetcher {
         do {
             response = try await transport.response(for: request)
         } catch {
+            if self.isCancellation(error) {
+                throw CancellationError()
+            }
             throw WayfinderUsageError.gatewayUnreachable
         }
         try self.validateSameOrigin(response: response, request: request)
@@ -311,12 +339,27 @@ public enum WayfinderUsageFetcher {
     }
 
     private static func effectivePort(for url: URL) -> Int? {
-        if let port = url.port { return port }
+        if let port = url.port {
+            return port
+        }
         switch url.scheme?.lowercased() {
         case "https": return 443
         case "http": return 80
         default: return nil
         }
+    }
+
+    private static let isolatedTransport: any ProviderHTTPTransport = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpCookieStorage = nil
+        configuration.httpShouldSetCookies = false
+        configuration.urlCache = nil
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        return ProviderHTTPClient(session: ProviderHTTPClient.redirectGuardedSession(configuration: configuration))
+    }()
+
+    private static func isCancellation(_ error: Error) -> Bool {
+        error is CancellationError || (error as? URLError)?.code == .cancelled || Task.isCancelled
     }
 
     private static func parseHealth(data: Data) throws -> WayfinderHealthResponse {

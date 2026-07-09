@@ -36,6 +36,21 @@ public enum WayfinderSettingsReader {
         }
     }
 
+    public static func dashboardURL(
+        environment: [String: String] = ProcessInfo.processInfo.environment) -> URL
+    {
+        self.appending(path: "router", to: self.baseURL(environment: environment))
+    }
+
+    static func appending(path: String, to baseURL: URL) -> URL {
+        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) ?? URLComponents()
+        let basePath = components.path.hasSuffix("/") ? String(components.path.dropLast()) : components.path
+        components.path = "\(basePath)/\(path)"
+        components.query = nil
+        components.fragment = nil
+        return components.url ?? baseURL
+    }
+
     static func cleaned(_ raw: String?) -> String? {
         guard var value = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
             return nil

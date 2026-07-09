@@ -134,6 +134,17 @@ struct WayfinderProviderLinuxTests {
     }
 
     @Test
+    func `dashboard URL follows the configured gateway and preserves its prefix`() {
+        let key = WayfinderSettingsReader.baseURLEnvironmentKey
+
+        #expect(WayfinderSettingsReader.dashboardURL(environment: [:]).absoluteString ==
+            "http://127.0.0.1:8088/router")
+        #expect(WayfinderSettingsReader.dashboardURL(
+            environment: [key: "http://localhost:9191/wayfinder/"]).absoluteString ==
+            "http://localhost:9191/wayfinder/router")
+    }
+
+    @Test
     func `config projects the gateway URL into the fetch environment`() {
         let config = ProviderConfig(id: .wayfinder, enterpriseHost: "http://localhost:9099")
         let environment = ProviderConfigEnvironment.applyProviderConfigOverrides(
@@ -219,6 +230,46 @@ struct WayfinderProviderLinuxTests {
             _ = try await WayfinderUsageFetcher.fetchUsage(
                 baseURL: #require(URL(string: "http://127.0.0.1:8088")),
                 transport: serverError)
+        }
+    }
+
+    @Test
+    func `required request cancellation remains cancellation`() async throws {
+        for error in [CancellationError() as any Error, URLError(.cancelled) as any Error] {
+            let cancelling = ProviderHTTPTransportHandler { _ in throw error }
+            await #expect(throws: CancellationError.self) {
+                _ = try await WayfinderUsageFetcher.fetchUsage(
+                    baseURL: #require(URL(string: "http://127.0.0.1:8088")),
+                    transport: cancelling)
+            }
+        }
+    }
+
+    @Test
+    func `optional metrics cancellation remains cancellation`() async throws {
+        let cancelling = ProviderHTTPTransportHandler { request in
+            let url = try #require(request.url)
+            if url.path == "/metrics" {
+                throw CancellationError()
+            }
+            let body: Data = switch url.path {
+            case "/healthz": Self.healthOK
+            case "/router/models": Self.models
+            case "/v1/savings": Self.savings30d
+            default: Data()
+            }
+            let response = try #require(HTTPURLResponse(
+                url: url,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil))
+            return (body, response)
+        }
+
+        await #expect(throws: CancellationError.self) {
+            _ = try await WayfinderUsageFetcher.fetchUsage(
+                baseURL: #require(URL(string: "http://127.0.0.1:8088")),
+                transport: cancelling)
         }
     }
 
