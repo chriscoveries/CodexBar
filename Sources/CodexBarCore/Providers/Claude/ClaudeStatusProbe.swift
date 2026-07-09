@@ -230,11 +230,10 @@ extension ClaudeStatusProbe {
         // Fallback: order-based percent scraping when labels are present but the surrounding layout moved.
         // Only apply the fallback when the corresponding label exists in the rendered panel; enterprise accounts
         // may omit the weekly panel entirely, and we should treat that as "unavailable" rather than guessing.
-        let hasAllModelsWeeklyLabel = labelContext.contains(
-            self.normalizedForLabelSearch("Current week (all models)"))
-        let hasOpusLabel = opusLabels.contains {
-            labelContext.contains(self.normalizedForLabelSearch($0))
-        }
+        let weeklyModels = Set(labelContext.lines.compactMap(self.weeklyModelName).map(self.normalizedForLabelSearch))
+        let hasAllModelsWeeklyLabel = weeklyModels.contains("allmodels")
+        let opusModels = Set(opusLabels.compactMap(self.weeklyModelName).map(self.normalizedForLabelSearch))
+        let hasOpusLabel = !weeklyModels.isDisjoint(with: opusModels)
 
         if sessionPct == nil {
             let ordered = self.allPercents(usagePanelText)
@@ -341,7 +340,15 @@ extension ClaudeStatusProbe {
     private static func extractPercent(labelSubstring: String, context: LabelSearchContext) -> Int? {
         let lines = context.lines
         let label = self.normalizedForLabelSearch(labelSubstring)
-        for (idx, normalizedLine) in context.normalizedLines.enumerated() where normalizedLine.contains(label) {
+        for (idx, line) in lines.enumerated() {
+            let normalizedLine = context.normalizedLines[idx]
+            guard self.matchesLabel(
+                line: line,
+                normalizedLine: normalizedLine,
+                labelSubstring: labelSubstring,
+                normalizedLabel: label)
+            else { continue }
+
             // Claude's usage panel can take a moment to render percentages (especially on enterprise accounts),
             // so scan a larger window than the original 3–4 lines.
             let window = lines.dropFirst(idx).prefix(12)
@@ -395,24 +402,10 @@ extension ClaudeStatusProbe {
     }
 
     private static func extractScopedWeeklyUsages(context: LabelSearchContext) -> [ScopedWeeklyUsage] {
-        guard let regex = try? NSRegularExpression(
-            pattern: #"current\s*week\s*\(([^)]+)\)"#,
-            options: [.caseInsensitive])
-        else { return [] }
-
-        func extractModelName(from line: String) -> String? {
-            let range = NSRange(line.startIndex..<line.endIndex, in: line)
-            guard let match = regex.firstMatch(in: line, options: [], range: range),
-                  match.numberOfRanges >= 2,
-                  let modelRange = Range(match.range(at: 1), in: line)
-            else { return nil }
-            return String(line[modelRange]).trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-
         var usageIndexByModel: [String: Int] = [:]
         var usages: [ScopedWeeklyUsage] = []
         for (index, line) in context.lines.enumerated() {
-            guard let modelName = extractModelName(from: line) else { continue }
+            guard let modelName = self.weeklyModelName(from: line) else { continue }
             let normalizedModel = self.normalizedForLabelSearch(modelName)
             guard normalizedModel != "allmodels", !normalizedModel.isEmpty else { continue }
 
@@ -420,7 +413,7 @@ extension ClaudeStatusProbe {
             var percentLeft: Int?
             var resetDescription: String?
             for candidate in window {
-                if let candidateModel = extractModelName(from: candidate),
+                if let candidateModel = self.weeklyModelName(from: candidate),
                    self.normalizedForLabelSearch(candidateModel) != normalizedModel
                 {
                     break
@@ -703,7 +696,15 @@ extension ClaudeStatusProbe {
     private static func extractReset(labelSubstring: String, context: LabelSearchContext) -> String? {
         let lines = context.lines
         let label = self.normalizedForLabelSearch(labelSubstring)
-        for (idx, normalizedLine) in context.normalizedLines.enumerated() where normalizedLine.contains(label) {
+        for (idx, line) in lines.enumerated() {
+            let normalizedLine = context.normalizedLines[idx]
+            guard self.matchesLabel(
+                line: line,
+                normalizedLine: normalizedLine,
+                labelSubstring: labelSubstring,
+                normalizedLabel: label)
+            else { continue }
+
             let window = lines.dropFirst(idx).prefix(14)
             for candidate in window {
                 let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -717,6 +718,32 @@ extension ClaudeStatusProbe {
             }
         }
         return nil
+    }
+
+    private static func matchesLabel(
+        line: String,
+        normalizedLine: String,
+        labelSubstring: String,
+        normalizedLabel: String) -> Bool
+    {
+        guard let expectedModel = self.weeklyModelName(from: labelSubstring) else {
+            return normalizedLine.contains(normalizedLabel)
+        }
+        guard let actualModel = self.weeklyModelName(from: line) else { return false }
+        return self.normalizedForLabelSearch(actualModel) == self.normalizedForLabelSearch(expectedModel)
+    }
+
+    private static func weeklyModelName(from line: String) -> String? {
+        guard let regex = try? NSRegularExpression(
+            pattern: #"current\s*week\s*\(([^)]+)\)"#,
+            options: [.caseInsensitive])
+        else { return nil }
+        let range = NSRange(line.startIndex..<line.endIndex, in: line)
+        guard let match = regex.firstMatch(in: line, options: [], range: range),
+              match.numberOfRanges >= 2,
+              let modelRange = Range(match.range(at: 1), in: line)
+        else { return nil }
+        return String(line[modelRange]).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func extractReset(labelSubstrings: [String], context: LabelSearchContext) -> String? {
