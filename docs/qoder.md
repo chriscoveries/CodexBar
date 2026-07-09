@@ -35,7 +35,7 @@ and caches valid cookie headers. Invalid cached sessions are skipped so a fresh 
 
 ## Display
 
-- Shows used credits, total credits, remaining credits, and usage percentage.
+- Shows used credits, total credits, and usage percentage.
 - Merges `totalQuota` with `sharedQuota` when Qoder returns both.
 - Uses `nextResetAt` when the API includes a reset timestamp.
 - Token-cost history is not supported.
