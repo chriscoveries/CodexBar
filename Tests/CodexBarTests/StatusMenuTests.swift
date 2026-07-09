@@ -900,6 +900,42 @@ extension StatusMenuTests {
     }
 
     @Test
+    func `provider config notifications relay background work impact between settings stores`() {
+        self.disableMenuCardsForTesting()
+        let sourceSettings = self.makeSettings()
+        let controllerSettings = self.makeSettings()
+        controllerSettings.statusChecksEnabled = false
+        controllerSettings.refreshFrequency = .manual
+
+        let fetcher = UsageFetcher()
+        let store = UsageStore(
+            fetcher: fetcher,
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: controllerSettings)
+        let controller = StatusItemController(
+            store: store,
+            settings: controllerSettings,
+            account: fetcher.loadAccountInfo(),
+            updater: DisabledUpdaterController(),
+            preferencesSelection: PreferencesSelection(),
+            statusBar: self.makeStatusBarForTesting(),
+            observeProviderConfigNotifications: true)
+        defer { controller.releaseStatusItemsForTesting() }
+
+        let initialBackgroundRevision = controllerSettings.backgroundWorkSettingsRevision
+        let reorderedProviders = Array(sourceSettings.orderedProviders().reversed())
+        sourceSettings.setProviderOrder(reorderedProviders)
+
+        #expect(controllerSettings.orderedProviders() == reorderedProviders)
+        #expect(controllerSettings.backgroundWorkSettingsRevision == initialBackgroundRevision)
+
+        sourceSettings.codexUsageDataSource = .cli
+
+        #expect(controllerSettings.codexUsageDataSource == .cli)
+        #expect(controllerSettings.backgroundWorkSettingsRevision == initialBackgroundRevision + 1)
+    }
+
+    @Test
     func `provider config changes preserve status item instances`() throws {
         self.disableMenuCardsForTesting()
         let settings = self.makeSettings()
