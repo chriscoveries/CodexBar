@@ -31,24 +31,15 @@ extension UsageStore {
         var firedThresholds: Set<Int> = []
         var source: SessionQuotaWindowSource?
     }
-
-    /// Per-refresh constants shared across the quota-warning lanes: which window
-    /// source is active, the redacted account label, and whether notifications and
-    /// hooks are each enabled for this provider.
-    struct QuotaWarningTransitionContext {
-        let source: SessionQuotaWindowSource?
-        let accountDisplayName: String?
-        let notificationsEnabled: Bool
-        let hooksActive: Bool
-    }
 }
 
 @MainActor
 extension UsageStore {
     func handleQuotaWarningTransitions(provider: UsageProvider, snapshot: UsageSnapshot) {
         let notificationsEnabled = self.settings.quotaWarningNotificationsEnabled
-        // Hooks have their own enable switch, so a configured quota_low hook must
-        // fire even when the user turned quota warning notifications off.
+        // Hooks have their own enable switch and their own per-rule thresholds, so
+        // quota_low hooks run on a separate path that does not depend on the
+        // notification preference or the notification thresholds.
         let hooksActive = self.hasQuotaHookRule(event: .quotaLow, provider: provider)
         guard notificationsEnabled || hooksActive else { return }
         if provider == .commandcode, snapshot.commandCodeSubscriptionEnrichmentUnavailable { return }
@@ -70,25 +61,53 @@ extension UsageStore {
             primaryWindow = provider == .mimo || provider == .qoder ? nil : snapshot.primary
             secondaryWindow = provider == .mimo || provider == .qoder ? nil : snapshot.secondary
         }
-        let context = QuotaWarningTransitionContext(
-            source: source,
-            accountDisplayName: accountDisplayName,
-            notificationsEnabled: notificationsEnabled,
-            hooksActive: hooksActive)
-        self.handleQuotaWarningTransition(
-            provider: provider,
-            window: .session,
-            rateWindow: primaryWindow,
-            context: context)
-        self.handleQuotaWarningTransition(
-            provider: provider,
-            window: .weekly,
-            rateWindow: secondaryWindow,
-            context: context)
-        self.handleClaudeExtraWindowQuotaWarnings(
-            provider: provider,
-            snapshot: snapshot,
-            context: context)
+
+        if notificationsEnabled {
+            self.handleQuotaWarningTransition(
+                provider: provider,
+                window: .session,
+                rateWindow: primaryWindow,
+                source: source,
+                accountDisplayName: accountDisplayName)
+            self.handleQuotaWarningTransition(
+                provider: provider,
+                window: .weekly,
+                rateWindow: secondaryWindow,
+                source: source,
+                accountDisplayName: accountDisplayName)
+            self.handleClaudeExtraWindowQuotaWarnings(
+                provider: provider,
+                snapshot: snapshot,
+                accountDisplayName: accountDisplayName)
+        }
+
+        if hooksActive {
+            self.dispatchQuotaLowHooks(
+                provider: provider,
+                lane: QuotaLowHookLane(
+                    window: .session,
+                    windowID: nil,
+                    label: QuotaWarningWindow.session.displayName),
+                rateWindow: primaryWindow,
+                accountDisplayName: accountDisplayName)
+            self.dispatchQuotaLowHooks(
+                provider: provider,
+                lane: QuotaLowHookLane(
+                    window: .weekly,
+                    windowID: nil,
+                    label: QuotaWarningWindow.weekly.displayName),
+                rateWindow: secondaryWindow,
+                accountDisplayName: accountDisplayName)
+            if provider == .claude {
+                for named in (snapshot.extraRateWindows ?? []).filter(Self.isClaudeNotifiableExtraWindow) {
+                    self.dispatchQuotaLowHooks(
+                        provider: provider,
+                        lane: QuotaLowHookLane(window: .weekly, windowID: named.id, label: named.title),
+                        rateWindow: named.window,
+                        accountDisplayName: accountDisplayName)
+                }
+            }
+        }
     }
 
     /// Emit weekly-lane quota warnings for Claude's extra rate windows — model-scoped weekly
@@ -98,12 +117,10 @@ extension UsageStore {
     private func handleClaudeExtraWindowQuotaWarnings(
         provider: UsageProvider,
         snapshot: UsageSnapshot,
-        context: QuotaWarningTransitionContext)
+        accountDisplayName: String?)
     {
         guard provider == .claude else { return }
-        let weeklyNotify = context.notificationsEnabled
-            && self.settings.quotaWarningEnabled(provider: provider, window: .weekly)
-        guard weeklyNotify || context.hooksActive else {
+        guard self.settings.quotaWarningEnabled(provider: provider, window: .weekly) else {
             let extraWindowKeys = self.quotaWarningState.keys.filter {
                 $0.provider == provider && $0.windowID != nil
             }
@@ -119,7 +136,8 @@ extension UsageStore {
                 provider: provider,
                 window: .weekly,
                 rateWindow: named.window,
-                context: context,
+                source: nil,
+                accountDisplayName: accountDisplayName,
                 windowID: named.id,
                 windowDisplayLabel: named.title)
         }
@@ -145,16 +163,13 @@ extension UsageStore {
         provider: UsageProvider,
         window: QuotaWarningWindow,
         rateWindow: RateWindow?,
-        context: QuotaWarningTransitionContext,
+        source: SessionQuotaWindowSource?,
+        accountDisplayName: String?,
         windowID: String? = nil,
         windowDisplayLabel: String? = nil)
     {
-        let source = context.source
-        let accountDisplayName = context.accountDisplayName
         let key = QuotaWarningStateKey(provider: provider, window: window, windowID: windowID)
-        let notify = context.notificationsEnabled
-            && self.settings.quotaWarningEnabled(provider: provider, window: window)
-        guard notify || context.hooksActive else {
+        guard self.settings.quotaWarningEnabled(provider: provider, window: window) else {
             self.quotaWarningState.removeValue(forKey: key)
             return
         }
@@ -187,24 +202,15 @@ extension UsageStore {
             state.firedThresholds.formUnion(QuotaWarningNotificationLogic.firedThresholdsAfterWarning(
                 threshold: threshold,
                 thresholds: thresholds))
-            if notify {
-                self.postQuotaWarning(
-                    QuotaWarningEvent(
-                        window: window,
-                        threshold: threshold,
-                        currentRemaining: currentRemaining,
-                        accountDisplayName: accountDisplayName,
-                        windowID: windowID,
-                        windowDisplayLabel: windowDisplayLabel),
-                    provider: provider)
-            }
-            self.emitHook(
-                .quotaLow,
-                provider: provider,
-                window: windowDisplayLabel ?? window.displayName,
-                usagePercent: rateWindow.usedPercent / 100,
-                resetAt: rateWindow.resetsAt,
-                accountDisplayName: accountDisplayName)
+            self.postQuotaWarning(
+                QuotaWarningEvent(
+                    window: window,
+                    threshold: threshold,
+                    currentRemaining: currentRemaining,
+                    accountDisplayName: accountDisplayName,
+                    windowID: windowID,
+                    windowDisplayLabel: windowDisplayLabel),
+                provider: provider)
         }
 
         state.lastRemaining = currentRemaining

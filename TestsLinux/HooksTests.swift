@@ -64,6 +64,46 @@ struct HooksTests {
         #expect(disabled.matchingRules(for: self.event()).isEmpty)
     }
 
+    // MARK: - quota_low threshold crossing
+
+    @Test
+    func `quotaLow rule fires only when its own threshold is crossed upward`() {
+        let rule = HookRule(event: .quotaLow, threshold: 0.90, executable: "/bin/echo")
+        // Notification thresholds (50/20 remaining => 0.50/0.80 usage) would not fire
+        // a 0.90 rule; the rule's own threshold must drive it.
+        let fallback = [0.50, 0.80]
+
+        // Crossing 0.90 upward fires it.
+        #expect(!QuotaLowHookThreshold.crossedRules(
+            [rule], previousUsage: 0.85, currentUsage: 0.95, fallbackThresholds: fallback).isEmpty)
+        // Already above, no new crossing.
+        #expect(QuotaLowHookThreshold.crossedRules(
+            [rule], previousUsage: 0.92, currentUsage: 0.97, fallbackThresholds: fallback).isEmpty)
+        // Below threshold, no fire even though notification thresholds were crossed.
+        #expect(QuotaLowHookThreshold.crossedRules(
+            [rule], previousUsage: 0.40, currentUsage: 0.85, fallbackThresholds: fallback).isEmpty)
+    }
+
+    @Test
+    func `thresholdless quotaLow rule falls back to notification thresholds`() {
+        let rule = HookRule(event: .quotaLow, threshold: nil, executable: "/bin/echo")
+        let fallback = [0.50, 0.80]
+        #expect(!QuotaLowHookThreshold.crossedRules(
+            [rule], previousUsage: 0.40, currentUsage: 0.55, fallbackThresholds: fallback).isEmpty)
+        #expect(QuotaLowHookThreshold.crossedRules(
+            [rule], previousUsage: 0.55, currentUsage: 0.60, fallbackThresholds: fallback).isEmpty)
+    }
+
+    @Test
+    func `only the crossed rule is selected among several`() {
+        let low = HookRule(id: "low", event: .quotaLow, threshold: 0.50, executable: "/bin/echo")
+        let high = HookRule(id: "high", event: .quotaLow, threshold: 0.90, executable: "/bin/echo")
+        // Usage rises past 0.90; 0.50 already fired earlier so must not re-fire.
+        let crossed = QuotaLowHookThreshold.crossedRules(
+            [low, high], previousUsage: 0.85, currentUsage: 0.95, fallbackThresholds: [])
+        #expect(crossed.map(\.id) == ["high"])
+    }
+
     // MARK: - Payload
 
     @Test

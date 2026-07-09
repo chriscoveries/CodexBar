@@ -66,6 +66,28 @@ public struct HookRule: Codable, Sendable, Equatable, Identifiable {
     }
 }
 
+public enum QuotaLowHookThreshold {
+    /// Returns the quota_low rules whose watched threshold was crossed upward
+    /// between `previousUsage` and `currentUsage` (both 0...1 usage fractions).
+    ///
+    /// A rule with an explicit `threshold` watches only that value, so its own
+    /// usage threshold drives emission independently of the notification
+    /// thresholds. A rule without a threshold falls back to `fallbackThresholds`
+    /// (the provider's notification thresholds, as usage fractions) so a plain
+    /// "notify me when quota is low" hook still fires at the app's warning points.
+    public static func crossedRules(
+        _ rules: [HookRule],
+        previousUsage: Double,
+        currentUsage: Double,
+        fallbackThresholds: [Double]) -> [HookRule]
+    {
+        rules.filter { rule in
+            let watched = rule.threshold.map { [$0] } ?? fallbackThresholds
+            return watched.contains { previousUsage < $0 && currentUsage >= $0 }
+        }
+    }
+}
+
 /// The top-level `hooks` section of the shared CodexBar config. Absent or
 /// `enabled == false` means hooks never run.
 public struct HooksConfig: Codable, Sendable, Equatable {

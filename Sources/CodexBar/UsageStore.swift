@@ -265,6 +265,9 @@ final class UsageStore {
     @ObservationIgnored var quotaWarningState: [QuotaWarningStateKey: QuotaWarningState] = [:]
     @ObservationIgnored let hookRateLimiter = HookRateLimiter()
     @ObservationIgnored var providerStatusHadIssue: [UsageProvider: Bool] = [:]
+    /// Last observed usage fraction (0...1) per quota-warning lane, used to detect
+    /// upward crossings of a quota_low hook rule's own threshold.
+    @ObservationIgnored var quotaLowHookUsage: [QuotaWarningStateKey: Double] = [:]
     @ObservationIgnored var lastPermissionPromptNotificationAt: [UsageProvider: Date] = [:]
     @ObservationIgnored var lastTokenFetchAt: [UsageProvider: Date] = [:]
     @ObservationIgnored var lastTokenFetchScope: [UsageProvider: String] = [:]

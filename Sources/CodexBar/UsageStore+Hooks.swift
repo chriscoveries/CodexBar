@@ -78,6 +78,73 @@ extension UsageStore {
         }
     }
 
+    /// Fires `quota_low` hooks driven by each rule's own usage threshold, crossed
+    /// upward, independent of the notification thresholds and preferences. A rule
+    /// with no threshold falls back to the provider's notification thresholds so a
+    /// "notify me when quota is low" hook still fires at the app's warning points.
+    /// Identifies a quota lane for quota_low hook crossing detection.
+    struct QuotaLowHookLane {
+        let window: QuotaWarningWindow
+        let windowID: String?
+        let label: String
+    }
+
+    func dispatchQuotaLowHooks(
+        provider: UsageProvider,
+        lane: QuotaLowHookLane,
+        rateWindow: RateWindow?,
+        accountDisplayName: String?)
+    {
+        guard let hooks = self.settings.config.hooks, hooks.enabled else { return }
+        let rules = hooks.events.filter { rule in
+            rule.enabled
+                && rule.event == .quotaLow
+                && (rule.provider == nil || rule.provider == provider.rawValue)
+        }
+        guard !rules.isEmpty else { return }
+
+        let key = QuotaWarningStateKey(provider: provider, window: lane.window, windowID: lane.windowID)
+        guard let rateWindow else {
+            self.quotaLowHookUsage.removeValue(forKey: key)
+            return
+        }
+        let current = rateWindow.usedPercent / 100
+        let previous = self.quotaLowHookUsage[key]
+        self.quotaLowHookUsage[key] = current
+        // No crossing can be established from the first sample; avoid firing on a
+        // fresh launch when usage is already high.
+        guard let previous else { return }
+
+        let fallbackThresholds = self.settings
+            .resolvedQuotaWarningThresholds(provider: provider, window: lane.window)
+            .map { (100.0 - Double($0)) / 100.0 }
+        let crossed = QuotaLowHookThreshold.crossedRules(
+            rules,
+            previousUsage: previous,
+            currentUsage: current,
+            fallbackThresholds: fallbackThresholds)
+        guard !crossed.isEmpty else { return }
+
+        let event = HookEvent(
+            event: .quotaLow,
+            provider: provider.rawValue,
+            account: accountDisplayName,
+            window: lane.label,
+            usagePercent: current,
+            resetAt: rateWindow.resetsAt,
+            timestamp: Date())
+        let config = HooksConfig(enabled: true, events: crossed)
+        let limiter = self.hookRateLimiter
+        let environment = self.environmentBase
+        Task.detached(priority: .utility) {
+            await HookRunner.dispatch(
+                event: event,
+                config: config,
+                rateLimiter: limiter,
+                baseEnvironment: environment)
+        }
+    }
+
     /// True when the user has an enabled hook rule for this event and provider.
     ///
     /// Used to run quota transition detection even when the matching notification
