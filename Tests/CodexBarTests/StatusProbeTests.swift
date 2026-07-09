@@ -680,6 +680,38 @@ struct StatusProbeTests {
     }
 
     @Test
+    func `does not roll stale same day claude reset into next year`() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(identifier: "UTC"))
+        let now = try #require(calendar.date(from: DateComponents(
+            year: 2026, month: 7, day: 9, hour: 15, minute: 5, second: 0)))
+
+        let parsed = ClaudeStatusProbe.parseResetDate(from: "Resets Jul 9, 3:00pm (UTC)", now: now)
+        let expected = calendar.date(from: DateComponents(
+            year: 2026, month: 7, day: 9, hour: 15, minute: 0, second: 0))
+
+        #expect(parsed == expected)
+        #expect(UsageFormatter.resetCountdownDescription(from: try #require(parsed), now: now) == "now")
+    }
+
+    @Test
+    func `stale same day claude reset renders resets now`() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(identifier: "UTC"))
+        let now = try #require(calendar.date(from: DateComponents(
+            year: 2026, month: 7, day: 9, hour: 15, minute: 5, second: 0)))
+        let resetText = "Resets Jul 9, 3:00pm (UTC)"
+        let resetDate = try #require(ClaudeStatusProbe.parseResetDate(from: resetText, now: now))
+        let window = RateWindow(
+            usedPercent: 73,
+            windowMinutes: 5 * 60,
+            resetsAt: resetDate,
+            resetDescription: resetText)
+
+        #expect(UsageFormatter.resetLine(for: window, style: .countdown, now: now) == "Resets now")
+    }
+
+    @Test
     func `parses claude reset with dot separated time`() throws {
         let now = Date(timeIntervalSince1970: 1_733_690_000)
         let parsed = ClaudeStatusProbe.parseResetDate(from: "Resets Dec 9 at 5.27am (UTC)", now: now)

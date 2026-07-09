@@ -875,6 +875,9 @@ extension ClaudeStatusProbe {
         if date >= now {
             return date
         }
+        guard now.timeIntervalSince(date) > 180 * 24 * 60 * 60 else {
+            return date
+        }
         return calendar.date(byAdding: .year, value: 1, to: date)
     }
 
