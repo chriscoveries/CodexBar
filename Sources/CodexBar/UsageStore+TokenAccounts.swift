@@ -1255,11 +1255,8 @@ extension UsageStore {
                     return nil as UsageSnapshot?
                 }
                 let backfilled = labeled.backfillingResetTimes(from: self.lastKnownResetSnapshots[provider])
-                let predictivePaceWarningAccountDiscriminatorOverride: String? = if provider == .claude,
-                                                                                    result.strategyKind == .oauth
-                {
-                    Self.predictivePaceWarningClaudeOAuthAccountDiscriminator(
-                        ownerIdentifier: result.claudeOAuthHistoryOwnerIdentifier)
+                let predictivePaceWarningAccountDiscriminatorOverride: String? = if provider == .claude {
+                    Self.predictivePaceWarningTokenAccountDiscriminator(account)
                 } else {
                     nil
                 }

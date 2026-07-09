@@ -393,47 +393,76 @@ struct PredictivePaceWarningTests {
     }
 
     @Test
-    func `store isolates no-email Claude OAuth risk episodes by owner discriminator`() {
+    func `stable Claude account identity spans OAuth and fallback observations`() {
         let now = Date(timeIntervalSince1970: 1_780_000_000)
-        let settings = self.makeSettings(suiteName: "PredictivePaceWarningTests-claude-oauth-owner")
+        let settings = self.makeSettings(suiteName: "PredictivePaceWarningTests-claude-active-account")
         settings.predictivePaceWarningNotificationsEnabled = true
         let notifier = NotifierSpy()
         let store = self.makeStore(settings: settings, notifier: notifier)
-        let firstOwner = UsageStore.predictivePaceWarningClaudeOAuthAccountDiscriminator(
-            ownerIdentifier: "owner-a")
-        let secondOwner = UsageStore.predictivePaceWarningClaudeOAuthAccountDiscriminator(
-            ownerIdentifier: "owner-b")
-        let snapshot = self.snapshot(
+        let firstAccount = UsageStore.predictivePaceWarningClaudeActiveAccountDiscriminator(
+            .stable(identity: "account-a"))
+        let secondAccount = UsageStore.predictivePaceWarningClaudeActiveAccountDiscriminator(
+            .stable(identity: "account-b"))
+        #expect(UsageStore.predictivePaceWarningClaudeActiveAccountDiscriminator(.stable(identity: nil)) == nil)
+        #expect(UsageStore.predictivePaceWarningClaudeActiveAccountDiscriminator(.changed) == nil)
+        let noEmailRisk = self.snapshot(
             now: now,
             sessionUsed: 80,
             weeklyUsed: 20,
             accountEmail: nil)
+        let emailRisk = self.snapshot(
+            now: now,
+            sessionUsed: 80,
+            weeklyUsed: 20,
+            accountEmail: "person@example.com")
+        let emailRecovery = self.snapshot(
+            now: now,
+            sessionUsed: 20,
+            weeklyUsed: 20,
+            accountEmail: "person@example.com")
 
         store.handlePredictivePaceWarningTransitions(
             provider: .claude,
-            snapshot: snapshot,
-            accountDiscriminatorOverride: firstOwner)
+            snapshot: noEmailRisk,
+            accountDiscriminatorOverride: firstAccount)
         store.handlePredictivePaceWarningTransitions(
             provider: .claude,
-            snapshot: snapshot,
-            accountDiscriminatorOverride: firstOwner)
+            snapshot: emailRisk,
+            accountDiscriminatorOverride: firstAccount)
         store.handlePredictivePaceWarningTransitions(
             provider: .claude,
-            snapshot: snapshot,
-            accountDiscriminatorOverride: secondOwner)
+            snapshot: emailRecovery,
+            accountDiscriminatorOverride: firstAccount)
+        store.handlePredictivePaceWarningTransitions(
+            provider: .claude,
+            snapshot: noEmailRisk,
+            accountDiscriminatorOverride: firstAccount)
+        store.handlePredictivePaceWarningTransitions(
+            provider: .claude,
+            snapshot: noEmailRisk,
+            accountDiscriminatorOverride: secondAccount)
 
-        #expect(notifier.predictivePosts.map(\.event.window) == [.session, .session])
+        #expect(notifier.predictivePosts.map(\.event.window) == [.session, .session, .session])
         #expect(notifier.predictivePosts.allSatisfy { $0.provider == .claude })
-        #expect(notifier.predictivePosts.allSatisfy { $0.event.accountDisplayName == nil })
     }
 
     @Test
-    func `selected Claude OAuth token account uses owner discriminator when email is missing`() async throws {
+    func `selected Claude account identity is stable across OAuth owner changes`() async throws {
         let now = Date(timeIntervalSince1970: 1_780_000_000)
-        let settings = self.makeSettings(suiteName: "PredictivePaceWarningTests-selected-claude-oauth-owner")
+        let settings = self.makeSettings(suiteName: "PredictivePaceWarningTests-selected-claude-account")
         settings.predictivePaceWarningNotificationsEnabled = true
-        settings.addTokenAccount(provider: .claude, label: "Selected", token: "token")
-        let account = try #require(settings.selectedTokenAccount(for: .claude))
+        let firstAccount = try ProviderTokenAccount(
+            id: #require(UUID(uuidString: "00000000-0000-0000-0000-000000000001")),
+            label: "First",
+            token: "token",
+            addedAt: 0,
+            lastUsed: nil)
+        let secondAccount = try ProviderTokenAccount(
+            id: #require(UUID(uuidString: "00000000-0000-0000-0000-000000000002")),
+            label: "Second",
+            token: "token",
+            addedAt: 0,
+            lastUsed: nil)
         let notifier = NotifierSpy()
         let store = self.makeStore(settings: settings, notifier: notifier)
         let snapshot = self.snapshot(
@@ -445,22 +474,22 @@ struct PredictivePaceWarningTests {
         await store.applySelectedOutcome(
             self.claudeOAuthOutcome(snapshot: snapshot, ownerIdentifier: "owner-a"),
             provider: .claude,
-            account: account,
-            fallbackSnapshot: nil)
-        await store.applySelectedOutcome(
-            self.claudeOAuthOutcome(snapshot: snapshot, ownerIdentifier: "owner-a"),
-            provider: .claude,
-            account: account,
+            account: firstAccount,
             fallbackSnapshot: nil)
         await store.applySelectedOutcome(
             self.claudeOAuthOutcome(snapshot: snapshot, ownerIdentifier: "owner-b"),
             provider: .claude,
-            account: account,
+            account: firstAccount,
+            fallbackSnapshot: nil)
+        await store.applySelectedOutcome(
+            self.claudeOAuthOutcome(snapshot: snapshot, ownerIdentifier: "owner-b"),
+            provider: .claude,
+            account: secondAccount,
             fallbackSnapshot: nil)
 
         #expect(notifier.predictivePosts.map(\.event.window) == [.session, .session])
         #expect(notifier.predictivePosts.allSatisfy { $0.provider == .claude })
-        #expect(notifier.predictivePosts.allSatisfy { $0.event.accountDisplayName == "Selected" })
+        #expect(notifier.predictivePosts.map(\.event.accountDisplayName) == ["First", "Second"])
     }
 
     @Test

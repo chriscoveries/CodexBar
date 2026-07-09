@@ -201,12 +201,19 @@ extension UsageStore {
         return "email:\(account)"
     }
 
-    static func predictivePaceWarningClaudeOAuthAccountDiscriminator(ownerIdentifier: String?) -> String? {
-        guard let ownerIdentifier = ownerIdentifier?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-            !ownerIdentifier.isEmpty
+    static func predictivePaceWarningClaudeActiveAccountDiscriminator(
+        _ observation: ClaudeOAuthActiveAccountObservation) -> String?
+    {
+        guard case let .stable(identity) = observation,
+              let identity = identity?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !identity.isEmpty
         else { return nil }
-        return "claude-oauth:\(ownerIdentifier)"
+        return "claude-account:\(identity)"
+    }
+
+    static func predictivePaceWarningTokenAccountDiscriminator(_ account: ProviderTokenAccount?) -> String? {
+        guard let account else { return nil }
+        return "token-account:\(account.id.uuidString.lowercased())"
     }
 
     private func predictivePaceWarningAccountDisplayName(provider: UsageProvider, snapshot: UsageSnapshot) -> String? {
