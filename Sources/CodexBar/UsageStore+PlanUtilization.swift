@@ -513,6 +513,7 @@ extension UsageStore {
                 "usedPercent": String(format: "%.2f", currentUsed),
                 "observedAt": String(format: "%.0f", currentObservedAt.timeIntervalSince1970),
             ])
+        let hookAccountLabel = self.settings.hidePersonalInfo ? nil : accountLabel
         switch descriptor.seriesName {
         case .session:
             let event = SessionLimitResetEvent(
@@ -521,6 +522,12 @@ extension UsageStore {
                 accountLabel: accountLabel,
                 usedPercent: currentUsed)
             NotificationCenter.default.post(name: .codexbarSessionLimitReset, object: event)
+            self.emitHook(
+                .quotaReset,
+                provider: context.provider,
+                window: QuotaWarningWindow.session.displayName,
+                usagePercent: currentUsed / 100,
+                accountDisplayName: hookAccountLabel)
         case .weekly:
             let event = WeeklyLimitResetEvent(
                 provider: context.provider,
@@ -528,6 +535,12 @@ extension UsageStore {
                 accountLabel: accountLabel,
                 usedPercent: currentUsed)
             NotificationCenter.default.post(name: .codexbarWeeklyLimitReset, object: event)
+            self.emitHook(
+                .quotaReset,
+                provider: context.provider,
+                window: QuotaWarningWindow.weekly.displayName,
+                usagePercent: currentUsed / 100,
+                accountDisplayName: hookAccountLabel)
         default:
             return
         }

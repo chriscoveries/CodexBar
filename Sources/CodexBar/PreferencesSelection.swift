@@ -9,6 +9,7 @@ extension SettingsPane {
         case .general: "general"
         case .display: "display"
         case .advanced: "advanced"
+        case .hooks: "hooks"
         case .about: "about"
         case .debug: "debug"
         case let .provider(provider): "provider:\(provider.rawValue)"
@@ -20,6 +21,7 @@ extension SettingsPane {
         case "general": self = .general
         case "display": self = .display
         case "advanced": self = .advanced
+        case "hooks": self = .hooks
         case "about": self = .about
         case "debug": self = .debug
         default:

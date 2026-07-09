@@ -33,6 +33,7 @@ public enum LogCategories {
     public static let elevenLabsUsage = "elevenlabs-usage"
     public static let geminiProbe = "gemini-probe"
     public static let grok = "grok"
+    public static let hooks = "hooks"
     public static let keychainCache = "keychain-cache"
     public static let keychainMigration = "keychain-migration"
     public static let keychainPreflight = "keychain-preflight"

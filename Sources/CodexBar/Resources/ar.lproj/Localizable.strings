@@ -478,7 +478,25 @@
 "tab_providers" = "مقدمو الخدمات";
 "tab_display" = "العرض";
 "tab_advanced" = "متقدمة";
+"tab_hooks" = "الخطافات";
 "tab_about" = "حول";
+
+/* Hooks Pane */
+"hooks_enable_title" = "تفعيل الخطافات";
+"hooks_enable_subtitle" = "تشغيل أوامر خارجية عند وقوع أحداث الحصة أو المزود.";
+"hooks_trust_warning" = "يمكن للخطافات تنفيذ أوامر محلية على جهاز Mac. اضبط فقط الأوامر التي تثق بها.";
+"hooks_rules_header" = "القواعد";
+"hooks_empty" = "لا توجد خطافات مُهيأة.";
+"hooks_add_rule" = "إضافة قاعدة";
+"hooks_delete_rule" = "حذف القاعدة";
+"hooks_rule_enabled" = "مُفعّل";
+"hooks_event" = "الحدث";
+"hooks_provider" = "المزود";
+"hooks_any_provider" = "أي مزود";
+"hooks_threshold" = "التشغيل عند الاستخدام ≥";
+"hooks_threshold_placeholder" = "90";
+"hooks_executable_placeholder" = "/usr/local/bin/my-command";
+"hooks_arguments_placeholder" = "الوسائط (مفصولة بمسافات)";
 "tab_debug" = "تصحيح الأخطاء";
 
 /* Providers Pane */

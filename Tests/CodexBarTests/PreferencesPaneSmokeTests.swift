@@ -14,6 +14,7 @@ struct PreferencesPaneSmokeTests {
         _ = GeneralPane(settings: settings).body
         _ = DisplayPane(settings: settings, store: store).body
         _ = AdvancedPane(settings: settings, store: store).body
+        _ = HooksPane(settings: settings).body
         _ = ProvidersPane(settings: settings, store: store).body
         _ = DebugPane(settings: settings, store: store).body
         _ = AboutPane(updater: DisabledUpdaterController()).body

@@ -263,6 +263,8 @@ final class UsageStore {
     @ObservationIgnored var lastKnownSessionRemaining: [UsageProvider: Double] = [:]
     @ObservationIgnored var lastKnownSessionWindowSource: [UsageProvider: SessionQuotaWindowSource] = [:]
     @ObservationIgnored var quotaWarningState: [QuotaWarningStateKey: QuotaWarningState] = [:]
+    @ObservationIgnored let hookRateLimiter = HookRateLimiter()
+    @ObservationIgnored var providerStatusHadIssue: [UsageProvider: Bool] = [:]
     @ObservationIgnored var lastPermissionPromptNotificationAt: [UsageProvider: Date] = [:]
     @ObservationIgnored var lastTokenFetchAt: [UsageProvider: Date] = [:]
     @ObservationIgnored var lastTokenFetchScope: [UsageProvider: String] = [:]
@@ -851,36 +853,6 @@ final class UsageStore {
         self.resetBoundaryRefreshTask?.cancel()
     }
 
-    enum SessionQuotaWindowSource: String {
-        case primary
-        case copilotSecondaryFallback
-        case zaiTertiary
-        case antigravityQuotaSummary
-        case antigravityLegacy
-    }
-
-    struct QuotaWarningStateKey: Hashable {
-        let provider: UsageProvider
-        let window: QuotaWarningWindow
-        /// Distinguishes independent extra rate windows that share a provider/window lane
-        /// (e.g. multiple `claude-weekly-scoped-*` windows) so their fired-threshold state
-        /// does not clobber each other or the primary session/weekly lanes. `nil` for the
-        /// primary session and weekly lanes.
-        let windowID: String?
-
-        init(provider: UsageProvider, window: QuotaWarningWindow, windowID: String? = nil) {
-            self.provider = provider
-            self.window = window
-            self.windowID = windowID
-        }
-    }
-
-    struct QuotaWarningState {
-        var lastRemaining: Double?
-        var firedThresholds: Set<Int> = []
-        var source: SessionQuotaWindowSource?
-    }
-
     func postQuotaWarning(_ event: QuotaWarningEvent, provider: UsageProvider) {
         self.sessionQuotaNotifier.postQuotaWarning(
             event: event,
@@ -945,6 +917,7 @@ final class UsageStore {
                 let message = "startup depleted: provider=\(providerText) curr=\(currentRemaining)"
                 self.sessionQuotaLogger.info(message)
                 self.sessionQuotaNotifier.post(transition: .depleted, provider: provider, badge: nil)
+                self.emitQuotaReachedHook(provider: provider, sessionWindow: sessionWindow, snapshot: snapshot)
             }
             return
         }
@@ -973,6 +946,9 @@ final class UsageStore {
         self.sessionQuotaLogger.info(message)
 
         self.sessionQuotaNotifier.post(transition: transition, provider: provider, badge: nil)
+        if transition == .depleted {
+            self.emitQuotaReachedHook(provider: provider, sessionWindow: sessionWindow, snapshot: snapshot)
+        }
     }
 
     func refreshProviderStatus(_ provider: UsageProvider) async {
@@ -1000,6 +976,7 @@ final class UsageStore {
                 if let components {
                     self.statusComponents[provider] = components
                 }
+                self.emitProviderStatusHooks(provider: provider, indicator: status.indicator)
             }
         } catch {
             self.recordStartupConnectivityRetryableFailure(error)

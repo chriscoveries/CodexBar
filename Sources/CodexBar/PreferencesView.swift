@@ -7,6 +7,7 @@ enum SettingsPane: Hashable {
     case general
     case display
     case advanced
+    case hooks
     case about
     case debug
     case provider(UsageProvider)
@@ -23,6 +24,7 @@ enum SettingsPane: Hashable {
         case .general: L("tab_general")
         case .display: L("tab_display")
         case .advanced: L("tab_advanced")
+        case .hooks: L("tab_hooks")
         case .about: L("tab_about")
         case .debug: L("tab_debug")
         case let .provider(provider):
@@ -126,6 +128,8 @@ struct PreferencesView: View {
             DisplayPane(settings: self.settings, store: self.store)
         case .advanced:
             AdvancedPane(settings: self.settings, store: self.store)
+        case .hooks:
+            HooksPane(settings: self.settings)
         case .about:
             AboutPane(updater: self.updater)
         case .debug:

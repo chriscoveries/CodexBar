@@ -480,6 +480,24 @@
 "tab_providers" = "Provider";
 "tab_display" = "Aspetto";
 "tab_advanced" = "Avanzate";
+"tab_hooks" = "Hook";
+
+/* Hooks Pane */
+"hooks_enable_title" = "Abilita hook";
+"hooks_enable_subtitle" = "Esegui comandi esterni al verificarsi di eventi di quota o provider.";
+"hooks_trust_warning" = "Gli hook possono eseguire comandi locali sul tuo Mac. Configura solo comandi di cui ti fidi.";
+"hooks_rules_header" = "Regole";
+"hooks_empty" = "Nessun hook configurato.";
+"hooks_add_rule" = "Aggiungi regola";
+"hooks_delete_rule" = "Elimina regola";
+"hooks_rule_enabled" = "Abilitato";
+"hooks_event" = "Evento";
+"hooks_provider" = "Provider";
+"hooks_any_provider" = "Qualsiasi provider";
+"hooks_threshold" = "Attiva a utilizzo ≥";
+"hooks_threshold_placeholder" = "90";
+"hooks_executable_placeholder" = "/usr/local/bin/my-command";
+"hooks_arguments_placeholder" = "Argomenti (separati da spazi)";
 "tab_about" = "Informazioni";
 "tab_debug" = "Diagnostica";
 

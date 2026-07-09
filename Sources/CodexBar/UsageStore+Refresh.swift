@@ -679,6 +679,7 @@ extension UsageStore {
                 if !preservesPriorData, !preservesClaudeWebSessionFailure {
                     self.snapshots.removeValue(forKey: provider)
                 }
+                self.emitHook(.refreshFailed, provider: provider, status: error.localizedDescription)
             } else {
                 self.errors[provider] = nil
             }
