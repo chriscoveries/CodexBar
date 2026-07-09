@@ -1198,7 +1198,10 @@ public struct AntigravityStatusProbe: Sendable {
         guard let lsof else {
             throw AntigravityStatusProbeError.portDetectionFailed("lsof not available")
         }
+        return try await Self.lsofListeningPorts(lsof: lsof, pid: pid, timeout: timeout)
+    }
 
+    private static func lsofListeningPorts(lsof: String, pid: Int, timeout: TimeInterval) async throws -> [Int] {
         let env = ProcessInfo.processInfo.environment
         let result: SubprocessResult
         do {
