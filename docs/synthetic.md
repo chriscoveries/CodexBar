@@ -13,7 +13,8 @@ known Synthetic quota lanes into the shared provider card.
 
 ## Authentication
 
-Add the API key in Settings -> Providers -> Synthetic, or set:
+Create an API key using [Synthetic's API guide](https://dev.synthetic.new/docs/api/getting-started), then add it in
+Settings -> Providers -> Synthetic, or set:
 
 ```bash
 export SYNTHETIC_API_KEY="..."
@@ -27,7 +28,7 @@ printf '%s' "$SYNTHETIC_API_KEY" | codexbar config set-api-key --provider synthe
 
 ## Data source
 
-CodexBar sends a read-only request to Synthetic's quota API:
+CodexBar sends a read-only request to [Synthetic's quota API](https://dev.synthetic.new/docs/synthetic/quotas):
 
 ```http
 GET https://api.synthetic.new/v2/quotas
@@ -47,11 +48,14 @@ If those keys are absent, CodexBar falls back to generic quota payloads such as
 
 ## Display
 
-- The menu bar can show the five-hour quota, weekly token quota, or search-hourly lane.
+- The menu card shows the five-hour, weekly token, and search-hourly lanes when present. The compact menu bar metric
+  uses the five-hour or weekly lane.
 - Usage is normalized from percent fields when present, or computed from used/remaining/limit values.
-- Reset timestamps are shown when Synthetic returns one; otherwise CodexBar shows the inferred window label.
+- Reset timestamps are shown when Synthetic returns one. When no timestamp is available, CodexBar uses the returned
+  or inferred window duration when present.
 - Plan name, when returned, is displayed as provider identity context.
-- Synthetic does not currently provide CodexBar cost history or a provider status page.
+- Synthetic does not currently provide CodexBar cost history.
+- External status page: [status.synthetic.new](https://status.synthetic.new) (not linked or auto-polled by CodexBar).
 
 ## CLI usage
 
