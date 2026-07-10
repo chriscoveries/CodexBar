@@ -34,6 +34,21 @@ extension UsageStore {
         return candidate < scheduledAt
     }
 
+    /// Advances a fixed timer from the last scheduled tick instead of the refresh completion time.
+    /// Missed ticks are skipped so a refresh that runs longer than its interval does not create
+    /// overlapping catch-up refreshes.
+    nonisolated static func nextFixedTimerScheduledAt(
+        previousScheduledAt: ContinuousClock.Instant,
+        completedAt: ContinuousClock.Instant,
+        interval: Duration) -> ContinuousClock.Instant
+    {
+        var scheduledAt = previousScheduledAt + interval
+        while scheduledAt <= completedAt {
+            scheduledAt += interval
+        }
+        return scheduledAt
+    }
+
     func logAdaptiveRefreshDecision(_ decision: AdaptiveRefreshPolicy.Decision) {
         // Reason and delay only; never provider/account/email/path/credential/response data.
         // No "adaptive refresh: " prefix — the adaptiveRefresh log category already identifies the source.

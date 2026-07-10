@@ -179,7 +179,7 @@ extension StatusItemController: StatusItemMenuPersistentActionDelegate {
                     interaction: .userInitiated)
             } else {
                 await self.performStoreRefresh(
-                    forceTokenUsage: true,
+                    forceTokenUsage: false,
                     refreshOpenMenusWhenComplete: true,
                     interaction: .userInitiated)
             }

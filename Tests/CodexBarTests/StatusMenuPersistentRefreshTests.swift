@@ -1201,17 +1201,17 @@ extension StatusMenuPersistentRefreshTests {
         }
 
         controller.refreshNow()
+        let manualTask = try? #require(controller.manualRefreshTasks[.global])
         await tokenRefreshStarted.wait()
+        await manualTask?.value
 
-        #expect(controller.store.isRefreshing)
+        #expect(!controller.store.isRefreshing)
         #expect(controller.store.refreshingProviders.isEmpty)
-        #expect(monitor.isManualRefreshInFlight)
+        #expect(!monitor.isManualRefreshInFlight)
         #expect(!monitor.isManualRefreshInFlight(for: .codex))
         #expect(monitor.subtitle(for: .codex, fallback: fallback).style == .info)
 
         releaseTokenRefresh.resume()
-        await controller.manualRefreshTasks[.global]?.value
-        #expect(!monitor.isManualRefreshInFlight)
     }
 
     @Test

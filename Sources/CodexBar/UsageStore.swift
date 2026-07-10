@@ -769,13 +769,23 @@ final class UsageStore {
         guard let wait = frequency.seconds else { return }
 
         // Background poller so the menu stays responsive; canceled when settings change or store deallocates.
-        // `self` is only briefly borrowed to read the (DEBUG-only) sleep override, never held across the sleep.
+        // Fixed cadence is anchored to the scheduled tick time, not refresh completion, so slow provider
+        // work doesn't permanently stretch a two-minute interval into "refresh duration + two minutes".
         self.timerTask = Task.detached(priority: .utility) { [weak self] in
+            let interval = Duration.seconds(wait)
+            let clock = ContinuousClock()
+            var scheduledAt = clock.now + interval
             while !Task.isCancelled {
-                let sleepDuration = await self?.effectiveTimerSleepDuration(.seconds(wait)) ?? .seconds(wait)
+                let now = clock.now
+                let computedSleep = now >= scheduledAt ? .zero : scheduledAt - now
+                let sleepDuration = await self?.effectiveTimerSleepDuration(computedSleep) ?? computedSleep
                 try? await Task.sleep(for: sleepDuration)
                 guard !Task.isCancelled else { return }
                 await self?.refresh()
+                scheduledAt = Self.nextFixedTimerScheduledAt(
+                    previousScheduledAt: scheduledAt,
+                    completedAt: clock.now,
+                    interval: interval)
             }
         }
     }

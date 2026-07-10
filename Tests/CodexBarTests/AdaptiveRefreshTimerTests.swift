@@ -131,6 +131,25 @@ struct AdaptiveRefreshTimerTests {
     }
 
     @Test
+    func `fixed cadence advances from scheduled tick instead of refresh completion`() {
+        let interval = Duration.milliseconds(100)
+        let start = ContinuousClock.now
+        let firstScheduledAt = start + interval
+
+        let nextAfterSlowRefresh = UsageStore.nextFixedTimerScheduledAt(
+            previousScheduledAt: firstScheduledAt,
+            completedAt: firstScheduledAt + .milliseconds(60),
+            interval: interval)
+        #expect(nextAfterSlowRefresh == start + .milliseconds(200))
+
+        let nextAfterMissedTicks = UsageStore.nextFixedTimerScheduledAt(
+            previousScheduledAt: firstScheduledAt,
+            completedAt: firstScheduledAt + .milliseconds(260),
+            interval: interval)
+        #expect(nextAfterMissedTicks == start + .milliseconds(400))
+    }
+
+    @Test
     func `adaptive mode keeps recomputing and refreshing across menu-open changes`() async throws {
         let settings = Self.makeSettingsStore(suite: "AdaptiveRefreshTimerTests-adaptive", frequency: .adaptive)
         let store = Self.makeUsageStore(settings: settings, startupBehavior: .full)
