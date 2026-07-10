@@ -81,6 +81,74 @@ extension CodexBackgroundRefreshCoalescingTests {
     }
 
     @Test
+    func `forced dashboard refresh stops a queued stale scheduler before it starts`() async throws {
+        let settings = try self.makeSettingsStore(
+            suite: "CodexBackgroundRefreshCoalescingTests-forced-dashboard-prestart-cancellation")
+        settings.statusChecksEnabled = false
+        settings.costUsageEnabled = false
+        let managedAccount = try Self.installManagedAccount(
+            email: "managed@example.com",
+            settings: settings)
+        defer { try? FileManager.default.removeItem(atPath: managedAccount.managedHomePath) }
+
+        let store = self.makeStore(settings: settings)
+        var allowNavigationTimeoutRetries: [Bool] = []
+        store._test_openAIDashboardCookieImportOverride = { targetEmail, _, _, _, _ in
+            OpenAIDashboardBrowserCookieImporter.ImportResult(
+                sourceLabel: "Fixture",
+                cookieCount: 2,
+                signedInEmail: targetEmail,
+                matchesCodexEmail: true)
+        }
+        store._test_openAIDashboardLoaderOverride = { _, _, allowNavigationTimeoutRetry, _ in
+            allowNavigationTimeoutRetries.append(allowNavigationTimeoutRetry)
+            return OpenAIDashboardSnapshot(
+                signedInEmail: managedAccount.email,
+                codeReviewRemainingPercent: 95,
+                creditEvents: [],
+                dailyBreakdown: [],
+                usageBreakdown: [],
+                creditsPurchaseURL: nil,
+                creditsRemaining: 25,
+                accountPlan: "Pro",
+                updatedAt: Date())
+        }
+        defer {
+            store._test_openAIDashboardCookieImportOverride = nil
+            store._test_openAIDashboardLoaderOverride = nil
+        }
+
+        let currentGuard = store.freshCodexOpenAIWebRefreshGuard()
+        let backgroundGuard = CodexAccountScopedRefreshGuard(
+            source: currentGuard.source,
+            identity: currentGuard.identity,
+            accountKey: currentGuard.accountKey,
+            authFingerprint: "background-token-material")
+        let forcedGuard = CodexAccountScopedRefreshGuard(
+            source: currentGuard.source,
+            identity: currentGuard.identity,
+            accountKey: currentGuard.accountKey,
+            authFingerprint: "forced-token-material")
+        store.openAIWebAccountDidChange = true
+
+        // Keep both calls on this MainActor turn so the forced request cancels the scheduler
+        // before its task body starts.
+        store.scheduleOpenAIDashboardRefreshIfNeeded(expectedGuard: backgroundGuard)
+        let backgroundTask = try #require(store.openAIDashboardBackgroundRefreshTask)
+        await store.refreshOpenAIDashboardIfNeeded(
+            force: true,
+            expectedGuard: forcedGuard,
+            bypassCoalescing: true,
+            allowCodexUsageBackfill: false)
+        await backgroundTask.value
+
+        #expect(backgroundTask.isCancelled)
+        #expect(allowNavigationTimeoutRetries == [true])
+        #expect(store.openAIDashboardBackgroundRefreshTask == nil)
+        #expect(store.openAIDashboardRefreshTask == nil)
+    }
+
+    @Test
     func `forced dashboard enrichment supersedes weaker background request`() async throws {
         let settings = try self.makeSettingsStore(
             suite: "CodexBackgroundRefreshCoalescingTests-forced-dashboard-supersedes-background")
