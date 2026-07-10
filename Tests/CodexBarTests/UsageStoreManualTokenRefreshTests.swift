@@ -78,6 +78,17 @@ private actor TokenRefreshRecorder {
     func record(provider: UsageProvider, force: Bool) {
         self.calls.append((provider, force))
     }
+
+    func waitForCallCount(_ count: Int, timeout: Duration = .seconds(5)) async -> Bool {
+        let deadline = ContinuousClock.now + timeout
+        while self.calls.count < count {
+            if ContinuousClock.now >= deadline {
+                return false
+            }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        return true
+    }
 }
 
 @MainActor
@@ -273,15 +284,39 @@ struct UsageStoreManualTokenRefreshTests {
         }
     }
 
+    @Test
+    func `forced background refresh bypasses a fresh token cache`() async {
+        let store = Self.makeStore()
+        let recorder = TokenRefreshRecorder()
+        store._test_providerRefreshOverride = { _ in }
+        store._test_codexCreditsLoaderOverride = {
+            CreditsSnapshot(remaining: 25, events: [], updatedAt: Date())
+        }
+        store._test_tokenUsageRefreshOverride = { provider, force in
+            await recorder.record(provider: provider, force: force)
+        }
+        defer {
+            store._test_providerRefreshOverride = nil
+            store._test_codexCreditsLoaderOverride = nil
+            store._test_tokenUsageRefreshOverride = nil
+        }
+
+        await store.refresh(forceTokenUsage: false)
+        let didRecordScheduledRefresh = await recorder.waitForCallCount(1)
+        #expect(didRecordScheduledRefresh)
+        guard didRecordScheduledRefresh else {
+            store.cancelForcedRefreshEnrichment()
+            return
+        }
+        await store.refresh(enrichmentMode: .forcedBackground)
+        await store.awaitForcedRefreshEnrichment()
+
+        #expect(await recorder.calls.map(\.provider) == [.codex, .codex])
+        #expect(await recorder.calls.map(\.force) == [false, true])
+    }
+
     private static func makeStore(enabledProviders: Set<UsageProvider> = [.codex]) -> UsageStore {
-        let suite = "UsageStoreManualTokenRefreshTests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defaults.removePersistentDomain(forName: suite)
-        let settings = SettingsStore(
-            userDefaults: defaults,
-            configStore: testConfigStore(suiteName: suite),
-            zaiTokenStore: NoopZaiTokenStore(),
-            syntheticTokenStore: NoopSyntheticTokenStore())
+        let settings = testSettingsStore(suiteName: "UsageStoreManualTokenRefreshTests")
         settings.refreshFrequency = .manual
         settings.statusChecksEnabled = false
         settings.costUsageEnabled = true
@@ -298,11 +333,19 @@ struct UsageStoreManualTokenRefreshTests {
                 enabled: enabledProviders.contains(provider))
         }
 
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codexbar-tests", isDirectory: true)
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let environment = [
+            "HOME": root.path,
+            "CODEX_HOME": root.appendingPathComponent(".codex", isDirectory: true).path,
+            "XDG_CONFIG_HOME": root.appendingPathComponent(".config", isDirectory: true).path,
+        ]
         return UsageStore(
-            fetcher: UsageFetcher(),
+            fetcher: UsageFetcher(environment: environment),
             browserDetection: BrowserDetection(cacheTTL: 0),
             settings: settings,
             startupBehavior: .testing,
-            environmentBase: [:])
+            environmentBase: environment)
     }
 }

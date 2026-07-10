@@ -42,11 +42,40 @@ extension UsageStore {
         completedAt: ContinuousClock.Instant,
         interval: Duration) -> ContinuousClock.Instant
     {
+        precondition(interval > .zero)
         var scheduledAt = previousScheduledAt + interval
         while scheduledAt <= completedAt {
             scheduledAt += interval
         }
         return scheduledAt
+    }
+
+    nonisolated static func runFixedRefreshTimer(
+        interval: Duration,
+        sleepOverride: Duration? = nil,
+        now: @escaping @Sendable () async -> ContinuousClock.Instant = { ContinuousClock.now },
+        sleep: @escaping @Sendable (Duration) async throws -> Void = { duration in
+            try await Task.sleep(for: duration)
+        },
+        refresh: @escaping @Sendable () async -> Void) async
+    {
+        precondition(interval > .zero)
+        var scheduledAt = await now() + interval
+        while !Task.isCancelled {
+            let current = await now()
+            let computedSleep = current >= scheduledAt ? .zero : scheduledAt - current
+            do {
+                try await sleep(sleepOverride ?? computedSleep)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            await refresh()
+            scheduledAt = await self.nextFixedTimerScheduledAt(
+                previousScheduledAt: scheduledAt,
+                completedAt: now(),
+                interval: interval)
+        }
     }
 
     func logAdaptiveRefreshDecision(_ decision: AdaptiveRefreshPolicy.Decision) {

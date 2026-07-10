@@ -430,6 +430,10 @@ extension UsageStore {
             await task.value
             return
         }
+        if bypassCoalescing {
+            self.openAIDashboardBackgroundRefreshTask?.cancel()
+            self.openAIDashboardRefreshTask?.cancel()
+        }
         self.handleOpenAIWebTargetEmailChangeIfNeeded(
             targetEmail: targetEmail,
             targetScope: self.codexCookieCacheScopeForOpenAIWeb())

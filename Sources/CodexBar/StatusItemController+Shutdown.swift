@@ -33,6 +33,8 @@ extension StatusItemController {
             task.cancel()
         }
         self.manualRefreshTasks.removeAll()
+        self.store.cancelForcedRefreshEnrichment()
+        self.store.cancelRequiredRefresh()
         self.menuCardRefreshMonitor.resetManualRefresh()
         self.screenChangeVisibilityTask?.cancel()
         self.screenChangeVisibilityTask = nil

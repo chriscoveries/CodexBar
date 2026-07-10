@@ -14,6 +14,7 @@
 - Quota warnings: add opt-in predictive pace alerts for Codex and Claude session and weekly limits, with one alert per risk episode. Thanks @vincent-peng!
 
 ### Fixed
+- Refresh: keep all-provider manual refresh responsive while forced cost, credit, and dashboard enrichment finishes in a serialized background tail, and keep fixed intervals anchored to scheduled ticks. Thanks @Yuxin-Qiao!
 - Agent Sessions: keep local and remote session discovery off by default while preserving the General setting for explicit opt-in.
 - Menus: stop completed provider cards and plan-utilization rows from remaining in “Refreshing…” while unrelated provider or token-cost work is still running. Thanks @Yuxin-Qiao!
 - Menu: keep native hover highlights aligned by deferring geometry-changing open-menu rebuilds until the pointer leaves the row. Thanks @Zihao-Qi!

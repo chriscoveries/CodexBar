@@ -117,6 +117,7 @@ public enum KeychainAccessPreflight {
 
     static func withCheckGenericPasswordOverrideForTesting<T>(
         _ override: ((String, String?) -> Outcome)?,
+        isolation _: isolated (any Actor)? = #isolation,
         operation: () async throws -> T) async rethrows -> T
     {
         try await self.$taskCheckGenericPasswordOverrideStore.withValue(
