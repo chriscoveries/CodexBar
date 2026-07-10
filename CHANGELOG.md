@@ -23,6 +23,7 @@
 - Token costs: coalesce bounded pricing-catalog refreshes when a newly observed model is still unpriced, preserving its exact usage until pricing arrives. Thanks @iam-brain!
 - Cost history: keep model breakdown menus steady while hovering, preserve compact rows, and make overflowing histories scrollable. Thanks @iam-brain!
 - Ollama: validate API keys against an authenticated endpoint instead of the public model catalog while preserving refresh cancellation. Thanks @joeVenner!
+- Claude CLI: recognize explicit-year reset timestamps while preserving their stated year and exact local DST occurrence, keeping countdowns, pace, and reset scheduling available.
 - Claude CLI: resolve yearless and time-only reset timestamps against their quota window and exact calendar occurrence, keeping recently stale resets current without moving future, leap-day, or repeated-hour resets into the past. Thanks @fanwenlin!
 - Catalan: complete current strings, align instructional voice, and enforce catalog parity. Thanks @pmontp19!
 - Kimi K2: report missing, blank, or rejected API keys clearly and trim surrounding whitespace before requests. Thanks @joeVenner!
