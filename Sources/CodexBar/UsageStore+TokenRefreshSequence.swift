@@ -67,19 +67,20 @@ extension UsageStore {
         force: Bool,
         scope: TokenRefreshSequenceScope) -> Task<Void, Never>
     {
+        let providers: [UsageProvider] = switch scope {
+        case .all:
+            self.enabledProvidersForBackgroundWork()
+        case let .provider(provider):
+            [provider]
+        }
         let token = UUID()
         self.tokenRefreshSequenceToken = token
+        // Publish the first owner before installing the task. A scoped forced refresh can arrive
+        // before the task gets its first MainActor turn and must not mistake this slot for unknown work.
+        self.tokenRefreshSequenceProvider = providers.first
         let task = Task(priority: .utility) { @MainActor [weak self] in
             guard let self else { return }
-            switch scope {
-            case .all:
-                await self.refreshTokenUsageSequence(force: force)
-            case let .provider(provider):
-                self.tokenRefreshSequenceProvider = provider
-                await self.refreshTokenUsage(provider, force: force)
-                self.tokenRefreshSequenceProvider = nil
-                self.scheduleMemoryPressureRelief()
-            }
+            await self.refreshTokenUsageSequence(providers: providers, force: force)
             self.completeTokenRefreshSequence(token: token)
         }
         self.tokenRefreshSequenceTask = task
@@ -101,9 +102,9 @@ extension UsageStore {
         self.tokenRefreshSequenceProvider = nil
     }
 
-    private func refreshTokenUsageSequence(force: Bool) async {
+    private func refreshTokenUsageSequence(providers: [UsageProvider], force: Bool) async {
         defer { self.tokenRefreshSequenceProvider = nil }
-        for provider in self.enabledProvidersForBackgroundWork() {
+        for provider in providers {
             if Task.isCancelled {
                 break
             }

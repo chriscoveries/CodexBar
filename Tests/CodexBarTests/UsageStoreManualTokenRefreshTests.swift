@@ -261,6 +261,29 @@ struct UsageStoreManualTokenRefreshTests {
     }
 
     @Test
+    func `scoped manual refresh preserves an unrelated token sequence before it starts`() async {
+        let store = Self.makeStore(enabledProviders: [.claude, .codex])
+        let recorder = TokenRefreshRecorder()
+        store._test_tokenUsageRefreshOverride = { provider, force in
+            await recorder.record(provider: provider, force: force)
+        }
+
+        // Do not yield between installing the scheduled slot and starting the scoped refresh. This
+        // exercises the window before the scheduled task receives its first MainActor turn.
+        store.scheduleTokenRefreshForTesting()
+        await store.refreshTokenUsageNow(for: .claude, force: true)
+
+        let recordedBothRefreshes = await recorder.waitForCallCount(2)
+        #expect(recordedBothRefreshes)
+        let scheduledTask = store.tokenRefreshSequenceTask
+        await scheduledTask?.value
+
+        let calls = await recorder.calls
+        #expect(calls.contains { $0.provider == .codex && !$0.force })
+        #expect(calls.contains { $0.provider == .claude && $0.force })
+    }
+
+    @Test
     func `regular refresh schedules token-cost refresh without waiting`() async {
         let store = Self.makeStore()
         let gate = TokenRefreshGate()
