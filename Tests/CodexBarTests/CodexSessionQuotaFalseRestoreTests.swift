@@ -163,7 +163,7 @@ struct CodexSessionQuotaFalseRestoreTests {
     }
 
     @Test
-    func `regressed post expiry boundary never confirms a restore`() throws {
+    func `regressed post expiry boundary requires two fresh observations`() throws {
         let owner = try self.owner("regressed")
         let boundary = self.start.addingTimeInterval(5 * 3600)
         let regressed = self.start.addingTimeInterval(10 * 60)
@@ -173,9 +173,13 @@ struct CodexSessionQuotaFalseRestoreTests {
         self.observe(store, used: 20, boundary: boundary, at: self.start, owner: owner)
         self.observe(store, used: 100, boundary: boundary, at: self.start.addingTimeInterval(60), owner: owner)
         self.observe(store, used: 20, boundary: regressed, at: boundary.addingTimeInterval(60), owner: owner)
-        self.observe(store, used: 10, boundary: regressed, at: boundary.addingTimeInterval(120), owner: owner)
-
         #expect(notifier.transitions == [.depleted])
+        #expect(store.sessionQuotaTransitionStates[.codex]?.pendingCodexRestoreObservationAt != nil)
+
+        self.observe(store, used: 10, boundary: regressed, at: boundary.addingTimeInterval(120), owner: owner)
+        self.observe(store, used: 5, boundary: regressed, at: boundary.addingTimeInterval(180), owner: owner)
+
+        #expect(notifier.transitions == [.depleted, .restored])
         #expect(store.sessionQuotaTransitionStates[.codex]?.pendingCodexRestoreObservationAt == nil)
     }
 

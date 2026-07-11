@@ -197,14 +197,9 @@ enum SessionQuotaTransitionReducer {
             if let resetBoundary = observation.resetBoundary,
                !UsageStore.areEquivalentPlanUtilizationResetBoundaries(trustedResetBoundary, resetBoundary)
             {
-                guard resetBoundary > trustedResetBoundary else {
-                    return SessionQuotaTransitionEvaluation(
-                        outcome: .suppressedCodexRestore,
-                        state: Self.preservedDepletedState(
-                            previous: previous,
-                            observation: observation))
-                }
-                if resetBoundary > observation.evaluationTime {
+                if resetBoundary > trustedResetBoundary,
+                   resetBoundary > observation.evaluationTime
+                {
                     return SessionQuotaTransitionEvaluation(
                         outcome: .restored,
                         state: Self.updatedState(
@@ -214,8 +209,8 @@ enum SessionQuotaTransitionReducer {
             }
         }
 
-        // Missing, equivalent, or already elapsed metadata can be a stale post-reset snapshot. Two
-        // fresh positive observations confirm the restore without trusting one ambiguous sample.
+        // Missing, equivalent, regressed, or already elapsed metadata can be a stale post-reset snapshot.
+        // Two fresh positive observations confirm the restore without trusting one ambiguous sample.
         if let pending = previous.pendingCodexRestoreObservationAt, observation.observedAt > pending {
             return SessionQuotaTransitionEvaluation(
                 outcome: .restored,
