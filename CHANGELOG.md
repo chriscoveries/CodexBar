@@ -841,7 +841,6 @@
 - Manus: add browser-cookie provider support for credit balance, monthly credits, and daily refresh tracking (#700). Thanks @hhh2210!
 - MiMo: add browser-cookie provider support for Xiaomi token-plan usage, plan labels, balance fallback, CLI, widget, and docs (#651). Thanks @debpramanik!
 - Qwen and Doubao: add API-key provider support for Alibaba Qwen and Volcengine Ark request-limit tracking (#498). Thanks @LeoLin990405!
-- MiniMax: add multi-service quota cards for text, speech, image, video, and music coding-plan usage (#605). Thanks @XWind18!
 - Antigravity: add OAuth-backed remote usage fetching so quotas can refresh even when the IDE is closed (#635). Thanks @abnormal749!
 - Venice: add API-key balance provider support with DIEM/USD balance display and token-account CLI wiring (#865). Thanks @clawSean!
 - Crof: add API-key provider support with request quota and credit balance tracking (#872). Thanks @baanish!
@@ -856,8 +855,6 @@
 
 ### Menu & Settings
 - Codex: add a stacked multi-account menu layout for account switchers (#869). Thanks @ajmccall!
-- Notifications: add opt-in quota warning notifications, warning markers, and provider-level thresholds for session and weekly quota windows (#852). Thanks @Alekstodo!
-- Accessibility: add VoiceOver labels for status icons, menu rows, provider switcher buttons, and usage charts (#860, fixes #859). Thanks @WadydX!
 - Menu bar: keep status items visible on launch by avoiding macOS autosaved hidden menu-extra state from v0.24 (#861).
 - Menu bar: remove stale split provider status items instead of hiding them, avoiding leftover second-icon slots on macOS 26.4.
 - Menu: keep the status menu open when manually refreshing usage from the menu (#845). Thanks @OlimjonovOtabek!
