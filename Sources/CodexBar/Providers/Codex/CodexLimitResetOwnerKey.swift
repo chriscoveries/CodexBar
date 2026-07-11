@@ -37,7 +37,10 @@ struct CodexSessionQuotaOwnerKey: Equatable, Sendable {
                 return nil
             }
             guard let sourceKey = Self.sourceKey(refreshGuard.source) else { return nil }
-            input = "codex-session-quota-owner:v1\0email\0\(sourceKey)\0\(email)"
+            // Email-only auth cannot distinguish same-email workspaces. Include the credential fingerprint
+            // and deliberately establish a new baseline after rotation rather than risk a cross-account alert.
+            guard let fingerprint = CodexAuthFingerprint.normalize(refreshGuard.authFingerprint) else { return nil }
+            input = "codex-session-quota-owner:v1\0email\0\(sourceKey)\0\(email)\0\(fingerprint)"
         case .unresolved:
             return nil
         }

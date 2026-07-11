@@ -425,7 +425,7 @@ struct CodexSessionQuotaFalseRestoreTests {
     }
 
     @Test
-    func `email only notification owners isolate source and survive credential rotation`() throws {
+    func `email only notification owners isolate source and credential rotation`() throws {
         let email = "email-only-owner@example.test"
         let identity = CodexIdentity.emailOnly(normalizedEmail: email)
         let liveA = try #require(CodexSessionQuotaOwnerKey(refreshGuard: CodexAccountScopedRefreshGuard(
@@ -455,14 +455,19 @@ struct CodexSessionQuotaFalseRestoreTests {
             accountKey: email,
             authFingerprint: "fixture-b")))
 
-        #expect(liveA == liveB)
+        #expect(liveA != liveB)
         #expect(liveA != profile)
         #expect(providerA == providerB)
         #expect(CodexLimitResetOwnerKey(identity: identity, accountEmail: email) == nil)
+        #expect(CodexSessionQuotaOwnerKey(refreshGuard: CodexAccountScopedRefreshGuard(
+            source: .liveSystem,
+            identity: identity,
+            accountKey: email,
+            authFingerprint: nil)) == nil)
     }
 
     @Test
-    func `email only credential rotation preserves depleted notification state`() throws {
+    func `email only credential rotation establishes a new baseline`() throws {
         let email = "rotating-email-only-owner@example.test"
         let identity = CodexIdentity.emailOnly(normalizedEmail: email)
         let oldGuard = CodexAccountScopedRefreshGuard(
@@ -475,12 +480,59 @@ struct CodexSessionQuotaFalseRestoreTests {
             identity: identity,
             accountKey: email,
             authFingerprint: "fixture-new")
-        let owner = try #require(UsageStore.codexSessionQuotaOwnerKey(for: oldGuard))
+        let oldOwner = try #require(UsageStore.codexSessionQuotaOwnerKey(for: oldGuard))
+        let newOwner = try #require(UsageStore.codexSessionQuotaOwnerKey(for: newGuard))
         let notifier = SessionQuotaNotifierSpy()
         let store = Self.makeStore(notifier: notifier)
 
-        self.observe(store, used: 20, boundary: nil, at: self.start, owner: owner)
-        self.observe(store, used: 100, boundary: nil, at: self.start.addingTimeInterval(60), owner: owner)
+        self.observe(store, used: 20, boundary: nil, at: self.start, owner: oldOwner)
+        self.observe(store, used: 100, boundary: nil, at: self.start.addingTimeInterval(60), owner: oldOwner)
+        store.snapshots[.codex] = self.snapshot(
+            used: 100,
+            resetBoundary: nil,
+            updatedAt: self.start.addingTimeInterval(60),
+            email: email)
+        store.lastCodexUsagePublicationGuard = oldGuard
+        store.lastCodexAccountScopedRefreshGuard = oldGuard
+
+        store.reconcileCodexAccountStateForUsageOwner(newGuard)
+
+        #expect(store.snapshots[.codex] == nil)
+        #expect(store.sessionQuotaTransitionStates[.codex] == nil)
+        self.observe(
+            store,
+            used: 20,
+            boundary: nil,
+            at: self.start.addingTimeInterval(120),
+            owner: newOwner)
+
+        #expect(notifier.transitions == [.depleted])
+        #expect(store.sessionQuotaTransitionStates[.codex]?.codexOwnerKey == newOwner)
+        #expect(store.sessionQuotaTransitionStates[.codex]?.remaining == 80)
+    }
+
+    @Test
+    func `provider owner survives source and credential changes`() throws {
+        let email = "provider-source-owner@example.test"
+        let identity = CodexIdentity.providerAccount(id: "workspace-provider-source-owner")
+        let oldGuard = CodexAccountScopedRefreshGuard(
+            source: .liveSystem,
+            identity: identity,
+            accountKey: email,
+            authFingerprint: "fixture-old")
+        let newGuard = CodexAccountScopedRefreshGuard(
+            source: .profileHome(path: "/tmp/codex-provider-source-owner"),
+            identity: identity,
+            accountKey: email,
+            authFingerprint: "fixture-new")
+        let oldOwner = try #require(UsageStore.codexSessionQuotaOwnerKey(for: oldGuard))
+        let newOwner = try #require(UsageStore.codexSessionQuotaOwnerKey(for: newGuard))
+        let notifier = SessionQuotaNotifierSpy()
+        let store = Self.makeStore(notifier: notifier)
+
+        #expect(oldOwner == newOwner)
+        self.observe(store, used: 20, boundary: nil, at: self.start, owner: oldOwner)
+        self.observe(store, used: 100, boundary: nil, at: self.start.addingTimeInterval(60), owner: oldOwner)
         store.snapshots[.codex] = self.snapshot(
             used: 100,
             resetBoundary: nil,
@@ -493,19 +545,18 @@ struct CodexSessionQuotaFalseRestoreTests {
 
         #expect(store.snapshots[.codex] == nil)
         #expect(store.sessionQuotaTransitionStates[.codex]?.remaining == 0)
-        let rotatedOwner = try #require(UsageStore.codexSessionQuotaOwnerKey(for: newGuard))
         self.observe(
             store,
             used: 20,
             boundary: nil,
             at: self.start.addingTimeInterval(120),
-            owner: rotatedOwner)
+            owner: newOwner)
         self.observe(
             store,
             used: 10,
             boundary: nil,
             at: self.start.addingTimeInterval(180),
-            owner: rotatedOwner)
+            owner: newOwner)
 
         #expect(notifier.transitions == [.depleted, .restored])
         _ = store.prepareCodexAccountScopedRefreshIfNeeded(
