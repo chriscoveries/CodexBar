@@ -9,6 +9,48 @@ enum SessionQuotaTransition: Equatable {
     case restored
 }
 
+struct SessionQuotaTransitionState: Equatable {
+    let remaining: Double
+    let source: UsageStore.SessionQuotaWindowSource
+    let observedAt: Date
+    let codexOwnerKey: CodexLimitResetOwnerKey?
+    let trustedResetBoundary: Date?
+    let pendingCodexRestoreObservationAt: Date?
+}
+
+enum SessionQuotaTransitionOutcome: Equatable {
+    case none
+    case depleted
+    case restored
+    case baselineChanged
+    case staleCodexObservation
+    case suppressedCodexRestore
+    case awaitingCodexRestoreConfirmation
+
+    var transition: SessionQuotaTransition {
+        switch self {
+        case .depleted: .depleted
+        case .restored: .restored
+        default: .none
+        }
+    }
+}
+
+struct SessionQuotaTransitionEvaluation: Equatable {
+    let outcome: SessionQuotaTransitionOutcome
+    let state: SessionQuotaTransitionState
+}
+
+struct SessionQuotaTransitionObservation: Equatable {
+    let provider: UsageProvider
+    let remaining: Double
+    let source: UsageStore.SessionQuotaWindowSource
+    let resetBoundary: Date?
+    let observedAt: Date
+    let evaluationTime: Date
+    let codexOwnerKey: CodexLimitResetOwnerKey?
+}
+
 struct QuotaWarningEvent: Equatable {
     let window: QuotaWarningWindow
     let threshold: Int
@@ -63,22 +105,6 @@ enum SessionQuotaNotificationLogic {
         return .none
     }
 
-    static func sessionResetBoundaryAllowsRestore(
-        previousResetBoundary: Date?,
-        currentResetBoundary: Date?,
-        evaluationTime: Date) -> Bool
-    {
-        guard let previousResetBoundary else { return true }
-        // Positive usage after the known boundary is reset evidence even when a fallback
-        // omits `resetsAt` or repeats the now-stale boundary.
-        if evaluationTime >= previousResetBoundary {
-            return true
-        }
-        return UsageStore.limitResetBoundaryAdvanced(
-            previous: previousResetBoundary,
-            current: currentResetBoundary)
-    }
-
     static func notificationCopy(
         transition: SessionQuotaTransition,
         providerName: String) -> (title: String, body: String)
@@ -98,10 +124,167 @@ enum SessionQuotaNotificationLogic {
     }
 }
 
-enum SessionResetBoundaryRecordingPolicy {
-    case update
-    case preserve
-    case restored
+enum SessionQuotaTransitionReducer {
+    static func evaluate(
+        previous: SessionQuotaTransitionState?,
+        observation: SessionQuotaTransitionObservation,
+        notificationsEnabled: Bool) -> SessionQuotaTransitionEvaluation
+    {
+        guard let previous else {
+            return SessionQuotaTransitionEvaluation(
+                outcome: notificationsEnabled && SessionQuotaNotificationLogic.isDepleted(observation.remaining)
+                    ? .depleted
+                    : .none,
+                state: self.baselineState(observation: observation))
+        }
+
+        let ownerChanged = observation.provider == .codex && previous.codexOwnerKey != observation.codexOwnerKey
+        guard previous.source == observation.source, !ownerChanged else {
+            return SessionQuotaTransitionEvaluation(
+                outcome: .baselineChanged,
+                state: Self.baselineState(observation: observation))
+        }
+
+        if observation.provider == .codex, observation.observedAt <= previous.observedAt {
+            return SessionQuotaTransitionEvaluation(outcome: .staleCodexObservation, state: previous)
+        }
+
+        guard notificationsEnabled else {
+            return SessionQuotaTransitionEvaluation(
+                outcome: .none,
+                state: Self.updatedState(
+                    previous: previous,
+                    observation: observation))
+        }
+
+        let transition = SessionQuotaNotificationLogic.transition(
+            previousRemaining: previous.remaining,
+            currentRemaining: observation.remaining)
+        if transition != .restored || observation.provider != .codex {
+            let outcome: SessionQuotaTransitionOutcome = switch transition {
+            case .none: .none
+            case .depleted: .depleted
+            case .restored: .restored
+            }
+            let preserveDepletedBoundary = observation.provider == .codex &&
+                SessionQuotaNotificationLogic.isDepleted(previous.remaining) &&
+                SessionQuotaNotificationLogic.isDepleted(observation.remaining)
+            let preserveCodexBoundary = preserveDepletedBoundary ||
+                (observation.provider == .codex && previous.trustedResetBoundary.map {
+                    observation.evaluationTime < $0 || observation.observedAt < $0
+                } == true)
+            return SessionQuotaTransitionEvaluation(
+                outcome: outcome,
+                state: Self.updatedState(
+                    previous: previous,
+                    observation: observation,
+                    preserveCodexResetBoundary: preserveCodexBoundary))
+        }
+
+        if let trustedResetBoundary = previous.trustedResetBoundary {
+            // The prior depleted boundary is authoritative while it remains in the future. A transient
+            // positive sample must not replace it, even when that sample advertises an advanced boundary.
+            guard observation.evaluationTime >= trustedResetBoundary,
+                  observation.observedAt >= trustedResetBoundary
+            else {
+                return SessionQuotaTransitionEvaluation(
+                    outcome: .suppressedCodexRestore,
+                    state: Self.preservedDepletedState(
+                        previous: previous,
+                        observation: observation))
+            }
+
+            if let resetBoundary = observation.resetBoundary,
+               !UsageStore.areEquivalentPlanUtilizationResetBoundaries(trustedResetBoundary, resetBoundary)
+            {
+                guard resetBoundary > trustedResetBoundary else {
+                    return SessionQuotaTransitionEvaluation(
+                        outcome: .suppressedCodexRestore,
+                        state: Self.preservedDepletedState(
+                            previous: previous,
+                            observation: observation))
+                }
+                if resetBoundary > observation.evaluationTime {
+                    return SessionQuotaTransitionEvaluation(
+                        outcome: .restored,
+                        state: Self.updatedState(
+                            previous: previous,
+                            observation: observation))
+                }
+            }
+        }
+
+        // Missing, equivalent, or already elapsed metadata can be a stale post-reset snapshot. Two
+        // fresh positive observations confirm the restore without trusting one ambiguous sample.
+        if let pending = previous.pendingCodexRestoreObservationAt, observation.observedAt > pending {
+            return SessionQuotaTransitionEvaluation(
+                outcome: .restored,
+                state: Self.updatedState(
+                    previous: previous,
+                    observation: observation))
+        }
+        return SessionQuotaTransitionEvaluation(
+            outcome: .awaitingCodexRestoreConfirmation,
+            state: Self.preservedDepletedState(
+                previous: previous,
+                observation: observation,
+                pendingRestoreObservationAt: observation.observedAt))
+    }
+
+    private static func baselineState(
+        observation: SessionQuotaTransitionObservation) -> SessionQuotaTransitionState
+    {
+        SessionQuotaTransitionState(
+            remaining: observation.remaining,
+            source: observation.source,
+            observedAt: observation.observedAt,
+            codexOwnerKey: observation.provider == .codex ? observation.codexOwnerKey : nil,
+            trustedResetBoundary: observation.provider == .codex ? observation.resetBoundary : nil,
+            pendingCodexRestoreObservationAt: nil)
+    }
+
+    private static func updatedState(
+        previous: SessionQuotaTransitionState,
+        observation: SessionQuotaTransitionObservation,
+        preserveCodexResetBoundary: Bool = false) -> SessionQuotaTransitionState
+    {
+        let trustedResetBoundary: Date? = if observation.provider != .codex {
+            nil
+        } else if preserveCodexResetBoundary {
+            previous.trustedResetBoundary
+        } else {
+            self.monotonicResetBoundary(
+                previous: previous.trustedResetBoundary,
+                current: observation.resetBoundary)
+        }
+        return SessionQuotaTransitionState(
+            remaining: observation.remaining,
+            source: observation.source,
+            observedAt: observation.observedAt,
+            codexOwnerKey: observation.provider == .codex ? observation.codexOwnerKey : nil,
+            trustedResetBoundary: trustedResetBoundary,
+            pendingCodexRestoreObservationAt: nil)
+    }
+
+    private static func preservedDepletedState(
+        previous: SessionQuotaTransitionState,
+        observation: SessionQuotaTransitionObservation,
+        pendingRestoreObservationAt: Date? = nil) -> SessionQuotaTransitionState
+    {
+        SessionQuotaTransitionState(
+            remaining: previous.remaining,
+            source: observation.source,
+            observedAt: observation.observedAt,
+            codexOwnerKey: observation.codexOwnerKey,
+            trustedResetBoundary: previous.trustedResetBoundary,
+            pendingCodexRestoreObservationAt: pendingRestoreObservationAt)
+    }
+
+    private static func monotonicResetBoundary(previous: Date?, current: Date?) -> Date? {
+        guard let previous else { return current }
+        guard UsageStore.limitResetBoundaryAdvanced(previous: previous, current: current) else { return previous }
+        return current
+    }
 }
 
 enum QuotaWarningNotificationLogic {
@@ -206,46 +389,8 @@ extension UsageStore {
         return minutes <= 6 * 60
     }
 
-    func recordSessionQuotaTransitionState(
-        provider: UsageProvider,
-        remaining: Double,
-        source: SessionQuotaWindowSource,
-        resetBoundary: Date?,
-        observedAt: Date,
-        boundaryPolicy: SessionResetBoundaryRecordingPolicy = .update)
-    {
-        self.lastKnownSessionRemaining[provider] = remaining
-        self.lastKnownSessionWindowSource[provider] = source
-
-        let previousBoundary = self.lastKnownSessionResetBoundary[provider]
-        if boundaryPolicy == .preserve, previousBoundary != nil {
-            return
-        }
-
-        if boundaryPolicy == .restored {
-            guard let resetBoundary,
-                  resetBoundary > observedAt,
-                  UsageStore.limitResetBoundaryAdvanced(previous: previousBoundary, current: resetBoundary)
-            else {
-                self.lastKnownSessionResetBoundary.removeValue(forKey: provider)
-                return
-            }
-            self.lastKnownSessionResetBoundary[provider] = resetBoundary
-            return
-        }
-
-        // Missing, expired, or regressed metadata must not discard the latest trusted boundary.
-        guard let resetBoundary, resetBoundary > observedAt else { return }
-        guard previousBoundary == nil ||
-            UsageStore.limitResetBoundaryAdvanced(previous: previousBoundary, current: resetBoundary)
-        else { return }
-        self.lastKnownSessionResetBoundary[provider] = resetBoundary
-    }
-
     func clearSessionQuotaTransitionState(provider: UsageProvider) {
-        self.lastKnownSessionRemaining.removeValue(forKey: provider)
-        self.lastKnownSessionWindowSource.removeValue(forKey: provider)
-        self.lastKnownSessionResetBoundary.removeValue(forKey: provider)
+        self.sessionQuotaTransitionStates.removeValue(forKey: provider)
     }
 
     private static let antigravityQuotaSummaryWindowIDPrefix = "antigravity-quota-summary-"

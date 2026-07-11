@@ -316,9 +316,7 @@ final class UsageStore {
     @ObservationIgnored var codexHistoricalDataset: CodexHistoricalDataset?
     @ObservationIgnored var codexHistoricalDatasetAccountKey: String?
     @ObservationIgnored var lastKnownResetSnapshots: [UsageProvider: UsageSnapshot] = [:]
-    @ObservationIgnored var lastKnownSessionRemaining: [UsageProvider: Double] = [:]
-    @ObservationIgnored var lastKnownSessionWindowSource: [UsageProvider: SessionQuotaWindowSource] = [:]
-    @ObservationIgnored var lastKnownSessionResetBoundary: [UsageProvider: Date] = [:]
+    @ObservationIgnored var sessionQuotaTransitionStates: [UsageProvider: SessionQuotaTransitionState] = [:]
     @ObservationIgnored var quotaWarningState: [QuotaWarningStateKey: QuotaWarningState] = [:]
     @ObservationIgnored var predictivePaceWarningNotifiedKeys: Set<PredictivePaceWarningStateKey> = []
     @ObservationIgnored var lastPermissionPromptNotificationAt: [UsageProvider: Date] = [:]
@@ -844,7 +842,12 @@ final class UsageStore {
             now: now)
     }
 
-    func handleSessionQuotaTransition(provider: UsageProvider, snapshot: UsageSnapshot) {
+    func handleSessionQuotaTransition(
+        provider: UsageProvider,
+        snapshot: UsageSnapshot,
+        codexOwnerKey: CodexLimitResetOwnerKey? = nil,
+        now: Date = Date())
+    {
         // Session quota notifications are tied to the primary session window. Copilot free plans can
         // expose only chat quota, so allow Copilot to fall back to secondary for transition tracking.
         // Command Code synthesizes a depleted primary while subscription enrichment is unavailable.
@@ -866,111 +869,65 @@ final class UsageStore {
         let currentRemaining = sessionWindow.window.remainingPercent
         let currentSource = sessionWindow.source
         let currentResetBoundary = sessionWindow.window.resetsAt
-        let previousRemaining = self.lastKnownSessionRemaining[provider]
-        let previousSource = self.lastKnownSessionWindowSource[provider]
-        let previousResetBoundary = self.lastKnownSessionResetBoundary[provider]
-        let currentIsDepleted = SessionQuotaNotificationLogic.isDepleted(currentRemaining)
-        let previousWasDepleted = SessionQuotaNotificationLogic.isDepleted(previousRemaining)
-        var preserveDepletedBaseline = false
-        var acceptedRestore = false
-
-        if let previousSource, previousSource != currentSource {
-            let providerText = provider.rawValue
-            self.sessionQuotaLogger.debug(
-                "session window source changed: provider=\(providerText) prevSource=\(previousSource.rawValue) " +
-                    "currSource=\(currentSource.rawValue) curr=\(currentRemaining)")
+        if provider == .codex, !self.settings.sessionQuotaNotificationsEnabled {
             self.clearSessionQuotaTransitionState(provider: provider)
-            self.recordSessionQuotaTransitionState(
+            self.sessionQuotaLogger.debug("Codex session notifications disabled; cleared notification baseline")
+            return
+        }
+        if provider == .codex, codexOwnerKey == nil {
+            self.clearSessionQuotaTransitionState(provider: provider)
+            self.sessionQuotaLogger.debug("missing Codex session owner; cleared notification baseline")
+            return
+        }
+        let previousState = self.sessionQuotaTransitionStates[provider]
+        let evaluation = SessionQuotaTransitionReducer.evaluate(
+            previous: previousState,
+            observation: SessionQuotaTransitionObservation(
                 provider: provider,
                 remaining: currentRemaining,
                 source: currentSource,
                 resetBoundary: currentResetBoundary,
-                observedAt: snapshot.updatedAt)
-            return
-        }
+                observedAt: snapshot.updatedAt,
+                evaluationTime: now,
+                codexOwnerKey: codexOwnerKey),
+            notificationsEnabled: self.settings.sessionQuotaNotificationsEnabled)
+        self.sessionQuotaTransitionStates[provider] = evaluation.state
 
-        defer {
-            if !preserveDepletedBaseline {
-                let boundaryPolicy: SessionResetBoundaryRecordingPolicy = if acceptedRestore {
-                    .restored
-                } else if currentIsDepleted, previousWasDepleted {
-                    .preserve
-                } else {
-                    .update
-                }
-                self.recordSessionQuotaTransitionState(
-                    provider: provider,
-                    remaining: currentRemaining,
-                    source: currentSource,
-                    resetBoundary: currentResetBoundary,
-                    observedAt: snapshot.updatedAt,
-                    boundaryPolicy: boundaryPolicy)
-            }
-        }
-
-        guard self.settings.sessionQuotaNotificationsEnabled else {
-            if SessionQuotaNotificationLogic.isDepleted(currentRemaining) ||
-                SessionQuotaNotificationLogic.isDepleted(previousRemaining)
-            {
-                let providerText = provider.rawValue
-                let message =
-                    "notifications disabled: provider=\(providerText) " +
-                    "prev=\(previousRemaining ?? -1) curr=\(currentRemaining)"
-                self.sessionQuotaLogger.debug(message)
-            }
-            return
-        }
-
-        guard previousRemaining != nil else {
-            if SessionQuotaNotificationLogic.isDepleted(currentRemaining) {
-                let providerText = provider.rawValue
-                let message = "startup depleted: provider=\(providerText) curr=\(currentRemaining)"
-                self.sessionQuotaLogger.info(message)
-                self.sessionQuotaNotifier.post(transition: .depleted, provider: provider, badge: nil)
-            }
-            return
-        }
-
-        let transition = SessionQuotaNotificationLogic.transition(
-            previousRemaining: previousRemaining,
-            currentRemaining: currentRemaining)
-        guard transition != .none else {
-            if SessionQuotaNotificationLogic.isDepleted(currentRemaining) ||
-                SessionQuotaNotificationLogic.isDepleted(previousRemaining)
-            {
-                let providerText = provider.rawValue
-                let message =
-                    "no transition: provider=\(providerText) " +
-                    "prev=\(previousRemaining ?? -1) curr=\(currentRemaining)"
-                self.sessionQuotaLogger.debug(message)
-            }
-            return
-        }
-
-        if transition == .restored,
-           !SessionQuotaNotificationLogic.sessionResetBoundaryAllowsRestore(
-               previousResetBoundary: previousResetBoundary,
-               currentResetBoundary: currentResetBoundary,
-               evaluationTime: snapshot.updatedAt)
-        {
-            preserveDepletedBaseline = true
-            let providerText = provider.rawValue
-            let message =
-                "suppressed transient restore: provider=\(providerText) " +
-                "prev=\(previousRemaining ?? -1) curr=\(currentRemaining)"
-            self.sessionQuotaLogger.info(message)
-            return
-        }
-
-        acceptedRestore = transition == .restored
         let providerText = provider.rawValue
-        let transitionText = String(describing: transition)
-        let message =
-            "transition \(transitionText): provider=\(providerText) " +
-            "prev=\(previousRemaining ?? -1) curr=\(currentRemaining)"
-        self.sessionQuotaLogger.info(message)
-
-        self.sessionQuotaNotifier.post(transition: transition, provider: provider, badge: nil)
+        let previousRemaining = previousState?.remaining
+        switch evaluation.outcome {
+        case .none:
+            if SessionQuotaNotificationLogic.isDepleted(currentRemaining) ||
+                SessionQuotaNotificationLogic.isDepleted(previousRemaining)
+            {
+                let reason = self.settings.sessionQuotaNotificationsEnabled
+                    ? "no transition"
+                    : "notifications disabled"
+                self.sessionQuotaLogger.debug(
+                    "\(reason): provider=\(providerText) " +
+                        "prev=\(previousRemaining ?? -1) curr=\(currentRemaining)")
+            }
+        case .baselineChanged:
+            self.sessionQuotaLogger.debug(
+                "session notification baseline changed: provider=\(providerText) curr=\(currentRemaining)")
+        case .staleCodexObservation:
+            self.sessionQuotaLogger.debug(
+                "ignored stale session observation: provider=\(providerText) curr=\(currentRemaining)")
+        case .suppressedCodexRestore:
+            self.sessionQuotaLogger.info(
+                "suppressed transient restore: provider=\(providerText) " +
+                    "prev=\(previousRemaining ?? -1) curr=\(currentRemaining)")
+        case .awaitingCodexRestoreConfirmation:
+            self.sessionQuotaLogger.info(
+                "awaiting restore confirmation: provider=\(providerText) " +
+                    "prev=\(previousRemaining ?? -1) curr=\(currentRemaining)")
+        case .depleted, .restored:
+            let transition = evaluation.outcome.transition
+            self.sessionQuotaLogger.info(
+                "transition \(String(describing: transition)): provider=\(providerText) " +
+                    "prev=\(previousRemaining ?? -1) curr=\(currentRemaining)")
+            self.sessionQuotaNotifier.post(transition: transition, provider: provider, badge: nil)
+        }
     }
 
     func refreshProviderStatus(_ provider: UsageProvider) async {

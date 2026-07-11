@@ -1237,7 +1237,10 @@ extension UsageStore {
             guard let snapshot else { return }
             self.lastFetchAttempts[.codex] = outcome.attempts
             self.handleCodexResetCreditNotifications(snapshot: snapshot)
-            self.handleSessionQuotaTransition(provider: .codex, snapshot: snapshot)
+            self.handleSessionQuotaTransition(
+                provider: .codex,
+                snapshot: snapshot,
+                codexOwnerKey: limitResetOwnerKey)
             self.handlePredictivePaceWarningTransitions(provider: .codex, snapshot: snapshot)
             self.lastKnownResetSnapshots[.codex] = snapshot
             let publicationGuard = Self.codexScopedRefreshGuard(for: account)

@@ -408,7 +408,10 @@ extension UsageStore {
                     nil
                 }
                 self.handleQuotaWarningTransitions(provider: provider, snapshot: backfilled)
-                self.handleSessionQuotaTransition(provider: provider, snapshot: backfilled)
+                self.handleSessionQuotaTransition(
+                    provider: provider,
+                    snapshot: backfilled,
+                    codexOwnerKey: provider == .codex ? context.codexLimitResetOwnerKey : nil)
                 self.handlePredictivePaceWarningTransitions(
                     provider: provider,
                     snapshot: backfilled,
