@@ -6,6 +6,7 @@
 - Settings: split provider pane "Settings" sections into "Menu bar" and "Connection" so metric pickers and auth/cookie/source controls are grouped by topic.
 
 ### Fixed
+- Settings: render section footer captions (Advanced keychain note, refresh hints, quota-warning and provider subtitles) leading-aligned in footnote size instead of the trailing-aligned body text macOS gives bare form footers.
 - Claude OAuth: remember an acknowledged CodexBar Keychain explanation for six hours without suppressing macOS authorization or either Keychain opt-out (#1990). Thanks @harjothkhara!
 - Claude: prevent CodexBar's passive CLI probes from starting background Claude Code updates, avoiding repeated partial downloads when a probe exits before an update completes. Thanks @PG2047!
 - Codex cost history: bound malformed session-metadata lines and release read chunks promptly, preventing metadata pre-scans from retaining memory in proportion to oversized JSONL records. Thanks @Yuxin-Qiao!
