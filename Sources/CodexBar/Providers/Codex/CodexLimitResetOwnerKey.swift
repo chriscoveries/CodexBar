@@ -37,10 +37,7 @@ struct CodexSessionQuotaOwnerKey: Equatable, Sendable {
                 return nil
             }
             guard let sourceKey = Self.sourceKey(refreshGuard.source) else { return nil }
-            let fingerprint = CodexAuthFingerprint.normalize(refreshGuard.authFingerprint)
-                .map { "present:\($0)" } ?? "missing"
-            input = "codex-session-quota-owner:v1\0email\0\(sourceKey)\0" +
-                "\(email)\0\(fingerprint)"
+            input = "codex-session-quota-owner:v1\0email\0\(sourceKey)\0\(email)"
         case .unresolved:
             return nil
         }
