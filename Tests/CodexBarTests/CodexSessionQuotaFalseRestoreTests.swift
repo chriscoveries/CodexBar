@@ -62,6 +62,25 @@ struct CodexSessionQuotaFalseRestoreTests {
     }
 
     @Test
+    func `depleted observation recovers a missing trusted boundary`() throws {
+        let owner = try self.owner("depleted-recovered-boundary")
+        let boundary = self.start.addingTimeInterval(5 * 3600)
+        let notifier = SessionQuotaNotifierSpy()
+        let store = Self.makeStore(notifier: notifier)
+
+        self.observe(store, used: 20, boundary: nil, at: self.start, owner: owner)
+        self.observe(store, used: 100, boundary: nil, at: self.start.addingTimeInterval(60), owner: owner)
+        self.observe(store, used: 100, boundary: boundary, at: self.start.addingTimeInterval(120), owner: owner)
+        #expect(store.sessionQuotaTransitionStates[.codex]?.trustedResetBoundary == boundary)
+
+        self.observe(store, used: 20, boundary: boundary, at: self.start.addingTimeInterval(180), owner: owner)
+        self.observe(store, used: 10, boundary: boundary, at: self.start.addingTimeInterval(240), owner: owner)
+
+        #expect(notifier.transitions == [.depleted])
+        #expect(store.sessionQuotaTransitionStates[.codex]?.pendingCodexRestoreObservationAt == nil)
+    }
+
+    @Test
     func `depletion cannot advance a still future trusted boundary`() throws {
         let owner = try self.owner("depletion-advanced")
         let boundary = self.start.addingTimeInterval(5 * 3600)

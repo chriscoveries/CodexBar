@@ -167,6 +167,7 @@ enum SessionQuotaTransitionReducer {
             case .restored: .restored
             }
             let preserveDepletedBoundary = observation.provider == .codex &&
+                previous.trustedResetBoundary != nil &&
                 SessionQuotaNotificationLogic.isDepleted(previous.remaining) &&
                 SessionQuotaNotificationLogic.isDepleted(observation.remaining)
             let preserveCodexBoundary = preserveDepletedBoundary ||
