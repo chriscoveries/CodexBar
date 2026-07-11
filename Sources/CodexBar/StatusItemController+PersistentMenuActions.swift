@@ -16,6 +16,10 @@ extension StatusItemController {
     }
 
     func isRefreshActionInFlight(for menu: NSMenu) -> Bool {
+        if self.store.hasForcedRefreshEnrichmentInFlight {
+            return true
+        }
+
         // An all-providers manual refresh (⌘R / overview) legitimately busies every row.
         if self.manualRefreshTasks[.global] != nil {
             return true

@@ -52,11 +52,30 @@ extension StatusItemController: StatusItemMenuPersistentActionDelegate {
     }
 
     func performStoreRefresh(
+        enrichmentMode: UsageStore.RefreshEnrichmentMode,
+        refreshOpenMenusWhenComplete: Bool,
+        interaction: ProviderInteraction) async
+    {
+        await self.withProviderInteraction(interaction) {
+            await self.store.refresh(enrichmentMode: enrichmentMode)
+            guard !Task.isCancelled, !self.hasPreparedForAppShutdown else { return }
+            self.store.scheduleStorageFootprintRefreshForOverview(force: true)
+            if refreshOpenMenusWhenComplete {
+                self.refreshOpenMenusAfterExplicitStoreAction()
+            } else {
+                self.invalidateMenus()
+            }
+        }
+    }
+
+    func performStoreRefresh(
         for provider: UsageProvider,
         refreshOpenMenusWhenComplete: Bool,
         interaction: ProviderInteraction) async
     {
         await self.withProviderInteraction(interaction) {
+            await self.store.awaitForcedRefreshEnrichment()
+            guard !Task.isCancelled, !self.hasPreparedForAppShutdown else { return }
             let refreshStartedAt = Date()
             await self.store.refreshProvider(provider)
             guard !Task.isCancelled, !self.hasPreparedForAppShutdown else { return }
@@ -69,7 +88,8 @@ extension StatusItemController: StatusItemMenuPersistentActionDelegate {
                 guard !Task.isCancelled, !self.hasPreparedForAppShutdown else { return }
                 await self.store.refreshOpenAIDashboardIfNeeded(
                     force: true,
-                    expectedGuard: self.store.freshCodexOpenAIWebRefreshGuard())
+                    expectedGuard: self.store.freshCodexOpenAIWebRefreshGuard(),
+                    bypassCoalescing: true)
                 guard !Task.isCancelled, !self.hasPreparedForAppShutdown else { return }
                 if self.store.openAIDashboardRequiresLogin {
                     await self.store.refreshProvider(.codex)
@@ -151,6 +171,7 @@ extension StatusItemController: StatusItemMenuPersistentActionDelegate {
         guard !self.hasPreparedForAppShutdown,
               self.manualRefreshTasks[scope] == nil,
               !conflictsWithOtherScope,
+              !self.store.hasForcedRefreshEnrichmentInFlight,
               !self.store.isRefreshing,
               !scopedRefreshInFlight
         else { return }
@@ -179,7 +200,7 @@ extension StatusItemController: StatusItemMenuPersistentActionDelegate {
                     interaction: .userInitiated)
             } else {
                 await self.performStoreRefresh(
-                    forceTokenUsage: true,
+                    enrichmentMode: .forcedBackground,
                     refreshOpenMenusWhenComplete: true,
                     interaction: .userInitiated)
             }
@@ -785,8 +806,12 @@ extension StatusItemController: StatusItemMenuPersistentActionDelegate {
     private func trimmedLoginOutput(_ text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let limit = 600
-        if trimmed.isEmpty { return L("No output captured.") }
-        if trimmed.count <= limit { return trimmed }
+        if trimmed.isEmpty {
+            return L("No output captured.")
+        }
+        if trimmed.count <= limit {
+            return trimmed
+        }
         let idx = trimmed.index(trimmed.startIndex, offsetBy: limit)
         return "\(trimmed[..<idx])…"
     }
