@@ -469,6 +469,8 @@
 "quota_warning_sound" = "Riproduci suono di notifica";
 "quota_warning_onscreen_alert" = "Mostra avviso di testo sullo schermo";
 "quota_warning_provider_inherits" = "Usa le impostazioni globali di avviso quota, salvo personalizzazione di una finestra qui.";
+"quota_warning_provider_disabled" = "Le notifiche di avviso quota e gli indicatori nelle barre di utilizzo sono disattivati. Abilita una delle due opzioni per modificare queste impostazioni salvate.";
+"quota_warning_provider_markers_only" = "Le notifiche di avviso quota sono disattivate globalmente. Queste impostazioni controllano ancora gli indicatori nelle barre di utilizzo.";
 "quota_warning_global" = "Globale";
 "quota_warning_customize_thresholds" = "Personalizza soglie %@";
 "quota_warning_enable_warnings" = "Abilita avvisi %@";
