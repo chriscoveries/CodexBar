@@ -507,7 +507,16 @@ public struct UsageSnapshot: Codable, Sendable {
     public func backfillingResetTimes(from cached: UsageSnapshot?, now: Date = .init()) -> UsageSnapshot {
         guard let cached else { return self }
         guard Self.identitiesMatch(self.identity, cached.identity) else { return self }
-        let primary = self.primary?.backfillingResetTime(from: cached.primary, now: now)
+        // Amp's percentage-based daily quota supersedes the legacy rolling-replenishment cadence. Do not attach
+        // that older exact reset to the new daily window; other providers retain the shared backfill behavior.
+        let cachedPrimary: RateWindow? = if self.identity?.providerID == .amp,
+                                            self.primary?.resetDescription == "resets daily"
+        {
+            nil
+        } else {
+            cached.primary
+        }
+        let primary = self.primary?.backfillingResetTime(from: cachedPrimary, now: now)
         let secondary = self.secondary?.backfillingResetTime(from: cached.secondary, now: now)
         let tertiary = self.tertiary?.backfillingResetTime(from: cached.tertiary, now: now)
         if primary == self.primary, secondary == self.secondary, tertiary == self.tertiary {
