@@ -80,7 +80,7 @@ struct MenuPane: View {
             } header: {
                 Text(L("section_agent_sessions"))
             } footer: {
-                Text(L("agent_sessions_footer"))
+                SettingsSectionFooter(L("agent_sessions_footer"))
             }
         }
         .formStyle(.grouped)
@@ -121,11 +121,13 @@ struct CostSummarySettingsSection: View {
             Text(L("section_cost_summary"))
         } footer: {
             if self.settings.costUsageEnabled {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(L("cost_auto_refresh_info"))
-                    self.costStatusLine(provider: .claude)
-                    self.costStatusLine(provider: .codex)
-                    self.costStatusLine(provider: .cursor)
+                SettingsSectionFooter {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(L("cost_auto_refresh_info"))
+                        self.costStatusLine(provider: .claude)
+                        self.costStatusLine(provider: .codex)
+                        self.costStatusLine(provider: .cursor)
+                    }
                 }
             }
         }
