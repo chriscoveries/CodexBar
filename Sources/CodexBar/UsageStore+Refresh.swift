@@ -5,6 +5,7 @@ extension UsageStore {
     private struct ProviderRefreshOutcomeContext {
         let generation: UInt64
         let codexExpectedGuard: CodexAccountScopedRefreshGuard?
+        let tokenAccount: ProviderTokenAccount?
         let claudeOAuthHistoryPersistentRefHash: String?
         let claudeOAuthActiveAccountObservation: ClaudeOAuthActiveAccountObservation
     }
@@ -180,6 +181,7 @@ extension UsageStore {
         let claudeAuthStateBeforeFetch = provider == .claude
             ? await Self.captureClaudeRefreshAuthState(invalidateCredentialsFile: true)
             : nil
+        let tokenAccount = self.settings.selectedTokenAccount(for: provider)
         let fetchContext = self.makeFetchContext(provider: provider, override: nil)
         let descriptor = spec.descriptor
         let codexResetCreditsFetcher = self.codexResetCreditsFetcher()
@@ -236,6 +238,7 @@ extension UsageStore {
             context: ProviderRefreshOutcomeContext(
                 generation: generation,
                 codexExpectedGuard: codexExpectedGuard,
+                tokenAccount: tokenAccount,
                 claudeOAuthHistoryPersistentRefHash: claudeOAuthHistoryPersistentRefHash,
                 claudeOAuthActiveAccountObservation: claudeOAuthActiveAccountObservation))
     }
@@ -252,9 +255,14 @@ extension UsageStore {
         switch outcome.result {
         case let .success(result):
             let scoped = result.usage.scoped(to: provider)
+            let accountScoped = if let tokenAccount = context.tokenAccount {
+                self.applyAccountLabel(scoped, provider: provider, account: tokenAccount)
+            } else {
+                scoped
+            }
             if provider == .codex,
                let codexExpectedGuard = context.codexExpectedGuard,
-               !self.shouldApplyCodexUsageResult(expectedGuard: codexExpectedGuard, usage: scoped)
+               !self.shouldApplyCodexUsageResult(expectedGuard: codexExpectedGuard, usage: accountScoped)
             {
                 return
             }
@@ -266,7 +274,7 @@ extension UsageStore {
                     ? self.codexLastKnownResetSnapshot(matching: context.codexExpectedGuard)
                     : self.lastKnownResetSnapshots[provider]
                 let stabilized = Self.commandCodeSnapshotResolvingDepletionOnEnrichmentFailure(
-                    current: scoped,
+                    current: accountScoped,
                     previous: self.snapshots[provider])
                 let backfilled = stabilized.backfillingResetTimes(from: resetBackfillSource)
                 let predictivePaceWarningAccountDiscriminatorOverride: String? = if provider == .claude {
@@ -298,14 +306,21 @@ extension UsageStore {
                 }
                 self.lastSourceLabels[provider] = result.sourceLabel
                 self.errors[provider] = nil
+                if let tokenAccount = context.tokenAccount {
+                    self.cacheTokenAccountSnapshot(
+                        provider: provider,
+                        account: tokenAccount,
+                        snapshot: backfilled,
+                        sourceLabel: result.sourceLabel)
+                }
                 if provider == .gemini {
                     self.clearGeminiConsumerTierDeprecationObservation()
                 }
                 self.knownLimitsAvailabilityByProvider.removeValue(forKey: provider)
                 self.failureGates[provider]?.recordSuccess()
                 if provider == .codex {
-                    self.rememberLiveSystemCodexEmailIfNeeded(scoped.accountEmail(for: .codex))
-                    self.seedCodexAccountScopedRefreshGuard(accountEmail: scoped.accountEmail(for: .codex))
+                    self.rememberLiveSystemCodexEmailIfNeeded(accountScoped.accountEmail(for: .codex))
+                    self.seedCodexAccountScopedRefreshGuard(accountEmail: accountScoped.accountEmail(for: .codex))
                 }
                 return backfilled
             }

@@ -231,6 +231,22 @@ struct Sub2APIUsageFetcherTests {
     }
 
     @Test
+    func `fetch enforces total request deadline`() async throws {
+        let transport = ProviderHTTPTransportHandler { _ in
+            try await Task.sleep(for: .seconds(60))
+            throw URLError(.unknown)
+        }
+
+        await #expect(throws: URLError.self) {
+            try await Sub2APIUsageFetcher.fetchUsage(
+                apiKey: "sk-group",
+                baseURL: #require(URL(string: "https://api.example.com")),
+                transport: transport,
+                timeout: .milliseconds(10))
+        }
+    }
+
+    @Test
     func `settings allow HTTPS and loopback HTTP only`() {
         #expect(Sub2APISettingsReader.baseURL(environment: [
             Sub2APISettingsReader.baseURLEnvironmentKey: "https://api.example.com",

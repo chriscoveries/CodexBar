@@ -357,6 +357,7 @@ public struct Sub2APIUsageFetcher: Sendable {
         apiKey: String,
         baseURL: URL,
         transport: any ProviderHTTPTransport = ProviderHTTPClient.shared,
+        timeout: Duration = .seconds(15),
         updatedAt: Date = Date()) async throws -> Sub2APIUsageSnapshot
     {
         let cleanedAPIKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -368,7 +369,16 @@ public struct Sub2APIUsageFetcher: Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.timeoutInterval = 15
 
-        let response = try await transport.response(for: request)
+        let responseTask = Task {
+            try await transport.response(for: request)
+        }
+        let response: ProviderHTTPResponse = switch await BoundedTaskJoin(sourceTask: responseTask)
+            .value(joinGrace: timeout)
+        {
+        case let .value(response): response
+        case let .failure(error): throw error
+        case .timedOut: throw URLError(.timedOut)
+        }
         switch response.statusCode {
         case 200..<300:
             return try self.parseSnapshot(data: response.data, updatedAt: updatedAt)
