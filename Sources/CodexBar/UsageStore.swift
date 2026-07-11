@@ -317,7 +317,11 @@ final class UsageStore {
     @ObservationIgnored var codexHistoricalDatasetAccountKey: String?
     @ObservationIgnored var lastKnownResetSnapshots: [UsageProvider: UsageSnapshot] = [:]
     @ObservationIgnored var sessionQuotaTransitionStates: [UsageProvider: SessionQuotaTransitionState] = [:]
-    @ObservationIgnored var codexSessionQuotaBaselineRequired = false
+    @ObservationIgnored var codexSessionQuotaBaselineRequirement: CodexSessionQuotaBaselineRequirement?
+    var codexSessionQuotaBaselineRequired: Bool {
+        self.codexSessionQuotaBaselineRequirement != nil
+    }
+
     @ObservationIgnored var quotaWarningState: [QuotaWarningStateKey: QuotaWarningState] = [:]
     @ObservationIgnored var predictivePaceWarningNotifiedKeys: Set<PredictivePaceWarningStateKey> = []
     @ObservationIgnored var lastPermissionPromptNotificationAt: [UsageProvider: Date] = [:]
@@ -860,12 +864,12 @@ final class UsageStore {
             return
         }
         if provider == .codex, !self.settings.sessionQuotaNotificationsEnabled {
-            self.requireFreshCodexSessionQuotaBaseline()
+            self.requireFreshCodexSessionQuotaBaseline(observedAt: snapshot.updatedAt)
             self.sessionQuotaLogger.debug("Codex session notifications disabled; cleared notification baseline")
             return
         }
         if provider == .codex, codexOwnerKey == nil {
-            self.requireFreshCodexSessionQuotaBaseline()
+            self.requireFreshCodexSessionQuotaBaseline(observedAt: snapshot.updatedAt)
             self.sessionQuotaLogger.debug("missing Codex session owner; cleared notification baseline")
             return
         }
@@ -874,10 +878,15 @@ final class UsageStore {
                 return
             }
             if provider == .codex {
-                if let previous = self.sessionQuotaTransitionStates[.codex],
-                   previous.codexOwnerKey != codexOwnerKey
-                {
-                    self.requireFreshCodexSessionQuotaBaseline()
+                if let previous = self.sessionQuotaTransitionStates[.codex] {
+                    if previous.codexOwnerKey != codexOwnerKey {
+                        self.requireFreshCodexSessionQuotaBaseline(observedAt: snapshot.updatedAt)
+                    } else {
+                        self.sessionQuotaTransitionStates[.codex] = previous.advancingObservationWatermark(
+                            to: snapshot.updatedAt)
+                    }
+                } else if self.codexSessionQuotaBaselineRequirement != nil {
+                    self.requireFreshCodexSessionQuotaBaseline(observedAt: snapshot.updatedAt)
                 }
                 self.sessionQuotaLogger.debug("missing Codex session window; retained notification baseline")
             } else {
@@ -889,8 +898,15 @@ final class UsageStore {
         let currentRemaining = sessionWindow.window.remainingPercent
         let currentSource = sessionWindow.source
         let currentResetBoundary = sessionWindow.window.resetsAt
+        if provider == .codex,
+           let requirement = self.codexSessionQuotaBaselineRequirement,
+           !requirement.admits(observedAt: snapshot.updatedAt)
+        {
+            self.sessionQuotaLogger.debug("ignored stale session observation while awaiting a fresh Codex baseline")
+            return
+        }
         let previousState = self.sessionQuotaTransitionStates[provider]
-        let forceBaseline = provider == .codex && self.codexSessionQuotaBaselineRequired
+        let forceBaseline = provider == .codex && self.codexSessionQuotaBaselineRequirement != nil
         let evaluation = SessionQuotaTransitionReducer.evaluate(
             previous: previousState,
             observation: SessionQuotaTransitionObservation(
@@ -905,7 +921,7 @@ final class UsageStore {
             forceBaseline: forceBaseline)
         self.sessionQuotaTransitionStates[provider] = evaluation.state
         if provider == .codex {
-            self.codexSessionQuotaBaselineRequired = false
+            self.codexSessionQuotaBaselineRequirement = nil
         }
 
         let providerText = provider.rawValue

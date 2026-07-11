@@ -366,9 +366,40 @@ struct CodexSessionQuotaFalseRestoreTests {
         #expect(store.sessionQuotaTransitionStates[.codex]?.remaining == 0)
         #expect(!store.codexSessionQuotaBaselineRequired)
     }
+}
+
+extension CodexSessionQuotaFalseRestoreTests {
+    @Test
+    func `missing owner keeps stale observations behind the fresh baseline barrier`() throws {
+        let owner = try self.owner("missing-owner-watermark")
+        let notifier = SessionQuotaNotifierSpy()
+        let store = Self.makeStore(notifier: notifier)
+        let invalidatedAt = self.start.addingTimeInterval(120)
+
+        self.observe(store, used: 20, boundary: nil, at: self.start, owner: owner)
+        store.handleSessionQuotaTransition(
+            provider: .codex,
+            snapshot: self.snapshot(used: 100, resetBoundary: nil, updatedAt: invalidatedAt),
+            codexOwnerKey: nil,
+            now: invalidatedAt)
+
+        self.observe(store, used: 100, boundary: nil, at: self.start.addingTimeInterval(60), owner: owner)
+        self.observe(store, used: 20, boundary: nil, at: self.start.addingTimeInterval(90), owner: owner)
+        self.observe(store, used: 10, boundary: nil, at: self.start.addingTimeInterval(100), owner: owner)
+
+        #expect(notifier.transitions.isEmpty)
+        #expect(store.sessionQuotaTransitionStates[.codex] == nil)
+        #expect(store.codexSessionQuotaBaselineRequirement?.observedAtWatermark == invalidatedAt)
+
+        self.observe(store, used: 100, boundary: nil, at: self.start.addingTimeInterval(121), owner: owner)
+
+        #expect(notifier.transitions.isEmpty)
+        #expect(store.sessionQuotaTransitionStates[.codex]?.remaining == 0)
+        #expect(!store.codexSessionQuotaBaselineRequired)
+    }
 
     @Test
-    func `windowless Codex result preserves a matching depleted baseline`() throws {
+    func `windowless Codex result advances a matching depleted baseline watermark`() throws {
         let owner = try self.owner("windowless-partial")
         let boundary = self.start.addingTimeInterval(5 * 3600)
         let notifier = SessionQuotaNotifierSpy()
@@ -390,7 +421,11 @@ struct CodexSessionQuotaFalseRestoreTests {
             codexOwnerKey: owner,
             now: self.start.addingTimeInterval(120))
 
+        self.observe(store, used: 20, boundary: boundary, at: self.start.addingTimeInterval(90), owner: owner)
+        self.observe(store, used: 10, boundary: boundary, at: self.start.addingTimeInterval(100), owner: owner)
+
         #expect(store.sessionQuotaTransitionStates[.codex]?.remaining == 0)
+        #expect(store.sessionQuotaTransitionStates[.codex]?.observedAt == self.start.addingTimeInterval(120))
         #expect(store.sessionQuotaTransitionStates[.codex]?.trustedResetBoundary == boundary)
         #expect(notifier.transitions == [.depleted])
 
@@ -400,23 +435,159 @@ struct CodexSessionQuotaFalseRestoreTests {
     }
 
     @Test
-    func `notifications disabled clears Codex state`() throws {
-        let owner = try self.owner("disabled")
+    func `windowless Codex result blocks stale boundaryless restore confirmation`() throws {
+        let owner = try self.owner("windowless-boundaryless")
         let notifier = SessionQuotaNotifierSpy()
         let store = Self.makeStore(notifier: notifier)
-        store.settings.sessionQuotaNotificationsEnabled = false
 
         self.observe(store, used: 20, boundary: nil, at: self.start, owner: owner)
         self.observe(store, used: 100, boundary: nil, at: self.start.addingTimeInterval(60), owner: owner)
-        #expect(notifier.transitions.isEmpty)
+        store.handleSessionQuotaTransition(
+            provider: .codex,
+            snapshot: UsageSnapshot(
+                primary: nil,
+                secondary: nil,
+                updatedAt: self.start.addingTimeInterval(120),
+                identity: ProviderIdentitySnapshot(
+                    providerID: .codex,
+                    accountEmail: "session-fixture@example.test",
+                    accountOrganization: nil,
+                    loginMethod: "test")),
+            codexOwnerKey: owner,
+            now: self.start.addingTimeInterval(120))
+
+        self.observe(store, used: 20, boundary: nil, at: self.start.addingTimeInterval(90), owner: owner)
+        self.observe(store, used: 10, boundary: nil, at: self.start.addingTimeInterval(100), owner: owner)
+
+        #expect(store.sessionQuotaTransitionStates[.codex]?.remaining == 0)
+        #expect(store.sessionQuotaTransitionStates[.codex]?.observedAt == self.start.addingTimeInterval(120))
+        #expect(store.sessionQuotaTransitionStates[.codex]?.pendingCodexRestoreObservationAt == nil)
+        #expect(notifier.transitions == [.depleted])
+
+        self.observe(store, used: 100, boundary: nil, at: self.start.addingTimeInterval(180), owner: owner)
+
+        #expect(notifier.transitions == [.depleted])
+    }
+
+    @Test
+    func `disabled provider cleanup does not refire Codex depletion`() throws {
+        let owner = try self.owner("disabled-provider-cleanup")
+        let boundary = self.start.addingTimeInterval(5 * 3600)
+        let notifier = SessionQuotaNotifierSpy()
+        let store = Self.makeStore(notifier: notifier)
+
+        self.observe(store, used: 20, boundary: boundary, at: self.start, owner: owner)
+        self.observe(store, used: 100, boundary: boundary, at: self.start.addingTimeInterval(60), owner: owner)
+        store.clearDisabledProviderState(enabledProviders: [])
+
         #expect(store.sessionQuotaTransitionStates[.codex] == nil)
         #expect(store.codexSessionQuotaBaselineRequired)
 
-        store.settings.sessionQuotaNotificationsEnabled = true
-        self.observe(store, used: 20, boundary: nil, at: self.start.addingTimeInterval(120), owner: owner)
-        #expect(notifier.transitions.isEmpty)
-        #expect(store.sessionQuotaTransitionStates[.codex]?.remaining == 80)
+        self.observe(store, used: 100, boundary: boundary, at: self.start.addingTimeInterval(120), owner: owner)
+
+        #expect(notifier.transitions == [.depleted])
+        #expect(store.sessionQuotaTransitionStates[.codex]?.remaining == 0)
         #expect(!store.codexSessionQuotaBaselineRequired)
+    }
+
+    @Test
+    func `unavailable provider cleanup does not refire Codex depletion`() throws {
+        let owner = try self.owner("unavailable-provider-cleanup")
+        let boundary = self.start.addingTimeInterval(5 * 3600)
+        let notifier = SessionQuotaNotifierSpy()
+        let store = Self.makeStore(notifier: notifier)
+
+        self.observe(store, used: 20, boundary: boundary, at: self.start, owner: owner)
+        self.observe(store, used: 100, boundary: boundary, at: self.start.addingTimeInterval(60), owner: owner)
+        store.clearUnavailableProviderState(
+            displayEnabledProviders: [.codex],
+            availableProviders: [])
+
+        #expect(store.sessionQuotaTransitionStates[.codex] == nil)
+        #expect(store.codexSessionQuotaBaselineRequired)
+
+        self.observe(store, used: 100, boundary: boundary, at: self.start.addingTimeInterval(120), owner: owner)
+
+        #expect(notifier.transitions == [.depleted])
+        #expect(store.sessionQuotaTransitionStates[.codex]?.remaining == 0)
+        #expect(!store.codexSessionQuotaBaselineRequired)
+    }
+
+    @Test
+    func `cleanup after a positive Codex baseline still reports depletion on recovery`() throws {
+        let owner = try self.owner("positive-provider-cleanup")
+        let boundary = self.start.addingTimeInterval(5 * 3600)
+        let notifier = SessionQuotaNotifierSpy()
+        let store = Self.makeStore(notifier: notifier)
+
+        self.observe(store, used: 20, boundary: boundary, at: self.start, owner: owner)
+        store.clearDisabledProviderState(enabledProviders: [])
+
+        #expect(store.sessionQuotaTransitionStates[.codex] == nil)
+        #expect(!store.codexSessionQuotaBaselineRequired)
+
+        self.observe(store, used: 100, boundary: boundary, at: self.start.addingTimeInterval(120), owner: owner)
+
+        #expect(notifier.transitions == [.depleted])
+        #expect(store.sessionQuotaTransitionStates[.codex]?.remaining == 0)
+    }
+
+    @Test
+    func `cleanup without a prior Codex baseline keeps startup depletion semantics`() throws {
+        let owner = try self.owner("startup-cleanup")
+        let notifier = SessionQuotaNotifierSpy()
+        let store = Self.makeStore(notifier: notifier)
+
+        store.clearDisabledProviderState(enabledProviders: [])
+
+        #expect(!store.codexSessionQuotaBaselineRequired)
+
+        self.observe(store, used: 100, boundary: nil, at: self.start, owner: owner)
+
+        #expect(notifier.transitions == [.depleted])
+        #expect(store.sessionQuotaTransitionStates[.codex]?.remaining == 0)
+    }
+
+    @Test
+    func `notifications disabled keep stale observations behind the fresh baseline barrier`() throws {
+        let owner = try self.owner("disabled-watermark")
+        let notifier = SessionQuotaNotifierSpy()
+        let store = Self.makeStore(notifier: notifier)
+        let invalidatedAt = self.start.addingTimeInterval(120)
+
+        self.observe(store, used: 20, boundary: nil, at: self.start, owner: owner)
+        store.settings.sessionQuotaNotificationsEnabled = false
+        self.observe(store, used: 100, boundary: nil, at: invalidatedAt, owner: owner)
+
+        #expect(notifier.transitions.isEmpty)
+        #expect(store.sessionQuotaTransitionStates[.codex] == nil)
+        #expect(store.codexSessionQuotaBaselineRequired)
+        #expect(store.codexSessionQuotaBaselineRequirement?.observedAtWatermark == invalidatedAt)
+
+        store.settings.sessionQuotaNotificationsEnabled = true
+        self.observe(store, used: 100, boundary: nil, at: self.start.addingTimeInterval(60), owner: owner)
+        self.observe(store, used: 20, boundary: nil, at: self.start.addingTimeInterval(90), owner: owner)
+        self.observe(store, used: 10, boundary: nil, at: self.start.addingTimeInterval(100), owner: owner)
+        self.observe(store, used: 20, boundary: nil, at: invalidatedAt, owner: owner)
+
+        #expect(notifier.transitions.isEmpty)
+        #expect(store.sessionQuotaTransitionStates[.codex] == nil)
+        #expect(store.codexSessionQuotaBaselineRequirement?.observedAtWatermark == invalidatedAt)
+
+        self.observe(store, used: 100, boundary: nil, at: self.start.addingTimeInterval(121), owner: owner)
+
+        #expect(notifier.transitions.isEmpty)
+        #expect(store.sessionQuotaTransitionStates[.codex]?.remaining == 0)
+        #expect(!store.codexSessionQuotaBaselineRequired)
+
+        self.observe(store, used: 20, boundary: nil, at: self.start.addingTimeInterval(122), owner: owner)
+        self.observe(store, used: 10, boundary: nil, at: self.start.addingTimeInterval(123), owner: owner)
+
+        #expect(notifier.transitions == [.restored])
+
+        self.observe(store, used: 100, boundary: nil, at: self.start.addingTimeInterval(124), owner: owner)
+
+        #expect(notifier.transitions == [.restored, .depleted])
     }
 
     @Test

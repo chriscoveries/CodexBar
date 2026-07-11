@@ -16,6 +16,33 @@ struct SessionQuotaTransitionState: Equatable {
     let codexOwnerKey: CodexSessionQuotaOwnerKey?
     let trustedResetBoundary: Date?
     let pendingCodexRestoreObservationAt: Date?
+
+    func advancingObservationWatermark(to observedAt: Date) -> Self {
+        guard observedAt > self.observedAt else { return self }
+        return Self(
+            remaining: self.remaining,
+            source: self.source,
+            observedAt: observedAt,
+            codexOwnerKey: self.codexOwnerKey,
+            trustedResetBoundary: self.trustedResetBoundary,
+            pendingCodexRestoreObservationAt: self.pendingCodexRestoreObservationAt)
+    }
+}
+
+struct CodexSessionQuotaBaselineRequirement: Equatable {
+    let observedAtWatermark: Date?
+
+    func merging(observedAt: Date?) -> Self {
+        guard let observedAt else { return self }
+        guard let watermark = self.observedAtWatermark else {
+            return Self(observedAtWatermark: observedAt)
+        }
+        return Self(observedAtWatermark: max(watermark, observedAt))
+    }
+
+    func admits(observedAt: Date) -> Bool {
+        self.observedAtWatermark.map { observedAt > $0 } ?? true
+    }
 }
 
 enum SessionQuotaTransitionOutcome: Equatable {
@@ -410,12 +437,28 @@ extension UsageStore {
     }
 
     func clearSessionQuotaTransitionState(provider: UsageProvider) {
-        self.sessionQuotaTransitionStates.removeValue(forKey: provider)
+        let removedState = self.sessionQuotaTransitionStates.removeValue(forKey: provider)
+        // Generic provider cleanup can run while Codex is disabled or temporarily unavailable. Preserve
+        // an already-depleted baseline across recovery so depletion cannot refire, but let a newly depleted
+        // account notify after a positive baseline was discarded.
+        if provider == .codex,
+           let removedState,
+           SessionQuotaNotificationLogic.isDepleted(removedState.remaining)
+        {
+            self.updateCodexSessionQuotaBaselineRequirement(observedAt: removedState.observedAt)
+        }
     }
 
-    func requireFreshCodexSessionQuotaBaseline() {
-        self.clearSessionQuotaTransitionState(provider: .codex)
-        self.codexSessionQuotaBaselineRequired = true
+    func requireFreshCodexSessionQuotaBaseline(observedAt: Date? = nil) {
+        let removedState = self.sessionQuotaTransitionStates.removeValue(forKey: .codex)
+        self.updateCodexSessionQuotaBaselineRequirement(observedAt: removedState?.observedAt)
+        self.updateCodexSessionQuotaBaselineRequirement(observedAt: observedAt)
+    }
+
+    private func updateCodexSessionQuotaBaselineRequirement(observedAt: Date?) {
+        let requirement = self.codexSessionQuotaBaselineRequirement ??
+            CodexSessionQuotaBaselineRequirement(observedAtWatermark: nil)
+        self.codexSessionQuotaBaselineRequirement = requirement.merging(observedAt: observedAt)
     }
 
     private static let antigravityQuotaSummaryWindowIDPrefix = "antigravity-quota-summary-"
