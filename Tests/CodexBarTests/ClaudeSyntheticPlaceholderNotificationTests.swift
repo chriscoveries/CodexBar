@@ -23,7 +23,7 @@ struct ClaudeSyntheticPlaceholderNotificationTests {
         store.handleSessionQuotaTransition(provider: .claude, snapshot: self.snapshot(sessionUsed: 100))
 
         #expect(notifier.transitions == [.depleted])
-        #expect(store.lastKnownSessionRemaining[.claude] == 0)
+        #expect(store.sessionQuotaTransitionStates[.claude]?.remaining == 0)
     }
 
     @Test
@@ -52,7 +52,7 @@ struct ClaudeSyntheticPlaceholderNotificationTests {
             snapshot: self.snapshot(sessionUsed: 100, sessionReset: boundary, secondsAfterStart: 7 * 60))
 
         #expect(notifier.transitions == [.depleted])
-        #expect(store.lastKnownSessionRemaining[.claude] == 0)
+        #expect(store.sessionQuotaTransitionStates[.claude]?.remaining == 0)
     }
 
     @Test
@@ -73,7 +73,7 @@ struct ClaudeSyntheticPlaceholderNotificationTests {
         store.handleSessionQuotaTransition(provider: .claude, snapshot: self.snapshot(sessionUsed: 100))
 
         #expect(notifier.transitions == [.depleted])
-        #expect(store.lastKnownSessionRemaining[.claude] == 0)
+        #expect(store.sessionQuotaTransitionStates[.claude]?.remaining == 0)
     }
 
     @Test
@@ -88,7 +88,7 @@ struct ClaudeSyntheticPlaceholderNotificationTests {
         store.handleSessionQuotaTransition(provider: .claude, snapshot: self.snapshot(sessionUsed: 0))
 
         #expect(notifier.transitions == [.depleted, .restored])
-        #expect(store.lastKnownSessionRemaining[.claude] == 100)
+        #expect(store.sessionQuotaTransitionStates[.claude]?.remaining == 100)
     }
 
     @Test
