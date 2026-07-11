@@ -1231,7 +1231,7 @@ extension UsageMenuCardView.Model {
                 tertiaryDetailText = detail
             }
             // Perplexity purchased credits don't reset; show balance without "Resets" prefix.
-            let opusResetText: String? = input.provider == .perplexity
+            let opusResetText: String? = input.provider == .perplexity || input.provider == .sub2api
                 ? opus.resetDescription?.trimmingCharacters(in: .whitespacesAndNewlines)
                 : Self.resetText(for: opus, style: input.resetTimeDisplayStyle, now: input.now)
             let tertiaryPaceDetail = Self.resetWindowPaceDetail(window: opus, input: input)
@@ -1319,12 +1319,14 @@ extension UsageMenuCardView.Model {
         {
             primaryDetailLeft = detail
         }
-        if input.provider == .warp || input.provider == .kilo || input.provider == .mimo || input.provider == .deepseek
-            || input.provider == .qoder || input.provider == .mistral || input.provider == .litellm,
-            let detail = primary.resetDescription,
-            !detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        if [.warp, .kilo, .mimo, .deepseek, .qoder, .mistral, .litellm].contains(input.provider),
+           let detail = primary.resetDescription,
+           !detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         {
             primaryDetailText = detail
+        }
+        if input.provider == .sub2api {
+            primaryResetText = primary.resetDescription
         }
         if let balance = Self.poeBalanceDetailText(input: input) {
             primaryDetailText = balance
@@ -1466,6 +1468,7 @@ extension UsageMenuCardView.Model {
                 weeklyResetText = nil
             }
         }
+        if input.provider == .sub2api { weeklyResetText = weekly.resetDescription }
         if input.provider == .kiro,
            let kiroUsage = input.snapshot?.kiroUsage,
            let remaining = kiroUsage.bonusCreditsRemaining,

@@ -226,7 +226,8 @@ struct MenuDescriptor {
             if let primary = snap.primary {
                 let primaryDetail = primary.resetDescription?.trimmingCharacters(in: .whitespacesAndNewlines)
                 let primaryDescriptionIsDetail = provider == .warp || provider == .kilo || provider == .abacus ||
-                    provider == .deepseek || provider == .azureopenai || provider == .mimo || provider == .qoder
+                    provider == .deepseek || provider == .azureopenai || provider == .mimo || provider == .qoder ||
+                    provider == .sub2api
                 let primaryWindow = if primaryDescriptionIsDetail {
                     // Some providers use resetDescription for non-reset detail
                     // (e.g., "Unlimited", "X/Y credits"). Avoid rendering it as a "Resets ..." line.
@@ -269,7 +270,8 @@ struct MenuDescriptor {
             }
             if let weekly = snap.secondary {
                 let weeklyResetOverride: String? = {
-                    guard provider == .warp || provider == .kilo || provider == .perplexity || provider == .crof
+                    guard provider == .warp || provider == .kilo || provider == .perplexity || provider == .crof ||
+                        provider == .sub2api
                     else { return nil }
                     let detail = weekly.resetDescription?.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard let detail, !detail.isEmpty else { return nil }
@@ -299,7 +301,7 @@ struct MenuDescriptor {
             }
             if labels.showsTertiary, let opus = snap.tertiary {
                 // Perplexity purchased credits don't reset; show the balance as plain text.
-                let opusResetOverride: String? = provider == .perplexity
+                let opusResetOverride: String? = provider == .perplexity || provider == .sub2api
                     ? opus.resetDescription?.trimmingCharacters(in: .whitespacesAndNewlines)
                     : nil
                 Self.appendRateWindow(

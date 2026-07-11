@@ -58,6 +58,11 @@ public struct Sub2APIUsageSnapshot: Sendable, Equatable {
         public let actualCostUSD: Double
     }
 
+    public struct DailyUsagePoint: Sendable, Equatable {
+        public let date: String
+        public let actualCostUSD: Double
+    }
+
     public let mode: String
     public let isValid: Bool
     public let status: String?
@@ -70,11 +75,13 @@ public struct Sub2APIUsageSnapshot: Sendable, Equatable {
     public let subscription: Subscription?
     public let todayUsage: UsageTotals?
     public let totalUsage: UsageTotals?
+    public let dailyUsage: [DailyUsagePoint]?
     public let expiresAt: Date?
     public let updatedAt: Date
 
     public func toUsageSnapshot() -> UsageSnapshot {
-        let subscriptionWindows = self.subscription.map { subscription in
+        let subscription = self.reconciledSubscription()
+        let subscriptionWindows = subscription.map { subscription in
             [
                 Self.rateWindow(
                     usage: subscription.dailyUsageUSD,
@@ -122,7 +129,7 @@ public struct Sub2APIUsageSnapshot: Sendable, Equatable {
             tertiary: tertiary,
             extraRateWindows: namedWindows.isEmpty ? nil : namedWindows,
             providerCost: providerCost,
-            subscriptionExpiresAt: self.subscription?.expiresAt ?? self.expiresAt,
+            subscriptionExpiresAt: subscription?.expiresAt ?? self.expiresAt,
             updatedAt: self.updatedAt,
             identity: ProviderIdentitySnapshot(
                 providerID: .sub2api,
@@ -130,6 +137,57 @@ public struct Sub2APIUsageSnapshot: Sendable, Equatable {
                 accountOrganization: self.planName,
                 loginMethod: identityDetail),
             dataConfidence: .exact)
+    }
+
+    private func reconciledSubscription() -> Subscription? {
+        guard let subscription else { return nil }
+
+        var dailyUsageUSD = subscription.dailyUsageUSD
+        var weeklyUsageUSD = subscription.weeklyUsageUSD
+
+        // sub2api's subscription list lazily clears expired daily/weekly windows, but /v1/usage can return the
+        // persisted counters from the previous window until another billed request performs maintenance. The same
+        // response includes key-scoped daily actual-cost points, so use those for the selected key's current local
+        // day and Monday-based week. This keeps one-key-per-group accounts aligned with the sub2api dashboard.
+        if let dailyUsage = self.dailyUsage {
+            let today = Self.dateKey(self.updatedAt)
+            let weekStart = Self.dateKey(Self.startOfWeek(containing: self.updatedAt))
+            dailyUsageUSD = dailyUsage.first(where: { $0.date == today })?.actualCostUSD ?? 0
+            weeklyUsageUSD = dailyUsage
+                .filter { $0.date >= weekStart && $0.date <= today }
+                .reduce(0) { $0 + $1.actualCostUSD }
+        } else if let todayUsage = self.todayUsage {
+            dailyUsageUSD = todayUsage.actualCostUSD
+        }
+
+        return Subscription(
+            dailyUsageUSD: dailyUsageUSD,
+            weeklyUsageUSD: weeklyUsageUSD,
+            monthlyUsageUSD: subscription.monthlyUsageUSD,
+            dailyLimitUSD: subscription.dailyLimitUSD,
+            weeklyLimitUSD: subscription.weeklyLimitUSD,
+            monthlyLimitUSD: subscription.monthlyLimitUSD,
+            expiresAt: subscription.expiresAt)
+    }
+
+    private static func startOfWeek(containing date: Date) -> Date {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let startOfDay = calendar.startOfDay(for: date)
+        let weekday = calendar.component(.weekday, from: startOfDay)
+        let daysSinceMonday = (weekday + 5) % 7
+        return calendar.date(byAdding: .day, value: -daysSinceMonday, to: startOfDay) ?? startOfDay
+    }
+
+    private static func dateKey(_ date: Date) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        return String(
+            format: "%04d-%02d-%02d",
+            components.year ?? 0,
+            components.month ?? 0,
+            components.day ?? 0)
     }
 
     private func balanceWindow() -> RateWindow? {
@@ -251,6 +309,16 @@ private struct Sub2APIUsageResponse: Decodable {
         let total: Totals?
     }
 
+    struct DailyUsagePoint: Decodable {
+        let date: String
+        let actualCost: Double?
+
+        private enum CodingKeys: String, CodingKey {
+            case date
+            case actualCost = "actual_cost"
+        }
+    }
+
     let mode: String?
     let isValid: Bool?
     let status: String?
@@ -262,6 +330,7 @@ private struct Sub2APIUsageResponse: Decodable {
     let rateLimits: [RateLimit]?
     let subscription: Subscription?
     let usage: Usage?
+    let dailyUsage: [DailyUsagePoint]?
     let expiresAt: String?
 
     private enum CodingKeys: String, CodingKey {
@@ -276,6 +345,7 @@ private struct Sub2APIUsageResponse: Decodable {
         case rateLimits = "rate_limits"
         case subscription
         case usage
+        case dailyUsage = "daily_usage"
         case expiresAt = "expires_at"
     }
 }
@@ -292,7 +362,7 @@ public struct Sub2APIUsageFetcher: Sendable {
         let cleanedAPIKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanedAPIKey.isEmpty else { throw Sub2APIUsageError.missingCredentials }
 
-        var request = URLRequest(url: self.usageURL(baseURL: baseURL))
+        var request = URLRequest(url: self.usageRequestURL(baseURL: baseURL))
         request.httpMethod = "GET"
         request.setValue("Bearer \(cleanedAPIKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -322,6 +392,16 @@ public struct Sub2APIUsageFetcher: Sendable {
         if components.suffix(2) == ["v1", "usage"] { return baseURL }
         if components.last == "v1" { return baseURL.appendingPathComponent("usage") }
         return baseURL.appendingPathComponent("v1/usage")
+    }
+
+    private static func usageRequestURL(baseURL: URL) -> URL {
+        let url = self.usageURL(baseURL: baseURL)
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
+        components.queryItems = [
+            URLQueryItem(name: "days", value: "30"),
+            URLQueryItem(name: "timezone", value: TimeZone.current.identifier),
+        ]
+        return components.url ?? url
     }
 
     private static func parseSnapshot(data: Data, updatedAt: Date) throws -> Sub2APIUsageSnapshot {
@@ -363,6 +443,13 @@ public struct Sub2APIUsageFetcher: Sendable {
                 },
                 todayUsage: self.usageTotals(response.usage?.today),
                 totalUsage: self.usageTotals(response.usage?.total),
+                dailyUsage: response.dailyUsage.map { points in
+                    points.map {
+                        Sub2APIUsageSnapshot.DailyUsagePoint(
+                            date: $0.date,
+                            actualCostUSD: $0.actualCost ?? 0)
+                    }
+                },
                 expiresAt: self.parseDate(response.expiresAt),
                 updatedAt: updatedAt)
         } catch let error as Sub2APIUsageError {

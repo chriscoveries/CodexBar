@@ -39,6 +39,12 @@ The response mode determines what CodexBar shows:
 Usage totals are scoped to the authenticated key. Wallet balance is scoped to the owning user, so CodexBar keeps it
 on each account card and does not sum it across keys.
 
+For subscription groups, sub2api can leave the previous daily or weekly counter in `/v1/usage` until the next billed
+request performs window maintenance. CodexBar reconciles those two windows from the response's key-scoped
+`daily_usage` series. This is exact for the recommended one-key-per-group setup; if several keys share one group, each
+CodexBar account shows that key's daily and weekly spend against the shared group limit. The monthly value remains the
+group subscription counter because sub2api uses a rolling 30-day window and does not expose its start time here.
+
 ## Security
 
 Keys are stored using CodexBar's existing provider config or token-account storage. CodexBar sends a key only to the

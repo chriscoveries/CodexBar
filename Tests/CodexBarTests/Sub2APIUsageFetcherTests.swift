@@ -102,6 +102,70 @@ struct Sub2APIUsageFetcherTests {
     }
 
     @Test
+    func `reconciles stale subscription day and week from daily key usage`() throws {
+        let json = """
+        {
+          "mode": "unrestricted",
+          "subscription": {
+            "daily_usage_usd": 120.23,
+            "weekly_usage_usd": 229.20,
+            "monthly_usage_usd": 1296.23,
+            "daily_limit_usd": 120,
+            "weekly_limit_usd": 700,
+            "monthly_limit_usd": 2800
+          },
+          "daily_usage": [
+            { "date": "2026-07-05", "actual_cost": 229.20 }
+          ]
+        }
+        """
+
+        let parsed = try Sub2APIUsageFetcher._parseSnapshotForTesting(
+            Data(json.utf8),
+            updatedAt: self.localDate(year: 2026, month: 7, day: 8))
+        let snapshot = parsed.toUsageSnapshot()
+
+        #expect(snapshot.primary?.usedPercent == 0)
+        #expect(snapshot.secondary?.usedPercent == 0)
+        #expect(snapshot.tertiary?.usedPercent == 1296.23 / 2800 * 100)
+        #expect(snapshot.primary?.resetDescription == "$0.00 / $120.00")
+        #expect(snapshot.secondary?.resetDescription == "$0.00 / $700.00")
+    }
+
+    @Test
+    func `sums current Monday based week from daily key usage`() throws {
+        let json = """
+        {
+          "mode": "unrestricted",
+          "subscription": {
+            "daily_usage_usd": 99,
+            "weekly_usage_usd": 99,
+            "monthly_usage_usd": 30,
+            "daily_limit_usd": 10,
+            "weekly_limit_usd": 40,
+            "monthly_limit_usd": 100
+          },
+          "daily_usage": [
+            { "date": "2026-07-05", "actual_cost": 50 },
+            { "date": "2026-07-06", "actual_cost": 4 },
+            { "date": "2026-07-08", "actual_cost": 2 }
+          ]
+        }
+        """
+
+        let parsed = try Sub2APIUsageFetcher._parseSnapshotForTesting(
+            Data(json.utf8),
+            updatedAt: self.localDate(year: 2026, month: 7, day: 8))
+        let snapshot = parsed.toUsageSnapshot()
+
+        #expect(snapshot.primary?.usedPercent == 20)
+        #expect(snapshot.secondary?.usedPercent == 15)
+        #expect(snapshot.tertiary?.usedPercent == 30)
+        #expect(snapshot.primary?.resetDescription == "$2.00 / $10.00")
+        #expect(snapshot.secondary?.resetDescription == "$6.00 / $40.00")
+    }
+
+    @Test
     func `parses unrestricted wallet balance`() throws {
         let json = """
         {
@@ -143,10 +207,15 @@ struct Sub2APIUsageFetcherTests {
     @Test
     func `fetch sends bearer API key`() async throws {
         let transport = ProviderHTTPTransportHandler { request in
-            #expect(request.url?.absoluteString == "https://api.example.com/v1/usage")
+            let requestURL = try #require(request.url)
+            #expect(requestURL.path == "/v1/usage")
+            let queryItems = URLComponents(url: requestURL, resolvingAgainstBaseURL: false)?
+                .queryItems ?? []
+            #expect(queryItems.contains(URLQueryItem(name: "days", value: "30")))
+            #expect(queryItems.contains(URLQueryItem(name: "timezone", value: TimeZone.current.identifier)))
             #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer sk-group")
             let response = try #require(HTTPURLResponse(
-                url: #require(request.url),
+                url: requestURL,
                 statusCode: 200,
                 httpVersion: nil,
                 headerFields: nil))
@@ -200,5 +269,17 @@ struct Sub2APIUsageFetcherTests {
         #expect(TokenAccountSupportCatalog.envOverride(for: .sub2api, token: "sk-claude") == [
             Sub2APISettingsReader.apiKeyEnvironmentKey: "sk-claude",
         ])
+    }
+
+    private func localDate(year: Int, month: Int, day: Int) throws -> Date {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        return try #require(calendar.date(from: DateComponents(
+            calendar: calendar,
+            timeZone: calendar.timeZone,
+            year: year,
+            month: month,
+            day: day,
+            hour: 12)))
     }
 }
