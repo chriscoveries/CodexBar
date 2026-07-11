@@ -235,7 +235,9 @@ enum SessionQuotaTransitionReducer {
             source: observation.source,
             observedAt: observation.observedAt,
             codexOwnerKey: observation.provider == .codex ? observation.codexOwnerKey : nil,
-            trustedResetBoundary: observation.provider == .codex ? observation.resetBoundary : nil,
+            trustedResetBoundary: observation.provider == .codex
+                ? self.validResetBoundary(observation.resetBoundary, observedAt: observation.observedAt)
+                : nil,
             pendingCodexRestoreObservationAt: nil)
     }
 
@@ -251,7 +253,9 @@ enum SessionQuotaTransitionReducer {
         } else {
             self.monotonicResetBoundary(
                 previous: previous.trustedResetBoundary,
-                current: observation.resetBoundary)
+                current: self.validResetBoundary(
+                    observation.resetBoundary,
+                    observedAt: observation.observedAt))
         }
         return SessionQuotaTransitionState(
             remaining: observation.remaining,
@@ -280,6 +284,11 @@ enum SessionQuotaTransitionReducer {
         guard let previous else { return current }
         guard UsageStore.limitResetBoundaryAdvanced(previous: previous, current: current) else { return previous }
         return current
+    }
+
+    private static func validResetBoundary(_ candidate: Date?, observedAt: Date) -> Date? {
+        guard let candidate, candidate > observedAt else { return nil }
+        return candidate
     }
 }
 

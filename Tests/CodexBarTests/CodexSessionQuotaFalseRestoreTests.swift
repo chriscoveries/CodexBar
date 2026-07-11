@@ -81,6 +81,29 @@ struct CodexSessionQuotaFalseRestoreTests {
     }
 
     @Test
+    func `expired baseline boundary cannot produce a single sample restore`() throws {
+        let owner = try self.owner("expired-baseline")
+        let expired = self.start.addingTimeInterval(-60)
+        let future = self.start.addingTimeInterval(5 * 3600)
+        let notifier = SessionQuotaNotifierSpy()
+        let store = Self.makeStore(notifier: notifier)
+
+        self.observe(store, used: 100, boundary: expired, at: self.start, owner: owner)
+        #expect(store.sessionQuotaTransitionStates[.codex]?.trustedResetBoundary == nil)
+
+        let firstPositive = self.start.addingTimeInterval(60)
+        self.observe(store, used: 20, boundary: future, at: firstPositive, owner: owner)
+
+        #expect(notifier.transitions == [.depleted])
+        #expect(store.sessionQuotaTransitionStates[.codex]?.pendingCodexRestoreObservationAt == firstPositive)
+
+        self.observe(store, used: 10, boundary: future, at: self.start.addingTimeInterval(120), owner: owner)
+
+        #expect(notifier.transitions == [.depleted, .restored])
+        #expect(store.sessionQuotaTransitionStates[.codex]?.trustedResetBoundary == future)
+    }
+
+    @Test
     func `depletion cannot advance a still future trusted boundary`() throws {
         let owner = try self.owner("depletion-advanced")
         let boundary = self.start.addingTimeInterval(5 * 3600)
