@@ -2,12 +2,35 @@ import CodexBarCore
 import Foundation
 
 extension UsageStore {
+    nonisolated static func codexSessionQuotaOwnerKey(
+        for refreshGuard: CodexAccountScopedRefreshGuard?) -> CodexSessionQuotaOwnerKey?
+    {
+        guard let refreshGuard else { return nil }
+        return CodexSessionQuotaOwnerKey(refreshGuard: refreshGuard)
+    }
+
+    nonisolated static func codexSessionQuotaOwnersMatch(
+        _ lhs: CodexAccountScopedRefreshGuard?,
+        _ rhs: CodexAccountScopedRefreshGuard?) -> Bool
+    {
+        guard let lhsKey = self.codexSessionQuotaOwnerKey(for: lhs),
+              let rhsKey = self.codexSessionQuotaOwnerKey(for: rhs)
+        else {
+            return false
+        }
+        return lhsKey == rhsKey
+    }
+
     private struct ProviderRefreshOutcomeContext {
         let generation: UInt64
         let codexExpectedGuard: CodexAccountScopedRefreshGuard?
         let codexLimitResetOwnerKey: CodexLimitResetOwnerKey?
         let claudeOAuthHistoryPersistentRefHash: String?
         let claudeOAuthActiveAccountObservation: ClaudeOAuthActiveAccountObservation
+
+        var codexSessionQuotaOwnerKey: CodexSessionQuotaOwnerKey? {
+            UsageStore.codexSessionQuotaOwnerKey(for: self.codexExpectedGuard)
+        }
     }
 
     private struct CodexRefreshPublicationPreparation {
@@ -408,7 +431,10 @@ extension UsageStore {
                     nil
                 }
                 self.handleQuotaWarningTransitions(provider: provider, snapshot: backfilled)
-                self.handleSessionQuotaTransition(provider: provider, snapshot: backfilled)
+                self.handleSessionQuotaTransition(
+                    provider: provider,
+                    snapshot: backfilled,
+                    codexOwnerKey: provider == .codex ? context.codexSessionQuotaOwnerKey : nil)
                 self.handlePredictivePaceWarningTransitions(
                     provider: provider,
                     snapshot: backfilled,
