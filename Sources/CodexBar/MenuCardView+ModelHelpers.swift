@@ -549,9 +549,15 @@ extension UsageMenuCardView.Model {
                 window: namedWindow.window,
                 input: input)
             let usageKnown = namedWindow.usageKnown
-            let resetText = Self.extraRateWindowResetText(
+            let resolvedResetText = Self.extraRateWindowResetText(
                 namedWindow: namedWindow,
                 input: input)
+            let resetText = input.provider == .sub2api && namedWindow.window.resetsAt == nil
+                ? nil
+                : resolvedResetText
+            let detailText = input.provider == .sub2api
+                ? namedWindow.window.resetDescription
+                : nil
             let statusText: String? = if usageKnown {
                 nil
             } else if let resetText {
@@ -569,7 +575,7 @@ extension UsageMenuCardView.Model {
                 percentStyle: percentStyle,
                 statusText: statusText,
                 resetText: usageKnown ? resetText : nil,
-                detailText: nil,
+                detailText: usageKnown ? detailText : nil,
                 detailLeftText: usageKnown ? paceDetail?.leftLabel : nil,
                 detailRightText: usageKnown ? paceDetail?.rightLabel : nil,
                 pacePercent: usageKnown ? paceDetail?.pacePercent : nil,

@@ -381,7 +381,9 @@ public struct Sub2APIUsageFetcher: Sendable {
         }
         switch response.statusCode {
         case 200..<300:
-            return try self.parseSnapshot(data: response.data, updatedAt: updatedAt)
+            let snapshot = try self.parseSnapshot(data: response.data, updatedAt: updatedAt)
+            guard snapshot.isValid else { throw Sub2APIUsageError.invalidCredentials }
+            return snapshot
         case 401, 403:
             throw Sub2APIUsageError.invalidCredentials
         default:

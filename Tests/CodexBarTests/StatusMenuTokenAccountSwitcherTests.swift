@@ -407,7 +407,7 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         await selectionTask.value
     }
 
-    func test_tokenAccountSwitchKeepsPreviousSnapshotUntilSelectedAccountRefreshCompletes() async throws {
+    func test_tokenAccountSwitchClearsPreviousAccountIdentityUntilSelectedRefreshCompletes() async throws {
         self.disableMenuCardsForTesting()
 
         let settings = self.makeSettings()
@@ -451,7 +451,11 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
 
         let selectionTask = try XCTUnwrap(switcher._test_select(index: 1))
 
-        XCTAssertEqual(store.snapshot(for: .claude)?.primary?.usedPercent, 11)
+        XCTAssertNil(store.snapshot(for: .claude))
+        XCTAssertNil(store.snapshot(for: .claude)?.identity(for: .claude))
+        let pausedModel = try XCTUnwrap(controller.menuCardModel(for: .claude))
+        XCTAssertTrue(pausedModel.email.isEmpty)
+        XCTAssertTrue(pausedModel.metrics.isEmpty)
         XCTAssertNil(store.lastKnownResetSnapshots[.claude])
         XCTAssertNil(store.errors[.claude])
         XCTAssertNil(store.lastSourceLabels[.claude])

@@ -247,6 +247,26 @@ struct Sub2APIUsageFetcherTests {
     }
 
     @Test
+    func `fetch rejects invalid key in successful response`() async throws {
+        let transport = ProviderHTTPTransportHandler { request in
+            let requestURL = try #require(request.url)
+            let response = try #require(HTTPURLResponse(
+                url: requestURL,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil))
+            return (Data(#"{"mode":"unrestricted","isValid":false}"#.utf8), response)
+        }
+
+        await #expect(throws: Sub2APIUsageError.invalidCredentials) {
+            try await Sub2APIUsageFetcher.fetchUsage(
+                apiKey: "sk-revoked",
+                baseURL: #require(URL(string: "https://api.example.com")),
+                transport: transport)
+        }
+    }
+
+    @Test
     func `settings allow HTTPS and loopback HTTP only`() {
         #expect(Sub2APISettingsReader.baseURL(environment: [
             Sub2APISettingsReader.baseURLEnvironmentKey: "https://api.example.com",

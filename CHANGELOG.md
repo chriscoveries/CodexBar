@@ -2,6 +2,9 @@
 
 ## 0.42.1 — Unreleased
 
+### Added
+- sub2api: add group-key usage with daily, weekly, and monthly quotas, multi-account switching, wallet balance, and expiry details. Thanks @weirdo-adam!
+
 ### Changed
 - Settings: split provider pane "Settings" sections into "Menu bar" and "Connection" so metric pickers and auth/cookie/source controls are grouped by topic.
 
