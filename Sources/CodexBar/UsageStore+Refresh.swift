@@ -620,8 +620,7 @@ extension UsageStore {
             self.tokenFailureGates[provider]?.reset()
             self.statuses.removeValue(forKey: provider)
             self.statusComponents.removeValue(forKey: provider)
-            self.lastKnownSessionRemaining.removeValue(forKey: provider)
-            self.lastKnownSessionWindowSource.removeValue(forKey: provider)
+            self.clearSessionQuotaTransitionState(provider: provider)
             self.predictivePaceWarningNotifiedKeys = Set(
                 self.predictivePaceWarningNotifiedKeys.filter { $0.provider != provider })
             self.quotaWarningState = self.quotaWarningState.filter { $0.key.provider != provider }
@@ -836,8 +835,7 @@ extension UsageStore {
         self.tokenErrors[.claude] = nil
         self.failureGates[.claude]?.reset()
         self.tokenFailureGates[.claude]?.reset()
-        self.lastKnownSessionRemaining.removeValue(forKey: .claude)
-        self.lastKnownSessionWindowSource.removeValue(forKey: .claude)
+        self.clearSessionQuotaTransitionState(provider: .claude)
         self.quotaWarningState = self.quotaWarningState.filter { $0.key.provider != .claude }
         self.lastTokenFetchAt.removeValue(forKey: .claude)
     }
@@ -871,8 +869,7 @@ extension UsageStore {
                 // Drop prior limits immediately so an Education subscription notice cannot leave stale bars visible.
                 self.snapshots.removeValue(forKey: provider)
                 self.lastKnownResetSnapshots.removeValue(forKey: provider)
-                self.lastKnownSessionRemaining.removeValue(forKey: provider)
-                self.lastKnownSessionWindowSource.removeValue(forKey: provider)
+                self.clearSessionQuotaTransitionState(provider: provider)
                 self.quotaWarningState = self.quotaWarningState.filter { $0.key.provider != provider }
                 self.lastSourceLabels.removeValue(forKey: provider)
                 self.errors[provider] = nil

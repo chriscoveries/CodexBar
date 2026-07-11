@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import CodexBar
 
@@ -32,6 +33,71 @@ struct SessionQuotaNotificationLogicTests {
     func `treats tiny positive remaining as depleted`() {
         let transition = SessionQuotaNotificationLogic.transition(previousRemaining: 0, currentRemaining: 0.00001)
         #expect(transition == .none)
+    }
+
+    @Test
+    func `suppresses restored transition when session reset boundary is unchanged`() {
+        let boundary = Date(timeIntervalSince1970: 1_700_000_000)
+        let evaluationTime = boundary.addingTimeInterval(-60)
+        #expect(
+            SessionQuotaNotificationLogic.sessionResetBoundaryAllowsRestore(
+                previousResetBoundary: boundary,
+                currentResetBoundary: boundary,
+                evaluationTime: evaluationTime) == false)
+    }
+
+    @Test
+    func `allows restored transition when unchanged session reset boundary has elapsed`() {
+        let boundary = Date(timeIntervalSince1970: 1_700_000_000)
+        let evaluationTime = boundary.addingTimeInterval(60)
+        #expect(
+            SessionQuotaNotificationLogic.sessionResetBoundaryAllowsRestore(
+                previousResetBoundary: boundary,
+                currentResetBoundary: boundary,
+                evaluationTime: evaluationTime) == true)
+    }
+
+    @Test
+    func `allows restored transition when session reset boundary advances`() {
+        let previous = Date(timeIntervalSince1970: 1_700_000_000)
+        let current = previous.addingTimeInterval(5 * 3600)
+        #expect(
+            SessionQuotaNotificationLogic.sessionResetBoundaryAllowsRestore(
+                previousResetBoundary: previous,
+                currentResetBoundary: current,
+                evaluationTime: current) == true)
+    }
+
+    @Test
+    func `allows restored transition when no previous session reset boundary exists`() {
+        let current = Date(timeIntervalSince1970: 1_700_000_000)
+        #expect(
+            SessionQuotaNotificationLogic.sessionResetBoundaryAllowsRestore(
+                previousResetBoundary: nil,
+                currentResetBoundary: current,
+                evaluationTime: current) == true)
+    }
+
+    @Test
+    func `allows restored transition when current boundary is missing after prior boundary elapsed`() {
+        let previous = Date(timeIntervalSince1970: 1_700_000_000)
+        let evaluationTime = previous.addingTimeInterval(60)
+        #expect(
+            SessionQuotaNotificationLogic.sessionResetBoundaryAllowsRestore(
+                previousResetBoundary: previous,
+                currentResetBoundary: nil,
+                evaluationTime: evaluationTime) == true)
+    }
+
+    @Test
+    func `suppresses restored transition when current boundary is missing before prior boundary elapsed`() {
+        let previous = Date(timeIntervalSince1970: 1_700_000_000)
+        let evaluationTime = previous.addingTimeInterval(-60)
+        #expect(
+            SessionQuotaNotificationLogic.sessionResetBoundaryAllowsRestore(
+                previousResetBoundary: previous,
+                currentResetBoundary: nil,
+                evaluationTime: evaluationTime) == false)
     }
 
     @Test

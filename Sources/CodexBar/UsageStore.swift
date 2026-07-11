@@ -318,6 +318,7 @@ final class UsageStore {
     @ObservationIgnored var lastKnownResetSnapshots: [UsageProvider: UsageSnapshot] = [:]
     @ObservationIgnored var lastKnownSessionRemaining: [UsageProvider: Double] = [:]
     @ObservationIgnored var lastKnownSessionWindowSource: [UsageProvider: SessionQuotaWindowSource] = [:]
+    @ObservationIgnored var lastKnownSessionResetBoundary: [UsageProvider: Date] = [:]
     @ObservationIgnored var quotaWarningState: [QuotaWarningStateKey: QuotaWarningState] = [:]
     @ObservationIgnored var predictivePaceWarningNotifiedKeys: Set<PredictivePaceWarningStateKey> = []
     @ObservationIgnored var lastPermissionPromptNotificationAt: [UsageProvider: Date] = [:]
@@ -858,28 +859,52 @@ final class UsageStore {
             if provider == .commandcode, snapshot.commandCodeSubscriptionEnrichmentUnavailable {
                 return
             }
-            self.lastKnownSessionRemaining.removeValue(forKey: provider)
-            self.lastKnownSessionWindowSource.removeValue(forKey: provider)
+            self.clearSessionQuotaTransitionState(provider: provider)
             return
         }
         let currentRemaining = sessionWindow.window.remainingPercent
         let currentSource = sessionWindow.source
+        let currentResetBoundary = sessionWindow.window.resetsAt
         let previousRemaining = self.lastKnownSessionRemaining[provider]
         let previousSource = self.lastKnownSessionWindowSource[provider]
+        let previousResetBoundary = self.lastKnownSessionResetBoundary[provider]
+        let currentIsDepleted = SessionQuotaNotificationLogic.isDepleted(currentRemaining)
+        let previousWasDepleted = SessionQuotaNotificationLogic.isDepleted(previousRemaining)
+        var preserveDepletedBaseline = false
+        var acceptedRestore = false
 
         if let previousSource, previousSource != currentSource {
             let providerText = provider.rawValue
             self.sessionQuotaLogger.debug(
                 "session window source changed: provider=\(providerText) prevSource=\(previousSource.rawValue) " +
                     "currSource=\(currentSource.rawValue) curr=\(currentRemaining)")
-            self.lastKnownSessionRemaining[provider] = currentRemaining
-            self.lastKnownSessionWindowSource[provider] = currentSource
+            self.clearSessionQuotaTransitionState(provider: provider)
+            self.recordSessionQuotaTransitionState(
+                provider: provider,
+                remaining: currentRemaining,
+                source: currentSource,
+                resetBoundary: currentResetBoundary,
+                observedAt: snapshot.updatedAt)
             return
         }
 
         defer {
-            self.lastKnownSessionRemaining[provider] = currentRemaining
-            self.lastKnownSessionWindowSource[provider] = currentSource
+            if !preserveDepletedBaseline {
+                let boundaryPolicy: SessionResetBoundaryRecordingPolicy = if acceptedRestore {
+                    .restored
+                } else if currentIsDepleted, previousWasDepleted {
+                    .preserve
+                } else {
+                    .update
+                }
+                self.recordSessionQuotaTransitionState(
+                    provider: provider,
+                    remaining: currentRemaining,
+                    source: currentSource,
+                    resetBoundary: currentResetBoundary,
+                    observedAt: snapshot.updatedAt,
+                    boundaryPolicy: boundaryPolicy)
+            }
         }
 
         guard self.settings.sessionQuotaNotificationsEnabled else {
@@ -921,6 +946,22 @@ final class UsageStore {
             return
         }
 
+        if transition == .restored,
+           !SessionQuotaNotificationLogic.sessionResetBoundaryAllowsRestore(
+               previousResetBoundary: previousResetBoundary,
+               currentResetBoundary: currentResetBoundary,
+               evaluationTime: snapshot.updatedAt)
+        {
+            preserveDepletedBaseline = true
+            let providerText = provider.rawValue
+            let message =
+                "suppressed transient restore: provider=\(providerText) " +
+                "prev=\(previousRemaining ?? -1) curr=\(currentRemaining)"
+            self.sessionQuotaLogger.info(message)
+            return
+        }
+
+        acceptedRestore = transition == .restored
         let providerText = provider.rawValue
         let transitionText = String(describing: transition)
         let message =
