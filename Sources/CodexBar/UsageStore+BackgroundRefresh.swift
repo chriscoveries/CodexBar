@@ -3,9 +3,13 @@ import Foundation
 
 @MainActor
 extension UsageStore {
-    private func clearProviderState(_ provider: UsageProvider) {
+    /// Clears ephemeral in-memory runtime/UI state for a provider that is disabled or unavailable.
+    /// Does not touch settings, token-account configuration, plan-utilization history, or disk-backed
+    /// Codex account snapshot cache.
+    func clearProviderState(_ provider: UsageProvider) {
         self.refreshingProviders.remove(provider)
         self.snapshots.removeValue(forKey: provider)
+        self.lastKnownResetSnapshots.removeValue(forKey: provider)
         self.errors[provider] = nil
         if provider == .gemini {
             self.clearGeminiConsumerTierDeprecationObservation()
@@ -14,6 +18,16 @@ extension UsageStore {
         self.lastSourceLabels.removeValue(forKey: provider)
         self.lastFetchAttempts.removeValue(forKey: provider)
         self.accountSnapshots.removeValue(forKey: provider)
+        if provider == .codex {
+            self.codexAccountSnapshots = []
+            self.lastCodexUsagePublicationGuard = nil
+        }
+        if provider == .kilo {
+            self.kiloScopeSnapshots = []
+        }
+        if provider == .claude {
+            self.clearClaudeSwapAccountState()
+        }
         self.tokenSnapshots.removeValue(forKey: provider)
         self.tokenErrors[provider] = nil
         self.providerStorageFootprints.removeValue(forKey: provider)
@@ -22,6 +36,9 @@ extension UsageStore {
         self.statuses.removeValue(forKey: provider)
         self.statusComponents.removeValue(forKey: provider)
         self.clearSessionQuotaTransitionState(provider: provider)
+        self.predictivePaceWarningNotifiedKeys = Set(
+            self.predictivePaceWarningNotifiedKeys.filter { $0.provider != provider })
+        self.quotaWarningState = self.quotaWarningState.filter { $0.key.provider != provider }
         self.lastTokenFetchAt.removeValue(forKey: provider)
     }
 
