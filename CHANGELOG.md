@@ -10,6 +10,7 @@
 - Settings: split provider pane "Settings" sections into "Menu bar" and "Connection" so metric pickers and auth/cookie/source controls are grouped by topic.
 
 ### Fixed
+- Agent Sessions: coalesce overlapping unchanged remote refresh requests so menu opens do not repeat Tailscale discovery and SSH passes. Thanks @Yuxin-Qiao!
 - Website: update every public provider count and the social card to 58, with a registry-derived check to prevent future drift. Thanks @kiranmagic7!
 - CLI: isolate interactive PATH probes from the caller's terminal so concurrent and redirected-stdin lookups cannot break `watch` or Ctrl+C. Thanks @possibilities!
 - Claude login: preserve the selected usage source after OAuth sign-in so Auto mode can still fall back to CLI or web data when OAuth is unavailable. Thanks @Chipagosfinest!
