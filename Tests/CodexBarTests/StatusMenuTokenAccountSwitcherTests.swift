@@ -42,6 +42,35 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         }
     }
 
+    private func installRotatingProvider(
+        on store: UsageStore,
+        provider: UsageProvider,
+        rotatedToken: String)
+    {
+        let baseSpec = store.providerSpecs[provider]!
+        let baseDescriptor = baseSpec.descriptor
+        let snapshot = self.snapshot(percent: 37)
+        let descriptor = ProviderDescriptor(
+            id: provider,
+            metadata: baseDescriptor.metadata,
+            branding: baseDescriptor.branding,
+            tokenCost: baseDescriptor.tokenCost,
+            fetchPlan: ProviderFetchPlan(
+                sourceModes: baseDescriptor.fetchPlan.sourceModes,
+                pipeline: ProviderFetchPipeline { _ in [
+                    RotatingTokenAccountFetchStrategy(
+                        provider: provider,
+                        rotatedToken: rotatedToken,
+                        snapshot: snapshot),
+                ] }),
+            cli: baseDescriptor.cli)
+        store.providerSpecs[provider] = ProviderSpec(
+            style: baseSpec.style,
+            isEnabled: baseSpec.isEnabled,
+            descriptor: descriptor,
+            makeFetchContext: baseSpec.makeFetchContext)
+    }
+
     private static func makeClaudeProviderSpec(
         baseSpec: ProviderSpec,
         loader: @escaping @Sendable () async throws -> UsageSnapshot) -> ProviderSpec
@@ -179,7 +208,8 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
                 account: account,
                 snapshot: self.snapshot(percent: Double(10 + index)),
                 error: nil,
-                sourceLabel: "test")
+                sourceLabel: "test",
+                cacheKey: store.tokenAccountSnapshotCacheKey(provider: .copilot, account: account))
         }
         let controller = StatusItemController(
             store: store,
@@ -255,14 +285,16 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
                 account: account,
                 snapshot: self.snapshot(percent: Double(70 + index)),
                 error: nil,
-                sourceLabel: "stale")
+                sourceLabel: "stale",
+                cacheKey: store.tokenAccountSnapshotCacheKey(provider: .copilot, account: account))
         }
         let currentSnapshots = accounts.enumerated().map { index, account in
             TokenAccountUsageSnapshot(
                 account: account,
                 snapshot: self.snapshot(percent: Double(10 + index)),
                 error: nil,
-                sourceLabel: "current")
+                sourceLabel: "current",
+                cacheKey: store.tokenAccountSnapshotCacheKey(provider: .copilot, account: account))
         }
         store.accountSnapshots[.copilot] = staleSnapshots + currentSnapshots
         let controller = StatusItemController(
@@ -281,6 +313,205 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         XCTAssertEqual(
             self.representedIDs(in: menu).filter { $0.hasPrefix("menuCard") },
             ["menuCard-0", "menuCard-1", "menuCard-2", "menuCard-3", "menuCard-4", "menuCard-5"])
+    }
+
+    func test_multiAccountStackedLayoutRejectsSnapshotsAfterCredentialOrBaseURLChanges() throws {
+        self.disableMenuCardsForTesting()
+        let settings = self.makeSettings()
+        settings.statusChecksEnabled = false
+        settings.refreshFrequency = .manual
+        settings.multiAccountMenuLayout = .stacked
+        self.enableOnly(.sub2api, settings)
+        settings.updateProviderConfig(provider: .sub2api) { config in
+            config.enterpriseHost = "https://first.example.test"
+        }
+        settings.addTokenAccount(provider: .sub2api, label: "Primary", token: "primary-token")
+        settings.addTokenAccount(provider: .sub2api, label: "Secondary", token: "secondary-token")
+        let originalAccounts = settings.tokenAccounts(for: .sub2api)
+
+        let fetcher = UsageFetcher()
+        let store = UsageStore(fetcher: fetcher, browserDetection: BrowserDetection(cacheTTL: 0), settings: settings)
+        store.accountSnapshots[.sub2api] = originalAccounts.map { account in
+            TokenAccountUsageSnapshot(
+                account: account,
+                snapshot: self.snapshot(),
+                error: nil,
+                sourceLabel: "fixture",
+                cacheKey: store.tokenAccountSnapshotCacheKey(provider: .sub2api, account: account))
+        }
+        let controller = StatusItemController(
+            store: store,
+            settings: settings,
+            account: fetcher.loadAccountInfo(),
+            updater: DisabledUpdaterController(),
+            preferencesSelection: PreferencesSelection(),
+            statusBar: testStatusBar())
+        defer { controller.releaseStatusItemsForTesting() }
+
+        XCTAssertEqual(try XCTUnwrap(controller.tokenAccountMenuDisplay(for: .sub2api)).snapshots.count, 2)
+
+        settings.updateTokenAccount(
+            provider: .sub2api,
+            accountID: originalAccounts[0].id,
+            token: "rotated-primary-token")
+        XCTAssertEqual(
+            try XCTUnwrap(controller.tokenAccountMenuDisplay(for: .sub2api)).snapshots.map(\.account.id),
+            [originalAccounts[1].id])
+
+        settings.updateProviderConfig(provider: .sub2api) { config in
+            config.enterpriseHost = "https://second.example.test"
+        }
+        XCTAssertTrue(try XCTUnwrap(controller.tokenAccountMenuDisplay(for: .sub2api)).snapshots.isEmpty)
+    }
+
+    func test_multiAccountStackedCancellationCannotRestoreCredentialStaleSnapshots() async {
+        self.disableMenuCardsForTesting()
+        let settings = self.makeSettings()
+        settings.statusChecksEnabled = false
+        settings.refreshFrequency = .manual
+        settings.multiAccountMenuLayout = .stacked
+        self.enableOnlyClaude(settings)
+        settings.addTokenAccount(provider: .claude, label: "Primary", token: "primary-token")
+        settings.addTokenAccount(provider: .claude, label: "Secondary", token: "secondary-token")
+        let originalAccounts = settings.tokenAccounts(for: .claude)
+
+        let store = UsageStore(
+            fetcher: UsageFetcher(),
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings)
+        store.accountSnapshots[.claude] = originalAccounts.map { account in
+            TokenAccountUsageSnapshot(
+                account: account,
+                snapshot: self.snapshot(),
+                error: nil,
+                sourceLabel: "fixture",
+                cacheKey: store.tokenAccountSnapshotCacheKey(provider: .claude, account: account))
+        }
+        settings.updateTokenAccount(
+            provider: .claude,
+            accountID: originalAccounts[0].id,
+            token: "rotated-primary-token")
+        let blocker = BlockingTokenAccountFetchStrategy()
+        self.installBlockingClaudeProvider(on: store, blocker: blocker)
+
+        let refreshTask = Task { @MainActor in
+            await store.refreshProvider(.claude)
+        }
+        await blocker.waitUntilStarted(count: 2)
+        await blocker.resumeAll(with: .failure(CancellationError()))
+        await refreshTask.value
+
+        XCTAssertEqual(store.accountSnapshots[.claude]?.map(\.account.id), [originalAccounts[1].id])
+    }
+
+    func test_validTokenAccountSnapshotsHandlesDuplicateAccountIDsWithoutTrapping() {
+        let settings = self.makeSettings()
+        self.enableOnlyClaude(settings)
+        let id = UUID()
+        let first = ProviderTokenAccount(
+            id: id,
+            label: "First",
+            token: "first-token",
+            addedAt: 1,
+            lastUsed: nil)
+        let duplicate = ProviderTokenAccount(
+            id: id,
+            label: "Duplicate",
+            token: "duplicate-token",
+            addedAt: 2,
+            lastUsed: nil)
+        let store = UsageStore(
+            fetcher: UsageFetcher(),
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings)
+        store.accountSnapshots[.claude] = [
+            TokenAccountUsageSnapshot(
+                account: first,
+                snapshot: self.snapshot(),
+                error: nil,
+                sourceLabel: "fixture",
+                cacheKey: store.tokenAccountSnapshotCacheKey(provider: .claude, account: first)),
+        ]
+
+        XCTAssertTrue(store.validTokenAccountSnapshots(provider: .claude, accounts: [first, duplicate]).isEmpty)
+    }
+
+    func test_duplicateAccountIDsRejectCrossCredentialPublication() async {
+        let settings = self.makeSettings()
+        settings.statusChecksEnabled = false
+        settings.refreshFrequency = .manual
+        self.enableOnlyClaude(settings)
+        settings.addTokenAccount(provider: .claude, label: "First", token: "first-token")
+        settings.addTokenAccount(provider: .claude, label: "Second", token: "second-token")
+        let accounts = settings.tokenAccounts(for: .claude)
+        let duplicate = ProviderTokenAccount(
+            id: accounts[0].id,
+            label: accounts[1].label,
+            token: accounts[1].token,
+            addedAt: accounts[1].addedAt,
+            lastUsed: accounts[1].lastUsed)
+        settings.updateProviderConfig(provider: .claude) { config in
+            config.tokenAccounts = ProviderTokenAccountData(
+                version: 1,
+                accounts: [accounts[0], duplicate],
+                activeIndex: 1)
+        }
+        let store = UsageStore(
+            fetcher: UsageFetcher(),
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings)
+        store._test_providerFetchOutcomeOverride = { _ in
+            ProviderFetchOutcome(
+                result: .success(ProviderFetchResult(
+                    usage: self.snapshot(percent: 66),
+                    credits: nil,
+                    dashboard: nil,
+                    sourceLabel: "fixture",
+                    strategyID: "fixture",
+                    strategyKind: .apiToken)),
+                attempts: [])
+        }
+
+        await store.refreshProvider(.claude)
+
+        XCTAssertNil(store.snapshot(for: .claude))
+        XCTAssertNil(store.accountSnapshots[.claude])
+    }
+
+    func test_authorizedTokenRotationPublishesAndCachesUnderTheRotatedCredential() async {
+        self.disableMenuCardsForTesting()
+        let settings = self.makeSettings()
+        settings.statusChecksEnabled = false
+        settings.refreshFrequency = .manual
+        settings.multiAccountMenuLayout = .segmented
+        self.enableOnly(.antigravity, settings)
+        settings.addTokenAccount(provider: .antigravity, label: "Primary", token: "primary-token")
+        settings.addTokenAccount(provider: .antigravity, label: "Secondary", token: "secondary-token")
+        settings.setActiveTokenAccountIndex(0, for: .antigravity)
+
+        let store = UsageStore(
+            fetcher: UsageFetcher(),
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings)
+        self.installRotatingProvider(on: store, provider: .antigravity, rotatedToken: "refreshed-token")
+
+        await store.refreshProvider(.antigravity)
+        let accountsAfterPrimaryRefresh = settings.tokenAccounts(for: .antigravity)
+        XCTAssertEqual(accountsAfterPrimaryRefresh[0].token, "refreshed-token")
+        XCTAssertEqual(store.snapshot(for: .antigravity)?.primary?.usedPercent, 37)
+        XCTAssertEqual(
+            store.accountSnapshots[.antigravity]?.first?.cacheKey,
+            store.tokenAccountSnapshotCacheKey(provider: .antigravity, account: accountsAfterPrimaryRefresh[0]))
+
+        settings.setActiveTokenAccountIndex(1, for: .antigravity)
+        await store.refreshProvider(.antigravity)
+        settings.setActiveTokenAccountIndex(0, for: .antigravity)
+        store.activateCachedTokenAccountSnapshot(
+            provider: .antigravity,
+            accountID: accountsAfterPrimaryRefresh[0].id)
+
+        XCTAssertEqual(store.snapshot(for: .antigravity)?.primary?.usedPercent, 37)
+        XCTAssertEqual(store.accountSnapshots[.antigravity]?.count, 2)
     }
 
     func test_tokenAccountSwitchDefersOpenMenuRebuildUntilAfterSwitcherAction() async throws {
@@ -373,12 +604,14 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
                 account: accounts[0],
                 snapshot: self.snapshot(percent: 11),
                 error: nil,
-                sourceLabel: "primary-cache"),
+                sourceLabel: "primary-cache",
+                cacheKey: store.tokenAccountSnapshotCacheKey(provider: .claude, account: accounts[0])),
             TokenAccountUsageSnapshot(
                 account: accounts[1],
                 snapshot: self.snapshot(percent: 72),
                 error: nil,
-                sourceLabel: "secondary-cache"),
+                sourceLabel: "secondary-cache",
+                cacheKey: store.tokenAccountSnapshotCacheKey(provider: .claude, account: accounts[1])),
         ]
         let blocker = BlockingTokenAccountFetchStrategy()
         self.installBlockingClaudeProvider(on: store, blocker: blocker)
@@ -432,7 +665,8 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
                 account: accounts[0],
                 snapshot: self.snapshot(percent: 11),
                 error: nil,
-                sourceLabel: "primary-cache"),
+                sourceLabel: "primary-cache",
+                cacheKey: store.tokenAccountSnapshotCacheKey(provider: .claude, account: accounts[0])),
         ]
         let blocker = BlockingTokenAccountFetchStrategy()
         self.installBlockingClaudeProvider(on: store, blocker: blocker)
@@ -470,6 +704,63 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
                 .snapshot?.primary?.usedPercent,
             45)
     }
+
+    func test_segmentedRefreshPreservesValidAccountCacheAndInvalidatesCredentialChanges() async {
+        self.disableMenuCardsForTesting()
+        let settings = self.makeSettings()
+        settings.statusChecksEnabled = false
+        settings.refreshFrequency = .manual
+        settings.multiAccountMenuLayout = .segmented
+        self.enableOnlyClaude(settings)
+        settings.addTokenAccount(provider: .claude, label: "Primary", token: "primary-token")
+        settings.addTokenAccount(provider: .claude, label: "Secondary", token: "secondary-token")
+        settings.setActiveTokenAccountIndex(0, for: .claude)
+
+        let store = UsageStore(
+            fetcher: UsageFetcher(),
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings)
+        store._test_providerFetchOutcomeOverride = { _ in
+            let percent = settings.selectedTokenAccount(for: .claude)?.label == "Primary" ? 11.0 : 72.0
+            return ProviderFetchOutcome(
+                result: .success(ProviderFetchResult(
+                    usage: self.snapshot(percent: percent),
+                    credits: nil,
+                    dashboard: nil,
+                    sourceLabel: "fixture",
+                    strategyID: "fixture",
+                    strategyKind: .apiToken)),
+                attempts: [])
+        }
+
+        await store.refreshProvider(.claude)
+        let originalAccounts = settings.tokenAccounts(for: .claude)
+        XCTAssertEqual(store.snapshot(for: .claude)?.primary?.usedPercent, 11)
+        XCTAssertEqual(store.accountSnapshots[.claude]?.count, 1)
+
+        settings.setActiveTokenAccountIndex(1, for: .claude)
+        store.activateCachedTokenAccountSnapshot(provider: .claude, accountID: originalAccounts[1].id)
+        XCTAssertNil(store.snapshot(for: .claude))
+        await store.refreshProvider(.claude)
+        XCTAssertEqual(store.snapshot(for: .claude)?.primary?.usedPercent, 72)
+        XCTAssertEqual(store.accountSnapshots[.claude]?.count, 2)
+
+        settings.setActiveTokenAccountIndex(0, for: .claude)
+        store.activateCachedTokenAccountSnapshot(provider: .claude, accountID: originalAccounts[0].id)
+        XCTAssertEqual(store.snapshot(for: .claude)?.primary?.usedPercent, 11)
+
+        settings.updateTokenAccount(
+            provider: .claude,
+            accountID: originalAccounts[0].id,
+            token: "rotated-primary-token")
+        store.activateCachedTokenAccountSnapshot(provider: .claude, accountID: originalAccounts[0].id)
+        XCTAssertNil(store.snapshot(for: .claude))
+        XCTAssertEqual(store.accountSnapshots[.claude]?.map(\.account.id), [originalAccounts[1].id])
+
+        settings.removeTokenAccount(provider: .claude, accountID: originalAccounts[1].id)
+        store.pruneTokenAccountSnapshots(provider: .claude, accounts: settings.tokenAccounts(for: .claude))
+        XCTAssertNil(store.accountSnapshots[.claude])
+    }
 }
 
 private struct StatusMenuTokenAccountFetchStrategy: ProviderFetchStrategy {
@@ -497,6 +788,42 @@ private struct StatusMenuTokenAccountFetchStrategy: ProviderFetchStrategy {
     }
 }
 
+private struct RotatingTokenAccountFetchStrategy: ProviderFetchStrategy {
+    let provider: UsageProvider
+    let rotatedToken: String
+    let snapshot: UsageSnapshot
+
+    var id: String {
+        "rotating-token-account-test"
+    }
+
+    var kind: ProviderFetchKind {
+        .apiToken
+    }
+
+    func isAvailable(_: ProviderFetchContext) async -> Bool {
+        true
+    }
+
+    func fetch(_ context: ProviderFetchContext) async throws -> ProviderFetchResult {
+        guard let accountID = context.selectedTokenAccountID,
+              let updater = context.tokenAccountTokenUpdater
+        else {
+            throw RotatingTokenAccountTestError.missingUpdater
+        }
+        await updater(self.provider, accountID, self.rotatedToken)
+        return self.makeResult(usage: self.snapshot, sourceLabel: "rotating-token-account-test")
+    }
+
+    func shouldFallback(on _: Error, context _: ProviderFetchContext) -> Bool {
+        false
+    }
+}
+
+private enum RotatingTokenAccountTestError: Error {
+    case missingUpdater
+}
+
 private actor BlockingTokenAccountFetchStrategy {
     private var waiters: [CheckedContinuation<Result<UsageSnapshot, Error>, Never>] = []
     private var startedWaiters: [(count: Int, continuation: CheckedContinuation<Void, Never>)] = []
@@ -518,7 +845,9 @@ private actor BlockingTokenAccountFetchStrategy {
     }
 
     func waitUntilStarted(count: Int) async {
-        if self.startedCount >= count { return }
+        if self.startedCount >= count {
+            return
+        }
         await withCheckedContinuation { continuation in
             self.startedWaiters.append((count: count, continuation: continuation))
         }

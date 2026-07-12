@@ -442,7 +442,13 @@ extension UsageStore {
                 provider: provider,
                 usage: rawScoped,
                 expectedGuard: context.codexExpectedGuard)
-            let accountScoped = if let tokenAccount = context.tokenAccount {
+            let currentTokenAccount = context.tokenAccount.flatMap { account in
+                self.uniqueTokenAccount(provider: provider, accountID: account.id)
+            }
+            if context.tokenAccount != nil, currentTokenAccount == nil {
+                return
+            }
+            let accountScoped = if let tokenAccount = currentTokenAccount {
                 self.applyAccountLabel(scoped, provider: provider, account: tokenAccount)
             } else {
                 scoped
@@ -504,7 +510,7 @@ extension UsageStore {
                 }
                 self.lastSourceLabels[provider] = result.sourceLabel
                 self.errors[provider] = nil
-                if let tokenAccount = context.tokenAccount {
+                if let tokenAccount = currentTokenAccount {
                     self.cacheTokenAccountSnapshot(
                         provider: provider,
                         account: tokenAccount,

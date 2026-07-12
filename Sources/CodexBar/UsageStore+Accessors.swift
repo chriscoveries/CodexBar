@@ -65,7 +65,15 @@ extension UsageStore {
         case .clawrouter:
             return ClawRouterUsageError.missingCredentials.errorDescription
         case .sub2api:
-            return Sub2APIUsageError.missingCredentials.errorDescription
+            let environment = ProviderRegistry.makeEnvironment(
+                base: self.environmentBase,
+                provider: provider,
+                settings: self.settings,
+                tokenOverride: nil)
+            if Sub2APISettingsReader.apiKey(environment: environment) == nil {
+                return Sub2APIUsageError.missingCredentials.errorDescription
+            }
+            return Sub2APIUsageError.missingBaseURL.errorDescription
         case .azureopenai:
             return AzureOpenAISettingsError.missingAPIKey.errorDescription
         case .elevenlabs:

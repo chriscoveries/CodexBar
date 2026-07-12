@@ -102,7 +102,7 @@ struct Sub2APIUsageFetcherTests {
     }
 
     @Test
-    func `reconciles stale subscription day and week from daily key usage`() throws {
+    func `preserves authoritative subscription windows when daily usage differs`() throws {
         let json = """
         {
           "mode": "unrestricted",
@@ -125,15 +125,15 @@ struct Sub2APIUsageFetcherTests {
             updatedAt: self.localDate(year: 2026, month: 7, day: 8))
         let snapshot = parsed.toUsageSnapshot()
 
-        #expect(snapshot.primary?.usedPercent == 0)
-        #expect(snapshot.secondary?.usedPercent == 0)
+        #expect(snapshot.primary?.usedPercent == 100)
+        #expect(snapshot.secondary?.usedPercent == 229.20 / 700 * 100)
         #expect(snapshot.tertiary?.usedPercent == 1296.23 / 2800 * 100)
-        #expect(snapshot.primary?.resetDescription == "$0.00 / $120.00")
-        #expect(snapshot.secondary?.resetDescription == "$0.00 / $700.00")
+        #expect(snapshot.primary?.resetDescription == "$120.23 / $120.00")
+        #expect(snapshot.secondary?.resetDescription == "$229.20 / $700.00")
     }
 
     @Test
-    func `sums current Monday based week from daily key usage`() throws {
+    func `does not reinterpret subscription windows as local calendar periods`() throws {
         let json = """
         {
           "mode": "unrestricted",
@@ -158,11 +158,11 @@ struct Sub2APIUsageFetcherTests {
             updatedAt: self.localDate(year: 2026, month: 7, day: 8))
         let snapshot = parsed.toUsageSnapshot()
 
-        #expect(snapshot.primary?.usedPercent == 20)
-        #expect(snapshot.secondary?.usedPercent == 15)
+        #expect(snapshot.primary?.usedPercent == 100)
+        #expect(snapshot.secondary?.usedPercent == 100)
         #expect(snapshot.tertiary?.usedPercent == 30)
-        #expect(snapshot.primary?.resetDescription == "$2.00 / $10.00")
-        #expect(snapshot.secondary?.resetDescription == "$6.00 / $40.00")
+        #expect(snapshot.primary?.resetDescription == "$99.00 / $10.00")
+        #expect(snapshot.secondary?.resetDescription == "$99.00 / $40.00")
     }
 
     @Test

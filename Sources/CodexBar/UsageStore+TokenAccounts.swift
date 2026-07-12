@@ -1,4 +1,5 @@
 import CodexBarCore
+import CryptoKit
 import Foundation
 
 struct TokenAccountUsageSnapshot: Identifiable {
@@ -7,13 +8,21 @@ struct TokenAccountUsageSnapshot: Identifiable {
     let snapshot: UsageSnapshot?
     let error: String?
     let sourceLabel: String?
+    let cacheKey: String
 
-    init(account: ProviderTokenAccount, snapshot: UsageSnapshot?, error: String?, sourceLabel: String?) {
+    init(
+        account: ProviderTokenAccount,
+        snapshot: UsageSnapshot?,
+        error: String?,
+        sourceLabel: String?,
+        cacheKey: String)
+    {
         self.id = account.id
         self.account = account
         self.snapshot = snapshot
         self.error = error
         self.sourceLabel = sourceLabel
+        self.cacheKey = cacheKey
     }
 }
 
@@ -36,7 +45,14 @@ struct CodexAccountUsageSnapshot: Identifiable {
 extension UsageStore {
     func activateCachedTokenAccountSnapshot(provider: UsageProvider, accountID: UUID) {
         self.knownLimitsAvailabilityByProvider.removeValue(forKey: provider)
-        guard let cached = self.accountSnapshots[provider]?.first(where: { $0.account.id == accountID }) else {
+        guard let account = self.uniqueTokenAccount(provider: provider, accountID: accountID),
+              let cached = self.accountSnapshots[provider]?.first(where: {
+                  $0.account.id == accountID && $0.cacheKey == self.tokenAccountSnapshotCacheKey(
+                      provider: provider,
+                      account: account)
+              })
+        else {
+            self.accountSnapshots[provider]?.removeAll { $0.account.id == accountID }
             // Never show the previous account's usage under the newly selected account. Segmented layouts only
             // fetch the active account, so an uncached selection must render as refreshing until its fetch completes.
             self.snapshots.removeValue(forKey: provider)
@@ -71,7 +87,8 @@ extension UsageStore {
             account: account,
             snapshot: snapshot,
             error: nil,
-            sourceLabel: sourceLabel)
+            sourceLabel: sourceLabel,
+            cacheKey: self.tokenAccountSnapshotCacheKey(provider: provider, account: account))
         var snapshots = self.accountSnapshots[provider] ?? []
         if let index = snapshots.firstIndex(where: { $0.account.id == account.id }) {
             snapshots[index] = cached
@@ -79,6 +96,45 @@ extension UsageStore {
             snapshots.append(cached)
         }
         self.accountSnapshots[provider] = snapshots
+    }
+
+    func pruneTokenAccountSnapshots(provider: UsageProvider, accounts: [ProviderTokenAccount]) {
+        let retained = self.validTokenAccountSnapshots(provider: provider, accounts: accounts)
+        if retained.isEmpty {
+            self.accountSnapshots.removeValue(forKey: provider)
+        } else {
+            self.accountSnapshots[provider] = retained
+        }
+    }
+
+    func validTokenAccountSnapshots(
+        provider: UsageProvider,
+        accounts: [ProviderTokenAccount]) -> [TokenAccountUsageSnapshot]
+    {
+        let accountsByID = Dictionary(grouping: accounts, by: \.id).compactMapValues { matches in
+            matches.count == 1 ? matches[0] : nil
+        }
+        return (self.accountSnapshots[provider] ?? []).filter { cached in
+            guard let account = accountsByID[cached.account.id] else { return false }
+            return cached.cacheKey == self.tokenAccountSnapshotCacheKey(provider: provider, account: account)
+        }
+    }
+
+    func tokenAccountSnapshotCacheKey(provider: UsageProvider, account: ProviderTokenAccount) -> String {
+        var config = self.settings.configSnapshot.providerConfig(for: provider) ?? ProviderConfig(id: provider)
+        // Active selection and sibling accounts must not invalidate a valid per-account snapshot.
+        config.tokenAccounts = nil
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        var material = Data(provider.rawValue.utf8)
+        material.append((try? encoder.encode(config)) ?? Data())
+        material.append((try? encoder.encode(account)) ?? Data())
+        return SHA256.hash(data: material).map { String(format: "%02x", $0) }.joined()
+    }
+
+    func uniqueTokenAccount(provider: UsageProvider, accountID: UUID) -> ProviderTokenAccount? {
+        let matches = self.settings.tokenAccounts(for: provider).filter { $0.id == accountID }
+        return matches.count == 1 ? matches[0] : nil
     }
 }
 
@@ -486,7 +542,10 @@ extension UsageStore {
         // data when an in-flight refresh is cancelled (e.g. menu tab switches). Without
         // this, cancellation produces empty/error snapshots and the menu briefly shows
         // misleading cards for accounts that previously had valid data.
-        let priorSnapshots = await MainActor.run { self.accountSnapshots[provider] ?? [] }
+        let priorSnapshots = await MainActor.run {
+            self.pruneTokenAccountSnapshots(provider: provider, accounts: accounts)
+            return self.accountSnapshots[provider] ?? []
+        }
         let priorByAccountID = Dictionary(uniqueKeysWithValues: priorSnapshots.map { ($0.account.id, $0) })
 
         var snapshots: [TokenAccountUsageSnapshot] = []
@@ -498,7 +557,8 @@ extension UsageStore {
         let results = await self.fetchTokenAccountOutcomes(provider: provider, accounts: limitedAccounts)
         guard self.isCurrentProviderRefreshGeneration(provider, generation: generation) else { return }
         for result in results {
-            let account = result.account
+            guard let account = self.uniqueTokenAccount(provider: provider, accountID: result.account.id)
+            else { continue }
             let outcome = result.outcome
             let isCancellation = Self.outcomeIsCancellation(outcome)
             if !isCancellation {
@@ -795,6 +855,7 @@ extension UsageStore {
         let fetcher = ProviderRegistry.makeFetcher(base: self.codexFetcher, provider: provider, env: env)
         let verbose = self.settings.isVerboseLoggingEnabled
         let contextProvider = provider
+        let publicationGeneration = self.providerRefreshPublicationContexts[provider]?.generation
         let originalAccountToken = account?.token
         let originalManualToken = provider == .stepfun ? self.settings.stepfunToken : nil
         return ProviderFetchContext(
@@ -819,10 +880,17 @@ extension UsageStore {
                     else {
                         return
                     }
+                    guard self.providerConfigMutationIsCurrent(
+                        provider: provider,
+                        generation: publicationGeneration)
+                    else { return }
                     self.settings.updateTokenAccount(
                         provider: provider,
                         accountID: accountID,
                         token: token)
+                    self.advanceProviderRefreshConfigRevision(
+                        provider: provider,
+                        generation: publicationGeneration)
                 }
             },
             providerManualTokenUpdater: { [weak self] provider, token in
@@ -830,13 +898,37 @@ extension UsageStore {
                     guard let self, provider == .stepfun,
                           self.settings.stepfunToken == originalManualToken
                     else { return }
+                    guard self.providerConfigMutationIsCurrent(
+                        provider: provider,
+                        generation: publicationGeneration)
+                    else { return }
                     self.settings.stepfunToken = token
+                    self.advanceProviderRefreshConfigRevision(
+                        provider: provider,
+                        generation: publicationGeneration)
                 }
             },
             costUsageHistoryDays: self.settings.costUsageHistoryDays,
             persistsCLISessions: true,
             persistentCLISessionIdleWindow: ProviderRegistry.persistentCLISessionIdleWindow(
                 refreshInterval: self.normalRefreshIntervalForHeuristics()))
+    }
+
+    private func providerConfigMutationIsCurrent(provider: UsageProvider, generation: UInt64?) -> Bool {
+        guard let generation else { return true }
+        guard let publication = self.providerRefreshPublicationContexts[provider],
+              publication.generation == generation
+        else { return false }
+        return publication.configRevision == self.settings.providerConfigRevision(for: provider)
+    }
+
+    private func advanceProviderRefreshConfigRevision(provider: UsageProvider, generation: UInt64?) {
+        guard let generation,
+              var publication = self.providerRefreshPublicationContexts[provider],
+              publication.generation == generation
+        else { return }
+        publication.configRevision = self.settings.providerConfigRevision(for: provider)
+        self.providerRefreshPublicationContexts[provider] = publication
     }
 
     func sourceMode(for provider: UsageProvider) -> ProviderSourceMode {
@@ -1141,7 +1233,8 @@ extension UsageStore {
                 account: account,
                 snapshot: labeled,
                 error: nil,
-                sourceLabel: result.sourceLabel)
+                sourceLabel: result.sourceLabel,
+                cacheKey: self.tokenAccountSnapshotCacheKey(provider: provider, account: account))
             return ResolvedAccountOutcome(snapshot: snapshot, usage: labeled)
         case let .failure(error):
             // Preserve the last-good snapshot when the refresh was cancelled (e.g. the
@@ -1161,7 +1254,8 @@ extension UsageStore {
                 account: account,
                 snapshot: nil,
                 error: self.tokenAccountSnapshotErrorMessage(error),
-                sourceLabel: nil)
+                sourceLabel: nil,
+                cacheKey: self.tokenAccountSnapshotCacheKey(provider: provider, account: account))
             return ResolvedAccountOutcome(snapshot: snapshot, usage: nil)
         }
     }

@@ -65,7 +65,7 @@ extension StatusItemController {
         matching accounts: [ProviderTokenAccount]) -> [TokenAccountUsageSnapshot]
     {
         var snapshotsByID: [UUID: TokenAccountUsageSnapshot] = [:]
-        for snapshot in self.store.accountSnapshots[provider] ?? [] {
+        for snapshot in self.store.validTokenAccountSnapshots(provider: provider, accounts: accounts) {
             snapshotsByID[snapshot.account.id] = snapshot
         }
         return accounts.compactMap { snapshotsByID[$0.id] }
