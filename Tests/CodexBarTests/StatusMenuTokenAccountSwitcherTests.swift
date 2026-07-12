@@ -761,6 +761,97 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         store.pruneTokenAccountSnapshots(provider: .claude, accounts: settings.tokenAccounts(for: .claude))
         XCTAssertNil(store.accountSnapshots[.claude])
     }
+
+    func test_segmentedRefreshClearsLiveSnapshotWhenCredentialChangesAndReplacementFails() async {
+        self.disableMenuCardsForTesting()
+        let settings = self.makeSettings()
+        settings.statusChecksEnabled = false
+        settings.refreshFrequency = .manual
+        settings.multiAccountMenuLayout = .segmented
+        self.enableOnlyClaude(settings)
+        settings.addTokenAccount(provider: .claude, label: "Primary", token: "p1")
+        let account = try? XCTUnwrap(settings.selectedTokenAccount(for: .claude))
+
+        let store = UsageStore(
+            fetcher: UsageFetcher(),
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings)
+        store._test_providerFetchOutcomeOverride = { _ in
+            ProviderFetchOutcome(
+                result: .success(ProviderFetchResult(
+                    usage: self.snapshot(percent: 45),
+                    credits: nil,
+                    dashboard: nil,
+                    sourceLabel: "fixture",
+                    strategyID: "fixture",
+                    strategyKind: .apiToken)),
+                attempts: [])
+        }
+        await store.refreshProvider(.claude)
+        XCTAssertEqual(store.snapshot(for: .claude)?.primary?.usedPercent, 45)
+        XCTAssertEqual(store.sourceLabel(for: .claude), "fixture")
+
+        if let account {
+            settings.updateTokenAccount(provider: .claude, accountID: account.id, token: "rotated-p1")
+        }
+        store._test_providerFetchOutcomeOverride = { _ in
+            ProviderFetchOutcome(result: .failure(StatusMenuTokenAccountTestError.rejected), attempts: [])
+        }
+        await store.refreshProvider(.claude)
+
+        XCTAssertNil(store.snapshot(for: .claude))
+        XCTAssertNil(store.lastSourceLabels[.claude])
+        XCTAssertNil(store.lastKnownResetSnapshots[.claude])
+        XCTAssertNil(store.accountSnapshots[.claude])
+    }
+
+    func test_segmentedRefreshClearsLiveSnapshotWhenBaseURLChangesAndReplacementFails() async {
+        self.disableMenuCardsForTesting()
+        let settings = self.makeSettings()
+        settings.statusChecksEnabled = false
+        settings.refreshFrequency = .manual
+        settings.multiAccountMenuLayout = .segmented
+        self.enableOnly(.sub2api, settings)
+        settings.updateProviderConfig(provider: .sub2api) { config in
+            config.enterpriseHost = "https://first.example.test"
+        }
+        settings.addTokenAccount(provider: .sub2api, label: "Primary", token: "p1")
+
+        let store = UsageStore(
+            fetcher: UsageFetcher(),
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings)
+        store._test_providerFetchOutcomeOverride = { _ in
+            ProviderFetchOutcome(
+                result: .success(ProviderFetchResult(
+                    usage: self.snapshot(percent: 45),
+                    credits: nil,
+                    dashboard: nil,
+                    sourceLabel: "fixture",
+                    strategyID: "fixture",
+                    strategyKind: .apiToken)),
+                attempts: [])
+        }
+        await store.refreshProvider(.sub2api)
+        XCTAssertEqual(store.snapshot(for: .sub2api)?.primary?.usedPercent, 45)
+
+        settings.updateProviderConfig(provider: .sub2api) { config in
+            config.enterpriseHost = "https://second.example.test"
+        }
+        store._test_providerFetchOutcomeOverride = { _ in
+            ProviderFetchOutcome(result: .failure(StatusMenuTokenAccountTestError.rejected), attempts: [])
+        }
+        await store.refreshProvider(.sub2api)
+
+        XCTAssertNil(store.snapshot(for: .sub2api))
+        XCTAssertNil(store.lastSourceLabels[.sub2api])
+        XCTAssertNil(store.lastKnownResetSnapshots[.sub2api])
+        XCTAssertNil(store.accountSnapshots[.sub2api])
+    }
+}
+
+private enum StatusMenuTokenAccountTestError: Error {
+    case rejected
 }
 
 private struct StatusMenuTokenAccountFetchStrategy: ProviderFetchStrategy {

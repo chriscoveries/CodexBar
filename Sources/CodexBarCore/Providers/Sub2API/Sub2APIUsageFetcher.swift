@@ -26,6 +26,41 @@ public enum Sub2APIUsageError: LocalizedError, Equatable, Sendable {
     }
 }
 
+public struct Sub2APIUsageDetails: Codable, Sendable, Equatable {
+    public enum Kind: String, Codable, Sendable {
+        case keyQuota
+        case subscription
+        case wallet
+        case unknown
+    }
+
+    public struct Totals: Codable, Sendable, Equatable {
+        public let requests: Int
+        public let totalTokens: Int
+        public let actualCostUSD: Double
+
+        public init(requests: Int, totalTokens: Int, actualCostUSD: Double) {
+            self.requests = requests
+            self.totalTokens = totalTokens
+            self.actualCostUSD = actualCostUSD
+        }
+    }
+
+    public let kind: Kind
+    public let balance: Double?
+    public let unit: String
+    public let today: Totals?
+    public let total: Totals?
+
+    public init(kind: Kind, balance: Double?, unit: String, today: Totals?, total: Totals?) {
+        self.kind = kind
+        self.balance = balance
+        self.unit = unit
+        self.today = today
+        self.total = total
+    }
+}
+
 public struct Sub2APIUsageSnapshot: Sendable, Equatable {
     public struct Quota: Sendable, Equatable {
         public let limit: Double
@@ -75,6 +110,15 @@ public struct Sub2APIUsageSnapshot: Sendable, Equatable {
 
     public func toUsageSnapshot() -> UsageSnapshot {
         let subscription = self.subscription
+        let kind: Sub2APIUsageDetails.Kind = if subscription != nil {
+            .subscription
+        } else if self.quota != nil || !self.rateLimits.isEmpty {
+            .keyQuota
+        } else if self.balance != nil {
+            .wallet
+        } else {
+            .unknown
+        }
         let subscriptionWindows = subscription.map { subscription in
             [
                 Self.rateWindow(
@@ -91,7 +135,7 @@ public struct Sub2APIUsageSnapshot: Sendable, Equatable {
                     windowMinutes: 30 * 24 * 60),
             ]
         }
-        let primary = subscriptionWindows?[0] ?? self.quota.map(Self.quotaWindow) ?? self.balanceWindow()
+        let primary = subscriptionWindows?[0] ?? self.quota.map(Self.quotaWindow)
         let secondary = subscriptionWindows?[1]
         let tertiary = subscriptionWindows?[2]
         let namedWindows = self.rateLimits.map { rateLimit in
@@ -104,42 +148,37 @@ public struct Sub2APIUsageSnapshot: Sendable, Equatable {
                     resetsAt: rateLimit.resetAt,
                     resetDescription: Self.amountDescription(used: rateLimit.used, limit: rateLimit.limit)))
         }
-        let providerCost = self.todayUsage.flatMap { usage -> ProviderCostSnapshot? in
-            guard usage.actualCostUSD > 0 else { return nil }
-            return ProviderCostSnapshot(
-                used: usage.actualCostUSD,
-                limit: 0,
-                currencyCode: self.unit,
-                period: "Today",
-                resetsAt: nil,
-                updatedAt: self.updatedAt)
-        }
-        let identityDetail = self.balance.map { "Balance: \(Self.currencyString($0, unit: self.unit))" }
-            ?? self.status
+        let usageDetails = Sub2APIUsageDetails(
+            kind: kind,
+            balance: self.balance,
+            unit: self.unit,
+            today: self.todayUsage.map {
+                Sub2APIUsageDetails.Totals(
+                    requests: $0.requests,
+                    totalTokens: $0.totalTokens,
+                    actualCostUSD: $0.actualCostUSD)
+            },
+            total: self.totalUsage.map {
+                Sub2APIUsageDetails.Totals(
+                    requests: $0.requests,
+                    totalTokens: $0.totalTokens,
+                    actualCostUSD: $0.actualCostUSD)
+            })
 
         return UsageSnapshot(
             primary: primary,
             secondary: secondary,
             tertiary: tertiary,
             extraRateWindows: namedWindows.isEmpty ? nil : namedWindows,
-            providerCost: providerCost,
+            sub2APIUsage: usageDetails,
             subscriptionExpiresAt: subscription?.expiresAt ?? self.expiresAt,
             updatedAt: self.updatedAt,
             identity: ProviderIdentitySnapshot(
                 providerID: .sub2api,
                 accountEmail: nil,
                 accountOrganization: self.planName,
-                loginMethod: identityDetail),
+                loginMethod: self.planName),
             dataConfidence: .exact)
-    }
-
-    private func balanceWindow() -> RateWindow? {
-        guard let remaining = self.remaining ?? self.balance else { return nil }
-        return RateWindow(
-            usedPercent: 0,
-            windowMinutes: nil,
-            resetsAt: nil,
-            resetDescription: "\(Self.currencyString(remaining, unit: self.unit)) remaining")
     }
 
     private static func quotaWindow(_ quota: Quota) -> RateWindow {
@@ -332,8 +371,12 @@ public struct Sub2APIUsageFetcher: Sendable {
 
     private static func usageURL(baseURL: URL) -> URL {
         let components = baseURL.path.split(separator: "/")
-        if components.suffix(2) == ["v1", "usage"] { return baseURL }
-        if components.last == "v1" { return baseURL.appendingPathComponent("usage") }
+        if components.suffix(2) == ["v1", "usage"] {
+            return baseURL
+        }
+        if components.last == "v1" {
+            return baseURL.appendingPathComponent("usage")
+        }
         return baseURL.appendingPathComponent("v1/usage")
     }
 

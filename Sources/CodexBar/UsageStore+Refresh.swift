@@ -303,7 +303,9 @@ extension UsageStore {
             return
         } else {
             _ = await MainActor.run {
-                self.pruneTokenAccountSnapshots(provider: provider, accounts: tokenAccounts)
+                self.reconcileSelectedTokenAccountSnapshotBeforeRefresh(
+                    provider: provider,
+                    accounts: tokenAccounts)
             }
         }
 

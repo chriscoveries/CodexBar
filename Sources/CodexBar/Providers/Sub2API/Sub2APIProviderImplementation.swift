@@ -47,4 +47,26 @@ struct Sub2APIProviderImplementation: ProviderImplementation {
                 onActivate: nil),
         ]
     }
+
+    @MainActor
+    func appendUsageMenuEntries(context: ProviderMenuUsageContext, entries: inout [ProviderMenuEntry]) {
+        guard let usage = context.snapshot?.sub2APIUsage else { return }
+        if let balance = usage.balance {
+            entries.append(.text(
+                "\(L("Balance")): \(UsageFormatter.currencyString(balance, currencyCode: usage.unit))",
+                .primary))
+        }
+        if let today = usage.today {
+            entries.append(.text("\(L("Today")): \(self.totalsText(today, unit: usage.unit))", .secondary))
+        }
+        if let total = usage.total {
+            entries.append(.text("\(L("Total")): \(self.totalsText(total, unit: usage.unit))", .secondary))
+        }
+    }
+
+    private func totalsText(_ totals: Sub2APIUsageDetails.Totals, unit: String) -> String {
+        "\(UsageFormatter.tokenCountString(totals.requests)) \(L("requests")) · " +
+            "\(UsageFormatter.tokenCountString(totals.totalTokens)) \(L("tokens")) · " +
+            UsageFormatter.currencyString(totals.actualCostUSD, currencyCode: unit)
+    }
 }

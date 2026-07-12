@@ -107,6 +107,17 @@ extension UsageStore {
         }
     }
 
+    func reconcileSelectedTokenAccountSnapshotBeforeRefresh(
+        provider: UsageProvider,
+        accounts: [ProviderTokenAccount])
+    {
+        self.pruneTokenAccountSnapshots(provider: provider, accounts: accounts)
+        guard let selectedAccount = self.settings.selectedTokenAccount(for: provider) else { return }
+        // A Settings edit can invalidate the selected credential or endpoint before its replacement refresh
+        // completes. Reconcile the live card now so a failed/cancelled fetch cannot retain old-account data.
+        self.activateCachedTokenAccountSnapshot(provider: provider, accountID: selectedAccount.id)
+    }
+
     func validTokenAccountSnapshots(
         provider: UsageProvider,
         accounts: [ProviderTokenAccount]) -> [TokenAccountUsageSnapshot]
