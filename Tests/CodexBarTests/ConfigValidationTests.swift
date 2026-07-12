@@ -114,7 +114,7 @@ struct ConfigValidationTests {
             config.setProviderConfig(ProviderConfig(
                 id: .sub2api,
                 source: .api,
-            apiKey: "fixture",
+                apiKey: "fixture",
                 enterpriseHost: host))
             let invalidHostIssue = CodexBarConfigValidator.validate(config).first { issue in
                 issue.provider == .sub2api && issue.code == "invalid_enterprise_host"
