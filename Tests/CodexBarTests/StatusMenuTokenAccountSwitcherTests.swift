@@ -116,8 +116,8 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         settings.refreshFrequency = .manual
         settings.mergeIcons = false
         self.enableOnlyClaude(settings)
-        settings.addTokenAccount(provider: .claude, label: "Primary", token: "p1")
-        settings.addTokenAccount(provider: .claude, label: "Secondary", token: "p2")
+        settings.addTokenAccount(provider: .claude, label: "Primary", token: "Bearer sk-ant-oat-primary")
+        settings.addTokenAccount(provider: .claude, label: "Secondary", token: "Bearer sk-ant-oat-secondary")
         settings.setActiveTokenAccountIndex(0, for: .claude)
 
         let fetcher = UsageFetcher()
@@ -235,8 +235,8 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         settings.mergeIcons = false
         settings.multiAccountMenuLayout = .stacked
         self.enableOnlyClaude(settings)
-        settings.addTokenAccount(provider: .claude, label: "Primary", token: "p1")
-        settings.addTokenAccount(provider: .claude, label: "Secondary", token: "p2")
+        settings.addTokenAccount(provider: .claude, label: "Primary", token: "Bearer sk-ant-oat-primary")
+        settings.addTokenAccount(provider: .claude, label: "Secondary", token: "Bearer sk-ant-oat-secondary")
 
         let fetcher = UsageFetcher()
         let store = UsageStore(fetcher: fetcher, browserDetection: BrowserDetection(cacheTTL: 0), settings: settings)
@@ -533,8 +533,8 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
                 metadata: metadata,
                 enabled: provider == .claude || provider == .codex)
         }
-        settings.addTokenAccount(provider: .claude, label: "Primary", token: "p1")
-        settings.addTokenAccount(provider: .claude, label: "Secondary", token: "p2")
+        settings.addTokenAccount(provider: .claude, label: "Primary", token: "Bearer sk-ant-oat-primary")
+        settings.addTokenAccount(provider: .claude, label: "Secondary", token: "Bearer sk-ant-oat-secondary")
         settings.setActiveTokenAccountIndex(0, for: .claude)
 
         let fetcher = UsageFetcher()
@@ -588,8 +588,8 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         settings.mergeIcons = false
         settings.multiAccountMenuLayout = .segmented
         self.enableOnlyClaude(settings)
-        settings.addTokenAccount(provider: .claude, label: "Primary", token: "p1")
-        settings.addTokenAccount(provider: .claude, label: "Secondary", token: "p2")
+        settings.addTokenAccount(provider: .claude, label: "Primary", token: "Bearer sk-ant-oat-primary")
+        settings.addTokenAccount(provider: .claude, label: "Secondary", token: "Bearer sk-ant-oat-secondary")
         settings.setActiveTokenAccountIndex(0, for: .claude)
         let accounts = settings.tokenAccounts(for: .claude)
 
@@ -649,8 +649,8 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         settings.mergeIcons = false
         settings.multiAccountMenuLayout = .segmented
         self.enableOnlyClaude(settings)
-        settings.addTokenAccount(provider: .claude, label: "Primary", token: "p1")
-        settings.addTokenAccount(provider: .claude, label: "Secondary", token: "p2")
+        settings.addTokenAccount(provider: .claude, label: "Primary", token: "Bearer sk-ant-oat-primary")
+        settings.addTokenAccount(provider: .claude, label: "Secondary", token: "Bearer sk-ant-oat-secondary")
         settings.setActiveTokenAccountIndex(0, for: .claude)
         let accounts = settings.tokenAccounts(for: .claude)
 

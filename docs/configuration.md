@@ -165,7 +165,7 @@ environment. Add labeled token accounts in Settings when one deployment has mult
 {
   "id": "sub2api",
   "enabled": true,
-  "apiKey": "<FALLBACK_API_KEY>",
+  "apiKey": "<REDACTED>",
   "enterpriseHost": "https://sub2api.example.com"
 }
 ```
