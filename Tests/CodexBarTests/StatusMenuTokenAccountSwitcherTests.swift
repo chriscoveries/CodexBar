@@ -848,6 +848,48 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         XCTAssertNil(store.lastKnownResetSnapshots[.sub2api])
         XCTAssertNil(store.accountSnapshots[.sub2api])
     }
+
+    func test_segmentedRefreshClearsLiveSnapshotWhenLastAccountIsRemovedAndFallbackFails() async {
+        self.disableMenuCardsForTesting()
+        let settings = self.makeSettings()
+        settings.statusChecksEnabled = false
+        settings.refreshFrequency = .manual
+        settings.multiAccountMenuLayout = .segmented
+        self.enableOnlyClaude(settings)
+        settings.addTokenAccount(provider: .claude, label: "Primary", token: "p1")
+        let accountID = settings.selectedTokenAccount(for: .claude)?.id
+
+        let store = UsageStore(
+            fetcher: UsageFetcher(),
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings)
+        store._test_providerFetchOutcomeOverride = { _ in
+            ProviderFetchOutcome(
+                result: .success(ProviderFetchResult(
+                    usage: self.snapshot(percent: 45),
+                    credits: nil,
+                    dashboard: nil,
+                    sourceLabel: "fixture",
+                    strategyID: "fixture",
+                    strategyKind: .apiToken)),
+                attempts: [])
+        }
+        await store.refreshProvider(.claude)
+        XCTAssertEqual(store.snapshot(for: .claude)?.primary?.usedPercent, 45)
+
+        if let accountID {
+            settings.removeTokenAccount(provider: .claude, accountID: accountID)
+        }
+        store._test_providerFetchOutcomeOverride = { _ in
+            ProviderFetchOutcome(result: .failure(StatusMenuTokenAccountTestError.rejected), attempts: [])
+        }
+        await store.refreshProvider(.claude)
+
+        XCTAssertNil(store.snapshot(for: .claude))
+        XCTAssertNil(store.lastSourceLabels[.claude])
+        XCTAssertNil(store.lastKnownResetSnapshots[.claude])
+        XCTAssertNil(store.accountSnapshots[.claude])
+    }
 }
 
 private enum StatusMenuTokenAccountTestError: Error {

@@ -55,10 +55,7 @@ extension UsageStore {
             self.accountSnapshots[provider]?.removeAll { $0.account.id == accountID }
             // Never show the previous account's usage under the newly selected account. Segmented layouts only
             // fetch the active account, so an uncached selection must render as refreshing until its fetch completes.
-            self.snapshots.removeValue(forKey: provider)
-            self.errors.removeValue(forKey: provider)
-            self.lastSourceLabels.removeValue(forKey: provider)
-            self.lastKnownResetSnapshots.removeValue(forKey: provider)
+            self.clearTokenAccountLiveSnapshot(provider: provider)
             return
         }
 
@@ -111,11 +108,25 @@ extension UsageStore {
         provider: UsageProvider,
         accounts: [ProviderTokenAccount])
     {
+        let hadCachedAccountState = self.accountSnapshots[provider]?.isEmpty == false
         self.pruneTokenAccountSnapshots(provider: provider, accounts: accounts)
-        guard let selectedAccount = self.settings.selectedTokenAccount(for: provider) else { return }
+        guard let selectedAccount = self.settings.selectedTokenAccount(for: provider) else {
+            if hadCachedAccountState {
+                self.knownLimitsAvailabilityByProvider.removeValue(forKey: provider)
+                self.clearTokenAccountLiveSnapshot(provider: provider)
+            }
+            return
+        }
         // A Settings edit can invalidate the selected credential or endpoint before its replacement refresh
         // completes. Reconcile the live card now so a failed/cancelled fetch cannot retain old-account data.
         self.activateCachedTokenAccountSnapshot(provider: provider, accountID: selectedAccount.id)
+    }
+
+    private func clearTokenAccountLiveSnapshot(provider: UsageProvider) {
+        self.snapshots.removeValue(forKey: provider)
+        self.errors.removeValue(forKey: provider)
+        self.lastSourceLabels.removeValue(forKey: provider)
+        self.lastKnownResetSnapshots.removeValue(forKey: provider)
     }
 
     func validTokenAccountSnapshots(
