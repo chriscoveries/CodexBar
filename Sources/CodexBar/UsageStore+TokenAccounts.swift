@@ -45,6 +45,7 @@ struct CodexAccountUsageSnapshot: Identifiable {
 extension UsageStore {
     func activateCachedTokenAccountSnapshot(provider: UsageProvider, accountID: UUID) {
         self.knownLimitsAvailabilityByProvider.removeValue(forKey: provider)
+        self.tokenAccountLiveStateProviders.insert(provider)
         guard let account = self.uniqueTokenAccount(provider: provider, accountID: accountID),
               let cached = self.accountSnapshots[provider]?.first(where: {
                   $0.account.id == accountID && $0.cacheKey == self.tokenAccountSnapshotCacheKey(
@@ -108,10 +109,9 @@ extension UsageStore {
         provider: UsageProvider,
         accounts: [ProviderTokenAccount])
     {
-        let hadCachedAccountState = self.accountSnapshots[provider]?.isEmpty == false
         self.pruneTokenAccountSnapshots(provider: provider, accounts: accounts)
         guard let selectedAccount = self.settings.selectedTokenAccount(for: provider) else {
-            if hadCachedAccountState {
+            if self.tokenAccountLiveStateProviders.remove(provider) != nil {
                 self.knownLimitsAvailabilityByProvider.removeValue(forKey: provider)
                 self.clearTokenAccountLiveSnapshot(provider: provider)
             }
@@ -566,6 +566,9 @@ extension UsageStore {
         // misleading cards for accounts that previously had valid data.
         let priorSnapshots = await MainActor.run {
             self.pruneTokenAccountSnapshots(provider: provider, accounts: accounts)
+            if let effectiveSelected {
+                self.activateCachedTokenAccountSnapshot(provider: provider, accountID: effectiveSelected.id)
+            }
             return self.accountSnapshots[provider] ?? []
         }
         let priorByAccountID = Dictionary(uniqueKeysWithValues: priorSnapshots.map { ($0.account.id, $0) })

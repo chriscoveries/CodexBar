@@ -761,7 +761,9 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         store.pruneTokenAccountSnapshots(provider: .claude, accounts: settings.tokenAccounts(for: .claude))
         XCTAssertNil(store.accountSnapshots[.claude])
     }
+}
 
+extension StatusMenuTokenAccountSwitcherTests {
     func test_segmentedRefreshClearsLiveSnapshotWhenCredentialChangesAndReplacementFails() async {
         self.disableMenuCardsForTesting()
         let settings = self.makeSettings()
@@ -889,6 +891,64 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         XCTAssertNil(store.lastSourceLabels[.claude])
         XCTAssertNil(store.lastKnownResetSnapshots[.claude])
         XCTAssertNil(store.accountSnapshots[.claude])
+    }
+
+    func test_segmentedRefreshClearsTokenAccountErrorWhenFailedAccountIsRemovedAndFallbackCancels() async {
+        self.disableMenuCardsForTesting()
+        let settings = self.makeSettings()
+        settings.statusChecksEnabled = false
+        settings.refreshFrequency = .manual
+        settings.multiAccountMenuLayout = .segmented
+        self.enableOnlyClaude(settings)
+        settings.addTokenAccount(provider: .claude, label: "Primary", token: "p1")
+        let accountID = settings.selectedTokenAccount(for: .claude)?.id
+
+        let store = UsageStore(
+            fetcher: UsageFetcher(),
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings)
+        store._test_providerFetchOutcomeOverride = { _ in
+            ProviderFetchOutcome(result: .failure(StatusMenuTokenAccountTestError.rejected), attempts: [])
+        }
+        await store.refreshProvider(.claude)
+        XCTAssertNotNil(store.userFacingError(for: .claude))
+        XCTAssertTrue(store.tokenAccountLiveStateProviders.contains(.claude))
+
+        if let accountID {
+            settings.removeTokenAccount(provider: .claude, accountID: accountID)
+        }
+        store._test_providerFetchOutcomeOverride = { _ in
+            ProviderFetchOutcome(result: .failure(CancellationError()), attempts: [])
+        }
+        await store.refreshProvider(.claude)
+
+        XCTAssertNil(store.snapshot(for: .claude))
+        XCTAssertNil(store.userFacingError(for: .claude))
+        XCTAssertNil(store.knownLimitsAvailabilityByProvider[.claude])
+        XCTAssertFalse(store.tokenAccountLiveStateProviders.contains(.claude))
+    }
+
+    func test_segmentedRefreshPreservesAmbientSnapshotWithoutTokenAccountOwnership() async {
+        self.disableMenuCardsForTesting()
+        let settings = self.makeSettings()
+        settings.statusChecksEnabled = false
+        settings.refreshFrequency = .manual
+        settings.multiAccountMenuLayout = .segmented
+        self.enableOnlyClaude(settings)
+
+        let store = UsageStore(
+            fetcher: UsageFetcher(),
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings)
+        store._setSnapshotForTesting(self.snapshot(percent: 45), provider: .claude)
+        store._test_providerFetchOutcomeOverride = { _ in
+            ProviderFetchOutcome(result: .failure(CancellationError()), attempts: [])
+        }
+
+        await store.refreshProvider(.claude)
+
+        XCTAssertEqual(store.snapshot(for: .claude)?.primary?.usedPercent, 45)
+        XCTAssertFalse(store.tokenAccountLiveStateProviders.contains(.claude))
     }
 }
 
