@@ -113,7 +113,7 @@ struct UsageStoreDisabledProviderCleanupTests {
         settings.updateProviderConfig(provider: .sub2api) { config in
             config.enterpriseHost = "https://first.example.test"
         }
-        settings.addTokenAccount(provider: .sub2api, label: "Primary", token: "fixture-token")
+        settings.addTokenAccount(provider: .sub2api, label: "Primary", token: "k1")
         let store = Self.makeUsageStore(settings: settings)
         let gate = CleanupAsyncGate()
         store._test_providerFetchOutcomeOverride = { _ in

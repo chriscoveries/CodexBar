@@ -116,8 +116,8 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         settings.refreshFrequency = .manual
         settings.mergeIcons = false
         self.enableOnlyClaude(settings)
-        settings.addTokenAccount(provider: .claude, label: "Primary", token: "Bearer sk-ant-oat-primary")
-        settings.addTokenAccount(provider: .claude, label: "Secondary", token: "Bearer sk-ant-oat-secondary")
+        settings.addTokenAccount(provider: .claude, label: "Primary", token: "p1")
+        settings.addTokenAccount(provider: .claude, label: "Secondary", token: "p2")
         settings.setActiveTokenAccountIndex(0, for: .claude)
 
         let fetcher = UsageFetcher()
@@ -235,8 +235,8 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         settings.mergeIcons = false
         settings.multiAccountMenuLayout = .stacked
         self.enableOnlyClaude(settings)
-        settings.addTokenAccount(provider: .claude, label: "Primary", token: "Bearer sk-ant-oat-primary")
-        settings.addTokenAccount(provider: .claude, label: "Secondary", token: "Bearer sk-ant-oat-secondary")
+        settings.addTokenAccount(provider: .claude, label: "Primary", token: "p1")
+        settings.addTokenAccount(provider: .claude, label: "Secondary", token: "p2")
 
         let fetcher = UsageFetcher()
         let store = UsageStore(fetcher: fetcher, browserDetection: BrowserDetection(cacheTTL: 0), settings: settings)
@@ -325,8 +325,8 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         settings.updateProviderConfig(provider: .sub2api) { config in
             config.enterpriseHost = "https://first.example.test"
         }
-        settings.addTokenAccount(provider: .sub2api, label: "Primary", token: "primary-token")
-        settings.addTokenAccount(provider: .sub2api, label: "Secondary", token: "secondary-token")
+        settings.addTokenAccount(provider: .sub2api, label: "Primary", token: "p1")
+        settings.addTokenAccount(provider: .sub2api, label: "Secondary", token: "p2")
         let originalAccounts = settings.tokenAccounts(for: .sub2api)
 
         let fetcher = UsageFetcher()
@@ -353,7 +353,7 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         settings.updateTokenAccount(
             provider: .sub2api,
             accountID: originalAccounts[0].id,
-            token: "rotated-primary-token")
+            token: "rotated-p1")
         XCTAssertEqual(
             try XCTUnwrap(controller.tokenAccountMenuDisplay(for: .sub2api)).snapshots.map(\.account.id),
             [originalAccounts[1].id])
@@ -371,8 +371,8 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         settings.refreshFrequency = .manual
         settings.multiAccountMenuLayout = .stacked
         self.enableOnlyClaude(settings)
-        settings.addTokenAccount(provider: .claude, label: "Primary", token: "primary-token")
-        settings.addTokenAccount(provider: .claude, label: "Secondary", token: "secondary-token")
+        settings.addTokenAccount(provider: .claude, label: "Primary", token: "p1")
+        settings.addTokenAccount(provider: .claude, label: "Secondary", token: "p2")
         let originalAccounts = settings.tokenAccounts(for: .claude)
 
         let store = UsageStore(
@@ -390,7 +390,7 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         settings.updateTokenAccount(
             provider: .claude,
             accountID: originalAccounts[0].id,
-            token: "rotated-primary-token")
+            token: "rotated-p1")
         let blocker = BlockingTokenAccountFetchStrategy()
         self.installBlockingClaudeProvider(on: store, blocker: blocker)
 
@@ -411,13 +411,13 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         let first = ProviderTokenAccount(
             id: id,
             label: "First",
-            token: "first-token",
+            token: "f1",
             addedAt: 1,
             lastUsed: nil)
         let duplicate = ProviderTokenAccount(
             id: id,
             label: "Duplicate",
-            token: "duplicate-token",
+            token: "d1",
             addedAt: 2,
             lastUsed: nil)
         let store = UsageStore(
@@ -441,8 +441,8 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         settings.statusChecksEnabled = false
         settings.refreshFrequency = .manual
         self.enableOnlyClaude(settings)
-        settings.addTokenAccount(provider: .claude, label: "First", token: "first-token")
-        settings.addTokenAccount(provider: .claude, label: "Second", token: "second-token")
+        settings.addTokenAccount(provider: .claude, label: "First", token: "f1")
+        settings.addTokenAccount(provider: .claude, label: "Second", token: "s1")
         let accounts = settings.tokenAccounts(for: .claude)
         let duplicate = ProviderTokenAccount(
             id: accounts[0].id,
@@ -485,19 +485,19 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         settings.refreshFrequency = .manual
         settings.multiAccountMenuLayout = .segmented
         self.enableOnly(.antigravity, settings)
-        settings.addTokenAccount(provider: .antigravity, label: "Primary", token: "primary-token")
-        settings.addTokenAccount(provider: .antigravity, label: "Secondary", token: "secondary-token")
+        settings.addTokenAccount(provider: .antigravity, label: "Primary", token: "p1")
+        settings.addTokenAccount(provider: .antigravity, label: "Secondary", token: "p2")
         settings.setActiveTokenAccountIndex(0, for: .antigravity)
 
         let store = UsageStore(
             fetcher: UsageFetcher(),
             browserDetection: BrowserDetection(cacheTTL: 0),
             settings: settings)
-        self.installRotatingProvider(on: store, provider: .antigravity, rotatedToken: "refreshed-token")
+        self.installRotatingProvider(on: store, provider: .antigravity, rotatedToken: "n1")
 
         await store.refreshProvider(.antigravity)
         let accountsAfterPrimaryRefresh = settings.tokenAccounts(for: .antigravity)
-        XCTAssertEqual(accountsAfterPrimaryRefresh[0].token, "refreshed-token")
+        XCTAssertEqual(accountsAfterPrimaryRefresh[0].token, "n1")
         XCTAssertEqual(store.snapshot(for: .antigravity)?.primary?.usedPercent, 37)
         XCTAssertEqual(
             store.accountSnapshots[.antigravity]?.first?.cacheKey,
@@ -533,8 +533,8 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
                 metadata: metadata,
                 enabled: provider == .claude || provider == .codex)
         }
-        settings.addTokenAccount(provider: .claude, label: "Primary", token: "Bearer sk-ant-oat-primary")
-        settings.addTokenAccount(provider: .claude, label: "Secondary", token: "Bearer sk-ant-oat-secondary")
+        settings.addTokenAccount(provider: .claude, label: "Primary", token: "p1")
+        settings.addTokenAccount(provider: .claude, label: "Secondary", token: "p2")
         settings.setActiveTokenAccountIndex(0, for: .claude)
 
         let fetcher = UsageFetcher()
@@ -588,8 +588,8 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         settings.mergeIcons = false
         settings.multiAccountMenuLayout = .segmented
         self.enableOnlyClaude(settings)
-        settings.addTokenAccount(provider: .claude, label: "Primary", token: "Bearer sk-ant-oat-primary")
-        settings.addTokenAccount(provider: .claude, label: "Secondary", token: "Bearer sk-ant-oat-secondary")
+        settings.addTokenAccount(provider: .claude, label: "Primary", token: "p1")
+        settings.addTokenAccount(provider: .claude, label: "Secondary", token: "p2")
         settings.setActiveTokenAccountIndex(0, for: .claude)
         let accounts = settings.tokenAccounts(for: .claude)
 
@@ -649,8 +649,8 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         settings.mergeIcons = false
         settings.multiAccountMenuLayout = .segmented
         self.enableOnlyClaude(settings)
-        settings.addTokenAccount(provider: .claude, label: "Primary", token: "Bearer sk-ant-oat-primary")
-        settings.addTokenAccount(provider: .claude, label: "Secondary", token: "Bearer sk-ant-oat-secondary")
+        settings.addTokenAccount(provider: .claude, label: "Primary", token: "p1")
+        settings.addTokenAccount(provider: .claude, label: "Secondary", token: "p2")
         settings.setActiveTokenAccountIndex(0, for: .claude)
         let accounts = settings.tokenAccounts(for: .claude)
 
@@ -712,8 +712,8 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         settings.refreshFrequency = .manual
         settings.multiAccountMenuLayout = .segmented
         self.enableOnlyClaude(settings)
-        settings.addTokenAccount(provider: .claude, label: "Primary", token: "primary-token")
-        settings.addTokenAccount(provider: .claude, label: "Secondary", token: "secondary-token")
+        settings.addTokenAccount(provider: .claude, label: "Primary", token: "p1")
+        settings.addTokenAccount(provider: .claude, label: "Secondary", token: "p2")
         settings.setActiveTokenAccountIndex(0, for: .claude)
 
         let store = UsageStore(
@@ -752,7 +752,7 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         settings.updateTokenAccount(
             provider: .claude,
             accountID: originalAccounts[0].id,
-            token: "rotated-primary-token")
+            token: "rotated-p1")
         store.activateCachedTokenAccountSnapshot(provider: .claude, accountID: originalAccounts[0].id)
         XCTAssertNil(store.snapshot(for: .claude))
         XCTAssertEqual(store.accountSnapshots[.claude]?.map(\.account.id), [originalAccounts[1].id])
