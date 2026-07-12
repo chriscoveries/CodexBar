@@ -71,7 +71,7 @@ public struct RemoteSessionFetcher: Sendable {
               let result = try? await SubprocessRunner.run(
                   binary: tailscale,
                   arguments: ["status", "--json"],
-                  environment: environment,
+                  environment: Self.tailscaleCLIEnvironment(from: environment),
                   timeout: 5,
                   label: "Tailscale session host discovery"),
               let data = result.stdout.data(using: .utf8)
@@ -155,10 +155,46 @@ public struct RemoteSessionFetcher: Sendable {
     }
 
     private func tailscaleBinary(environment: [String: String]) -> String? {
-        self.findExecutable("tailscale", environment: environment) ?? {
-            let bundled = "/Applications/Tailscale.app/Contents/MacOS/Tailscale"
-            return FileManager.default.isExecutableFile(atPath: bundled) ? bundled : nil
-        }()
+        Self.tailscaleBinaryCandidates(path: environment["PATH"])
+            .first { FileManager.default.isExecutableFile(atPath: $0) }
+    }
+
+    /// Ordered candidate paths for the `tailscale` CLI, most-preferred first.
+    ///
+    /// The macOS app ships its CLI as a thin `/bin/sh` wrapper (usually
+    /// `/usr/local/bin/tailscale`) around the app's dual-mode binary. We prefer the
+    /// wrapper, but a GUI-launched CodexBar inherits a minimal `PATH` (`/usr/bin:/bin`)
+    /// that omits the standard CLI locations, so we also probe them explicitly before
+    /// falling back to the app binary itself.
+    public static func tailscaleBinaryCandidates(path: String?) -> [String] {
+        let pathDirs = path?.split(separator: ":").map(String.init) ?? []
+        var seen = Set<String>()
+        var candidates = (pathDirs + ["/usr/local/bin", "/opt/homebrew/bin"])
+            .filter { seen.insert($0).inserted }
+            .map { $0 + "/tailscale" }
+        // Last resort: the dual-mode app binary. Must be run via
+        // `tailscaleCLIEnvironment(from:)` so it stays in CLI mode.
+        candidates.append("/Applications/Tailscale.app/Contents/MacOS/Tailscale")
+        return candidates
+    }
+
+    /// Environment that keeps the dual-mode Tailscale app binary in CLI mode.
+    ///
+    /// With no shell/terminal marker present the binary boots the full menu-bar GUI
+    /// (SkyLight/WindowServer, status icon) instead of running the CLI: it never emits
+    /// JSON, the probe times out, and the Tailscale icon flickers on every refresh. A
+    /// set `TERM` or `SHLVL` forces CLI mode (argv[0] casing and `XPC_SERVICE_NAME` do
+    /// not). `SHLVL` is what the app's own `/bin/sh` CLI wrapper injects, so we mirror it here.
+    ///
+    /// Applied to every probe, not just the app-binary fallback: it is redundant but harmless for the
+    /// CLI wrapper (itself a `/bin/sh` script that already exports `SHLVL`), and injecting it
+    /// unconditionally keeps CLI mode guaranteed regardless of which binary `tailscaleBinary` resolves.
+    /// An existing `TERM`/`SHLVL` (real terminal context) is left untouched.
+    public static func tailscaleCLIEnvironment(from environment: [String: String]) -> [String: String] {
+        guard environment["TERM"] == nil, environment["SHLVL"] == nil else { return environment }
+        var environment = environment
+        environment["SHLVL"] = "1"
+        return environment
     }
 
     private func findExecutable(_ name: String, environment: [String: String]) -> String? {
