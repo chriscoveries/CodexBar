@@ -17,6 +17,25 @@ import Testing
 struct UsageStorePlanUtilizationAsyncLoadTests {
     @MainActor
     @Test
+    func `testing startup without an injected history store skips disk loading`() {
+        let suiteName = "UsageStorePlanUtilizationAsyncLoad-default-test-\(UUID().uuidString)"
+        let settings = Self.makeSettings(suiteName: suiteName)
+        defer { UserDefaults().removePersistentDomain(forName: suiteName) }
+
+        let store = UsageStore(
+            fetcher: UsageFetcher(),
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings,
+            startupBehavior: .testing)
+
+        #expect(store.planUtilizationHistoryLoadTask == nil)
+        #expect(store.planUtilizationHistoryLoaded == true)
+        #expect(store.planUtilizationHistory.isEmpty)
+        #expect(store.planUtilizationHistoryStore.directoryURL == nil)
+    }
+
+    @MainActor
+    @Test
     func `init returns before disk load completes`() {
         let suiteName = "UsageStorePlanUtilizationAsyncLoad-init-\(UUID().uuidString)"
         let gate = PlanUtilizationHistoryLoadGate()

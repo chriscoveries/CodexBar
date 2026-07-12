@@ -363,7 +363,7 @@ final class UsageStore {
         settings: SettingsStore,
         registry: ProviderRegistry = .shared,
         historicalUsageHistoryStore: HistoricalUsageHistoryStore = HistoricalUsageHistoryStore(),
-        planUtilizationHistoryStore: PlanUtilizationHistoryStore = .defaultAppSupport(),
+        planUtilizationHistoryStore: PlanUtilizationHistoryStore? = nil,
         codexAccountUsageSnapshotStore: (any CodexAccountUsageSnapshotStoring)? = nil,
         sessionQuotaNotifier: any SessionQuotaNotifying = SessionQuotaNotifier(),
         startupBehavior: StartupBehavior = .automatic,
@@ -378,13 +378,14 @@ final class UsageStore {
         self.registry = registry
         self.environmentBase = environmentBase
         self.historicalUsageHistoryStore = historicalUsageHistoryStore
-        self.planUtilizationHistoryStore = planUtilizationHistoryStore
-        self.sessionQuotaNotifier = sessionQuotaNotifier
         self.startupBehavior = startupBehavior.resolved(isRunningTests: Self.isRunningTestsProcess())
+        let planHistoryStore = Self.resolvedPlanHistoryStore(planUtilizationHistoryStore, startup: self.startupBehavior)
+        self.planUtilizationHistoryStore = planHistoryStore
+        self.sessionQuotaNotifier = sessionQuotaNotifier
         self.codexAccountUsageSnapshotStore = codexAccountUsageSnapshotStore ??
             (self.startupBehavior.automaticallyStartsBackgroundWork ? FileCodexAccountUsageSnapshotStore() : nil)
         self.planUtilizationPersistenceCoordinator = PlanUtilizationHistoryPersistenceCoordinator(
-            store: planUtilizationHistoryStore)
+            store: planHistoryStore)
         self.providerMetadata = registry.metadata
         self
             .failureGates = Dictionary(
@@ -403,7 +404,10 @@ final class UsageStore {
         self.providerRuntimes = Dictionary(uniqueKeysWithValues: ProviderCatalog.all.compactMap { implementation in
             implementation.makeRuntime().map { (implementation.id, $0) }
         })
-        self.startPlanUtilizationHistoryLoad(gate: planUtilizationHistoryLoadGateForTesting)
+        self.startPlanUtilizationHistoryLoad(
+            gate: planUtilizationHistoryLoadGateForTesting,
+            enabled: self.startupBehavior.automaticallyStartsBackgroundWork ||
+                planUtilizationHistoryStore != nil)
         self.sessionLimitResetDetectorStates = Self.loadLimitResetDetectorStates(
             from: settings.userDefaults,
             defaultsKey: Self.sessionLimitResetDetectorDefaultsKey,
