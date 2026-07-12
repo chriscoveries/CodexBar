@@ -3,10 +3,24 @@ import Foundation
 
 @MainActor
 extension UsageStore {
-    /// Clears ephemeral in-memory runtime/UI state for a provider that is disabled or unavailable.
-    /// Does not touch settings, token-account configuration, plan-utilization history, or disk-backed
-    /// Codex account snapshot cache.
+    struct ProviderPublicationRevision: Equatable {
+        let cleanupRevision: UInt64
+        let enablementRevision: UInt64
+    }
+
+    /// Invalidates in-flight provider work and clears its transient runtime/UI state.
+    /// Settings, token-account configuration, historical datasets, credits/dashboard caches,
+    /// and disk-backed Codex account snapshots intentionally remain owned by their existing lifetimes.
     func clearProviderState(_ provider: UsageProvider) {
+        self.providerRefreshCoordinator.invalidateRequests(for: provider)
+        self.clearProviderRuntimeState(provider)
+    }
+
+    /// The active refresh uses this when it discovers its own provider is disabled. Its replacing
+    /// request already invalidated predecessors, so canceling the current coordinator state here
+    /// would make it cancel itself before its waiters can drain.
+    func clearProviderRuntimeState(_ provider: UsageProvider) {
+        self.providerCleanupRevisions[provider, default: 0] &+= 1
         self.refreshingProviders.remove(provider)
         self.snapshots.removeValue(forKey: provider)
         self.lastKnownResetSnapshots.removeValue(forKey: provider)
@@ -40,11 +54,38 @@ extension UsageStore {
             self.predictivePaceWarningNotifiedKeys.filter { $0.provider != provider })
         self.quotaWarningState = self.quotaWarningState.filter { $0.key.provider != provider }
         self.lastTokenFetchAt.removeValue(forKey: provider)
+        self.lastTokenFetchScope.removeValue(forKey: provider)
+    }
+
+    func providerCleanupRevision(for provider: UsageProvider) -> UInt64 {
+        self.providerCleanupRevisions[provider, default: 0]
+    }
+
+    func providerCleanupRevisionIsCurrent(_ revision: UInt64, for provider: UsageProvider) -> Bool {
+        self.providerCleanupRevision(for: provider) == revision
+    }
+
+    func providerPublicationRevision(for provider: UsageProvider) -> ProviderPublicationRevision {
+        ProviderPublicationRevision(
+            cleanupRevision: self.providerCleanupRevision(for: provider),
+            enablementRevision: self.settings.providerEnablementRevision(for: provider))
+    }
+
+    func providerPublicationRevisionIsCurrent(
+        _ revision: ProviderPublicationRevision,
+        for provider: UsageProvider) -> Bool
+    {
+        self.providerCleanupRevisionIsCurrent(revision.cleanupRevision, for: provider) &&
+            revision.enablementRevision == self.settings.providerEnablementRevision(for: provider)
     }
 
     func clearDisabledProviderState(enabledProviders: Set<UsageProvider>) {
         for provider in UsageProvider.allCases where !enabledProviders.contains(provider) {
-            self.clearProviderState(provider)
+            if self.currentProviderRefreshAllowsDisabledPublication(provider) {
+                self.clearProviderRuntimeState(provider)
+            } else {
+                self.clearProviderState(provider)
+            }
         }
     }
 
