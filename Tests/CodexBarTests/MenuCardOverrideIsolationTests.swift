@@ -111,7 +111,7 @@ struct MenuCardOverrideIsolationTests {
         let account = ProviderTokenAccount(
             id: UUID(),
             label: "Rejected group",
-            token: "fixture-token",
+            token: "fixture",
             addedAt: 0,
             lastUsed: nil)
         let accountSnapshot = TokenAccountUsageSnapshot(
@@ -151,7 +151,7 @@ struct MenuCardOverrideIsolationTests {
         let account = ProviderTokenAccount(
             id: UUID(),
             label: "Configured group",
-            token: "fixture-token",
+            token: "fixture",
             addedAt: 0,
             lastUsed: nil)
         let usage = UsageSnapshot(
