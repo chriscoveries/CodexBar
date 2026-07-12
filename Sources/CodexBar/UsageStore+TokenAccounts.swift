@@ -856,6 +856,7 @@ extension UsageStore {
         let verbose = self.settings.isVerboseLoggingEnabled
         let contextProvider = provider
         let publicationGeneration = self.providerRefreshPublicationContexts[provider]?.generation
+        let contextConfigRevision = self.settings.providerConfigRevision(for: provider)
         let originalAccountToken = account?.token
         let originalManualToken = provider == .stepfun ? self.settings.stepfunToken : nil
         return ProviderFetchContext(
@@ -882,7 +883,8 @@ extension UsageStore {
                     }
                     guard self.providerConfigMutationIsCurrent(
                         provider: provider,
-                        generation: publicationGeneration)
+                        generation: publicationGeneration,
+                        originalConfigRevision: contextConfigRevision)
                     else { return }
                     self.settings.updateTokenAccount(
                         provider: provider,
@@ -900,7 +902,8 @@ extension UsageStore {
                     else { return }
                     guard self.providerConfigMutationIsCurrent(
                         provider: provider,
-                        generation: publicationGeneration)
+                        generation: publicationGeneration,
+                        originalConfigRevision: contextConfigRevision)
                     else { return }
                     self.settings.stepfunToken = token
                     self.advanceProviderRefreshConfigRevision(
@@ -914,12 +917,20 @@ extension UsageStore {
                 refreshInterval: self.normalRefreshIntervalForHeuristics()))
     }
 
-    private func providerConfigMutationIsCurrent(provider: UsageProvider, generation: UInt64?) -> Bool {
+    private func providerConfigMutationIsCurrent(
+        provider: UsageProvider,
+        generation: UInt64?,
+        originalConfigRevision: UInt64) -> Bool
+    {
         guard let generation else { return true }
-        guard let publication = self.providerRefreshPublicationContexts[provider],
-              publication.generation == generation
-        else { return false }
-        return publication.configRevision == self.settings.providerConfigRevision(for: provider)
+        let currentConfigRevision = self.settings.providerConfigRevision(for: provider)
+        guard let publication = self.providerRefreshPublicationContexts[provider] else { return false }
+        if publication.generation == generation {
+            return publication.configRevision == currentConfigRevision
+        }
+        // A replacement waits for its predecessor before capturing fetch inputs. Let the predecessor persist an
+        // authorized refresh token while its original config is unchanged; the replacement will then start from it.
+        return originalConfigRevision == currentConfigRevision
     }
 
     private func advanceProviderRefreshConfigRevision(provider: UsageProvider, generation: UInt64?) {
