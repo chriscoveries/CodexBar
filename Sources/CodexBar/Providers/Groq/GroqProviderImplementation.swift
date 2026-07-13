@@ -14,11 +14,6 @@ struct GroqProviderImplementation: ProviderImplementation {
         _ = settings.groqAPIKey
     }
 
-    @MainActor
-    func isAvailable(context: ProviderAvailabilityContext) -> Bool {
-        ProviderTokenResolver.groqToken(environment: context.environment) != nil ||
-            !context.settings.groqAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
 
     @MainActor
     func settingsFields(context: ProviderSettingsContext) -> [ProviderSettingsFieldDescriptor] {
