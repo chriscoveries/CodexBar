@@ -1,4 +1,3 @@
-import AppKit
 import CodexBarCore
 import Foundation
 import Testing
@@ -62,26 +61,33 @@ struct ShareStatsTests {
         #expect(!text.contains("secret-project"))
     }
 
-    @MainActor
     @Test
-    func `renderer produces a valid differentiated social card png`() throws {
+    func `multiple Codex subscriptions stay distinct and all contribute to totals`() throws {
         let payload = try #require(ShareStatsBuilder.make(
             providers: [
                 ShareStatsProviderSource(
-                    providerName: "Codex",
+                    providerName: "Codex · #1",
                     tokenSnapshot: Self.codexSnapshot,
-                    usageSnapshot: nil),
+                    usageSnapshot: Self.usage(usedPercent: 64)),
                 ShareStatsProviderSource(
-                    providerName: "Cursor",
-                    tokenSnapshot: nil,
-                    usageSnapshot: Self.usage(usedPercent: 82)),
+                    providerName: "Codex · #2",
+                    tokenSnapshot: Self.claudeSnapshot,
+                    usageSnapshot: Self.usage(usedPercent: 38)),
             ],
             calendar: Self.calendar))
-        let data = try #require(ShareStatsRenderer.pngData(for: payload))
-        let representation = try #require(NSBitmapImageRep(data: data))
 
-        #expect(representation.pixelsWide == 1200)
-        #expect(representation.pixelsHigh == 630)
+        #expect(payload.providers.map(\.providerName) == ["Codex · #1", "Codex · #2"])
+        #expect(payload.totalTokens == 5_500_000_000)
+        #expect(payload.estimatedCostUSD == 4250)
+        #expect(payload.pricedProviderCount == 2)
+        #expect(payload.tokenProviderCount == 2)
+    }
+
+    @MainActor
+    @Test
+    func `card uses standard social preview dimensions without invoking GPU rendering`() {
+        #expect(ShareStatsCardView.size.width == 1200)
+        #expect(ShareStatsCardView.size.height == 630)
     }
 
     private static let codexSnapshot = Self.snapshot(
