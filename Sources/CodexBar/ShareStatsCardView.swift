@@ -85,7 +85,9 @@ struct ShareStatsCardView: View {
                         color: self.accent,
                         secondary: self.secondary)
                 } else {
-                    Text("\(self.payload.providers.count) subscriptions · \(self.payload.topModels.count) models surfaced")
+                    Text(
+                        "\(self.payload.providers.count) subscriptions · "
+                            + "\(self.payload.topModels.count) models surfaced")
                         .font(.system(size: 18, weight: .medium, design: .rounded))
                         .foregroundStyle(self.secondary)
                 }
