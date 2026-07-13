@@ -50,6 +50,9 @@ extension UsageStore {
         }
 
         if hooksActive {
+            // Stable, unredacted account identifier used only as an in-memory key so
+            // separate accounts on one provider track their crossings independently.
+            let accountKey = snapshot.accountEmail(for: provider)
             self.dispatchQuotaLowHooks(
                 provider: provider,
                 lane: QuotaLowHookLane(
@@ -57,6 +60,7 @@ extension UsageStore {
                     windowID: nil,
                     label: QuotaWarningWindow.session.displayName),
                 rateWindow: primaryWindow,
+                accountKey: accountKey,
                 accountDisplayName: accountDisplayName)
             self.dispatchQuotaLowHooks(
                 provider: provider,
@@ -65,6 +69,7 @@ extension UsageStore {
                     windowID: nil,
                     label: QuotaWarningWindow.weekly.displayName),
                 rateWindow: secondaryWindow,
+                accountKey: accountKey,
                 accountDisplayName: accountDisplayName)
             if provider == .claude {
                 for named in (snapshot.extraRateWindows ?? []).filter(Self.isClaudeNotifiableExtraWindow) {
@@ -72,6 +77,7 @@ extension UsageStore {
                         provider: provider,
                         lane: QuotaLowHookLane(window: .weekly, windowID: named.id, label: named.title),
                         rateWindow: named.window,
+                        accountKey: accountKey,
                         accountDisplayName: accountDisplayName)
                 }
             }

@@ -94,10 +94,6 @@ extension UsageStore {
         }
     }
 
-    /// Fires `quota_low` hooks driven by each rule's own usage threshold, crossed
-    /// upward, independent of the notification thresholds and preferences. A rule
-    /// with no threshold falls back to the provider's notification thresholds so a
-    /// "notify me when quota is low" hook still fires at the app's warning points.
     /// Identifies a quota lane for quota_low hook crossing detection.
     struct QuotaLowHookLane {
         let window: QuotaWarningWindow
@@ -105,10 +101,27 @@ extension UsageStore {
         let label: String
     }
 
+    /// Key for per-account, per-lane quota_low crossing history. Includes the stable
+    /// account identifier so that, when several accounts share one provider, one
+    /// account's usage observations cannot suppress, clear, or re-arm another
+    /// account's threshold crossing. `account` is an in-memory discriminator only;
+    /// it is never logged or forwarded to a hook.
+    struct QuotaLowHookUsageKey: Hashable {
+        let provider: UsageProvider
+        let window: QuotaWarningWindow
+        let windowID: String?
+        let account: String?
+    }
+
+    /// Fires `quota_low` hooks driven by each rule's own usage threshold, crossed
+    /// upward, independent of the notification thresholds and preferences. A rule
+    /// with no threshold falls back to the provider's notification thresholds so a
+    /// "notify me when quota is low" hook still fires at the app's warning points.
     func dispatchQuotaLowHooks(
         provider: UsageProvider,
         lane: QuotaLowHookLane,
         rateWindow: RateWindow?,
+        accountKey: String?,
         accountDisplayName: String?)
     {
         guard let hooks = self.settings.config.hooks, hooks.enabled else { return }
@@ -119,7 +132,11 @@ extension UsageStore {
         }
         guard !rules.isEmpty else { return }
 
-        let key = QuotaWarningStateKey(provider: provider, window: lane.window, windowID: lane.windowID)
+        let key = QuotaLowHookUsageKey(
+            provider: provider,
+            window: lane.window,
+            windowID: lane.windowID,
+            account: accountKey)
         guard let rateWindow else {
             self.quotaLowHookUsage.removeValue(forKey: key)
             return
