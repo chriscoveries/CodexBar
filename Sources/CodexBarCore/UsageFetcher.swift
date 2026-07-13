@@ -198,6 +198,7 @@ public struct UsageSnapshot: Codable, Sendable {
     public let sub2APIUsage: Sub2APIUsageDetails?
     public let wayfinderUsage: WayfinderUsageSnapshot?
     public let openAIAPIUsage: OpenAIAPIUsageSnapshot?
+    public let groqConsoleUsage: GroqConsoleUsageSnapshot?
     public let codexResetCredits: CodexRateLimitResetCreditsSnapshot?
     public let claudeAdminAPIUsage: ClaudeAdminAPIUsageSnapshot?
     public let mistralUsage: MistralUsageSnapshot?
@@ -232,6 +233,7 @@ public struct UsageSnapshot: Codable, Sendable {
         case sub2APIUsage
         case wayfinderUsage
         case openAIAPIUsage
+        case groqConsoleUsage
         case codexResetCredits
         case claudeAdminAPIUsage
         case mistralUsage
@@ -266,6 +268,7 @@ public struct UsageSnapshot: Codable, Sendable {
         sub2APIUsage: Sub2APIUsageDetails? = nil,
         wayfinderUsage: WayfinderUsageSnapshot? = nil,
         openAIAPIUsage: OpenAIAPIUsageSnapshot? = nil,
+        groqConsoleUsage: GroqConsoleUsageSnapshot? = nil,
         codexResetCredits: CodexRateLimitResetCreditsSnapshot? = nil,
         claudeAdminAPIUsage: ClaudeAdminAPIUsageSnapshot? = nil,
         mistralUsage: MistralUsageSnapshot? = nil,
@@ -299,6 +302,7 @@ public struct UsageSnapshot: Codable, Sendable {
         self.sub2APIUsage = sub2APIUsage
         self.wayfinderUsage = wayfinderUsage
         self.openAIAPIUsage = openAIAPIUsage
+        self.groqConsoleUsage = groqConsoleUsage
         self.codexResetCredits = codexResetCredits
         self.claudeAdminAPIUsage = claudeAdminAPIUsage
         self.mistralUsage = mistralUsage
@@ -351,6 +355,9 @@ public struct UsageSnapshot: Codable, Sendable {
         self.sub2APIUsage = try container.decodeIfPresent(Sub2APIUsageDetails.self, forKey: .sub2APIUsage)
         self.wayfinderUsage = try container.decodeIfPresent(WayfinderUsageSnapshot.self, forKey: .wayfinderUsage)
         self.openAIAPIUsage = try container.decodeIfPresent(OpenAIAPIUsageSnapshot.self, forKey: .openAIAPIUsage)
+        self.groqConsoleUsage = try container.decodeIfPresent(
+            GroqConsoleUsageSnapshot.self,
+            forKey: .groqConsoleUsage)
         self.codexResetCredits = try container.decodeIfPresent(
             CodexRateLimitResetCreditsSnapshot.self,
             forKey: .codexResetCredits)
@@ -408,6 +415,7 @@ public struct UsageSnapshot: Codable, Sendable {
         try container.encodeIfPresent(self.sub2APIUsage, forKey: .sub2APIUsage)
         try container.encodeIfPresent(self.wayfinderUsage, forKey: .wayfinderUsage)
         try container.encodeIfPresent(self.openAIAPIUsage, forKey: .openAIAPIUsage)
+        try container.encodeIfPresent(self.groqConsoleUsage, forKey: .groqConsoleUsage)
         try container.encodeIfPresent(self.codexResetCredits, forKey: .codexResetCredits)
         try container.encodeIfPresent(self.claudeAdminAPIUsage, forKey: .claudeAdminAPIUsage)
         try container.encodeIfPresent(self.mistralUsage, forKey: .mistralUsage)
@@ -609,6 +617,7 @@ public struct UsageSnapshot: Codable, Sendable {
             sub2APIUsage: self.sub2APIUsage,
             wayfinderUsage: self.wayfinderUsage,
             openAIAPIUsage: self.openAIAPIUsage,
+            groqConsoleUsage: self.groqConsoleUsage,
             codexResetCredits: codexResetCredits.resolving(self.codexResetCredits),
             claudeAdminAPIUsage: self.claudeAdminAPIUsage,
             mistralUsage: self.mistralUsage,
