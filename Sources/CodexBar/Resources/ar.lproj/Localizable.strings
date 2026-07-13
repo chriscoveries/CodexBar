@@ -1187,3 +1187,9 @@
 "Show Codex Spark usage" = "عرض استخدام Codex Spark";
 "Shows Codex Spark quota rows in the menu and provider preview. Requires optional credits and extra usage in Display settings." = "يعرض صفوف حصة Codex Spark في القائمة ومعاينة المزوّد. يتطلب تفعيل «عرض الاعتمادات + الاستخدام الإضافي» في إعدادات العرض.";
 "Scroll to see more models" = "مرر لرؤية المزيد من النماذج";
+"adaptive_activity_consent_title" = "السماح بالتحديث المستجيب للنشاط؟";
+"adaptive_activity_consent_message" = "يمكن للتحديث التكيفي فحص قائمة العمليات المحلية قيد التشغيل، بما في ذلك أسطر الأوامر، للتعرّف على Codex وClaude، ثم قراءة بيانات تعريف الجلسات المعروفة كل 30 ثانية أثناء البرمجة. عند إيقاف Agent Sessions، لا يستخدم CodexBar سوى وقت أحدث نشاط في الذاكرة ويتجاهل مسارات الجلسات وهوياتها. لا تُرسل بيانات النشاط هذه إلى أي مكان، ويظل الاكتشاف عن بُعد وSSH متوقفين. إذا رفضت، فسيظل الوضع التكيفي يعتمد على نشاط القائمة ويتخطى عمليات فحص النشاط المحلي. يمكنك تغيير هذا لاحقًا من الإعدادات > عام.";
+"adaptive_activity_consent_allow" = "السماح بالنشاط المحلي";
+"adaptive_activity_consent_decline" = "استخدام نشاط القائمة فقط";
+"adaptive_activity_scan_title" = "استخدام نشاط البرمجة المحلي";
+"adaptive_activity_scan_subtitle" = "يفحص قائمة العمليات قيد التشغيل وبيانات تعريف جلسات Codex/Claude المعروفة كل 30 ثانية. لا يُستخدم سوى وقت أحدث نشاط؛ ولا تُرسل بيانات النشاط هذه، ويظل الاكتشاف عن بُعد وSSH متوقفين.";

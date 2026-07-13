@@ -10,7 +10,7 @@ read_when:
 
 - **Status:** Opt-in policy accepted in [#1861](https://github.com/steipete/CodexBar/pull/1861); agent-aware fresh-install default extension implemented with the evidence below
 - **Decision owner:** Maintainer
-- **Runtime impact:** Bounded fresh-install default of 2–30-minute provider-batch cadence plus a 30-second unconstrained local activity scan
+- **Runtime impact:** Bounded fresh-install default of 2–30-minute provider-batch cadence; an explicitly allowed local activity scan runs every 30 seconds when unconstrained
 
 ## Decision
 
@@ -80,6 +80,10 @@ interaction context, or the promise that menu-open refresh does not reset the pe
 - Preserve the old implicit 5-minute fallback for existing installations without a stored cadence and for unrecognized
   stored values. Persist either resolved fallback immediately.
 - Preserve every valid stored value exactly, including `Manual`, every fixed interval, and `Adaptive`.
+- Do not treat an Adaptive cadence as authorization to inspect local process or session metadata. Persist an explicit
+  `undecided`, `allowed`, or `declined` choice; only `allowed` enables Adaptive-only scans.
+- Present the choice once when Adaptive is effective and consent is undecided. Both answers keep Adaptive selected;
+  declining retains the menu-only policy. Existing Adaptive users remain unscanned until they explicitly allow it.
 - Schedule the same enabled-provider batch as fixed refresh; do not select accounts, workspaces, or data lanes.
 - Keep manual refresh immediate and user-initiated.
 - When refresh-all-on-open is disabled, keep menu-open refresh missing/error-only and background/non-interactive.
@@ -175,7 +179,8 @@ Adaptive stores no persistent interaction history.
 - Keep `lastMenuOpenAt` and `lastCodingActivityAt` in memory; reset both on launch.
 - Read Low Power Mode and thermal state at decision time.
 - Log only the selected delay and stable `Reason` code through the existing local logger.
-- Every 30 seconds, reuse the existing local scanner. It runs `ps` and, when needed, `lsof`; enumerates recent Codex
+- After explicit consent, reuse the existing local scanner every 30 seconds. It inspects the running-process list and
+  command lines via `ps`, runs `lsof` when needed, and enumerates recent Codex
   rollouts; reads rollout first-line metadata and mtimes; and inspects Claude transcript metadata. This is a local
   metadata scan, not a provider request. Pause Adaptive-only scans under Low Power Mode or serious/critical thermal
   pressure; keep scanning when the user explicitly enables Agent Sessions presentation.
@@ -187,6 +192,7 @@ Adaptive stores no persistent interaction history.
 - Do not log or persist provider identity, account identity, email, workspace, path, credentials, response data, menu
   content, or the activity timestamp for scheduling.
 - Do not invoke remote host discovery, Tailscale, or SSH unless Agent Sessions is explicitly enabled.
+- Clear the in-memory activity timestamp when consent is revoked so it cannot continue influencing later decisions.
 - Do not add analytics or send refresh-policy data off device.
 
 This avoids a new retention policy, migration, deletion UI, and behavioral profile. Persistent history requires a new
@@ -217,8 +223,8 @@ The work remained independently reviewable:
 4. Wire the in-memory menu-open signal without changing `scheduleOpenMenuRefresh(for:)`.
 5. Add local reason-code logging and documentation.
 6. Add offline replay tooling and evaluate the frozen trace in #2029.
-7. Reuse the local Agent Sessions scanner, project its output to one in-memory timestamp when presentation is off, and
-   advance only an otherwise later Adaptive timer.
+7. Add explicit persisted consent, then reuse the local Agent Sessions scanner only after approval, project its output
+   to one in-memory timestamp when presentation is off, and advance only an otherwise later Adaptive timer.
 8. Make Adaptive the fresh-install default after policy, timer, projection, and scanner-cost verification, while
    preserving the legacy 5-minute fallback for existing unset or invalid state.
 
@@ -250,9 +256,11 @@ or menu prewarming as part of these steps.
 - repeated, older, or later observations never postpone an earlier scheduled refresh;
 - fixed and manual modes may record the in-memory signal but never reschedule from it.
 
-### Agent Sessions boundary
+### Agent Sessions and consent boundary
 
-- Adaptive enables local monitoring without enabling Agent Sessions presentation;
+- Adaptive without consent keeps the historical menu-only policy and performs no local session scan;
+- allowing local coding activity enables monitoring without enabling Agent Sessions presentation;
+- existing Adaptive users remain unscanned while consent is undecided or declined;
 - an Adaptive-only scan retains the newest attributable timestamp and discards complete session records;
 - Adaptive-only scans pause under Low Power Mode and serious/critical thermal pressure;
 - scanner limits cap agent processes, Codex rollout parsing, and Claude transcript candidates;
@@ -334,10 +342,11 @@ offline audit reports recorded schedule events separately when the supplied trac
 ## Agent-aware fresh-install default follow-up (2026-07-12)
 
 This extension moves the previously replay-only activity cap into `AdaptiveRefreshPolicyCore`, retains the former
-menu-only policy as `adaptive-menu-only`, wires the existing local Agent Sessions scanner into the live timer, and uses
-Adaptive as the fresh-install default while preserving the legacy 5-minute fallback for existing unset or invalid
-preferences. The `adaptive-activity` CLI spelling remains an alias for the production `adaptive` policy so scripts
-written against 0.42.1 keep working.
+menu-only policy as `adaptive-menu-only`, and uses Adaptive as the fresh-install default while preserving the legacy
+5-minute fallback for existing unset or invalid preferences. The existing local Agent Sessions scanner is wired into
+the live timer only after explicit consent; undecided or declined Adaptive users keep the menu-only policy. The
+`adaptive-activity` CLI spelling remains an alias for the production `adaptive` policy so scripts written against
+0.42.1 keep working.
 
 The same frozen 1,780-record trace and segmentation settings produce:
 

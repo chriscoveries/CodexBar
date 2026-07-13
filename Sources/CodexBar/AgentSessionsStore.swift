@@ -60,10 +60,11 @@ final class AgentSessionsStore {
         self.localSessions.count + self.remoteHosts.reduce(0) { $0 + $1.sessions.count }
     }
 
-    /// Adaptive refresh uses the local metadata signal only. Remote sessions remain behind the
-    /// explicit Agent Sessions setting because they can involve Tailscale discovery and SSH.
+    /// Adaptive refresh uses local metadata only after explicit consent. Remote sessions remain
+    /// behind the Agent Sessions setting because they can involve Tailscale discovery and SSH.
     var localMonitoringEnabled: Bool {
-        self.settings.agentSessionsEnabled || self.settings.refreshFrequency == .adaptive
+        self.settings.agentSessionsEnabled ||
+            (self.settings.refreshFrequency == .adaptive && self.settings.adaptiveActivityScanningEnabled)
     }
 
     nonisolated static func latestActivityAt(in sessions: [AgentSession]) -> Date? {
@@ -72,14 +73,14 @@ final class AgentSessionsStore {
 
     nonisolated static func shouldScanLocally(
         agentSessionsEnabled: Bool,
-        adaptiveRefreshEnabled: Bool,
+        adaptiveActivityScanningEnabled: Bool,
         lowPowerModeEnabled: Bool,
         thermalState: ProcessInfo.ThermalState) -> Bool
     {
         if agentSessionsEnabled {
             return true
         }
-        guard adaptiveRefreshEnabled, !lowPowerModeEnabled else { return false }
+        guard adaptiveActivityScanningEnabled, !lowPowerModeEnabled else { return false }
         return thermalState != .serious && thermalState != .critical
     }
 
@@ -155,7 +156,8 @@ final class AgentSessionsStore {
         let processInfo = ProcessInfo.processInfo
         guard Self.shouldScanLocally(
             agentSessionsEnabled: self.settings.agentSessionsEnabled,
-            adaptiveRefreshEnabled: self.settings.refreshFrequency == .adaptive,
+            adaptiveActivityScanningEnabled: self.settings.refreshFrequency == .adaptive &&
+                self.settings.adaptiveActivityScanningEnabled,
             lowPowerModeEnabled: processInfo.isLowPowerModeEnabled,
             thermalState: processInfo.thermalState)
         else { return }

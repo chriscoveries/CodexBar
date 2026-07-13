@@ -86,6 +86,31 @@ struct LocalizationLanguageCatalogTests {
     }
 
     @Test
+    func `adaptive activity consent is localized in every app language`() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let resourcesURL = root.appendingPathComponent("Sources/CodexBar/Resources")
+        let keys = [
+            "adaptive_activity_consent_title",
+            "adaptive_activity_consent_message",
+            "adaptive_activity_consent_allow",
+            "adaptive_activity_consent_decline",
+            "adaptive_activity_scan_title",
+            "adaptive_activity_scan_subtitle",
+        ]
+
+        for language in AppLanguage.allCases where language != .system {
+            let url = resourcesURL.appendingPathComponent("\(language.rawValue).lproj/Localizable.strings")
+            let catalog = try #require(NSDictionary(contentsOf: url) as? [String: String])
+            for key in keys {
+                #expect(catalog[key]?.isEmpty == false, "\(language.rawValue).\(key)")
+            }
+        }
+    }
+
+    @Test
     func `language picker labels use stable native names`() {
         let expected: [AppLanguage: String] = [
             .system: "System",

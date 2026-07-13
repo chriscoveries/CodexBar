@@ -1216,3 +1216,9 @@
 "Show Codex Spark usage" = "顯示 Codex Spark 使用量";
 "Shows Codex Spark quota rows in the menu and provider preview. Requires optional credits and extra usage in Display settings." = "在選單和提供者預覽中顯示 Codex Spark 配額列。需要在「顯示」設定中啟用「顯示額度 + 額外使用量」。";
 "Scroll to see more models" = "捲動查看更多模型";
+"adaptive_activity_consent_title" = "允許根據活動自適應重新整理？";
+"adaptive_activity_consent_message" = "自適應重新整理可以檢查本機執行中的程序列表（包括命令列）來辨識 Codex 和 Claude，並在你編寫程式碼時每 30 秒讀取一次已知的工作階段中繼資料。關閉 Agent Sessions 時，CodexBar 僅在記憶體中使用最近一次活動時間，並捨棄工作階段路徑和身分資訊。此活動資料不會傳送到任何地方，遠端偵測和 SSH 保持關閉。即使拒絕，自適應模式仍會使用選單活動，並略過本機活動掃描。你可以稍後在「設定」>「一般」中變更此選項。";
+"adaptive_activity_consent_allow" = "允許本機活動";
+"adaptive_activity_consent_decline" = "僅使用選單活動";
+"adaptive_activity_scan_title" = "使用本機編碼活動";
+"adaptive_activity_scan_subtitle" = "每 30 秒檢查一次執行中的程序列表和已知的 Codex/Claude 工作階段中繼資料。僅使用最近一次活動時間；此活動資料不會被傳送，遠端偵測和 SSH 保持關閉。";

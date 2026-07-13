@@ -1187,3 +1187,9 @@
 "Show Codex Spark usage" = "Show Codex Spark usage";
 "Shows Codex Spark quota rows in the menu and provider preview. Requires optional credits and extra usage in Display settings." = "Shows Codex Spark quota rows in the menu and provider preview. Requires optional credits and extra usage in Display settings.";
 "Scroll to see more models" = "Scroll to see more models";
+"adaptive_activity_consent_title" = "Allow activity-aware refresh?";
+"adaptive_activity_consent_message" = "Adaptive refresh can inspect the local running-process list, including command lines, to identify Codex and Claude, then read known session metadata every 30 seconds while you are coding. With Agent Sessions off, CodexBar uses only the latest activity time in memory and discards session paths and identities. This activity data is not sent anywhere, and remote discovery and SSH stay off. If you decline, Adaptive still uses menu activity and skips local activity scans. You can change this later in Settings > General.";
+"adaptive_activity_consent_allow" = "Allow Local Activity";
+"adaptive_activity_consent_decline" = "Use Menu Activity Only";
+"adaptive_activity_scan_title" = "Use local coding activity";
+"adaptive_activity_scan_subtitle" = "Checks the running-process list and known Codex/Claude session metadata every 30 seconds. Only the latest activity time is used; this activity data is not sent, and remote discovery and SSH stay off.";

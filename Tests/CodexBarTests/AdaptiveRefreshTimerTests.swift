@@ -136,6 +136,20 @@ struct AdaptiveRefreshTimerTests {
     }
 
     @Test
+    func `clearing coding activity removes the adaptive input`() {
+        let settings = Self.makeSettingsStore(
+            suite: "AdaptiveRefreshTimerTests-clearCodingActivity",
+            frequency: .adaptive)
+        let store = Self.makeUsageStore(settings: settings, startupBehavior: .testing)
+        store.noteCodingActivityObserved(at: Date(timeIntervalSinceReferenceDate: 100))
+        #expect(store.lastCodingActivityAt != nil)
+
+        store.clearCodingActivityObservation()
+
+        #expect(store.lastCodingActivityAt == nil)
+    }
+
+    @Test
     func `opportunistic timer refresh is a no-op while another refresh is already in flight`() async {
         let settings = Self.makeSettingsStore(suite: "AdaptiveRefreshTimerTests-coalesce", frequency: .manual)
         let store = Self.makeUsageStore(settings: settings, startupBehavior: .testing)

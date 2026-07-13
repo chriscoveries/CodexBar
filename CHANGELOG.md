@@ -6,7 +6,7 @@
 - sub2api: add group-key usage with daily, weekly, and monthly quotas, multi-account switching, wallet balance, and expiry details. Thanks @weirdo-adam!
 
 ### Changed
-- Refresh: make Adaptive the fresh-install default and use recent local Codex or Claude activity to cap unconstrained idle delays at 5 minutes. Existing installations without a stored cadence keep the old 5-minute fallback, invalid values recover to 5 minutes, and every valid stored cadence remains unchanged. Local session scans are bounded, and remote Agent Sessions stay opt-in.
+- Refresh: make Adaptive the fresh-install default and offer an explicit one-time choice before using local Codex or Claude activity to cap unconstrained idle delays at 5 minutes. Existing installations without a stored cadence keep the old 5-minute fallback, existing Adaptive users do not scan before consent, and every valid stored cadence remains unchanged. Local session scans are bounded, and remote Agent Sessions stay opt-in.
 
 ### Fixed
 - Startup: load persisted plan-utilization history away from the main thread so mature histories no longer delay app launch. Thanks @Yuxin-Qiao!

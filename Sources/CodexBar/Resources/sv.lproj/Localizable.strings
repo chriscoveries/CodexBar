@@ -1179,3 +1179,9 @@
 "Show Codex Spark usage" = "Visa Codex Spark-användning";
 "Shows Codex Spark quota rows in the menu and provider preview. Requires optional credits and extra usage in Display settings." = "Visar kvotrader för Codex Spark i menyn och i förhandsvisningen för leverantören. Kräver att ”Visa krediter och extra användning” är aktiverat under Visning i Inställningar.";
 "Scroll to see more models" = "Rulla för att se fler modeller";
+"adaptive_activity_consent_title" = "Tillåta aktivitetsmedveten uppdatering?";
+"adaptive_activity_consent_message" = "Adaptiv uppdatering kan granska listan över lokala processer som körs, inklusive kommandorader, för att identifiera Codex och Claude och sedan läsa kända sessionsmetadata var 30:e sekund medan du kodar. När Agent Sessions är avstängt använder CodexBar endast tiden för den senaste aktiviteten i minnet och kasserar sessionssökvägar och identiteter. Dessa aktivitetsdata skickas ingenstans, och fjärridentifiering och SSH förblir avstängda. Om du avböjer fortsätter Adaptiv att använda menyaktivitet och hoppar över lokala aktivitetsskanningar. Du kan ändra detta senare under Inställningar > Allmänt.";
+"adaptive_activity_consent_allow" = "Tillåt lokal aktivitet";
+"adaptive_activity_consent_decline" = "Använd endast menyaktivitet";
+"adaptive_activity_scan_title" = "Använd lokal kodningsaktivitet";
+"adaptive_activity_scan_subtitle" = "Granskar listan över processer som körs och kända Codex/Claude-sessionsmetadata var 30:e sekund. Endast tiden för den senaste aktiviteten används; dessa aktivitetsdata skickas inte, och fjärridentifiering och SSH förblir avstängda.";

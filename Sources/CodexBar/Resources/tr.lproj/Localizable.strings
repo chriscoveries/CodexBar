@@ -1184,3 +1184,9 @@
 "Show Codex Spark usage" = "Codex Spark kullanımını göster";
 "Shows Codex Spark quota rows in the menu and provider preview. Requires optional credits and extra usage in Display settings." = "Codex Spark kota satırlarını menüde ve sağlayıcı önizlemesinde gösterir. Görünüm ayarlarında “Krediler + ekstra kullanımı göster” seçeneğinin etkin olmasını gerektirir.";
 "Scroll to see more models" = "Daha fazla model görmek için kaydırın";
+"adaptive_activity_consent_title" = "Etkinliğe duyarlı yenilemeye izin verilsin mi?";
+"adaptive_activity_consent_message" = "Uyarlanabilir yenileme, Codex ve Claude'u tanımak için komut satırları dahil yerel çalışan işlemler listesini inceleyebilir, ardından siz kod yazarken bilinen oturum meta verilerini 30 saniyede bir okuyabilir. Agent Sessions kapalıyken CodexBar bellekte yalnızca en son etkinlik zamanını kullanır ve oturum yolları ile kimliklerini atar. Bu etkinlik verileri hiçbir yere gönderilmez; uzaktan keşif ve SSH kapalı kalır. Reddederseniz Uyarlanabilir, menü etkinliğini kullanmaya devam eder ve yerel etkinlik taramalarını atlar. Bunu daha sonra Ayarlar > Genel bölümünden değiştirebilirsiniz.";
+"adaptive_activity_consent_allow" = "Yerel Etkinliğe İzin Ver";
+"adaptive_activity_consent_decline" = "Yalnızca Menü Etkinliğini Kullan";
+"adaptive_activity_scan_title" = "Yerel kodlama etkinliğini kullan";
+"adaptive_activity_scan_subtitle" = "Çalışan işlemler listesini ve bilinen Codex/Claude oturum meta verilerini 30 saniyede bir inceler. Yalnızca en son etkinlik zamanı kullanılır; bu etkinlik verileri gönderilmez, uzaktan keşif ve SSH kapalı kalır.";

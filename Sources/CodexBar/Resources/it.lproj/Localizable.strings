@@ -1186,3 +1186,9 @@
 "Show Codex Spark usage" = "Mostra l’utilizzo di Codex Spark";
 "Shows Codex Spark quota rows in the menu and provider preview. Requires optional credits and extra usage in Display settings." = "Mostra le righe della quota Codex Spark nel menu e nell’anteprima del provider. Richiede di attivare «Mostra crediti + uso extra» nelle impostazioni Aspetto.";
 "Scroll to see more models" = "Scorri per vedere altri modelli";
+"adaptive_activity_consent_title" = "Consentire l’aggiornamento basato sull’attività?";
+"adaptive_activity_consent_message" = "L’aggiornamento adattivo può esaminare l’elenco dei processi locali in esecuzione, incluse le righe di comando, per identificare Codex e Claude, quindi leggere ogni 30 secondi i metadati delle sessioni note mentre programmi. Quando Agent Sessions è disattivato, CodexBar conserva in memoria solo l’ora dell’attività più recente e scarta percorsi e identità delle sessioni. Questi dati sull’attività non vengono inviati da nessuna parte; il rilevamento remoto e SSH restano disattivati. Se rifiuti, la modalità Adattiva continua a usare l’attività del menu e non esegue scansioni dell’attività locale. Puoi modificare questa scelta in seguito in Impostazioni > Generali.";
+"adaptive_activity_consent_allow" = "Consenti attività locale";
+"adaptive_activity_consent_decline" = "Usa solo l’attività del menu";
+"adaptive_activity_scan_title" = "Usa l’attività di programmazione locale";
+"adaptive_activity_scan_subtitle" = "Esamina ogni 30 secondi l’elenco dei processi in esecuzione e i metadati delle sessioni Codex/Claude note. Viene usata solo l’ora dell’attività più recente; questi dati sull’attività non vengono inviati, e il rilevamento remoto e SSH restano disattivati.";

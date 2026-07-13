@@ -18,6 +18,25 @@ extension SettingsStore {
         }
     }
 
+    var adaptiveActivityScanConsent: AdaptiveActivityScanConsent {
+        get { self.defaultsState.adaptiveActivityScanConsent }
+        set {
+            self.defaultsState.adaptiveActivityScanConsent = newValue
+            self.userDefaults.set(newValue.rawValue, forKey: "adaptiveActivityScanConsent")
+            self.noteBackgroundWorkSettingsChanged()
+        }
+    }
+
+    var adaptiveActivityScanningEnabled: Bool {
+        self.adaptiveActivityScanConsent == .allowed
+    }
+
+    var shouldRequestAdaptiveActivityScanConsent: Bool {
+        self.refreshFrequency == .adaptive &&
+            !self.agentSessionsEnabled &&
+            self.adaptiveActivityScanConsent == .undecided
+    }
+
     /// When enabled, keeping the menu open through its short refresh delay fetches usage for every
     /// enabled provider. The periodic refresh clock remains unchanged. See `scheduleOpenMenuRefresh`.
     var refreshAllProvidersOnMenuOpen: Bool {
@@ -845,7 +864,9 @@ extension SettingsStore {
         for provider in providers where !seen.contains(provider) {
             seen.insert(provider)
             normalized.append(provider)
-            if let maxCount, normalized.count >= maxCount { break }
+            if let maxCount, normalized.count >= maxCount {
+                break
+            }
         }
         return normalized
     }

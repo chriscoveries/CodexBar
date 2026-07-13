@@ -1181,3 +1181,9 @@
 "Show Codex Spark usage" = "Hiển thị mức sử dụng Codex Spark";
 "Shows Codex Spark quota rows in the menu and provider preview. Requires optional credits and extra usage in Display settings." = "Hiển thị các hàng hạn mức Codex Spark trong menu và bản xem trước của nhà cung cấp. Yêu cầu bật “Hiển thị tín dụng + mức sử dụng bổ sung” trong phần cài đặt Hiển thị.";
 "Scroll to see more models" = "Cuộn để xem thêm mô hình";
+"adaptive_activity_consent_title" = "Cho phép làm mới theo hoạt động?";
+"adaptive_activity_consent_message" = "Tính năng làm mới thích ứng có thể kiểm tra danh sách tiến trình cục bộ đang chạy, bao gồm cả dòng lệnh, để nhận diện Codex và Claude, sau đó đọc siêu dữ liệu của các phiên đã biết mỗi 30 giây trong khi bạn viết mã. Khi tắt Agent Sessions, CodexBar chỉ dùng thời điểm hoạt động gần nhất trong bộ nhớ và loại bỏ đường dẫn cùng danh tính phiên. Dữ liệu hoạt động này không được gửi đi đâu, còn tính năng phát hiện từ xa và SSH vẫn tắt. Nếu bạn từ chối, chế độ Thích ứng vẫn dùng hoạt động trong menu và bỏ qua việc quét hoạt động cục bộ. Bạn có thể thay đổi sau trong Cài đặt > Chung.";
+"adaptive_activity_consent_allow" = "Cho phép hoạt động cục bộ";
+"adaptive_activity_consent_decline" = "Chỉ dùng hoạt động trong menu";
+"adaptive_activity_scan_title" = "Dùng hoạt động viết mã cục bộ";
+"adaptive_activity_scan_subtitle" = "Kiểm tra danh sách tiến trình đang chạy và siêu dữ liệu của các phiên Codex/Claude đã biết mỗi 30 giây. Chỉ thời điểm hoạt động gần nhất được sử dụng; dữ liệu hoạt động này không được gửi đi, còn tính năng phát hiện từ xa và SSH vẫn tắt.";

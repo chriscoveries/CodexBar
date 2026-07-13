@@ -45,6 +45,12 @@ enum RefreshFrequency: String, CaseIterable, Identifiable {
     }
 }
 
+enum AdaptiveActivityScanConsent: String, Sendable {
+    case undecided
+    case allowed
+    case declined
+}
+
 enum MenuBarMetricPreference: String, CaseIterable, Identifiable {
     case automatic
     case primary
@@ -407,6 +413,7 @@ extension SettingsStore {
         let refreshFrequency = Self.loadRefreshFrequency(
             userDefaults: userDefaults,
             hadPreviousInstallationState: hadPreviousInstallationState)
+        let adaptiveActivityScanConsent = Self.loadAdaptiveActivityScanConsent(userDefaults: userDefaults)
         let refreshAllProvidersOnMenuOpen = userDefaults.object(
             forKey: "refreshAllProvidersOnMenuOpen") as? Bool ?? false
         let launchAtLogin = userDefaults.object(forKey: "launchAtLogin") as? Bool ?? false
@@ -501,6 +508,7 @@ extension SettingsStore {
         let agentSessionsManualHosts = userDefaults.string(forKey: "agentSessionsManualHosts") ?? ""
         return SettingsDefaultsState(
             refreshFrequency: refreshFrequency,
+            adaptiveActivityScanConsent: adaptiveActivityScanConsent,
             refreshAllProvidersOnMenuOpen: refreshAllProvidersOnMenuOpen,
             launchAtLogin: launchAtLogin,
             debugMenuEnabled: debugMenuEnabled,
@@ -587,6 +595,19 @@ extension SettingsStore {
         let frequency: RefreshFrequency = rawValue == nil && !hadPreviousInstallationState ? .adaptive : .fiveMinutes
         userDefaults.set(frequency.rawValue, forKey: "refreshFrequency")
         return frequency
+    }
+
+    private static func loadAdaptiveActivityScanConsent(
+        userDefaults: UserDefaults) -> AdaptiveActivityScanConsent
+    {
+        if let rawValue = userDefaults.string(forKey: "adaptiveActivityScanConsent"),
+           let consent = AdaptiveActivityScanConsent(rawValue: rawValue)
+        {
+            return consent
+        }
+
+        userDefaults.set(AdaptiveActivityScanConsent.undecided.rawValue, forKey: "adaptiveActivityScanConsent")
+        return .undecided
     }
 
     private static func loadNotificationDefaults(userDefaults: UserDefaults) -> NotificationDefaults {

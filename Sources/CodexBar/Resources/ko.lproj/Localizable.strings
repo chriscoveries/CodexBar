@@ -1149,3 +1149,9 @@
 "Show Codex Spark usage" = "Codex Spark 사용량 표시";
 "Shows Codex Spark quota rows in the menu and provider preview. Requires optional credits and extra usage in Display settings." = "메뉴와 공급자 미리보기에 Codex Spark 할당량 행을 표시합니다. 표시 설정에서 ‘크레딧 + 추가 사용량 표시’를 활성화해야 합니다.";
 "Scroll to see more models" = "스크롤하여 더 많은 모델 보기";
+"adaptive_activity_consent_title" = "활동 인식 새로 고침을 허용할까요?";
+"adaptive_activity_consent_message" = "적응형 새로 고침은 Codex와 Claude를 식별하기 위해 명령줄을 포함한 로컬 실행 중 프로세스 목록을 검사한 다음, 코딩하는 동안 30초마다 알려진 세션 메타데이터를 읽을 수 있습니다. Agent Sessions를 끄면 CodexBar는 메모리에서 가장 최근 활동 시간만 사용하고 세션 경로와 ID는 폐기합니다. 이 활동 데이터는 어디에도 전송되지 않으며 원격 검색 및 SSH는 꺼진 상태로 유지됩니다. 거부해도 적응형 모드는 메뉴 활동을 계속 사용하고 로컬 활동 검사는 건너뜁니다. 나중에 설정 > 일반에서 변경할 수 있습니다.";
+"adaptive_activity_consent_allow" = "로컬 활동 허용";
+"adaptive_activity_consent_decline" = "메뉴 활동만 사용";
+"adaptive_activity_scan_title" = "로컬 코딩 활동 사용";
+"adaptive_activity_scan_subtitle" = "30초마다 실행 중 프로세스 목록과 알려진 Codex/Claude 세션 메타데이터를 검사합니다. 가장 최근 활동 시간만 사용하며, 이 활동 데이터는 전송되지 않고 원격 검색 및 SSH는 꺼진 상태로 유지됩니다.";

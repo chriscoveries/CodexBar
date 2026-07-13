@@ -1186,3 +1186,9 @@
 "Show Codex Spark usage" = "Tampilkan penggunaan Codex Spark";
 "Shows Codex Spark quota rows in the menu and provider preview. Requires optional credits and extra usage in Display settings." = "Menampilkan baris kuota Codex Spark di menu dan pratinjau penyedia. Mengharuskan “Tampilkan kredit + penggunaan ekstra” diaktifkan di pengaturan Tampilan.";
 "Scroll to see more models" = "Gulir untuk melihat model lainnya";
+"adaptive_activity_consent_title" = "Izinkan penyegaran yang peka terhadap aktivitas?";
+"adaptive_activity_consent_message" = "Penyegaran adaptif dapat memeriksa daftar proses lokal yang sedang berjalan, termasuk baris perintah, untuk mengenali Codex dan Claude, lalu membaca metadata sesi yang dikenal setiap 30 detik saat Anda menulis kode. Saat Agent Sessions dinonaktifkan, CodexBar hanya menggunakan waktu aktivitas terbaru di memori serta membuang jalur dan identitas sesi. Data aktivitas ini tidak dikirim ke mana pun, dan penemuan jarak jauh serta SSH tetap nonaktif. Jika Anda menolak, mode Adaptif tetap menggunakan aktivitas menu dan melewati pemindaian aktivitas lokal. Anda dapat mengubahnya nanti di Pengaturan > Umum.";
+"adaptive_activity_consent_allow" = "Izinkan Aktivitas Lokal";
+"adaptive_activity_consent_decline" = "Gunakan Aktivitas Menu Saja";
+"adaptive_activity_scan_title" = "Gunakan aktivitas penulisan kode lokal";
+"adaptive_activity_scan_subtitle" = "Memeriksa daftar proses yang berjalan dan metadata sesi Codex/Claude yang dikenal setiap 30 detik. Hanya waktu aktivitas terbaru yang digunakan; data aktivitas ini tidak dikirim, dan penemuan jarak jauh serta SSH tetap nonaktif.";

@@ -1181,3 +1181,9 @@
 "Show Codex Spark usage" = "Codex Spark の使用量を表示";
 "Shows Codex Spark quota rows in the menu and provider preview. Requires optional credits and extra usage in Display settings." = "メニューとプロバイダのプレビューに Codex Spark のクォータ行を表示します。表示設定で「クレジットと追加使用量を表示」を有効にする必要があります。";
 "Scroll to see more models" = "スクロールして他のモデルを表示";
+"adaptive_activity_consent_title" = "アクティビティ対応の更新を許可しますか？";
+"adaptive_activity_consent_message" = "アダプティブ更新では、Codex と Claude を識別するために、コマンドラインを含むローカルの実行中プロセス一覧を調べ、コーディング中は既知のセッションメタデータを 30 秒ごとに読み取ることができます。Agent Sessions がオフの場合、CodexBar は最新のアクティビティ時刻だけをメモリで使用し、セッションのパスと識別情報を破棄します。このアクティビティデータが外部に送信されることはなく、リモート検出と SSH はオフのままです。許可しない場合も、「アダプティブ」はメニューのアクティビティを使用し、ローカルアクティビティのスキャンは行いません。この設定は後で「設定」>「一般」で変更できます。";
+"adaptive_activity_consent_allow" = "ローカルアクティビティを許可";
+"adaptive_activity_consent_decline" = "メニューのアクティビティのみを使用";
+"adaptive_activity_scan_title" = "ローカルのコーディングアクティビティを使用";
+"adaptive_activity_scan_subtitle" = "実行中プロセスの一覧と、既知の Codex/Claude セッションメタデータを 30 秒ごとに確認します。使用するのは最新のアクティビティ時刻のみです。このアクティビティデータは送信されず、リモート検出と SSH はオフのままです。";

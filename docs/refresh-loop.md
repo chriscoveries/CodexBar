@@ -43,13 +43,20 @@ read_when:
 - `UsageStore` tracks `lastMenuOpenAt` and `lastCodingActivityAt` in memory only (never persisted; both reset on
   launch). A menu open or a newer local activity observation can bring a pending adaptive tick forward, but never
   postpones an earlier tick or refreshes synchronously.
-- Adaptive reuses `LocalAgentSessionScanner` every 30 seconds. The scan runs `ps` and, when needed, `lsof`, enumerates
+- Adaptive reuses `LocalAgentSessionScanner` every 30 seconds only after the user allows local coding activity. The
+  persisted `adaptiveActivityScanConsent` value is `undecided`, `allowed`, or `declined`; missing or invalid values are
+  repaired to `undecided`, which never authorizes a scan. Both choices keep the Adaptive cadence: declining uses only
+  menu activity, while allowing adds the local coding-activity signal. The choice is also editable in General settings.
+- An allowed scan runs `ps -axo ... command=` to inspect the running-process list and identify Codex/Claude, then runs
+  `lsof` when needed and enumerates
   recent Codex rollouts, reads rollout first-line metadata and mtimes, and inspects Claude transcript metadata. When
   the Agent Sessions UI is off, CodexBar discards the resulting session records and retains only the latest `Date`.
   Each scan considers at most 64 agent processes, parses at most 128 Codex rollout metadata records, and keeps
   at most 64 Claude transcript candidates per project.
-  Adaptive-only scans pause under Low Power Mode and serious/critical thermal pressure. Tailscale discovery and SSH
-  remain behind the explicit Agent Sessions setting. The activity timestamp is not persisted, logged, or uploaded.
+  Adaptive-only scans pause under Low Power Mode and serious/critical thermal pressure. Explicitly enabling Agent
+  Sessions continues to authorize its local scan independently of the Adaptive consent choice. Tailscale discovery and
+  SSH remain behind the Agent Sessions setting. The activity timestamp is not persisted, logged, or uploaded, and it is
+  cleared when consent is revoked.
 - Each adaptive tick recomputes the delay after the previous refresh completes, sleeps, then calls the same
   `UsageStore.refresh()` used by fixed-interval mode, so the existing `isRefreshing` coalescing guard still
   applies — only one provider-batch refresh runs at a time regardless of cadence mode.

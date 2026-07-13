@@ -1656,6 +1656,10 @@ extension UsageStore {
         }
     }
 
+    func clearCodingActivityObservation() {
+        self.lastCodingActivityAt = nil
+    }
+
     func restartAdaptiveTimerPreservingResetBoundary() {
         self.startTimer(preservingResetBoundaryRefresh: true)
     }

@@ -382,12 +382,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        AppNotifications.shared.requestAuthorizationOnStartup()
         self.memoryPressureMonitor.start()
         #if DEBUG
         self.installDebugMemoryPressureObserverIfNeeded()
         #endif
         self.ensureStatusController()
+        Task { @MainActor [weak self] in
+            await Task.yield()
+            guard let settings = self?.settings else { return }
+            let presentedAdaptiveConsent = AdaptiveActivityConsentPresenter.presentIfNeeded(settings: settings)
+            // Avoid stacking two permission prompts on first launch. Notification authorization
+            // remains startup-driven and is requested on the next launch after this one-time choice.
+            if !presentedAdaptiveConsent {
+                AppNotifications.shared.requestAuthorizationOnStartup()
+            }
+        }
         KeyboardShortcuts.onKeyUp(for: .openMenu) { [weak self] in
             // KeyboardShortcuts dispatches both normal and menu-tracking hotkeys on the main event loop.
             MainActor.assumeIsolated {
@@ -494,7 +503,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func ensureStatusController() {
-        if self.statusController != nil { return }
+        if self.statusController != nil {
+            return
+        }
 
         if let store,
            let settings,

@@ -1180,3 +1180,9 @@
 "Show Codex Spark usage" = "Codex Spark-gebruik tonen";
 "Shows Codex Spark quota rows in the menu and provider preview. Requires optional credits and extra usage in Display settings." = "Toont Codex Spark-quotumregels in het menu en de voorvertoning van de provider. Vereist dat ‘Toon credits + extra gebruik’ is ingeschakeld in de instellingen voor Weergave.";
 "Scroll to see more models" = "Scroll om meer modellen te bekijken";
+"adaptive_activity_consent_title" = "Activiteitsgestuurd vernieuwen toestaan?";
+"adaptive_activity_consent_message" = "Adaptief vernieuwen kan de lijst met lokaal actieve processen, inclusief opdrachtregels, controleren om Codex en Claude te herkennen en vervolgens tijdens het programmeren elke 30 seconden bekende sessiemetadata lezen. Als Agent Sessions uitstaat, gebruikt CodexBar in het geheugen alleen het tijdstip van de meest recente activiteit en verwijdert het sessiepaden en identiteiten. Deze activiteitsgegevens worden nergens naartoe gestuurd en detectie op afstand en SSH blijven uitgeschakeld. Als je weigert, gebruikt Adaptief nog steeds menuactiviteit en worden lokale activiteitsscans overgeslagen. Je kunt dit later wijzigen via Instellingen > Algemeen.";
+"adaptive_activity_consent_allow" = "Lokale activiteit toestaan";
+"adaptive_activity_consent_decline" = "Alleen menuactiviteit gebruiken";
+"adaptive_activity_scan_title" = "Lokale programmeeractiviteit gebruiken";
+"adaptive_activity_scan_subtitle" = "Controleert elke 30 seconden de lijst met actieve processen en bekende Codex/Claude-sessiemetadata. Alleen het tijdstip van de meest recente activiteit wordt gebruikt; deze activiteitsgegevens worden niet verstuurd en detectie op afstand en SSH blijven uitgeschakeld.";
