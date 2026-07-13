@@ -3,15 +3,18 @@ import Foundation
 
 struct ShareStatsProviderSource: Sendable {
     let providerName: String
+    let subscriptionName: String?
     let tokenSnapshot: CostUsageTokenSnapshot?
     let usageSnapshot: UsageSnapshot?
 }
 
 struct ShareStatsProviderPayload: Sendable, Equatable, Identifiable {
     let providerName: String
+    let subscriptionName: String?
     let totalTokens: Int?
     let estimatedCostUSD: Double?
     let activeDays: Int?
+    let dailyTokens: [Int]
 
     var id: String {
         self.providerName
@@ -82,9 +85,11 @@ enum ShareStatsBuilder {
             let activeDays = dailyTokens.map { $0.count(where: { $0 > 0 }) }
             return ShareStatsProviderPayload(
                 providerName: source.providerName,
+                subscriptionName: source.subscriptionName,
                 totalTokens: summary?.totalTokens,
                 estimatedCostUSD: summary?.totalCostUSD,
-                activeDays: activeDays)
+                activeDays: activeDays,
+                dailyTokens: dailyTokens ?? Array(repeating: 0, count: days))
         }
         let tokenValues = providers.compactMap(\.totalTokens)
         let costValues = providers.compactMap(\.estimatedCostUSD).filter(\.isFinite)
@@ -129,11 +134,13 @@ enum ShareStatsBuilder {
                           forLocalDayContaining: day,
                           calendar: calendar)
                 else { continue }
+                var detailedModelNames: Set<String> = []
                 for breakdown in entry.modelBreakdowns ?? [] {
                     let modelName = breakdown.modelName.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !modelName.isEmpty,
                           breakdown.totalTokens != nil || breakdown.costUSD != nil
                     else { continue }
+                    detailedModelNames.insert(modelName)
                     let key = ModelKey(providerName: source.providerName, modelName: modelName)
                     var aggregate = aggregates[key] ?? ModelAggregate()
                     if let tokens = breakdown.totalTokens {
@@ -145,6 +152,14 @@ enum ShareStatsBuilder {
                         aggregate.sawCost = true
                     }
                     aggregates[key] = aggregate
+                }
+                for rawModelName in entry.modelsUsed ?? [] {
+                    let modelName = rawModelName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !modelName.isEmpty, !detailedModelNames.contains(modelName) else { continue }
+                    let key = ModelKey(providerName: source.providerName, modelName: modelName)
+                    if aggregates[key] == nil {
+                        aggregates[key] = ModelAggregate()
+                    }
                 }
             }
         }
@@ -248,7 +263,9 @@ enum ShareStatsFormatting {
             if let cost = provider.estimatedCostUSD, cost.isFinite {
                 metrics.append("~\(self.currencyUSD(cost)) est")
             }
-            return "\(provider.providerName): \(metrics.isEmpty ? "connected" : metrics.joined(separator: " · "))"
+            let subscription = provider.subscriptionName.map { " · \($0)" } ?? ""
+            return "\(provider.providerName)\(subscription): " +
+                "\(metrics.isEmpty ? "connected" : metrics.joined(separator: " · "))"
         })
         if !payload.topModels.isEmpty {
             lines.append("Top models:")

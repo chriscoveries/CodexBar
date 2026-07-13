@@ -10,18 +10,22 @@ struct ShareStatsTests {
             providers: [
                 ShareStatsProviderSource(
                     providerName: "Codex",
+                    subscriptionName: "Plus",
                     tokenSnapshot: Self.codexSnapshot,
                     usageSnapshot: Self.usage(usedPercent: 64)),
                 ShareStatsProviderSource(
                     providerName: "Claude",
+                    subscriptionName: "Max",
                     tokenSnapshot: Self.claudeSnapshot,
                     usageSnapshot: Self.usage(usedPercent: 38)),
                 ShareStatsProviderSource(
                     providerName: "Cursor",
+                    subscriptionName: "Pro",
                     tokenSnapshot: nil,
                     usageSnapshot: Self.usage(usedPercent: 82)),
                 ShareStatsProviderSource(
                     providerName: "OpenCode",
+                    subscriptionName: nil,
                     tokenSnapshot: nil,
                     usageSnapshot: nil),
             ],
@@ -31,7 +35,9 @@ struct ShareStatsTests {
         #expect(payload.totalTokens == 5_500_000_000)
         #expect(payload.estimatedCostUSD == 4250)
         #expect(payload.providers.map(\.providerName) == ["Codex", "Claude", "Cursor", "OpenCode"])
+        #expect(payload.providers.map(\.subscriptionName) == ["Plus", "Max", "Pro", nil])
         #expect(payload.providers[3].totalTokens == nil)
+        #expect(payload.providers[0].dailyTokens.reduce(0, +) == 4_768_000_000)
         #expect(payload.tokenProviderCount == 2)
         #expect(payload.pricedProviderCount == 2)
         #expect(payload.topModels.map(\.modelName) == ["gpt-5.5", "claude-sonnet-5"])
@@ -43,18 +49,20 @@ struct ShareStatsTests {
             providers: [
                 ShareStatsProviderSource(
                     providerName: "Codex",
+                    subscriptionName: "Plus",
                     tokenSnapshot: Self.codexSnapshot,
                     usageSnapshot: nil),
                 ShareStatsProviderSource(
                     providerName: "Cursor",
+                    subscriptionName: "Pro",
                     tokenSnapshot: nil,
                     usageSnapshot: Self.usage(usedPercent: 82)),
             ],
             calendar: Self.calendar))
         let text = ShareStatsFormatting.text(payload)
 
-        #expect(text.contains("Codex: 4.77B tokens"))
-        #expect(text.contains("Cursor: connected"))
+        #expect(text.contains("Codex · Plus: 4.77B tokens"))
+        #expect(text.contains("Cursor · Pro: connected"))
         #expect(text.contains("estimated across priced providers"))
         #expect(text.contains("gpt-5.5 (Codex)"))
         #expect(text.contains("Generated locally by CodexBar"))
@@ -67,10 +75,12 @@ struct ShareStatsTests {
             providers: [
                 ShareStatsProviderSource(
                     providerName: "Codex · #1",
+                    subscriptionName: "Plus",
                     tokenSnapshot: Self.codexSnapshot,
                     usageSnapshot: Self.usage(usedPercent: 64)),
                 ShareStatsProviderSource(
                     providerName: "Codex · #2",
+                    subscriptionName: "Team",
                     tokenSnapshot: Self.claudeSnapshot,
                     usageSnapshot: Self.usage(usedPercent: 38)),
             ],
@@ -81,6 +91,39 @@ struct ShareStatsTests {
         #expect(payload.estimatedCostUSD == 4250)
         #expect(payload.pricedProviderCount == 2)
         #expect(payload.tokenProviderCount == 2)
+    }
+
+    @Test
+    func `builder keeps model names when cost history has no model breakdown`() throws {
+        let snapshot = CostUsageTokenSnapshot(
+            sessionTokens: nil,
+            sessionCostUSD: nil,
+            last30DaysTokens: 42000,
+            last30DaysCostUSD: nil,
+            historyDays: 30,
+            daily: [CostUsageDailyReport.Entry(
+                date: "2026-07-07",
+                inputTokens: nil,
+                outputTokens: nil,
+                totalTokens: 42000,
+                costUSD: nil,
+                modelsUsed: ["gpt-5.5-codex", "gpt-5.5-codex"],
+                modelBreakdowns: nil)],
+            projects: [],
+            updatedAt: Date(timeIntervalSince1970: 1_783_382_400))
+        let payload = try #require(ShareStatsBuilder.make(
+            providers: [ShareStatsProviderSource(
+                providerName: "Codex",
+                subscriptionName: "Plus",
+                tokenSnapshot: snapshot,
+                usageSnapshot: nil)],
+            calendar: Self.calendar))
+
+        #expect(payload.topModels == [ShareStatsModelPayload(
+            providerName: "Codex",
+            modelName: "gpt-5.5-codex",
+            totalTokens: nil,
+            estimatedCostUSD: nil)])
     }
 
     @MainActor

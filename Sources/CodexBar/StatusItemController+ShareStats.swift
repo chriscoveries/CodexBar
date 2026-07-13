@@ -45,23 +45,49 @@ extension StatusItemController {
                             snapshot.snapshot.map { (snapshot.id, $0) }
                         })
                     sources.append(contentsOf: subscriptions.map { subscription in
-                        ShareStatsProviderSource(
+                        let usageSnapshot = accountUsage[subscription.id]
+                            ?? (subscriptions.count == 1 ? self.store.snapshot(for: .codex) : nil)
+                        return ShareStatsProviderSource(
                             providerName: subscription.displayName,
+                            subscriptionName: self.shareStatsSubscriptionName(
+                                provider: .codex,
+                                snapshot: usageSnapshot),
                             tokenSnapshot: subscription.tokenSnapshot,
-                            usageSnapshot: accountUsage[subscription.id] ?? self.store.snapshot(for: .codex))
+                            usageSnapshot: usageSnapshot)
                     })
                     continue
                 }
             }
 
+            let usageSnapshot = self.store.snapshot(for: provider)
             sources.append(ShareStatsProviderSource(
                 providerName: self.store.metadata(for: provider).displayName,
+                subscriptionName: self.shareStatsSubscriptionName(
+                    provider: provider,
+                    snapshot: usageSnapshot),
                 tokenSnapshot: self.store.tokenSnapshot(for: provider)
                     ?? self.store.tokenSnapshot(
-                        fromProviderSnapshot: self.store.snapshot(for: provider),
+                        fromProviderSnapshot: usageSnapshot,
                         provider: provider),
-                usageSnapshot: self.store.snapshot(for: provider)))
+                usageSnapshot: usageSnapshot))
         }
         return sources
+    }
+
+    private func shareStatsSubscriptionName(
+        provider: UsageProvider,
+        snapshot: UsageSnapshot?) -> String?
+    {
+        guard let rawName = snapshot?.loginMethod(for: provider)?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !rawName.isEmpty
+        else { return nil }
+
+        let name = if provider == .codex {
+            CodexPlanFormatting.displayName(rawName) ?? UsageFormatter.cleanPlanName(rawName)
+        } else {
+            UsageFormatter.cleanPlanName(rawName)
+        }
+        return name.isEmpty ? nil : name
     }
 }
