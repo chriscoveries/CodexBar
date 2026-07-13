@@ -40,10 +40,10 @@ extension StatusItemController {
             if provider == .codex {
                 let subscriptions = await self.store.codexSubscriptionCostSnapshots(force: false)
                 if !subscriptions.isEmpty {
-                    let accountUsage = Dictionary(uniqueKeysWithValues: self.store.codexAccountSnapshots.compactMap {
-                        snapshot in
-                        snapshot.snapshot.map { (snapshot.id, $0) }
-                    })
+                    let accountUsage = Dictionary(uniqueKeysWithValues: self.store.codexAccountSnapshots
+                        .compactMap { snapshot in
+                            snapshot.snapshot.map { (snapshot.id, $0) }
+                        })
                     sources.append(contentsOf: subscriptions.map { subscription in
                         ShareStatsProviderSource(
                             providerName: subscription.displayName,
