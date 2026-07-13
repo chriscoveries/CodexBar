@@ -12,7 +12,9 @@ struct PreferencesPaneSmokeTests {
         let store = Self.makeUsageStore(settings: settings)
 
         _ = GeneralPane(settings: settings).body
-        _ = DisplayPane(settings: settings, store: store).body
+        _ = NotificationsPane(settings: settings).body
+        _ = MenuBarPane(settings: settings, store: store).body
+        _ = MenuPane(settings: settings, store: store).body
         _ = AdvancedPane(settings: settings, store: store).body
         _ = HooksPane(settings: settings).body
         _ = ProvidersPane(settings: settings, store: store).body
@@ -42,7 +44,9 @@ struct PreferencesPaneSmokeTests {
         store._setErrorForTesting("Example error", provider: .codex)
 
         _ = GeneralPane(settings: settings).body
-        _ = DisplayPane(settings: settings, store: store).body
+        _ = NotificationsPane(settings: settings).body
+        _ = MenuBarPane(settings: settings, store: store).body
+        _ = MenuPane(settings: settings, store: store).body
         _ = AdvancedPane(settings: settings, store: store).body
         _ = ProvidersPane(provider: .claude, settings: settings, store: store).body
         _ = DebugPane(settings: settings, store: store).body
@@ -85,11 +89,16 @@ struct PreferencesPaneSmokeTests {
     }
 
     @Test
-    func `display menu options cover persisted settings`() {
-        #expect(DisplaySettingsMenuOptions.displayModes == MenuBarDisplayMode.allCases)
-        #expect(DisplaySettingsMenuOptions.weeklyProgressWorkDays == [nil, 4, 5, 7])
-        #expect(DisplaySettingsMenuOptions.multiAccountLayouts == MultiAccountMenuLayout.allCases)
-        #expect(DisplaySettingsMenuOptions.costSummaryDisplayStyles == CostSummaryDisplayStyle.allCases)
+    func `menu bar and menu options cover persisted settings`() {
+        #expect(MenuBarSettingsMenuOptions.displayModes == MenuBarDisplayMode.allCases)
+        #expect(MenuBarSettingsMenuOptions.iconStyles == MenuBarIconStyle.allCases)
+        #expect(MenuBarSettingsMenuOptions.switcherRows == SwitcherRowsOption.allCases)
+        #expect(MenuSettingsMenuOptions.weeklyProgressWorkDays == [nil, 4, 5, 7])
+        #expect(MenuSettingsMenuOptions.multiAccountLayouts == MultiAccountMenuLayout.allCases)
+        #expect(MenuSettingsMenuOptions.usageBarsFill == UsageBarsFillOption.allCases)
+        #expect(MenuSettingsMenuOptions.resetTimes == ResetTimesOption.allCases)
+        #expect(MenuSettingsMenuOptions.costSummaries == CostSummaryOption.allCases)
+        #expect(NotificationsSettingsMenuOptions.confettiCelebrations == ConfettiCelebrationOption.allCases)
 
         let suite = "PreferencesPaneSmokeTests-display-menu-persistence"
         let settings = Self.makeSettingsStore(suite: suite)
@@ -107,10 +116,75 @@ struct PreferencesPaneSmokeTests {
 
     @Test
     func `overview provider limit text formats numeric limit as object argument`() {
-        let text = DisplayPane.overviewProviderLimitText(limit: 3)
+        let text = MenuBarPane.overviewProviderLimitText(limit: 3)
 
         #expect(text.contains("3"))
         #expect(!text.contains("%@"))
+    }
+
+    @Test
+    func `menu bar icon style maps existing booleans`() {
+        let settings = Self.makeSettingsStore(suite: "PreferencesPaneSmokeTests-menu-bar-icon-style")
+
+        settings.menuBarShowsBrandIconWithPercent = false
+        settings.menuBarHidesCritters = false
+        #expect(settings.menuBarIconStyle == .critters)
+
+        settings.menuBarHidesCritters = true
+        #expect(settings.menuBarIconStyle == .bars)
+
+        settings.menuBarShowsBrandIconWithPercent = true
+        #expect(settings.menuBarIconStyle == .iconAndPercent)
+
+        settings.menuBarHidesCritters = true
+        settings.menuBarIconStyle = .iconAndPercent
+        #expect(settings.menuBarShowsBrandIconWithPercent)
+        #expect(settings.menuBarHidesCritters)
+
+        settings.menuBarIconStyle = .critters
+        #expect(!settings.menuBarShowsBrandIconWithPercent)
+        #expect(!settings.menuBarHidesCritters)
+
+        settings.menuBarIconStyle = .bars
+        #expect(!settings.menuBarShowsBrandIconWithPercent)
+        #expect(settings.menuBarHidesCritters)
+    }
+
+    @Test
+    func `confetti celebration option maps all boolean combinations`() {
+        let settings = Self.makeSettingsStore(suite: "PreferencesPaneSmokeTests-confetti-celebration")
+
+        for option in ConfettiCelebrationOption.allCases {
+            settings.confettiCelebrationOption = option
+            #expect(settings.confettiCelebrationOption == option)
+            #expect(settings.confettiOnSessionLimitResetsEnabled == (option == .session || option == .both))
+            #expect(settings.confettiOnWeeklyLimitResetsEnabled == (option == .weekly || option == .both))
+        }
+    }
+
+    @Test
+    func `cost summary option disables without losing style`() {
+        let settings = Self.makeSettingsStore(suite: "PreferencesPaneSmokeTests-cost-summary-option")
+
+        settings.costSummaryOption = .costSubmenu
+        #expect(settings.costUsageEnabled)
+        #expect(settings.costSummaryDisplayStyle == .costSubmenu)
+
+        settings.costSummaryOption = .off
+        #expect(!settings.costUsageEnabled)
+        #expect(settings.costSummaryDisplayStyle == .costSubmenu)
+        #expect(settings.costSummaryOption == .off)
+
+        settings.costUsageEnabled = true
+        #expect(settings.costSummaryOption == .costSubmenu)
+
+        settings.costSummaryOption = .inlineSummary
+        #expect(settings.costUsageEnabled)
+        #expect(settings.costSummaryDisplayStyle == .inlineSummary)
+
+        settings.costSummaryOption = .both
+        #expect(settings.costUsageEnabled)
+        #expect(settings.costSummaryDisplayStyle == .both)
     }
 
     @Test
@@ -201,6 +275,7 @@ struct PreferencesPaneSmokeTests {
         settings.quotaWarningNotificationsEnabled = true
 
         CodexBarLocalizationOverride.$appLanguage.withValue("ru") {
+            #expect(L("quota_warning_global") == "Глобально")
             #expect(L("quota_warning_warning") == "Предупреждение")
             #expect(L("quota_warning_critical") == "Критично")
 
@@ -209,12 +284,148 @@ struct PreferencesPaneSmokeTests {
     }
 
     @Test
-    func `quota warning inherited summary keeps additional active thresholds visible`() {
+    func `provider quota warning inherited summary keeps additional active thresholds visible`() {
         CodexBarLocalizationOverride.$appLanguage.withValue("en") {
-            #expect(
-                ProviderQuotaWarningSettingsView.thresholdText([80, 50, 20], enabled: true)
-                    == "Warning 80%, Critical 50%, 20%")
+            let thresholdText = ProviderQuotaWarningSettingsView.thresholdText([80, 50, 20], enabled: true)
+
+            #expect(thresholdText == "Warning 80%, Critical 50%, 20%")
+            #expect(String(format: L("quota_warning_inherited"), thresholdText)
+                == "Inherited: Warning 80%, Critical 50%, 20%")
         }
+    }
+
+    @Test
+    func `provider quota warning rows build for global custom and off states`() {
+        let settings = Self.makeSettingsStore(suite: "PreferencesPaneSmokeTests-provider-quota-warning-rows")
+        settings.quotaWarningNotificationsEnabled = true
+        settings.setQuotaWarningThresholds(.session, thresholds: [50, 20])
+        settings.setQuotaWarningThresholds(.weekly, thresholds: [80, 40])
+
+        _ = ProviderQuotaWarningSettingsView(provider: .codex, settings: settings).body
+
+        settings.setQuotaWarningOverride(provider: .codex, window: .session, thresholds: [70, 30], enabled: true)
+        settings.setQuotaWarningOverride(provider: .codex, window: .weekly, thresholds: [60, 10], enabled: false)
+
+        _ = ProviderQuotaWarningSettingsView(provider: .codex, settings: settings).body
+
+        #expect(settings.hasQuotaWarningOverride(provider: .codex, window: .session))
+        #expect(settings.hasQuotaWarningOverride(provider: .codex, window: .weekly))
+        #expect(settings.quotaWarningEnabled(provider: .codex, window: .session))
+        #expect(!settings.quotaWarningEnabled(provider: .codex, window: .weekly))
+        #expect(settings.resolvedQuotaWarningThresholds(provider: .codex, window: .weekly) == [60, 10])
+    }
+
+    @Test
+    func `provider quota warning controls follow notification and marker visibility`() {
+        let settings = Self.makeSettingsStore(suite: "PreferencesPaneSmokeTests-provider-quota-warning-disabled")
+        settings.quotaWarningNotificationsEnabled = true
+        settings.quotaWarningMarkersVisible = true
+        settings.setQuotaWarningOverride(provider: .codex, window: .session, thresholds: [70, 30], enabled: true)
+        settings.setQuotaWarningOverride(provider: .codex, window: .weekly, thresholds: [60, 10], enabled: false)
+
+        let view = ProviderQuotaWarningSettingsView(provider: .codex, settings: settings)
+        let inheritedView = ProviderQuotaWarningSettingsView(provider: .claude, settings: settings)
+        #expect(view.controlsEnabled)
+        #expect(view.overrideMode(for: .session) == .custom)
+        #expect(view.overrideMode(for: .weekly) == .off)
+        #expect(inheritedView.overrideMode(for: .session) == .global)
+        #expect(inheritedView.overrideMode(for: .weekly) == .global)
+
+        CodexBarLocalizationOverride.$appLanguage.withValue("en") {
+            #expect(view.footerText == "Uses the global quota warning settings unless a window is customized here.")
+        }
+
+        settings.quotaWarningNotificationsEnabled = false
+
+        #expect(view.controlsEnabled)
+        #expect(inheritedView.controlsEnabled)
+        #expect(view.overrideMode(for: .session) == .custom)
+        #expect(view.overrideMode(for: .weekly) == .off)
+        #expect(inheritedView.overrideMode(for: .session) == .global)
+        #expect(inheritedView.overrideMode(for: .weekly) == .global)
+        #expect(settings.explicitQuotaWarningThresholds(provider: .codex, window: .session) == [70, 30])
+        #expect(settings.explicitQuotaWarningThresholds(provider: .codex, window: .weekly) == [60, 10])
+
+        CodexBarLocalizationOverride.$appLanguage.withValue("en") {
+            #expect(view.footerText == "Quota warning notifications are disabled globally. " +
+                "These settings still control usage-bar markers.")
+        }
+
+        settings.quotaWarningMarkersVisible = false
+        settings.predictivePaceWarningNotificationsEnabled = true
+
+        #expect(!view.controlsEnabled)
+        #expect(!inheritedView.controlsEnabled)
+
+        CodexBarLocalizationOverride.$appLanguage.withValue("en") {
+            #expect(view.footerText == "Quota warning notifications and usage-bar markers are disabled. " +
+                "Enable either to edit these saved settings.")
+        }
+
+        settings.quotaWarningNotificationsEnabled = true
+
+        #expect(view.controlsEnabled)
+        #expect(inheritedView.controlsEnabled)
+        #expect(view.overrideMode(for: .session) == .custom)
+        #expect(view.overrideMode(for: .weekly) == .off)
+        #expect(inheritedView.overrideMode(for: .session) == .global)
+        #expect(inheritedView.overrideMode(for: .weekly) == .global)
+
+        CodexBarLocalizationOverride.$appLanguage.withValue("en") {
+            #expect(view.footerText == "Uses the global quota warning settings unless a window is customized here.")
+        }
+    }
+
+    @Test
+    func `provider quota warning mode binding applies global custom and off transitions`() {
+        let settings = Self.makeSettingsStore(suite: "PreferencesPaneSmokeTests-provider-quota-warning-mode-binding")
+        settings.quotaWarningNotificationsEnabled = true
+        settings.setQuotaWarningWindowEnabled(.session, enabled: true)
+        settings.setQuotaWarningThresholds(.session, thresholds: [50, 20])
+
+        let view = ProviderQuotaWarningSettingsView(provider: .codex, settings: settings)
+        let mode = view.overrideModeBinding(for: .session)
+
+        #expect(mode.wrappedValue == .global)
+
+        mode.wrappedValue = .custom
+        #expect(mode.wrappedValue == .custom)
+        #expect(settings.hasQuotaWarningOverride(provider: .codex, window: .session))
+        #expect(settings.quotaWarningEnabled(provider: .codex, window: .session))
+        #expect(settings.providerConfig(for: .codex)?.quotaWarnings?.session?.thresholds == nil)
+        #expect(settings.resolvedQuotaWarningThresholds(provider: .codex, window: .session) == [50, 20])
+        #expect(view.shouldCommitThresholdEditorOnDisappear(for: .session))
+
+        settings.setQuotaWarningThresholds(provider: .codex, window: .session, thresholds: [70, 30])
+        mode.wrappedValue = .off
+        #expect(mode.wrappedValue == .off)
+        #expect(settings.hasQuotaWarningOverride(provider: .codex, window: .session))
+        #expect(!settings.quotaWarningEnabled(provider: .codex, window: .session))
+        #expect(settings.resolvedQuotaWarningThresholds(provider: .codex, window: .session) == [70, 30])
+        #expect(view.shouldCommitThresholdEditorOnDisappear(for: .session))
+
+        mode.wrappedValue = .custom
+        #expect(mode.wrappedValue == .custom)
+        #expect(settings.quotaWarningEnabled(provider: .codex, window: .session))
+        #expect(settings.explicitQuotaWarningThresholds(provider: .codex, window: .session) == [70, 30])
+        #expect(settings.resolvedQuotaWarningThresholds(provider: .codex, window: .session) == [70, 30])
+
+        mode.wrappedValue = .global
+        #expect(mode.wrappedValue == .global)
+        #expect(!settings.hasQuotaWarningOverride(provider: .codex, window: .session))
+        #expect(settings.quotaWarningEnabled(provider: .codex, window: .session))
+        #expect(settings.resolvedQuotaWarningThresholds(provider: .codex, window: .session) == [50, 20])
+        #expect(!view.shouldCommitThresholdEditorOnDisappear(for: .session))
+
+        mode.wrappedValue = .custom
+        #expect(settings.providerConfig(for: .codex)?.quotaWarnings?.session?.thresholds == nil)
+
+        mode.wrappedValue = .off
+        let disabledInheritedConfig = settings.providerConfig(for: .codex)?.quotaWarnings?.session
+        #expect(disabledInheritedConfig?.enabled == false)
+        #expect(disabledInheritedConfig?.thresholds == nil)
+        #expect(settings.resolvedQuotaWarningThresholds(provider: .codex, window: .session) == [50, 20])
+        #expect(view.shouldCommitThresholdEditorOnDisappear(for: .session))
     }
 
     @Test
@@ -241,7 +452,7 @@ struct PreferencesPaneSmokeTests {
         #expect(UserDefaults.standard.string(forKey: "appLanguage") == "zh-Hans")
         CodexBarLocalizationOverride.$appLanguage.withValue("zh-Hans") {
             #expect(L("tab_general") == "通用")
-            #expect(L("quota_warning_notifications_title") == "配额预警通知")
+            #expect(L("threshold_warnings_title") == "阈值预警")
             #expect(L("show_provider_storage_usage_title") == "显示提供商存储用量")
         }
 
@@ -323,7 +534,7 @@ struct PreferencesPaneSmokeTests {
             #expect(L("language_title") == "Lingua")
             #expect(L("section_system") == "Sistema")
             #expect(L("language_italian") == "Italiano")
-            #expect(L("tab_display") == "Aspetto")
+            #expect(L("tab_menu_bar") == "Barra menu")
             #expect(L("tab_advanced") == "Avanzate")
             #expect(L("quit_app") == "Esci da CodexBar")
         }
