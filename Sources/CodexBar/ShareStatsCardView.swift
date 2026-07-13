@@ -119,7 +119,7 @@ struct ShareStatsCardView: View {
                         .font(.system(size: 15, weight: .semibold, design: .rounded))
                         .tracking(1.6)
                     Spacer()
-                    Text("\(self.payload.providers.count) ACTIVE")
+                    Text("\(self.payload.providers.count) CONNECTED")
                         .font(.system(size: 11, weight: .semibold, design: .rounded))
                         .tracking(1.1)
                 }
@@ -162,6 +162,7 @@ struct ShareStatsCardView: View {
                     { index, model in
                         ShareStatsModelRow(
                             rank: index + 1,
+                            subscriptionRank: self.subscriptionRank(forProviderNamed: model.providerName),
                             model: model,
                             color: self.color(forProviderNamed: model.providerName))
                     }
@@ -175,8 +176,15 @@ struct ShareStatsCardView: View {
     }
 
     private func color(forProviderNamed name: String) -> Color {
-        let index = self.payload.providers.firstIndex { $0.providerName == name } ?? 0
-        return ShareStatsPalette.color(at: index)
+        ShareStatsPalette.color(at: self.paletteIndex(forProviderNamed: name))
+    }
+
+    private func subscriptionRank(forProviderNamed name: String) -> Int {
+        self.paletteIndex(forProviderNamed: name) + 1
+    }
+
+    private func paletteIndex(forProviderNamed name: String) -> Int {
+        self.payload.providers.firstIndex { $0.providerName == name } ?? 0
     }
 
     private var footer: some View {
@@ -199,6 +207,7 @@ struct ShareStatsCardView: View {
 
 private struct ShareStatsModelRow: View {
     let rank: Int
+    let subscriptionRank: Int
     let model: ShareStatsModelPayload
     let color: Color
 
@@ -214,9 +223,9 @@ private struct ShareStatsModelRow: View {
                     .font(.system(size: 16, weight: .medium, design: .rounded))
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)
-                Text("via \(self.model.providerName)")
+                Text("subscription \(String(format: "%02d", self.subscriptionRank)) · \(self.model.providerName)")
                     .font(.system(size: 11, weight: .regular, design: .rounded))
-                    .foregroundStyle(self.color.opacity(0.92))
+                    .foregroundStyle(self.color)
             }
             Spacer(minLength: 10)
             Text(self.detail)
@@ -225,7 +234,13 @@ private struct ShareStatsModelRow: View {
                 .foregroundStyle(Color(red: 0.73, green: 0.70, blue: 0.65))
                 .lineLimit(1)
         }
-        .frame(height: 30)
+        .padding(.horizontal, 8)
+        .frame(height: 32)
+        .background(self.color.opacity(0.13), in: RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(self.color.opacity(0.62), lineWidth: 1)
+        }
     }
 
     private var detail: String {
@@ -248,7 +263,11 @@ private struct ShareStatsProviderRow: View {
                 .monospacedDigit()
                 .foregroundStyle(self.color)
                 .frame(width: 28, height: 25)
-                .background(self.color.opacity(0.14), in: RoundedRectangle(cornerRadius: 7))
+                .background(self.color.opacity(0.21), in: RoundedRectangle(cornerRadius: 7))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 7)
+                        .stroke(self.color.opacity(0.62), lineWidth: 1)
+                }
             HStack(spacing: 8) {
                 Text(self.provider.providerName)
                     .font(.system(size: 16, weight: .semibold, design: .rounded))
@@ -261,7 +280,11 @@ private struct ShareStatsProviderRow: View {
                         .foregroundStyle(self.color)
                         .padding(.horizontal, 7)
                         .padding(.vertical, 4)
-                        .background(self.color.opacity(0.13), in: Capsule())
+                        .background(self.color.opacity(0.20), in: Capsule())
+                        .overlay {
+                            Capsule()
+                                .stroke(self.color.opacity(0.50), lineWidth: 1)
+                        }
                         .lineLimit(1)
                 }
             }
@@ -275,10 +298,10 @@ private struct ShareStatsProviderRow: View {
         }
         .padding(.horizontal, 10)
         .frame(height: 38)
-        .background(self.color.opacity(0.07), in: RoundedRectangle(cornerRadius: 10))
+        .background(self.color.opacity(0.13), in: RoundedRectangle(cornerRadius: 10))
         .overlay {
             RoundedRectangle(cornerRadius: 10)
-                .stroke(self.color.opacity(0.24), lineWidth: 1)
+                .stroke(self.color.opacity(0.62), lineWidth: 1)
         }
     }
 
@@ -296,12 +319,12 @@ private struct ShareStatsProviderRow: View {
 
 private enum ShareStatsPalette {
     static let colors = [
-        Color(red: 0.96, green: 0.49, blue: 0.25),
-        Color(red: 0.70, green: 0.45, blue: 0.96),
-        Color(red: 0.24, green: 0.76, blue: 0.69),
-        Color(red: 0.96, green: 0.72, blue: 0.20),
-        Color(red: 0.34, green: 0.64, blue: 0.98),
-        Color(red: 0.94, green: 0.38, blue: 0.54),
+        Color(red: 1.00, green: 0.60, blue: 0.38),
+        Color(red: 0.60, green: 0.66, blue: 1.00),
+        Color(red: 0.38, green: 0.84, blue: 0.72),
+        Color(red: 0.95, green: 0.79, blue: 0.41),
+        Color(red: 0.44, green: 0.77, blue: 0.96),
+        Color(red: 0.95, green: 0.55, blue: 0.67),
     ]
 
     static func color(at index: Int) -> Color {
@@ -361,7 +384,7 @@ private struct ShareStatsActivityChart: View {
                                 let value = item.values.indices.contains(day) ? item.values[day] : 0
                                 if value > 0 {
                                     RoundedRectangle(cornerRadius: 2)
-                                        .fill(item.color.opacity(0.88))
+                                        .fill(item.color.opacity(0.96))
                                         .frame(height: max(2, proxy.size.height * Double(value) / maximum))
                                 }
                             }
