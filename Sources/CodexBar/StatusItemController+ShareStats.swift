@@ -4,6 +4,14 @@ import CodexBarCore
 extension StatusItemController {
     @objc func showShareStats(_ sender: NSMenuItem) {
         _ = sender
+        self.presentShareStats()
+    }
+
+    @objc func handleShareStatsNotification() {
+        self.presentShareStats()
+    }
+
+    private func presentShareStats() {
         let sources = self.store.enabledProviders().map { provider in
             ShareStatsProviderSource(
                 providerName: self.store.metadata(for: provider).displayName,
