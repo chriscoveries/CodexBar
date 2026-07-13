@@ -8,10 +8,11 @@ read_when:
 # Refresh loop
 
 ## Cadence
-- `RefreshFrequency`: Manual, 1m, 2m, 5m, 15m, 30m, Adaptive (default fallback).
-- Stored in `UserDefaults` via `SettingsStore`. A missing or unrecognized stored value resolves to Adaptive. Existing
-  installations without a stored value also transition from the current implicit 5-minute fallback. Every valid stored
-  choice, including Manual and each fixed interval, remains unchanged.
+- `RefreshFrequency`: Manual, 1m, 2m, 5m, 15m, 30m, Adaptive (fresh-install default).
+- Stored in `UserDefaults` via `SettingsStore`. An unset cadence resolves to Adaptive only when no prior-launch marker
+  or existing config is present, and the resolved value is persisted immediately. Existing installations without a
+  stored cadence and unrecognized stored values resolve to the legacy 5-minute fallback. Every valid stored choice,
+  including Manual and each fixed interval, remains unchanged.
 
 ## Behavior
 - Background refresh runs off-main and updates `UsageStore` (usage + credits + optional web scrape).

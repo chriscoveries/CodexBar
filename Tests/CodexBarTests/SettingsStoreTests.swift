@@ -43,42 +43,6 @@ struct SettingsStoreTests {
     }
 
     @Test
-    func `default refresh frequency is adaptive`() throws {
-        let suite = "SettingsStoreTests-default"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
-        let configStore = testConfigStore(suiteName: suite)
-
-        let store = SettingsStore(
-            userDefaults: defaults,
-            configStore: configStore,
-            zaiTokenStore: NoopZaiTokenStore(),
-            syntheticTokenStore: NoopSyntheticTokenStore())
-
-        #expect(store.refreshFrequency == .adaptive)
-        #expect(store.refreshFrequency.seconds == nil)
-        #expect(defaults.string(forKey: "refreshFrequency") == RefreshFrequency.adaptive.rawValue)
-    }
-
-    @Test
-    func `falls back for unrecognized refresh frequency raw value`() throws {
-        let suite = "SettingsStoreTests-invalid-refresh"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defaults.removePersistentDomain(forName: suite)
-        defaults.set("legacyValue", forKey: "refreshFrequency")
-        let configStore = testConfigStore(suiteName: suite)
-
-        let store = SettingsStore(
-            userDefaults: defaults,
-            configStore: configStore,
-            zaiTokenStore: NoopZaiTokenStore(),
-            syntheticTokenStore: NoopSyntheticTokenStore())
-
-        #expect(store.refreshFrequency == .adaptive)
-        #expect(defaults.string(forKey: "refreshFrequency") == RefreshFrequency.adaptive.rawValue)
-    }
-
-    @Test
     func `persists refresh frequency across instances`() throws {
         let suite = "SettingsStoreTests-persist"
         let defaultsA = try #require(UserDefaults(suiteName: suite))

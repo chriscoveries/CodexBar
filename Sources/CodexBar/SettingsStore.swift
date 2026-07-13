@@ -270,6 +270,9 @@ final class SettingsStore {
         antigravityOAuthCredentialsStore: AntigravityOAuthCredentialsStore = AntigravityOAuthCredentialsStore(),
         performInitialProviderDetection: Bool = !SettingsStore.isRunningTests)
     {
+        // Capture this before app-group/config migrations can create prior-installation state.
+        let hadExistingConfig = (try? configStore.load()) != nil
+        let hadPreviousInstallationState = hadExistingConfig || Self.hadPreviousAppLaunch(userDefaults: userDefaults)
         let appGroupID = AppGroupSupport.currentGroupID()
         let appGroupMigration: AppGroupSupport.MigrationResult
         if Self.isRunningTests {
@@ -297,7 +300,6 @@ final class SettingsStore {
             userDefaults.set(legacyOpenAIWebAccess, forKey: "openAIWebAccessEnabled")
         }
         let hasStoredOpenAIWebAccessPreference = userDefaults.object(forKey: "openAIWebAccessEnabled") != nil
-        let hadExistingConfig = (try? configStore.load()) != nil
         let legacyStores = CodexBarConfigMigrator.LegacyStores(
             zaiTokenStore: zaiTokenStore,
             syntheticTokenStore: syntheticTokenStore,
@@ -323,7 +325,9 @@ final class SettingsStore {
         self.antigravityOAuthCredentialsStore = antigravityOAuthCredentialsStore
         self.config = config
         self.configLoading = true
-        let defaultsState = Self.loadDefaultsState(userDefaults: userDefaults)
+        let defaultsState = Self.loadDefaultsState(
+            userDefaults: userDefaults,
+            hadPreviousInstallationState: hadPreviousInstallationState)
         self.defaultsState = defaultsState
         self.mergedMenuLastSelectedWasOverviewStorage = defaultsState.mergedMenuLastSelectedWasOverview
         self.selectedMenuProviderRawStorage = defaultsState.selectedMenuProviderRaw
@@ -396,13 +400,13 @@ extension SettingsStore {
     }
 
     // swiftlint:disable:next function_body_length
-    private static func loadDefaultsState(userDefaults: UserDefaults) -> SettingsDefaultsState {
-        let refreshDefault = userDefaults.string(forKey: "refreshFrequency")
-            .flatMap(RefreshFrequency.init(rawValue:))
-        let refreshFrequency = refreshDefault ?? .adaptive
-        if Self.isRunningTests, refreshDefault == nil {
-            userDefaults.set(refreshFrequency.rawValue, forKey: "refreshFrequency")
-        }
+    private static func loadDefaultsState(
+        userDefaults: UserDefaults,
+        hadPreviousInstallationState: Bool) -> SettingsDefaultsState
+    {
+        let refreshFrequency = Self.loadRefreshFrequency(
+            userDefaults: userDefaults,
+            hadPreviousInstallationState: hadPreviousInstallationState)
         let refreshAllProvidersOnMenuOpen = userDefaults.object(
             forKey: "refreshAllProvidersOnMenuOpen") as? Bool ?? false
         let launchAtLogin = userDefaults.object(forKey: "launchAtLogin") as? Bool ?? false
@@ -560,6 +564,29 @@ extension SettingsStore {
             terminalAppRaw: userDefaults.string(forKey: "terminalApp"),
             agentSessionsEnabled: agentSessionsEnabled,
             agentSessionsManualHosts: agentSessionsManualHosts)
+    }
+
+    private static func hadPreviousAppLaunch(userDefaults: UserDefaults) -> Bool {
+        userDefaults.object(forKey: "providerDetectionCompleted") != nil ||
+            userDefaults.object(forKey: AppGroupSupport.migrationVersionKey) != nil
+    }
+
+    private static func loadRefreshFrequency(
+        userDefaults: UserDefaults,
+        hadPreviousInstallationState: Bool) -> RefreshFrequency
+    {
+        let rawValue = userDefaults.object(forKey: "refreshFrequency")
+        if let stored = rawValue as? String,
+           let frequency = RefreshFrequency(rawValue: stored)
+        {
+            return frequency
+        }
+
+        // An invalid value is existing state. Missing state is Adaptive only when no prior-installation
+        // state existed before migrations began; legacy unset users keep the old five-minute fallback.
+        let frequency: RefreshFrequency = rawValue == nil && !hadPreviousInstallationState ? .adaptive : .fiveMinutes
+        userDefaults.set(frequency.rawValue, forKey: "refreshFrequency")
+        return frequency
     }
 
     private static func loadNotificationDefaults(userDefaults: UserDefaults) -> NotificationDefaults {

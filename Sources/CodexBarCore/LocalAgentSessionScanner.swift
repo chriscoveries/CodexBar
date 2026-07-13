@@ -19,6 +19,7 @@ public struct LocalAgentSessionScanner: Sendable {
         self.config = config
     }
 
+    @concurrent
     public func scan(
         now: Date = Date(),
         environment: [String: String] = ProcessInfo.processInfo.environment) async -> [AgentSession]

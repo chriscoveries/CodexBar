@@ -8,20 +8,24 @@ read_when:
 
 # Adaptive refresh decision record
 
-- **Status:** Opt-in policy accepted in [#1861](https://github.com/steipete/CodexBar/pull/1861); agent-aware default extension implemented with the evidence below
+- **Status:** Opt-in policy accepted in [#1861](https://github.com/steipete/CodexBar/pull/1861); agent-aware fresh-install default extension implemented with the evidence below
 - **Decision owner:** Maintainer
-- **Runtime impact:** Bounded default 2–30-minute provider-batch cadence plus a 30-second unconstrained local activity scan
+- **Runtime impact:** Bounded fresh-install default of 2–30-minute provider-batch cadence plus a 30-second unconstrained local activity scan
 
 ## Decision
 
-CodexBar uses `Adaptive` when the stored refresh preference is missing or unrecognized. Every valid stored choice,
+CodexBar uses `Adaptive` for a missing refresh preference only when no prior-launch marker or existing config exists.
+The resolved value is persisted immediately, so later launches preserve that choice. Existing installations without a
+stored cadence, and unrecognized stored values, resolve to the legacy 5-minute fallback. Every valid stored choice,
 including Manual and each fixed interval, remains unchanged. Adaptive adjusts the existing provider-batch timer between
 2 and 30 minutes. Recent local Codex or Claude transcript activity caps otherwise slower unconstrained decisions at 5
 minutes.
 
-Current main does not persist its implicit 5-minute fallback in production, so `UserDefaults` cannot distinguish a new
-installation from an existing installation with no stored cadence. This extension intentionally moves both groups to
-Adaptive. It does not change any valid stored selection; selecting a fixed cadence or Manual remains authoritative.
+The rollout boundary uses an existing config or launch markers that predate this change (`providerDetectionCompleted`
+and the app-group migration version), captured before startup migrations can create them. This covers installations from
+v0.4 onward plus any installation with a config. A completely untouched, configless v0.1-v0.3 installation leaves no
+durable signal that can distinguish it from a new install; that historical cohort follows the fresh-install default.
+Selecting a fixed cadence or Manual remains authoritative.
 
 The original #1861 decision approved a menu-only opt-in policy. The 2026-07-12 extension below adds one local,
 in-memory activity timestamp and changes the fallback after the offline replay, timer integration, privacy projection,
@@ -33,7 +37,7 @@ learned ranking, or menu prewarming.
 | Option | Freshness | Complexity | Provider work | Decision |
 |---|---|---|---|---|
 | Keep fixed frequencies only | Predictable | Lowest | Predictable | Safe fallback |
-| Use bounded agent-aware adaptive batch cadence by default | Better while active; quieter while idle | Small | Bounded | Selected |
+| Use bounded agent-aware adaptive batch cadence as the fresh-install default | Better while active; quieter while idle | Small | Bounded | Selected |
 | Add per-provider/account prediction | Potentially best | High | Harder to reason about | Reject for now |
 | Add learned ranking or contextual bandits | Unproven | Very high | Harder to audit | Reject |
 
@@ -71,10 +75,10 @@ interaction context, or the promise that menu-open refresh does not reset the pe
 
 ## Accepted product contract
 
-- Keep `Adaptive` as a mutually exclusive `RefreshFrequency` choice and use it when the stored preference is missing or
-  unrecognized.
-- Treat a missing value as an intentional transition from the old implicit 5-minute fallback, including on existing
-  installations; do not describe this as a fresh-install-only default.
+- Keep `Adaptive` as a mutually exclusive `RefreshFrequency` choice and use it for an unset cadence only when no
+  prior-launch marker or existing config exists.
+- Preserve the old implicit 5-minute fallback for existing installations without a stored cadence and for unrecognized
+  stored values. Persist either resolved fallback immediately.
 - Preserve every valid stored value exactly, including `Manual`, every fixed interval, and `Adaptive`.
 - Schedule the same enabled-provider batch as fixed refresh; do not select accounts, workspaces, or data lanes.
 - Keep manual refresh immediate and user-initiated.
@@ -215,7 +219,8 @@ The work remained independently reviewable:
 6. Add offline replay tooling and evaluate the frozen trace in #2029.
 7. Reuse the local Agent Sessions scanner, project its output to one in-memory timestamp when presentation is off, and
    advance only an otherwise later Adaptive timer.
-8. Change the missing/invalid preference fallback after policy, timer, projection, and scanner-cost verification.
+8. Make Adaptive the fresh-install default after policy, timer, projection, and scanner-cost verification, while
+   preserving the legacy 5-minute fallback for existing unset or invalid state.
 
 Do not add target adapters, outcome databases, account/workspace prediction, learned models, visible ordering changes,
 or menu prewarming as part of these steps.
@@ -278,9 +283,9 @@ The 2026-07-12 extension requires evidence from separate seams rather than treat
 - remote discovery and SSH must remain guarded by the explicit Agent Sessions setting;
 - the local scanner's cost must be measured and disclosed separately from provider-batch savings.
 
-Rollback is restoring the missing/invalid preference fallback to 5 minutes and omitting `lastCodingActivityAt` from the
-policy input. Fixed/manual scheduling and every valid stored selection remain compatible because their raw values do not
-change.
+Rollback is restoring the fresh-install fallback to 5 minutes and omitting `lastCodingActivityAt` from the policy input.
+Existing unset/invalid state already retains the 5-minute fallback; fixed/manual scheduling and every valid stored
+selection remain compatible because their raw values do not change.
 
 ## Explicit non-decisions
 
@@ -326,12 +331,13 @@ Replay advances are counterfactual events on a zero-service-time policy clock. T
 count with live `timerAdvanced` events, whose schedule includes real refresh duration and in-flight coalescing. The
 offline audit reports recorded schedule events separately when the supplied trace contains them.
 
-## Agent-aware default follow-up (2026-07-12)
+## Agent-aware fresh-install default follow-up (2026-07-12)
 
 This extension moves the previously replay-only activity cap into `AdaptiveRefreshPolicyCore`, retains the former
 menu-only policy as `adaptive-menu-only`, wires the existing local Agent Sessions scanner into the live timer, and uses
-Adaptive for missing or unrecognized refresh preferences. The `adaptive-activity` CLI spelling remains an alias for the
-production `adaptive` policy so scripts written against 0.42.1 keep working.
+Adaptive as the fresh-install default while preserving the legacy 5-minute fallback for existing unset or invalid
+preferences. The `adaptive-activity` CLI spelling remains an alias for the production `adaptive` policy so scripts
+written against 0.42.1 keep working.
 
 The same frozen 1,780-record trace and segmentation settings produce:
 
