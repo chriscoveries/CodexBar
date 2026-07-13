@@ -72,6 +72,39 @@ struct SpawnedProcessGroupTests {
     }
 
     @Test
+    func `launch clears the parent thread signal mask`() throws {
+        var blockedMask = sigset_t()
+        var previousMask = sigset_t()
+        sigemptyset(&blockedMask)
+        sigaddset(&blockedMask, SIGTERM)
+        try #require(pthread_sigmask(SIG_BLOCK, &blockedMask, &previousMask) == 0)
+        defer { pthread_sigmask(SIG_SETMASK, &previousMask, nil) }
+
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        let script = """
+        import signal
+        import sys
+
+        blocked = signal.pthread_sigmask(signal.SIG_BLOCK, set())
+        sys.exit(1 if signal.SIGTERM in blocked else 0)
+        """
+        let process = try SpawnedProcessGroup.launch(
+            binary: "/usr/bin/python3",
+            arguments: ["-c", script],
+            environment: ProcessInfo.processInfo.environment,
+            stdoutPipe: stdoutPipe,
+            stderrPipe: stderrPipe)
+
+        while process.isRunning {
+            usleep(20000)
+        }
+        process.finishSynchronously()
+
+        #expect(process.terminationStatus == 0)
+    }
+
+    @Test
     func `launch closes unrelated parent descriptors`() async throws {
         let sourceFD = open("/dev/null", O_RDONLY)
         let inheritedFD = fcntl(sourceFD, F_DUPFD, 200)
