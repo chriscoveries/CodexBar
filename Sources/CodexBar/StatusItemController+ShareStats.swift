@@ -2,6 +2,14 @@ import AppKit
 import CodexBarCore
 
 extension StatusItemController {
+    func installShareStatsObserver() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(self.handleShareStatsNotification),
+            name: .codexbarShareStats,
+            object: nil)
+    }
+
     @objc func showShareStats(_ sender: NSMenuItem) {
         _ = sender
         self.presentShareStats()

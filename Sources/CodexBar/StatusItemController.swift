@@ -450,11 +450,7 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
             selector: #selector(self.handleQuotaWarningPosted(_:)),
             name: .codexbarQuotaWarningDidPost,
             object: nil)
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(self.handleShareStatsNotification),
-            name: .codexbarShareStats,
-            object: nil)
+        self.installShareStatsObserver()
         if observeProviderConfigNotifications {
             NotificationCenter.default.addObserver(
                 self,
