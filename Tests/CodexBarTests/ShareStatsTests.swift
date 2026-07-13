@@ -167,6 +167,65 @@ struct ShareStatsTests {
         #expect(ShareStatsFormatting.text(payload).contains("OpenRouter: ~$18.75 MTD"))
     }
 
+    @Test
+    func `builder uses one shared calendar window across stale provider snapshots`() throws {
+        let current = Self.snapshot(
+            tokens: 100,
+            cost: 1,
+            modelName: "current-model",
+            projectName: "current")
+        let stale = CostUsageTokenSnapshot(
+            sessionTokens: nil,
+            sessionCostUSD: nil,
+            last30DaysTokens: 900,
+            last30DaysCostUSD: 9,
+            historyDays: 30,
+            daily: [Self.entry(
+                day: "2026-06-01",
+                tokens: 900,
+                cost: 9,
+                modelName: "stale-model")],
+            updatedAt: Date(timeIntervalSince1970: 1_780_272_000))
+        let payload = try #require(ShareStatsBuilder.make(
+            providers: [
+                ShareStatsProviderSource(
+                    providerName: "Current",
+                    subscriptionName: nil,
+                    tokenSnapshot: current,
+                    usageSnapshot: nil),
+                ShareStatsProviderSource(
+                    providerName: "Stale",
+                    subscriptionName: nil,
+                    tokenSnapshot: stale,
+                    usageSnapshot: nil),
+            ],
+            days: 30,
+            calendar: Self.calendar))
+
+        #expect(payload.totalTokens == 100)
+        #expect(payload.estimatedCostUSD == 1)
+        #expect(payload.providers[1].totalTokens == nil)
+        #expect(payload.topModels.map(\.modelName) == ["current-model"])
+    }
+
+    @Test
+    func `subscription labels allow plan tiers but reject overloaded identity details`() {
+        #expect(ShareStatsSubscriptionName.sanitized(provider: .codex, rawName: "pro") == "Pro 20x")
+        #expect(ShareStatsSubscriptionName.sanitized(provider: .cursor, rawName: "Cursor Pro") == "Cursor Pro")
+        #expect(ShareStatsSubscriptionName.sanitized(
+            provider: .deepgram,
+            rawName: "Project: secret-project") == nil)
+        #expect(ShareStatsSubscriptionName.sanitized(
+            provider: .azureopenai,
+            rawName: "Deployment: private-deployment") == nil)
+        #expect(ShareStatsSubscriptionName.sanitized(
+            provider: .openrouter,
+            rawName: "Balance: $49.58") == nil)
+        #expect(ShareStatsSubscriptionName.sanitized(
+            provider: .kilo,
+            rawName: "Pro · Auto top-up: visa") == nil)
+    }
+
     @MainActor
     @Test
     func `card uses standard social preview dimensions without invoking GPU rendering`() {

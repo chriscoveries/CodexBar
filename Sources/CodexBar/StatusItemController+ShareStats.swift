@@ -81,19 +81,8 @@ extension StatusItemController {
         provider: UsageProvider,
         snapshot: UsageSnapshot?) -> String?
     {
-        guard let rawName = snapshot?.loginMethod(for: provider)?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-            !rawName.isEmpty
-        else { return nil }
-
-        let name = if provider == .codex {
-            CodexPlanFormatting.displayName(rawName) ?? UsageFormatter.cleanPlanName(rawName)
-        } else {
-            UsageFormatter.cleanPlanName(rawName)
-        }
-        if provider == .openrouter, name.lowercased().hasPrefix("balance:") {
-            return nil
-        }
-        return name.isEmpty ? nil : name
+        ShareStatsSubscriptionName.sanitized(
+            provider: provider,
+            rawName: snapshot?.loginMethod(for: provider))
     }
 }

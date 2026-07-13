@@ -1186,3 +1186,18 @@
 "Show Codex Spark usage" = "Tampilkan penggunaan Codex Spark";
 "Shows Codex Spark quota rows in the menu and provider preview. Requires optional credits and extra usage in Display settings." = "Menampilkan baris kuota Codex Spark di menu dan pratinjau penyedia. Mengharuskan “Tampilkan kredit + penggunaan ekstra” diaktifkan di pengaturan Tampilan.";
 "Scroll to see more models" = "Gulir untuk melihat model lainnya";
+
+/* Shareable usage card */
+"Copy Image" = "Salin Gambar";
+"Copy Stats" = "Salin Statistik";
+"Could not copy image" = "Gambar tidak dapat disalin";
+"Image copied" = "Gambar disalin";
+"Image saved" = "Gambar disimpan";
+"Nothing is uploaded. This image is created on your Mac." = "Tidak ada data yang diunggah. Gambar ini dibuat di Mac Anda.";
+"Preview, copy, or save one private card with all enabled subscriptions." = "Pratinjau, salin, atau simpan satu kartu pribadi dengan semua langganan yang diaktifkan.";
+"Save..." = "Simpan...";
+"Share AI Usage" = "Bagikan Penggunaan AI";
+"Share Stats…" = "Bagikan Statistik…";
+"Share usage card" = "Bagikan kartu penggunaan";
+"Sharing" = "Berbagi";
+"Stats copied" = "Statistik disalin";

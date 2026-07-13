@@ -23,6 +23,34 @@ struct ShareStatsProviderSource: Sendable {
     }
 }
 
+enum ShareStatsSubscriptionName {
+    /// Provider identity fields are not consistently plan-only. Some providers store project,
+    /// deployment, balance, credential, or status details in `loginMethod`, so sharing must opt in
+    /// only providers whose identity contract is a subscription tier.
+    static func sanitized(provider: UsageProvider, rawName: String?) -> String? {
+        guard let rawName = rawName?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawName.isEmpty
+        else { return nil }
+
+        let supportsPlanLabel = switch provider {
+        case .codex, .claude, .cursor, .alibaba, .alibabatokenplan, .gemini, .antigravity,
+             .copilot, .devin, .zai, .minimax, .augment, .elevenlabs, .windsurf, .zed,
+             .perplexity, .sakana, .abacus, .synthetic, .t3chat, .sub2api:
+            true
+        default:
+            false
+        }
+        guard supportsPlanLabel else { return nil }
+
+        let name = if provider == .codex {
+            CodexPlanFormatting.displayName(rawName) ?? UsageFormatter.cleanPlanName(rawName)
+        } else {
+            UsageFormatter.cleanPlanName(rawName)
+        }
+        return name.isEmpty ? nil : name
+    }
+}
+
 enum ShareStatsSpendWindow: Sendable, Equatable {
     case selectedPeriod
     case monthToDate
@@ -116,7 +144,9 @@ enum ShareStatsBuilder {
             periodEnd: periodEnd,
             calendar: calendar)
         let providers = sources.map { source -> ShareStatsProviderPayload in
-            let summary = source.tokenSnapshot?.summary(forLastDays: days, calendar: calendar)
+            let summary = source.tokenSnapshot.map {
+                self.summary(snapshot: $0, days: days, periodEnd: periodEnd, calendar: calendar)
+            }
             let dailyTokens = source.tokenSnapshot.map {
                 self.dailyTokens(snapshot: $0, days: days, periodEnd: periodEnd, calendar: calendar)
             }
@@ -246,15 +276,51 @@ enum ShareStatsBuilder {
         periodEnd: Date,
         calendar: Calendar) -> [Int]
     {
+        self.dailyEntries(
+            snapshot: snapshot,
+            days: days,
+            periodEnd: periodEnd,
+            calendar: calendar)
+            .map { max(0, $0?.totalTokens ?? 0) }
+    }
+
+    private static func summary(
+        snapshot: CostUsageTokenSnapshot,
+        days: Int,
+        periodEnd: Date,
+        calendar: Calendar) -> CostUsageWindowSummary
+    {
+        let entries = self.dailyEntries(
+            snapshot: snapshot,
+            days: days,
+            periodEnd: periodEnd,
+            calendar: calendar)
+            .compactMap(\.self)
+        let tokens = entries.compactMap(\.totalTokens)
+        let costs = entries.compactMap(\.costUSD).filter(\.isFinite)
+        let requests = entries.compactMap(\.requestCount)
+        return CostUsageWindowSummary(
+            days: days,
+            totalTokens: tokens.isEmpty ? nil : tokens.reduce(0, +),
+            totalCostUSD: costs.isEmpty ? nil : costs.reduce(0, +),
+            totalRequests: requests.isEmpty ? nil : requests.reduce(0, +),
+            entryCount: entries.count)
+    }
+
+    private static func dailyEntries(
+        snapshot: CostUsageTokenSnapshot,
+        days: Int,
+        periodEnd: Date,
+        calendar: Calendar) -> [CostUsageDailyReport.Entry?]
+    {
         let end = calendar.startOfDay(for: periodEnd)
         let start = calendar.date(byAdding: .day, value: -(days - 1), to: end) ?? end
         return (0..<days).map { offset in
-            guard let date = calendar.date(byAdding: .day, value: offset, to: start) else { return 0 }
-            let entry = CostUsageTokenSnapshot.entry(
+            guard let date = calendar.date(byAdding: .day, value: offset, to: start) else { return nil }
+            return CostUsageTokenSnapshot.entry(
                 in: snapshot.daily,
                 forLocalDayContaining: date,
                 calendar: calendar)
-            return max(0, entry?.totalTokens ?? 0)
         }
     }
 }
