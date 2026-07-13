@@ -19,7 +19,14 @@ extension UsageStore {
         {
             return
         }
-        if provider == .codex, !self.settings.sessionQuotaNotificationsEnabled {
+        // Hooks have their own enable switch, so a configured quota_reached hook must fire on a
+        // real depletion even when session quota notifications are off. Run transition detection
+        // whenever notifications OR a matching hook rule is active; gate the OS notification post
+        // on the notification setting, but emit the hook on any depletion.
+        let notificationsEnabled = self.settings.sessionQuotaNotificationsEnabled
+        let hooksActive = self.hasQuotaHookRule(event: .quotaReached, provider: provider)
+        let detectionEnabled = notificationsEnabled || hooksActive
+        if provider == .codex, !detectionEnabled {
             self.requireFreshCodexSessionQuotaBaseline(observedAt: snapshot.updatedAt)
             self.sessionQuotaLogger.debug("Codex session notifications disabled; cleared notification baseline")
             return
@@ -73,7 +80,7 @@ extension UsageStore {
                 observedAt: snapshot.updatedAt,
                 evaluationTime: now,
                 codexOwnerKey: codexOwnerKey),
-            notificationsEnabled: self.settings.sessionQuotaNotificationsEnabled,
+            notificationsEnabled: detectionEnabled,
             forceBaseline: forceBaseline)
         self.sessionQuotaTransitionStates[provider] = evaluation.state
         if provider == .codex {
@@ -113,10 +120,28 @@ extension UsageStore {
             self.sessionQuotaLogger.info(
                 "transition \(String(describing: transition)): provider=\(providerText) " +
                     "prev=\(previousRemaining ?? -1) curr=\(currentRemaining)")
+            self.publishSessionQuotaTransition(
+                transition,
+                provider: provider,
+                sessionWindow: sessionWindow,
+                snapshot: snapshot,
+                notificationsEnabled: notificationsEnabled)
+        }
+    }
+
+    /// Posts the OS notification (only when enabled) and emits the quota_reached hook on depletion.
+    private func publishSessionQuotaTransition(
+        _ transition: SessionQuotaTransition,
+        provider: UsageProvider,
+        sessionWindow: (window: RateWindow, source: SessionQuotaWindowSource),
+        snapshot: UsageSnapshot,
+        notificationsEnabled: Bool)
+    {
+        if notificationsEnabled {
             self.sessionQuotaNotifier.post(transition: transition, provider: provider, badge: nil)
-            if transition == .depleted {
-                self.emitQuotaReachedHook(provider: provider, sessionWindow: sessionWindow, snapshot: snapshot)
-            }
+        }
+        if transition == .depleted {
+            self.emitQuotaReachedHook(provider: provider, sessionWindow: sessionWindow, snapshot: snapshot)
         }
     }
 }
