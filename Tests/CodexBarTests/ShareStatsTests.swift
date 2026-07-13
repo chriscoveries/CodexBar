@@ -233,6 +233,48 @@ struct ShareStatsTests {
         #expect(ShareStatsCardView.size.height == 630)
     }
 
+    @MainActor
+    @Test
+    func `menu only exposes share stats when the builder can render data`() throws {
+        let suite = "ShareStatsTests-menu-availability"
+        let settings = testSettingsStore(suiteName: suite)
+        settings.statusChecksEnabled = false
+        settings.providerDetectionCompleted = true
+        let metadata = ProviderRegistry.shared.metadata
+        for provider in UsageProvider.allCases {
+            guard let providerMetadata = metadata[provider] else { continue }
+            settings.setProviderEnabled(
+                provider: provider,
+                metadata: providerMetadata,
+                enabled: provider == .claude)
+        }
+
+        let store = UsageStore(
+            fetcher: UsageFetcher(environment: [:]),
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings,
+            startupBehavior: .testing,
+            environmentBase: [:])
+        store._setSnapshotForTesting(Self.usage(usedPercent: 38), provider: .claude)
+
+        let quotaOnly = Self.menuActions(store: store, settings: settings)
+        #expect(!quotaOnly.contains(.shareStats))
+
+        let localNoon = try #require(Calendar.current.date(from: DateComponents(
+            year: 2026,
+            month: 7,
+            day: 7,
+            hour: 12)))
+        store._setTokenSnapshotForTesting(Self.snapshot(
+            tokens: 732_000_000,
+            cost: 500,
+            modelName: "claude-sonnet-5",
+            projectName: "other-secret",
+            updatedAt: localNoon), provider: .claude)
+        let tokenBacked = Self.menuActions(store: store, settings: settings)
+        #expect(tokenBacked.contains(.shareStats))
+    }
+
     private static let codexSnapshot = Self.snapshot(
         tokens: 4_768_000_000,
         cost: 3750,
@@ -248,7 +290,8 @@ struct ShareStatsTests {
         tokens: Int,
         cost: Double,
         modelName: String,
-        projectName: String) -> CostUsageTokenSnapshot
+        projectName: String,
+        updatedAt: Date = Date(timeIntervalSince1970: 1_783_382_400)) -> CostUsageTokenSnapshot
     {
         CostUsageTokenSnapshot(
             sessionTokens: nil,
@@ -266,7 +309,7 @@ struct ShareStatsTests {
                     daily: [],
                     modelBreakdowns: nil),
             ],
-            updatedAt: Date(timeIntervalSince1970: 1_783_382_400))
+            updatedAt: updatedAt)
     }
 
     private static func usage(usedPercent: Double) -> UsageSnapshot {
@@ -294,6 +337,23 @@ struct ShareStatsTests {
             costUSD: cost,
             modelsUsed: [modelName],
             modelBreakdowns: [.init(modelName: modelName, costUSD: cost, totalTokens: tokens)])
+    }
+
+    @MainActor
+    private static func menuActions(store: UsageStore, settings: SettingsStore) -> [MenuDescriptor.MenuAction] {
+        MenuDescriptor.build(
+            provider: .claude,
+            store: store,
+            settings: settings,
+            account: AccountInfo(email: nil, plan: nil),
+            updateReady: false,
+            includeContextualActions: false)
+            .sections
+            .flatMap(\.entries)
+            .compactMap { entry in
+                guard case let .action(_, action) = entry else { return nil }
+                return action
+            }
     }
 
     private static var calendar: Calendar {

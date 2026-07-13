@@ -625,15 +625,16 @@ struct MenuDescriptor {
 
     private static func shareStatsAvailable(store: UsageStore) -> Bool {
         store.enabledProviders().contains { provider in
+            let usageSnapshot = store.snapshot(for: provider)
             let local = store.tokenSnapshot(for: provider)
-            let projected = store.tokenSnapshot(fromProviderSnapshot: store.snapshot(for: provider), provider: provider)
+            let projected = store.tokenSnapshot(fromProviderSnapshot: usageSnapshot, provider: provider)
             if let snapshot = local ?? projected {
                 let summary = snapshot.summary(forLastDays: 30)
-                if summary.totalTokens != nil || summary.totalCostUSD != nil || summary.totalRequests != nil {
+                if summary.totalTokens != nil || summary.totalCostUSD != nil {
                     return true
                 }
             }
-            return store.snapshot(for: provider) != nil
+            return ShareStatsReportedSpend.from(provider: provider, snapshot: usageSnapshot) != nil
         }
     }
 
