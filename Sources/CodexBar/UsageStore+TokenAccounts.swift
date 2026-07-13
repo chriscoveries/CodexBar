@@ -888,7 +888,10 @@ extension UsageStore {
             runtime: .app,
             sourceMode: sourceMode,
             includeCredits: includeCredits,
-            includeOptionalUsage: self.settings.showOptionalCreditsAndExtraUsage,
+            includeOptionalUsage: ProviderTokenAccountSelection.shouldIncludeOptionalUsage(
+                provider: provider,
+                settings: self.settings,
+                override: override),
             webTimeout: 60,
             webDebugDumpHTML: false,
             verbose: verbose,
@@ -1463,7 +1466,11 @@ extension UsageStore {
                 guard self.isCurrentProviderRefreshGeneration(provider, generation: generation) else {
                     return nil as UsageSnapshot?
                 }
-                let backfilled = labeled.backfillingResetTimes(from: self.lastKnownResetSnapshots[provider])
+                let profileStable = provider == .deepseek
+                    ? labeled.preservingDeepSeekPlatformProfiles(
+                        from: self.presentationSnapshot(for: .deepseek))
+                    : labeled
+                let backfilled = profileStable.backfillingResetTimes(from: self.lastKnownResetSnapshots[provider])
                 let warningAccountDiscriminator = Self.warningTokenAccountDiscriminator(account)
                 self.handleQuotaWarningTransitions(
                     provider: provider,
@@ -1476,6 +1483,9 @@ extension UsageStore {
                     accountDiscriminatorOverride: provider == .claude ? warningAccountDiscriminator : nil)
                 self.lastKnownResetSnapshots[provider] = backfilled
                 self.snapshots[provider] = backfilled
+                if provider == .deepseek {
+                    self.clearDeepSeekProfileTransition()
+                }
                 self.lastSourceLabels[provider] = result.sourceLabel
                 self.errors[provider] = nil
                 self.knownLimitsAvailabilityByProvider.removeValue(forKey: provider)
