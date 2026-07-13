@@ -94,6 +94,12 @@ struct ShareStatsCardView: View {
                 .font(.system(size: 14, weight: .regular, design: .rounded))
                 .foregroundStyle(self.secondary)
                 .padding(.top, 10)
+            if let monthToDateSpendUSD = self.payload.monthToDateSpendUSD {
+                Text("+\(ShareStatsFormatting.currencyUSD(monthToDateSpendUSD)) MTD reported separately")
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundStyle(ShareStatsPalette.color(at: 4))
+                    .padding(.top, 5)
+            }
             HStack {
                 Text("ACTIVITY BY SUBSCRIPTION")
                     .font(.system(size: 11, weight: .semibold, design: .rounded))
@@ -311,7 +317,8 @@ private struct ShareStatsProviderRow: View {
             metrics.append(ShareStatsFormatting.compactCount(tokens))
         }
         if let cost = self.provider.estimatedCostUSD, cost.isFinite {
-            metrics.append("~\(ShareStatsFormatting.currencyUSD(cost))")
+            let window = self.provider.spendWindow == .monthToDate ? " MTD" : ""
+            metrics.append("~\(ShareStatsFormatting.currencyUSD(cost))\(window)")
         }
         return metrics.isEmpty ? "connected" : metrics.joined(separator: " · ")
     }

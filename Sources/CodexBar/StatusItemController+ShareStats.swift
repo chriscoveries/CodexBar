@@ -69,7 +69,10 @@ extension StatusItemController {
                     ?? self.store.tokenSnapshot(
                         fromProviderSnapshot: usageSnapshot,
                         provider: provider),
-                usageSnapshot: usageSnapshot))
+                usageSnapshot: usageSnapshot,
+                reportedSpend: ShareStatsReportedSpend.from(
+                    provider: provider,
+                    snapshot: usageSnapshot)))
         }
         return sources
     }
@@ -87,6 +90,9 @@ extension StatusItemController {
             CodexPlanFormatting.displayName(rawName) ?? UsageFormatter.cleanPlanName(rawName)
         } else {
             UsageFormatter.cleanPlanName(rawName)
+        }
+        if provider == .openrouter, name.lowercased().hasPrefix("balance:") {
+            return nil
         }
         return name.isEmpty ? nil : name
     }

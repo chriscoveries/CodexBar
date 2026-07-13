@@ -126,6 +126,47 @@ struct ShareStatsTests {
             estimatedCostUSD: nil)])
     }
 
+    @Test
+    func `OpenRouter month spend stays visible and separate from trailing period total`() throws {
+        let openRouterUsage = OpenRouterUsageSnapshot(
+            totalCredits: 100,
+            totalUsage: 40,
+            balance: 60,
+            usedPercent: 40,
+            keyDataFetched: true,
+            keyLimit: nil,
+            keyUsage: nil,
+            keyUsageDaily: 1.25,
+            keyUsageWeekly: 7.50,
+            keyUsageMonthly: 18.75,
+            rateLimit: nil,
+            updatedAt: Date(timeIntervalSince1970: 1_783_382_400))
+            .toUsageSnapshot()
+        let payload = try #require(ShareStatsBuilder.make(
+            providers: [
+                ShareStatsProviderSource(
+                    providerName: "Codex",
+                    subscriptionName: "Plus",
+                    tokenSnapshot: Self.codexSnapshot,
+                    usageSnapshot: nil),
+                ShareStatsProviderSource(
+                    providerName: "OpenRouter",
+                    subscriptionName: nil,
+                    tokenSnapshot: nil,
+                    usageSnapshot: openRouterUsage,
+                    reportedSpend: ShareStatsReportedSpend.from(
+                        provider: .openrouter,
+                        snapshot: openRouterUsage)),
+            ],
+            calendar: Self.calendar))
+
+        #expect(payload.estimatedCostUSD == 3750)
+        #expect(payload.monthToDateSpendUSD == 18.75)
+        #expect(payload.providers[1].estimatedCostUSD == 18.75)
+        #expect(payload.providers[1].spendWindow == .monthToDate)
+        #expect(ShareStatsFormatting.text(payload).contains("OpenRouter: ~$18.75 MTD"))
+    }
+
     @MainActor
     @Test
     func `card uses standard social preview dimensions without invoking GPU rendering`() {

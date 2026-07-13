@@ -6,6 +6,40 @@ struct ShareStatsProviderSource: Sendable {
     let subscriptionName: String?
     let tokenSnapshot: CostUsageTokenSnapshot?
     let usageSnapshot: UsageSnapshot?
+    let reportedSpend: ShareStatsReportedSpend?
+
+    init(
+        providerName: String,
+        subscriptionName: String?,
+        tokenSnapshot: CostUsageTokenSnapshot?,
+        usageSnapshot: UsageSnapshot?,
+        reportedSpend: ShareStatsReportedSpend? = nil)
+    {
+        self.providerName = providerName
+        self.subscriptionName = subscriptionName
+        self.tokenSnapshot = tokenSnapshot
+        self.usageSnapshot = usageSnapshot
+        self.reportedSpend = reportedSpend
+    }
+}
+
+enum ShareStatsSpendWindow: Sendable, Equatable {
+    case selectedPeriod
+    case monthToDate
+}
+
+struct ShareStatsReportedSpend: Sendable, Equatable {
+    let amountUSD: Double
+    let window: ShareStatsSpendWindow
+
+    static func from(provider: UsageProvider, snapshot: UsageSnapshot?) -> Self? {
+        guard provider == .openrouter,
+              let amountUSD = snapshot?.openRouterUsage?.keyUsageMonthly,
+              amountUSD.isFinite,
+              amountUSD >= 0
+        else { return nil }
+        return Self(amountUSD: amountUSD, window: .monthToDate)
+    }
 }
 
 struct ShareStatsProviderPayload: Sendable, Equatable, Identifiable {
@@ -13,6 +47,7 @@ struct ShareStatsProviderPayload: Sendable, Equatable, Identifiable {
     let subscriptionName: String?
     let totalTokens: Int?
     let estimatedCostUSD: Double?
+    let spendWindow: ShareStatsSpendWindow?
     let activeDays: Int?
     let dailyTokens: [Int]
 
@@ -49,6 +84,14 @@ struct ShareStatsPayload: Sendable, Equatable {
         self.providers.count { $0.totalTokens != nil }
     }
 
+    var monthToDateSpendUSD: Double? {
+        let values = self.providers.compactMap { provider -> Double? in
+            guard provider.spendWindow == .monthToDate else { return nil }
+            return provider.estimatedCostUSD
+        }
+        return values.isEmpty ? nil : values.reduce(0, +)
+    }
+
     var hasShareableData: Bool {
         !self.providers.isEmpty && self.providers.contains { provider in
             provider.totalTokens != nil || provider.estimatedCostUSD != nil
@@ -83,16 +126,25 @@ enum ShareStatsBuilder {
                 }
             }
             let activeDays = dailyTokens.map { $0.count(where: { $0 > 0 }) }
+            let selectedPeriodCost = summary?.totalCostUSD
+            let reportedSpend = source.reportedSpend.flatMap { spend in
+                spend.amountUSD.isFinite && spend.amountUSD >= 0 ? spend : nil
+            }
             return ShareStatsProviderPayload(
                 providerName: source.providerName,
                 subscriptionName: source.subscriptionName,
                 totalTokens: summary?.totalTokens,
-                estimatedCostUSD: summary?.totalCostUSD,
+                estimatedCostUSD: selectedPeriodCost ?? reportedSpend?.amountUSD,
+                spendWindow: selectedPeriodCost != nil ? .selectedPeriod : reportedSpend?.window,
                 activeDays: activeDays,
                 dailyTokens: dailyTokens ?? Array(repeating: 0, count: days))
         }
         let tokenValues = providers.compactMap(\.totalTokens)
-        let costValues = providers.compactMap(\.estimatedCostUSD).filter(\.isFinite)
+        let costValues = providers.compactMap { provider -> Double? in
+            guard provider.spendWindow == .selectedPeriod else { return nil }
+            return provider.estimatedCostUSD
+        }
+        .filter(\.isFinite)
         let payload = ShareStatsPayload(
             days: days,
             periodEnd: periodEnd,
@@ -261,7 +313,8 @@ enum ShareStatsFormatting {
                 metrics.append("\(self.compactCount(tokens)) tokens")
             }
             if let cost = provider.estimatedCostUSD, cost.isFinite {
-                metrics.append("~\(self.currencyUSD(cost)) est")
+                let window = provider.spendWindow == .monthToDate ? " MTD" : " est"
+                metrics.append("~\(self.currencyUSD(cost))\(window)")
             }
             let subscription = provider.subscriptionName.map { " · \($0)" } ?? ""
             return "\(provider.providerName)\(subscription): " +
