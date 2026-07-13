@@ -9,9 +9,9 @@ read_when:
 
 ## Cadence
 - `RefreshFrequency`: Manual, 1m, 2m, 5m, 15m, 30m, Adaptive (default fallback).
-- Stored in `UserDefaults` via `SettingsStore`. A missing or unrecognized stored value resolves to Adaptive. Because the
-  old implicit 5-minute fallback was not persisted, existing installations without a stored value also transition to
-  Adaptive. Every valid stored choice, including Manual and each fixed interval, remains unchanged.
+- Stored in `UserDefaults` via `SettingsStore`. A missing or unrecognized stored value resolves to Adaptive. Existing
+  installations without a stored value also transition from the current implicit 5-minute fallback. Every valid stored
+  choice, including Manual and each fixed interval, remains unchanged.
 
 ## Behavior
 - Background refresh runs off-main and updates `UsageStore` (usage + credits + optional web scrape).
@@ -31,9 +31,9 @@ read_when:
   | Condition | Delay | Reason |
   |---|---:|---|
   | Low Power Mode enabled, or thermal state `.serious`/`.critical` | 30 min | `constrained` |
-  | Menu opened within the last 5 min (including future/clock-adjusted timestamps) | 2 min | `recentInteraction` |
-  | Menu opened 5 min–1 h ago | 5 min | `warm` |
-  | Local Codex or Claude transcript activity observed within 5 min, when the menu rule would be slower | 5 min | `codingActivity` |
+  | Menu opened at most 5 min ago (including future/clock-adjusted timestamps) | 2 min | `recentInteraction` |
+  | Menu opened more than 5 min and at most 1 h ago | 5 min | `warm` |
+  | Local Codex or Claude transcript activity observed less than 5 min ago, when the menu rule would be slower | 5 min | `codingActivity` |
   | Menu opened 1–4 h ago | 15 min | `idle` |
   | No recorded menu open, or opened 4+ h ago | 30 min | `longIdle` |
 
@@ -45,7 +45,7 @@ read_when:
 - Adaptive reuses `LocalAgentSessionScanner` every 30 seconds. The scan runs `ps` and, when needed, `lsof`, enumerates
   recent Codex rollouts, reads rollout first-line metadata and mtimes, and inspects Claude transcript metadata. When
   the Agent Sessions UI is off, CodexBar discards the resulting session records and retains only the latest `Date`.
-  Each scan considers at most 64 attributable processes, parses at most 128 Codex rollout metadata records, and keeps
+  Each scan considers at most 64 agent processes, parses at most 128 Codex rollout metadata records, and keeps
   at most 64 Claude transcript candidates per project.
   Adaptive-only scans pause under Low Power Mode and serious/critical thermal pressure. Tailscale discovery and SSH
   remain behind the explicit Agent Sessions setting. The activity timestamp is not persisted, logged, or uploaded.

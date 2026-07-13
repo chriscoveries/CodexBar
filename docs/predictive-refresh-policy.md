@@ -19,9 +19,9 @@ including Manual and each fixed interval, remains unchanged. Adaptive adjusts th
 2 and 30 minutes. Recent local Codex or Claude transcript activity caps otherwise slower unconstrained decisions at 5
 minutes.
 
-The previous implementation did not persist its implicit 5-minute fallback, so `UserDefaults` cannot distinguish a new
-installation from an existing installation that never stored a cadence. This extension intentionally moves both groups
-to Adaptive. It does not change any valid stored selection; selecting a fixed cadence or Manual remains authoritative.
+Current main does not persist its implicit 5-minute fallback in production, so `UserDefaults` cannot distinguish a new
+installation from an existing installation with no stored cadence. This extension intentionally moves both groups to
+Adaptive. It does not change any valid stored selection; selecting a fixed cadence or Manual remains authoritative.
 
 The original #1861 decision approved a menu-only opt-in policy. The 2026-07-12 extension below adds one local,
 in-memory activity timestamp and changes the fallback after the offline replay, timer integration, privacy projection,
@@ -175,7 +175,7 @@ Adaptive stores no persistent interaction history.
   rollouts; reads rollout first-line metadata and mtimes; and inspects Claude transcript metadata. This is a local
   metadata scan, not a provider request. Pause Adaptive-only scans under Low Power Mode or serious/critical thermal
   pressure; keep scanning when the user explicitly enables Agent Sessions presentation.
-- Bound each scan to the newest 64 attributable processes, 128 Codex rollout metadata records, and 64 Claude transcript
+- Bound each scan to the newest 64 agent processes, 128 Codex rollout metadata records, and 64 Claude transcript
   candidates per project. Directory metadata enumeration still scales with those known session directories, but file
   content parsing and process/transcript correlation do not grow without limit.
 - When Agent Sessions presentation is disabled, discard the full scan result after deriving the newest `Date`. Do not
@@ -250,7 +250,7 @@ or menu prewarming as part of these steps.
 - Adaptive enables local monitoring without enabling Agent Sessions presentation;
 - an Adaptive-only scan retains the newest attributable timestamp and discards complete session records;
 - Adaptive-only scans pause under Low Power Mode and serious/critical thermal pressure;
-- scanner limits cap attributable processes, Codex rollout parsing, and Claude transcript candidates;
+- scanner limits cap agent processes, Codex rollout parsing, and Claude transcript candidates;
 - remote fetch remains guarded by the explicit Agent Sessions setting;
 - a refresh-frequency change does not invalidate or retry an in-flight remote refresh.
 

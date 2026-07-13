@@ -63,7 +63,7 @@ browser-cookie web path. The web path reuses cached cookies when possible and im
 the cache is missing or rejected.
 
 ### Refresh Frequency
-- Default: Every 5 minutes (configurable in Preferences → General)
+- Default: Adaptive, between 2 and 30 minutes (configurable in Preferences → General)
 - Minimum: 1 minute
 - Cookie import happens automatically when cached cookies need refresh
 
