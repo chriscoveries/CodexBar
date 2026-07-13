@@ -115,6 +115,8 @@ extension StatusItemController {
             "refresh"
         case .refreshAugmentSession:
             "refreshAugmentSession"
+        case .shareStats:
+            "shareStats"
         case .dashboard:
             "dashboard"
         case .statusPage:

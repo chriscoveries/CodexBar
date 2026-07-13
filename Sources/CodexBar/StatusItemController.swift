@@ -216,6 +216,7 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
     }
 
     var creditsPurchaseWindow: OpenAICreditsPurchaseWindowController?
+    var shareStatsWindow: ShareStatsWindowController?
 
     var activeLoginProvider: UsageProvider? {
         didSet {

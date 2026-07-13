@@ -3,6 +3,7 @@
 ## 0.42.2 — Unreleased
 
 ### Added
+- Sharing: export a privacy-safe local card that differentiates 30-day token, estimated-cost, and plan usage across configured subscriptions.
 - sub2api: add group-key usage with daily, weekly, and monthly quotas, multi-account switching, wallet balance, and expiry details. Thanks @weirdo-adam!
 - Kimi: reuse fresh signed-in Kimi Code CLI credentials in Auto mode without refreshing or rewriting CLI-owned authentication state. Thanks @Leechael!
 
