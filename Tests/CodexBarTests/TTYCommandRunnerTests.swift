@@ -415,7 +415,7 @@ struct TTYCommandRunnerEnvTests {
     }
 
     @Test
-    func `deadline drain preserves prompt output emitted after deadline`() throws {
+    func `deadline drain preserves timeout while collecting late output`() throws {
         let fm = FileManager.default
         let dir = fm.temporaryDirectory.appendingPathComponent("codexbar-tty-\(UUID().uuidString)", isDirectory: true)
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -424,9 +424,8 @@ struct TTYCommandRunnerEnvTests {
         let scriptURL = dir.appendingPathComponent("late-output.sh")
         let script = """
         #!/bin/sh
-        /bin/sleep 0.05
+        /bin/sleep 0.12
         printf 'https://claude.ai/oauth/authorize?test=late\\n'
-        /bin/sleep 5
         """
         try script.write(to: scriptURL, atomically: true, encoding: .utf8)
         try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
