@@ -82,7 +82,7 @@ enum CostUsageJsonl {
             let reachedEOF = try autoreleasepool {
                 let chunk = try handle.read(upToCount: 256 * 1024) ?? Data()
                 if chunk.isEmpty {
-                    if hasCompleteJSONTail() {
+                    if truncated || hasCompleteJSONTail() {
                         flushLine()
                         committedOffset = startOffset + bytesRead
                     }
