@@ -852,7 +852,10 @@ public struct TTYCommandRunner {
                 usleep(60000)
             }
 
-            let exitStatusBeforeDrain: Int32? = if !stoppedEarly, !process.isRunning {
+            let exitStatusBeforeDrain: Int32? = if !stoppedEarly,
+                                                   let exitObservedAt = process.exitObservationDate,
+                                                   exitObservedAt <= deadline
+            {
                 process.finishSynchronously()
             } else {
                 nil
