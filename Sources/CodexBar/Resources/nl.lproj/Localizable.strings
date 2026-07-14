@@ -397,6 +397,8 @@
 "section_refreshing" = "Vernieuwen";
 "section_alerts" = "Waarschuwingen";
 "section_celebrations" = "Vieringen";
+"confetti_palette_color" = "Kleur %d";
+"confetti_palette_hint" = "Voer 2–3 #RRGGBB-waarden in.";
 "section_icon" = "Pictogram";
 "section_combined_icon" = "Gecombineerd pictogram";
 "section_animation" = "Animatie";

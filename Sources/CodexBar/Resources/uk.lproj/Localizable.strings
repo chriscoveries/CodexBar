@@ -397,6 +397,8 @@
 "section_refreshing" = "Оновлення";
 "section_alerts" = "Сповіщення";
 "section_celebrations" = "Святкування";
+"confetti_palette_color" = "Колір %d";
+"confetti_palette_hint" = "Введіть 2–3 значення #RRGGBB.";
 "section_icon" = "Значок";
 "section_combined_icon" = "Об’єднаний значок";
 "section_animation" = "Анімація";

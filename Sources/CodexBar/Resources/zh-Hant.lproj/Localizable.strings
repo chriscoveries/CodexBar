@@ -405,6 +405,8 @@
 "section_refreshing" = "重新整理";
 "section_alerts" = "提醒";
 "section_celebrations" = "慶祝";
+"confetti_palette_color" = "顏色 %d";
+"confetti_palette_hint" = "輸入 2–3 個 #RRGGBB 值。";
 "section_icon" = "圖示";
 "section_combined_icon" = "合併圖示";
 "section_animation" = "動畫";

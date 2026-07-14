@@ -450,7 +450,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         resetKind: String)
     {
         let origin = self.statusController?.celebrationOriginPoint(for: provider)
-        let palette = ProviderDescriptorRegistry.descriptor(for: provider).branding.confettiPalette
+        let palette = self.settings?.confettiPalette(for: provider)
+            ?? ProviderDescriptorRegistry.descriptor(for: provider).branding.confettiPalette
         self.confettiLogger.info(
             "Triggering confetti",
             metadata: [

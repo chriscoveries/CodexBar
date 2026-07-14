@@ -44,6 +44,7 @@ struct SettingsDefaultsState {
     var randomBlinkEnabled: Bool
     var confettiOnSessionLimitResetsEnabled: Bool
     var confettiOnWeeklyLimitResetsEnabled: Bool
+    var confettiPaletteOverridesRaw: [String: [String]]
     var menuBarShowsHighestUsage: Bool
     var claudeOAuthKeychainPromptModeRaw: String?
     var claudeOAuthKeychainReadStrategyRaw: String?

@@ -400,6 +400,8 @@
 "section_refreshing" = "Penyegaran";
 "section_alerts" = "Peringatan";
 "section_celebrations" = "Perayaan";
+"confetti_palette_color" = "Warna %d";
+"confetti_palette_hint" = "Masukkan 2–3 nilai #RRGGBB.";
 "section_icon" = "Ikon";
 "section_combined_icon" = "Ikon gabungan";
 "section_animation" = "Animasi";

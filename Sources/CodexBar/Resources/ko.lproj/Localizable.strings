@@ -395,6 +395,8 @@
 "section_refreshing" = "새로 고침";
 "section_alerts" = "알림";
 "section_celebrations" = "축하";
+"confetti_palette_color" = "색상 %d";
+"confetti_palette_hint" = "#RRGGBB 값 2~3개를 입력하세요.";
 "section_icon" = "아이콘";
 "section_combined_icon" = "통합 아이콘";
 "section_animation" = "애니메이션";

@@ -400,6 +400,8 @@
 "section_refreshing" = "การรีเฟรช";
 "section_alerts" = "การแจ้งเตือน";
 "section_celebrations" = "การเฉลิมฉลอง";
+"confetti_palette_color" = "สี %d";
+"confetti_palette_hint" = "ป้อนค่า #RRGGBB 2–3 ค่า";
 "section_icon" = "ไอคอน";
 "section_combined_icon" = "ไอคอนรวม";
 "section_animation" = "ภาพเคลื่อนไหว";

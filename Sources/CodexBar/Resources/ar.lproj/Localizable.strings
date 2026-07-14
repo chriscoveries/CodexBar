@@ -400,6 +400,8 @@
 "section_refreshing" = "التحديث";
 "section_alerts" = "التنبيهات";
 "section_celebrations" = "الاحتفالات";
+"confetti_palette_color" = "اللون %d";
+"confetti_palette_hint" = "أدخل قيم #RRGGBB من 2 إلى 3.";
 "section_icon" = "الأيقونة";
 "section_combined_icon" = "الأيقونة المدمجة";
 "section_animation" = "الحركة";

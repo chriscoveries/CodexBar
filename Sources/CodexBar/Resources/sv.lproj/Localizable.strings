@@ -398,6 +398,8 @@
 "section_refreshing" = "Uppdatering";
 "section_alerts" = "Aviseringar";
 "section_celebrations" = "Firanden";
+"confetti_palette_color" = "Färg %d";
+"confetti_palette_hint" = "Ange 2–3 #RRGGBB-värden.";
 "section_icon" = "Ikon";
 "section_combined_icon" = "Kombinerad ikon";
 "section_animation" = "Animering";

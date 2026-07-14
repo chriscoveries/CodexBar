@@ -397,6 +397,8 @@
 "section_refreshing" = "更新";
 "section_alerts" = "アラート";
 "section_celebrations" = "お祝い";
+"confetti_palette_color" = "色 %d";
+"confetti_palette_hint" = "#RRGGBB の値を2～3個入力してください。";
 "section_icon" = "アイコン";
 "section_combined_icon" = "統合アイコン";
 "section_animation" = "アニメーション";

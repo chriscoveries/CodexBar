@@ -397,6 +397,8 @@
 "section_refreshing" = "Làm mới";
 "section_alerts" = "Cảnh báo";
 "section_celebrations" = "Ăn mừng";
+"confetti_palette_color" = "Màu %d";
+"confetti_palette_hint" = "Nhập 2–3 giá trị #RRGGBB.";
 "section_icon" = "Biểu tượng";
 "section_combined_icon" = "Biểu tượng kết hợp";
 "section_animation" = "Hoạt ảnh";

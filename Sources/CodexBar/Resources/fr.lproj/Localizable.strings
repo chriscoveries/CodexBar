@@ -397,6 +397,8 @@
 "section_refreshing" = "Actualisation";
 "section_alerts" = "Alertes";
 "section_celebrations" = "Célébrations";
+"confetti_palette_color" = "Couleur %d";
+"confetti_palette_hint" = "Saisissez 2 à 3 valeurs #RRGGBB.";
 "section_icon" = "Icône";
 "section_combined_icon" = "Icône combinée";
 "section_animation" = "Animation";

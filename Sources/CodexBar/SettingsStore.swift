@@ -178,6 +178,7 @@ final class SettingsStore {
     static let sharedDefaults = AppGroupSupport.sharedDefaults()
     static let mergedOverviewProviderLimit = 3
     static let productionCodexAccountReconciliationSnapshotCacheInterval: TimeInterval = 2
+    static let confettiPaletteOverridesKey = "providerConfettiPaletteOverrides"
     static let isRunningTests: Bool = {
         let env = ProcessInfo.processInfo.environment
         if env["XCTestConfigurationFilePath"] != nil {
@@ -452,6 +453,7 @@ extension SettingsStore {
         let hidePersonalInfo = userDefaults.object(forKey: "hidePersonalInfo") as? Bool ?? false
         let randomBlinkEnabled = userDefaults.object(forKey: "randomBlinkEnabled") as? Bool ?? false
         let confettiOnReset = Self.loadConfettiOnResetDefaults(userDefaults: userDefaults)
+        let confettiPaletteOverridesRaw = Self.loadConfettiPaletteOverrides(userDefaults: userDefaults)
         let menuBarShowsHighestUsage = userDefaults.object(forKey: "menuBarShowsHighestUsage") as? Bool ?? false
         let claudeOAuthKeychainReadStrategyRaw = Self.loadClaudeOAuthKeychainReadStrategyRaw(userDefaults: userDefaults)
         let claudeOAuthKeychainPromptModeRaw = userDefaults.string(forKey: "claudeOAuthKeychainPromptMode")
@@ -539,6 +541,7 @@ extension SettingsStore {
             randomBlinkEnabled: randomBlinkEnabled,
             confettiOnSessionLimitResetsEnabled: confettiOnReset.session,
             confettiOnWeeklyLimitResetsEnabled: confettiOnReset.weekly,
+            confettiPaletteOverridesRaw: confettiPaletteOverridesRaw,
             menuBarShowsHighestUsage: menuBarShowsHighestUsage,
             claudeOAuthKeychainPromptModeRaw: claudeOAuthKeychainPromptModeRaw,
             claudeOAuthKeychainReadStrategyRaw: claudeOAuthKeychainReadStrategyRaw,
@@ -605,6 +608,10 @@ extension SettingsStore {
         (
             session: userDefaults.object(forKey: "confettiOnSessionLimitResetsEnabled") as? Bool ?? false,
             weekly: userDefaults.object(forKey: "confettiOnWeeklyLimitResetsEnabled") as? Bool ?? false)
+    }
+
+    private static func loadConfettiPaletteOverrides(userDefaults: UserDefaults) -> [String: [String]] {
+        userDefaults.dictionary(forKey: self.confettiPaletteOverridesKey)?.compactMapValues { $0 as? [String] } ?? [:]
     }
 
     private static func loadMenuBarMetricPreferences(userDefaults: UserDefaults) -> [String: String] {

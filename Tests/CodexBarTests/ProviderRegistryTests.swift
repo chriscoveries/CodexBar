@@ -45,4 +45,15 @@ struct ProviderRegistryTests {
 
         #expect(zaiIndex < minimaxIndex)
     }
+
+    @Test
+    func `legacy provider branding initializer provides a monochrome palette`() {
+        let color = ProviderColor(hex: 0x336699)
+        let branding = ProviderBranding(
+            iconStyle: .codex,
+            iconResourceName: "ProviderIcon-example",
+            color: color)
+
+        #expect(branding.confettiPalette == [color, color])
+    }
 }

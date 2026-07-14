@@ -400,6 +400,8 @@
 "section_refreshing" = "Odświeżanie";
 "section_alerts" = "Alerty";
 "section_celebrations" = "Świętowanie";
+"confetti_palette_color" = "Kolor %d";
+"confetti_palette_hint" = "Wprowadź 2–3 wartości #RRGGBB.";
 "section_icon" = "Ikona";
 "section_combined_icon" = "Połączona ikona";
 "section_animation" = "Animacja";

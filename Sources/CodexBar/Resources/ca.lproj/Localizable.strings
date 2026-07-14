@@ -399,6 +399,8 @@
 "section_refreshing" = "Actualització";
 "section_alerts" = "Avisos";
 "section_celebrations" = "Celebracions";
+"confetti_palette_color" = "Color %d";
+"confetti_palette_hint" = "Introduïu entre 2 i 3 valors #RRGGBB.";
 "section_icon" = "Icona";
 "section_combined_icon" = "Icona combinada";
 "section_animation" = "Animació";

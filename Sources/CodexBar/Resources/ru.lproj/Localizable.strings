@@ -400,6 +400,8 @@
 "section_refreshing" = "Обновление";
 "section_alerts" = "Оповещения";
 "section_celebrations" = "Празднования";
+"confetti_palette_color" = "Цвет %d";
+"confetti_palette_hint" = "Введите 2–3 значения #RRGGBB.";
 "section_icon" = "Значок";
 "section_combined_icon" = "Объединённый значок";
 "section_animation" = "Анимация";

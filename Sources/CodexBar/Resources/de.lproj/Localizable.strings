@@ -395,6 +395,8 @@
 "section_refreshing" = "Aktualisierung";
 "section_alerts" = "Warnungen";
 "section_celebrations" = "Feiern";
+"confetti_palette_color" = "Farbe %d";
+"confetti_palette_hint" = "Geben Sie 2–3 #RRGGBB-Werte ein.";
 "section_icon" = "Symbol";
 "section_combined_icon" = "Kombiniertes Symbol";
 "section_animation" = "Animation";

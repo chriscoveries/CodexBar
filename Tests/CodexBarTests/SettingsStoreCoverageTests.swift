@@ -142,6 +142,50 @@ struct SettingsStoreCoverageTests {
     }
 
     @Test
+    func `confetti palette overrides persist independently and reset`() throws {
+        let suite = "SettingsStoreCoverageTests-confetti-palette-overrides"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        let configStore = testConfigStore(suiteName: suite)
+        let initial = Self.makeSettingsStore(userDefaults: defaults, configStore: configStore)
+        let codexDefault = initial.confettiPaletteHexValues(for: .codex)
+        let claudeDefault = initial.confettiPaletteHexValues(for: .claude)
+
+        #expect(initial.setConfettiPaletteHexValues(["#123456", "abcdef", " 00ff00 "], for: .codex))
+        #expect(initial.confettiPaletteHexValues(for: .codex) == ["#123456", "#ABCDEF", "#00FF00"])
+        #expect(initial.confettiPaletteHexValues(for: .claude) == claudeDefault)
+        #expect(initial.hasConfettiPaletteOverride(for: .codex))
+
+        let reloaded = Self.makeSettingsStore(userDefaults: defaults, configStore: configStore)
+        #expect(reloaded.confettiPaletteHexValues(for: .codex) == ["#123456", "#ABCDEF", "#00FF00"])
+        #expect(reloaded.confettiPaletteHexValues(for: .claude) == claudeDefault)
+
+        reloaded.resetConfettiPalette(for: .codex)
+        #expect(!reloaded.hasConfettiPaletteOverride(for: .codex))
+        #expect(reloaded.confettiPaletteHexValues(for: .codex) == codexDefault)
+    }
+
+    @Test
+    func `malformed confetti palette overrides keep provider defaults`() throws {
+        let suite = "SettingsStoreCoverageTests-malformed-confetti-palette-overrides"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        defaults.set(
+            [UsageProvider.codex.rawValue: ["#12345", "#FFFFFF"]],
+            forKey: SettingsStore.confettiPaletteOverridesKey)
+        let settings = Self.makeSettingsStore(userDefaults: defaults, configStore: testConfigStore(suiteName: suite))
+        let codexDefault = ProviderDescriptorRegistry.descriptor(for: .codex).branding.confettiPalette.map(\.hexString)
+
+        #expect(settings.confettiPaletteHexValues(for: .codex) == codexDefault)
+        #expect(!settings.setConfettiPaletteHexValues(["#12345", "#FFFFFF"], for: .codex))
+        #expect(settings.confettiPaletteHexValues(for: .codex) == codexDefault)
+
+        #expect(!settings.setConfettiPaletteHexValues(["#123456"], for: .codex))
+        #expect(!settings.setConfettiPaletteHexValues(["#123456", "#654321", "#ABCDEF", "#FEDCBA"], for: .codex))
+        #expect(settings.confettiPaletteHexValues(for: .codex) == codexDefault)
+    }
+
+    @Test
     func `multi account menu layout persists and bridges legacy show all token accounts`() throws {
         let suite = "SettingsStoreCoverageTests-multi-account-layout"
         let defaults = try #require(UserDefaults(suiteName: suite))
