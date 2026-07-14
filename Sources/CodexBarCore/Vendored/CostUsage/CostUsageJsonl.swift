@@ -6,6 +6,56 @@ enum CostUsageJsonl {
         let wasTruncated: Bool
     }
 
+    private struct JSONTailState {
+        private var containerDepth = 0
+        private var insideString = false
+        private var escaping = false
+        private var sawNonWhitespace = false
+
+        mutating func append(_ bytes: UnsafePointer<UInt8>, count: Int) {
+            for index in 0..<count {
+                self.append(bytes[index])
+            }
+        }
+
+        mutating func reset() {
+            self = Self()
+        }
+
+        var isStructurallyComplete: Bool {
+            self.sawNonWhitespace && !self.insideString && self.containerDepth == 0
+        }
+
+        private mutating func append(_ byte: UInt8) {
+            if self.insideString {
+                if self.escaping {
+                    self.escaping = false
+                } else if byte == 0x5C {
+                    self.escaping = true
+                } else if byte == 0x22 {
+                    self.insideString = false
+                }
+                return
+            }
+
+            switch byte {
+            case 0x20, 0x09, 0x0D:
+                return
+            case 0x22:
+                self.sawNonWhitespace = true
+                self.insideString = true
+            case 0x7B, 0x5B:
+                self.sawNonWhitespace = true
+                self.containerDepth += 1
+            case 0x7D, 0x5D:
+                self.sawNonWhitespace = true
+                self.containerDepth = max(0, self.containerDepth - 1)
+            default:
+                self.sawNonWhitespace = true
+            }
+        }
+    }
+
     @discardableResult
     static func scan(
         fileURL: URL,
@@ -48,10 +98,12 @@ enum CostUsageJsonl {
         var truncated = false
         var bytesRead: Int64 = 0
         var committedOffset = startOffset
+        var jsonTailState = JSONTailState()
 
         func appendSegment(_ bytes: UnsafePointer<UInt8>, count: Int) {
             guard count > 0 else { return }
             lineBytes += count
+            jsonTailState.append(bytes, count: count)
             if current.count < prefixBytes {
                 let appendCount = min(prefixBytes - current.count, count)
                 if appendCount > 0 {
@@ -70,10 +122,17 @@ enum CostUsageJsonl {
             current.removeAll(keepingCapacity: true)
             lineBytes = 0
             truncated = false
+            jsonTailState.reset()
         }
 
         func hasCompleteJSONTail() -> Bool {
-            guard !truncated, lineBytes == current.count else { return false }
+            if truncated {
+                // The full record is intentionally not retained. Its structural state is enough
+                // to keep a still-open object or string retriable without changing the old
+                // behavior for complete records that exceed the safety limit.
+                return jsonTailState.isStructurallyComplete
+            }
+            guard lineBytes == current.count else { return false }
             return (try? JSONSerialization.jsonObject(with: current, options: [.fragmentsAllowed])) != nil
         }
 
@@ -82,7 +141,7 @@ enum CostUsageJsonl {
             let reachedEOF = try autoreleasepool {
                 let chunk = try handle.read(upToCount: 256 * 1024) ?? Data()
                 if chunk.isEmpty {
-                    if truncated || hasCompleteJSONTail() {
+                    if hasCompleteJSONTail() {
                         flushLine()
                         committedOffset = startOffset + bytesRead
                     }

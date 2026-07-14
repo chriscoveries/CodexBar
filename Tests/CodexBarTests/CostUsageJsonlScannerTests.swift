@@ -144,6 +144,48 @@ struct CostUsageJsonlScannerTests {
         #expect(endOffset == Int64(Data(record.utf8).count))
     }
 
+    @Test
+    func `jsonl scanner retries a truncated incomplete final record after append`() throws {
+        let root = try self.makeTemporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let fileURL = root.appendingPathComponent("truncated-appending.jsonl", isDirectory: false)
+        let initial = #"{"message":"\#(String(repeating: "x", count: 256))"#
+        try initial.write(to: fileURL, atomically: true, encoding: .utf8)
+
+        var firstPass: [CostUsageJsonl.Line] = []
+        let resumeOffset = try CostUsageJsonl.scan(
+            fileURL: fileURL,
+            maxLineBytes: 64,
+            prefixBytes: 64)
+        { line in
+            firstPass.append(line)
+        }
+
+        #expect(firstPass.isEmpty)
+        #expect(resumeOffset == 0)
+
+        let completion = #""}"# + "\n"
+        let handle = try FileHandle(forWritingTo: fileURL)
+        defer { try? handle.close() }
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data(completion.utf8))
+
+        var secondPass: [CostUsageJsonl.Line] = []
+        let endOffset = try CostUsageJsonl.scan(
+            fileURL: fileURL,
+            offset: resumeOffset,
+            maxLineBytes: 64,
+            prefixBytes: 64)
+        { line in
+            secondPass.append(line)
+        }
+
+        #expect(secondPass.count == 1)
+        #expect(secondPass[0].wasTruncated)
+        #expect(endOffset == Int64(Data((initial + completion).utf8).count))
+    }
+
     private func makeTemporaryRoot() throws -> URL {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(
             "codexbar-cost-usage-jsonl-\(UUID().uuidString)",
