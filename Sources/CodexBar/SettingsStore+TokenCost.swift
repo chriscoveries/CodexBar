@@ -13,12 +13,7 @@ extension SettingsStore {
     }
 
     func applyTokenCostDefaultIfNeeded() {
-        // Skip the first-launch auto-enable under tests: it scans the real home directory for usage
-        // sources and, when it finds them, writes `costUsageEnabled` mid-startup. That write trips the
-        // background-work settings observer and adds a second, machine-dependent startup refresh, which
-        // flakes exact-count/version assertions (e.g. AdaptiveRefreshTimerTests, CodexAccountMenu…) on
-        // developer machines that have real usage logs. Tests cover the detection logic directly via
-        // `hasAnyTokenCostUsageSources`. Mirrors the other `isRunningTests` defaults in `SettingsStore`.
+        // Tests cover detection directly; skip filesystem-driven auto-enablement to keep startup deterministic.
         guard !Self.isRunningTests else { return }
         // Settings are persisted in UserDefaults.standard.
         guard UserDefaults.standard.object(forKey: "tokenCostUsageEnabled") == nil else { return }
