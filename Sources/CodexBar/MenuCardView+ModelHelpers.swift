@@ -493,7 +493,7 @@ extension UsageMenuCardView.Model {
         return Self.displayableWeeklyPace(UsagePace.weekly(
             window: window,
             now: input.now,
-            defaultWindowMinutes: self.weeklyWindowMinutes,
+            defaultWindowMinutes: 10080,
             workDays: input.workDaysPerWeek))
     }
 
@@ -514,7 +514,7 @@ extension UsageMenuCardView.Model {
         let resolved = pace ?? UsagePace.weekly(
             window: paceWindow,
             now: input.now,
-            defaultWindowMinutes: self.weeklyWindowMinutes,
+            defaultWindowMinutes: 10080,
             workDays: input.workDaysPerWeek)
         guard let resolved = Self.displayableWeeklyPace(resolved) else { return nil }
         return Self.weeklyPaceDetail(
@@ -525,26 +525,18 @@ extension UsageMenuCardView.Model {
             showUsed: input.usageBarsShowUsed)
     }
 
-    private static let weeklyWindowMinutes = 7 * 24 * 60
     private static let monthlyWindowSentinelMinutes = 30 * 24 * 60
 
     private static func supportsResetWindowPace(provider: UsageProvider, window: RateWindow, now: Date) -> Bool {
         switch provider {
         case .cursor:
-            return window.windowMinutes != nil
+            window.windowMinutes != nil
         case .grok:
-            guard GrokProviderDescriptor.primaryLabel(window: window, now: now) == "Weekly",
-                  let resetsAt = window.resetsAt
-            else { return false }
-            let windowMinutes = window.windowMinutes ?? self.weeklyWindowMinutes
-            let timeUntilReset = resetsAt.timeIntervalSince(now)
-            return windowMinutes > 0
-                && timeUntilReset > 0
-                && timeUntilReset <= TimeInterval(windowMinutes) * 60
+            GrokProviderDescriptor.primaryLabel(window: window, now: now) == "Weekly"
         case .alibaba, .alibabatokenplan, .doubao, .opencodego:
-            return window.windowMinutes == self.monthlyWindowSentinelMinutes
+            window.windowMinutes == self.monthlyWindowSentinelMinutes
         default:
-            return false
+            false
         }
     }
 
