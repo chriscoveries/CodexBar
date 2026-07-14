@@ -830,28 +830,6 @@ final class UsageStore {
         case antigravityLegacy
     }
 
-    struct QuotaWarningStateKey: Hashable {
-        let provider: UsageProvider
-        let window: QuotaWarningWindow
-        /// Distinguishes independent extra rate windows that share a provider/window lane
-        /// (e.g. multiple `claude-weekly-scoped-*` windows) so their fired-threshold state
-        /// does not clobber each other or the primary session/weekly lanes. `nil` for the
-        /// primary session and weekly lanes.
-        let windowID: String?
-
-        init(provider: UsageProvider, window: QuotaWarningWindow, windowID: String? = nil) {
-            self.provider = provider
-            self.window = window
-            self.windowID = windowID
-        }
-    }
-
-    struct QuotaWarningState {
-        var lastRemaining: Double?
-        var firedThresholds: Set<Int> = []
-        var source: SessionQuotaWindowSource?
-    }
-
     func postQuotaWarning(_ event: QuotaWarningEvent, provider: UsageProvider) {
         self.sessionQuotaNotifier.postQuotaWarning(
             event: event,
