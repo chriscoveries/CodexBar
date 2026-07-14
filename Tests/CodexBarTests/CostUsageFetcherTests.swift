@@ -4,6 +4,85 @@ import Testing
 
 struct CostUsageFetcherTests {
     @Test
+    func `fetcher returns individual codex conversations for the selected history window`() async throws {
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+
+        let day = try env.makeLocalNoon(year: 2026, month: 4, day: 8)
+        let firstURL = try env.writeCodexSessionFile(
+            day: day,
+            filename: "first.jsonl",
+            contents: env.jsonl([
+                [
+                    "type": "session_meta",
+                    "timestamp": env.isoString(for: day),
+                    "payload": ["session_id": "first-session"],
+                ],
+                [
+                    "type": "event_msg",
+                    "timestamp": env.isoString(for: day.addingTimeInterval(1)),
+                    "payload": [
+                        "type": "token_count",
+                        "info": [
+                            "model": "openai/gpt-5.4",
+                            "last_token_usage": [
+                                "input_tokens": 100,
+                                "cached_input_tokens": 20,
+                                "output_tokens": 10,
+                            ],
+                        ],
+                    ],
+                ],
+            ]))
+        let secondURL = try env.writeCodexSessionFile(
+            day: day,
+            filename: "second.jsonl",
+            contents: env.jsonl([
+                [
+                    "type": "session_meta",
+                    "timestamp": env.isoString(for: day),
+                    "payload": ["session_id": "second-session"],
+                ],
+                [
+                    "type": "event_msg",
+                    "timestamp": env.isoString(for: day.addingTimeInterval(1)),
+                    "payload": [
+                        "type": "token_count",
+                        "info": [
+                            "model": "openai/gpt-5.4",
+                            "last_token_usage": [
+                                "input_tokens": 40,
+                                "cached_input_tokens": 5,
+                                "output_tokens": 5,
+                            ],
+                        ],
+                    ],
+                ],
+            ]))
+        try FileManager.default.setAttributes(
+            [.modificationDate: day.addingTimeInterval(10)],
+            ofItemAtPath: firstURL.path)
+        try FileManager.default.setAttributes(
+            [.modificationDate: day.addingTimeInterval(20)],
+            ofItemAtPath: secondURL.path)
+
+        let snapshot = try await CostUsageFetcher.loadTokenSnapshot(
+            provider: .codex,
+            now: day,
+            historyDays: 1,
+            scannerOptions: CostUsageScanner.Options(cacheRoot: env.cacheRoot))
+
+        #expect(snapshot.sessions.map(\.sessionID) == ["second-session", "first-session"])
+        let first = try #require(snapshot.sessions.first(where: { $0.sessionID == "first-session" }))
+        #expect(first.inputTokens == 100)
+        #expect(first.cachedInputTokens == 20)
+        #expect(first.outputTokens == 10)
+        #expect(first.totalTokens == 110)
+        #expect(first.modelBreakdowns.map(\.modelName) == ["gpt-5.4"])
+        #expect(first.costUSD != nil)
+    }
+
+    @Test
     func `fetcher scopes codex history to selected codex home`() async throws {
         let env = try CostUsageTestEnvironment()
         defer { env.cleanup() }

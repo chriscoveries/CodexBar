@@ -244,12 +244,18 @@ public struct CostUsageFetcher: Sendable {
             }
 
             var projects: [CostUsageProjectBreakdown] = []
+            var sessions: [CostUsageSessionBreakdown] = []
             var piDaily: CostUsageDailyReport?
             if provider == .codex {
                 let cache = CostUsageCacheIO.load(provider: .codex, cacheRoot: scanOptions.cacheRoot)
+                let range = CostUsageScanner.CostUsageDayRange(since: since, until: until)
                 projects = CostUsageScanner.buildCodexProjectBreakdownsFromCache(
                     cache: cache,
-                    range: CostUsageScanner.CostUsageDayRange(since: since, until: until),
+                    range: range,
+                    modelsDevCacheRoot: scanOptions.cacheRoot)
+                sessions = CostUsageScanner.buildCodexSessionBreakdownsFromCache(
+                    cache: cache,
+                    range: range,
                     modelsDevCacheRoot: scanOptions.cacheRoot)
             }
             if provider == .codex || provider == .claude {
@@ -270,7 +276,7 @@ public struct CostUsageFetcher: Sendable {
                 projects = Self.mergedProjectBreakdowns(
                     projects + [piDaily.flatMap(Self.unknownProjectBreakdown(from:))].compactMap(\.self))
             }
-            return (daily: daily, projects: projects)
+            return (daily: daily, projects: projects, sessions: sessions)
         }
 
         if retryUnknownPricing,
@@ -301,7 +307,8 @@ public struct CostUsageFetcher: Sendable {
             from: scanResult.daily,
             now: now,
             historyDays: clampedHistoryDays,
-            projects: scanResult.projects)
+            projects: scanResult.projects,
+            sessions: scanResult.sessions)
     }
 
     private struct UnknownPricingRefreshRequest: Sendable {
@@ -401,6 +408,7 @@ public struct CostUsageFetcher: Sendable {
             let cache = CostUsageCacheIO.load(provider: .codex, cacheRoot: options.cacheRoot)
             var reports: [CostUsageDailyReport] = []
             var projects: [CostUsageProjectBreakdown] = []
+            var sessions: [CostUsageSessionBreakdown] = []
             // Raw inputs for the derived result fields below: the native cache's own scan
             // time, every constituent scan time, and whether a second source joined the merge.
             var nativeScanAt: Date?
@@ -422,6 +430,10 @@ public struct CostUsageFetcher: Sendable {
                         nativeScanAt = scanAt
                         scanTimes.append(scanAt)
                     }
+                    sessions = CostUsageScanner.buildCodexSessionBreakdownsFromCache(
+                        cache: cache,
+                        range: range,
+                        modelsDevCacheRoot: options.cacheRoot)
                     if cache.codexProjectMetadataVersion == CostUsageScanner.codexProjectMetadataVersion {
                         projects.append(contentsOf: CostUsageScanner.buildCodexProjectBreakdownsFromCache(
                             cache: cache,
@@ -459,6 +471,7 @@ public struct CostUsageFetcher: Sendable {
                     now: now,
                     historyDays: clampedHistoryDays,
                     projects: Self.mergedProjectBreakdowns(projects),
+                    sessions: sessions,
                     updatedAt: scanTimes.min()),
                 lastRefreshAt: piMerged ? nil : nativeScanAt)
         }
@@ -484,6 +497,7 @@ public struct CostUsageFetcher: Sendable {
         historyDays: Int = 30,
         useCurrentLocalDayForSession: Bool = true,
         projects: [CostUsageProjectBreakdown] = [],
+        sessions: [CostUsageSessionBreakdown] = [],
         updatedAt: Date? = nil) -> CostUsageTokenSnapshot
     {
         let sessionEntry = useCurrentLocalDayForSession
@@ -520,6 +534,7 @@ public struct CostUsageFetcher: Sendable {
             historyDays: historyDays,
             daily: daily.data,
             projects: projects,
+            sessions: sessions,
             updatedAt: updatedAt ?? now)
     }
 
