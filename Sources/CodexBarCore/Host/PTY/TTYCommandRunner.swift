@@ -741,6 +741,7 @@ public struct TTYCommandRunner {
             var lastEnter = Date()
             var stoppedEarly = false
             var urlSeen = false
+            var ptyClosed = false
             var triggeredSends = Set<Data>()
             var recentText = ""
             var lastOutputAt = Date()
@@ -802,11 +803,15 @@ public struct TTYCommandRunner {
             while Date() < deadline {
                 try checkCancellation()
                 let readResult = readDrainChunk()
-                let newData = switch readResult {
+                let newData: Data
+                switch readResult {
                 case let .data(data):
-                    data
-                case .wouldBlock, .closed:
-                    Data()
+                    newData = data
+                case .wouldBlock:
+                    newData = Data()
+                case .closed:
+                    ptyClosed = true
+                    newData = Data()
                 }
                 if processNonCodexChunk(newData, allowSends: true, allowStop: true) {
                     stoppedEarly = true
@@ -826,9 +831,18 @@ public struct TTYCommandRunner {
                     lastEnter = Date()
                 }
 
-                if case .closed = readResult, !process.isRunning { break }
+                if ptyClosed, !process.isRunning { break }
                 if !process.isRunning { break }
                 usleep(60000)
+            }
+
+            func drainNonCodexOutput(for duration: TimeInterval) {
+                let drainFor = max(0, duration)
+                guard drainFor > 0 else { return }
+                Self.drainRemainingOutput(
+                    until: Date().addingTimeInterval(drainFor),
+                    readChunk: readDrainChunk,
+                    processChunk: { _ = processNonCodexChunk($0, allowSends: false, allowStop: false) })
             }
 
             if stoppedEarly {
@@ -849,21 +863,16 @@ public struct TTYCommandRunner {
                         usleep(50000)
                     }
                 }
-            } else if !process.isRunning {
+            } else {
                 // PTY-backed scripts can exit before their final echo becomes readable on the parent side.
                 // Give the kernel a brief non-blocking drain window so we don't lose the last line of output.
-                let drainFor = max(0, min(0.2, deadline.timeIntervalSinceNow))
-                if drainFor > 0 {
-                    Self.drainRemainingOutput(
-                        until: Date().addingTimeInterval(drainFor),
-                        readChunk: readDrainChunk,
-                        processChunk: { _ = processNonCodexChunk($0, allowSends: false, allowStop: false) })
-                }
+                drainNonCodexOutput(for: min(0.5, max(0.2, options.settleAfterStop)))
             }
 
             let text = String(data: buffer, encoding: .utf8) ?? ""
-            let completion: Result.Completion = if !process.isRunning {
-                .processExited(status: process.finishSynchronously() ?? 1)
+            let exitStatus = !process.isRunning ? process.finishSynchronously() : nil
+            let completion: Result.Completion = if let exitStatus {
+                .processExited(status: exitStatus)
             } else if terminatedForIdle {
                 .idleTimeout
             } else if stoppedEarly {
