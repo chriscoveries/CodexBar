@@ -178,6 +178,34 @@ extension UsageStore {
         }
     }
 
+    /// Stable in-memory discriminator for per-account quota_low hook state.
+    ///
+    /// Composes the full provider identity (email, organization, login method)
+    /// rather than the email alone, so accounts without an email, or sharing one
+    /// identity field, still key independently when any other field differs. Only
+    /// truly identical identities (same account) share a baseline. Returns nil when
+    /// no identity field is known. Never logged or forwarded to a hook.
+    nonisolated static func quotaHookAccountKey(
+        provider: UsageProvider,
+        snapshot: UsageSnapshot) -> String?
+    {
+        guard let identity = snapshot.identity(for: provider) else { return nil }
+        return self.quotaHookAccountKey(
+            email: identity.accountEmail,
+            organization: identity.accountOrganization,
+            loginMethod: identity.loginMethod)
+    }
+
+    nonisolated static func quotaHookAccountKey(
+        email: String?,
+        organization: String?,
+        loginMethod: String?) -> String?
+    {
+        let fields = [email, organization, loginMethod]
+        guard fields.contains(where: { $0?.isEmpty == false }) else { return nil }
+        return fields.map { $0 ?? "" }.joined(separator: "\u{1F}")
+    }
+
     /// True when the user has an enabled hook rule for this event and provider.
     ///
     /// Used to run quota transition detection even when the matching notification

@@ -50,9 +50,9 @@ extension UsageStore {
         }
 
         if hooksActive {
-            // Stable, unredacted account identifier used only as an in-memory key so
+            // Stable, unredacted account discriminator used only as an in-memory key so
             // separate accounts on one provider track their crossings independently.
-            let accountKey = snapshot.accountEmail(for: provider)
+            let accountKey = Self.quotaHookAccountKey(provider: provider, snapshot: snapshot)
             self.dispatchQuotaLowHooks(
                 provider: provider,
                 lane: QuotaLowHookLane(
