@@ -56,9 +56,9 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
         var autosaveName: String {
             switch self {
             case .merged:
-                "codexbar-merged"
+                StatusItemController.scopedStatusItemAutosaveName("codexbar-merged")
             case let .provider(provider):
-                "codexbar-\(provider.rawValue)"
+                StatusItemController.scopedStatusItemAutosaveName("codexbar-\(provider.rawValue)")
             }
         }
 
@@ -70,6 +70,16 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
                 "\(StatusItemController.statusItemAccessibilityIdentifierPrefix).\(provider.rawValue)"
             }
         }
+    }
+
+    private nonisolated static func scopedStatusItemAutosaveName(_ name: String) -> String {
+        guard let namespace = ProcessInfo.processInfo.environment["CODEXBAR_STATUS_ITEM_NAMESPACE"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !namespace.isEmpty
+        else {
+            return name
+        }
+        return "\(namespace).\(name)"
     }
 
     nonisolated static func isDebugApp(bundleIdentifier: String?) -> Bool {
