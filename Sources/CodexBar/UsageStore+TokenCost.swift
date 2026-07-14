@@ -112,12 +112,10 @@ extension UsageStore {
         guard provider == .codex else {
             return (nil, provider.rawValue)
         }
-        let homePath = self.settings.activeManagedCodexRemoteHomePath?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let homePath, !homePath.isEmpty else {
-            return (nil, "codex:ambient")
-        }
-        return (homePath, "codex:managed:\(homePath)")
+        // The cost ledger represents locally executed Codex sessions, including sessions
+        // authenticated with an organization API key. It must remain independent from the
+        // selected managed account, which only controls the remote quota and web-dashboard path.
+        return (nil, "codex:ambient")
     }
 
     func tokenSnapshot(

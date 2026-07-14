@@ -5,7 +5,7 @@ import Testing
 
 struct MenuCardModelCodexDegradedQuotaTests {
     @Test
-    func `codex local token usage keeps remote quota unavailable error visible`() throws {
+    func `codex local token usage hides remote quota unavailable error`() throws {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let metadata = try #require(ProviderDefaults.metadata[.codex])
         let tokenSnapshot = CostUsageTokenSnapshot(
@@ -46,8 +46,8 @@ struct MenuCardModelCodexDegradedQuotaTests {
             now: now))
 
         #expect(model.placeholder == nil)
-        #expect(model.subtitleStyle == .error)
-        #expect(model.subtitleText == "Codex usage is temporarily unavailable. Try refreshing.")
+        #expect(model.subtitleStyle == .info)
+        #expect(model.subtitleText == "Not fetched yet")
         #expect(model.usesStackedDetailLayout)
         #expect(model.tokenUsage?.sessionLine.contains("$1.08") == true)
         #expect(model.tokenUsage?.sessionLine.contains("tokens") == true)
@@ -145,7 +145,7 @@ struct MenuCardModelCodexDegradedQuotaTests {
     }
 
     @Test
-    func `codex local token usage preserves mapped transport error`() throws {
+    func `codex local token usage hides mapped remote transport error`() throws {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let metadata = try #require(ProviderDefaults.metadata[.codex])
         let tokenSnapshot = CostUsageTokenSnapshot(
@@ -178,8 +178,8 @@ struct MenuCardModelCodexDegradedQuotaTests {
             now: now))
 
         #expect(model.placeholder == nil)
-        #expect(model.subtitleStyle == .error)
-        #expect(model.subtitleText == "Codex usage is temporarily unavailable. Try refreshing.")
+        #expect(model.subtitleStyle == .info)
+        #expect(model.subtitleText == "Not fetched yet")
         #expect(model.tokenUsage?.sessionLine.contains("$1.08") == true)
     }
 

@@ -73,6 +73,21 @@ struct CodexProviderImplementation: ProviderImplementation {
 
         return [
             ProviderSettingsToggleDescriptor(
+                id: "codex-local-session-cost-ledger",
+                title: "Local session cost estimates",
+                subtitle: [
+                    "Reads local session token records to estimate spend.",
+                    "Works with organization API keys and does not require OpenAI billing or administrator access.",
+                    "Model prices refresh from the public models.dev catalog and fall back to bundled rates offline.",
+                ].joined(separator: " "),
+                binding: context.boolBinding(\.costUsageEnabled),
+                statusText: nil,
+                actions: [],
+                isVisible: nil,
+                onChange: nil,
+                onAppDidBecomeActive: nil,
+                onAppearWhenEnabled: nil),
+            ProviderSettingsToggleDescriptor(
                 id: "codex-historical-tracking",
                 title: "Historical tracking",
                 subtitle: "Stores local Codex usage history (8 weeks) to personalize Pace predictions.",
@@ -161,8 +176,8 @@ struct CodexProviderImplementation: ProviderImplementation {
         return [
             ProviderSettingsPickerDescriptor(
                 id: "codex-usage-source",
-                title: "Usage source",
-                subtitle: "Auto falls back to the next source if the preferred one fails.",
+                title: "Quota usage source",
+                subtitle: "Controls live session and weekly quota fetching only. Local session cost estimates work independently.",
                 binding: usageBinding,
                 options: usageOptions,
                 isVisible: nil,

@@ -58,8 +58,17 @@ struct ProviderSettingsDescriptorTests {
         let pickers = CodexProviderImplementation().settingsPickers(context: context)
         let toggles = CodexProviderImplementation().settingsToggles(context: context)
         #expect(pickers.contains(where: { $0.id == "codex-usage-source" }))
+        let usagePicker = try #require(pickers.first(where: { $0.id == "codex-usage-source" }))
+        #expect(usagePicker.title == "Quota usage source")
+        #expect(usagePicker.subtitle.contains("Local session cost estimates work independently"))
         let cookiePicker = try #require(pickers.first(where: { $0.id == "codex-cookie-source" }))
         #expect(cookiePicker.placement == .connection)
+        let localLedgerToggle = try #require(toggles.first(where: { $0.id == "codex-local-session-cost-ledger" }))
+        #expect(localLedgerToggle.title == "Local session cost estimates")
+        #expect(localLedgerToggle.subtitle.contains("organization API keys"))
+        #expect(!localLedgerToggle.binding.wrappedValue)
+        localLedgerToggle.binding.wrappedValue = true
+        #expect(fixture.settings.costUsageEnabled)
         #expect(toggles.contains(where: { $0.id == "codex-historical-tracking" }))
         let sparkToggle = try #require(toggles.first(where: { $0.id == "codex-spark-usage-visible" }))
         #expect(sparkToggle.title == "Show Codex Spark usage")
@@ -72,6 +81,19 @@ struct ProviderSettingsDescriptorTests {
 
         fixture.settings.showOptionalCreditsAndExtraUsage = false
         #expect(sparkToggle.isEnabled?() == false)
+    }
+
+    @Test
+    func `codex local ledger ignores the managed account home`() throws {
+        let fixture = try self.makeSettingsFixture(suite: "ProviderSettingsDescriptorTests-codex-local-ledger")
+        fixture.settings._test_activeManagedCodexRemoteHomePath = "/tmp/managed-codex-home"
+        fixture.settings.codexActiveSource = .managedAccount(id: UUID())
+        defer { fixture.settings._test_activeManagedCodexRemoteHomePath = nil }
+
+        let scope = fixture.store.tokenCostScope(for: .codex)
+
+        #expect(scope.codexHomePath == nil)
+        #expect(scope.signature == "codex:ambient")
     }
 
     @Test
