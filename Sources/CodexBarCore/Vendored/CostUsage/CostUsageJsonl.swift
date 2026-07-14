@@ -12,12 +12,6 @@ enum CostUsageJsonl {
         private var escaping = false
         private var sawNonWhitespace = false
 
-        mutating func append(_ bytes: UnsafePointer<UInt8>, count: Int) {
-            for index in 0..<count {
-                self.append(bytes[index])
-            }
-        }
-
         mutating func reset() {
             self = Self()
         }
@@ -26,7 +20,7 @@ enum CostUsageJsonl {
             self.sawNonWhitespace && !self.insideString && self.containerDepth == 0
         }
 
-        private mutating func append(_ byte: UInt8) {
+        mutating func append(_ byte: UInt8) {
             if self.insideString {
                 if self.escaping {
                     self.escaping = false
@@ -103,7 +97,6 @@ enum CostUsageJsonl {
         func appendSegment(_ bytes: UnsafePointer<UInt8>, count: Int) {
             guard count > 0 else { return }
             lineBytes += count
-            jsonTailState.append(bytes, count: count)
             if current.count < prefixBytes {
                 let appendCount = min(prefixBytes - current.count, count)
                 if appendCount > 0 {
@@ -161,6 +154,8 @@ enum CostUsageJsonl {
                             flushLine()
                             committedOffset = chunkStartOffset + Int64(index + 1)
                             segmentStart = index + 1
+                        } else {
+                            jsonTailState.append(base[index])
                         }
                         index += 1
                     }
