@@ -4,6 +4,7 @@
 
 ### Added
 - ZenMux: add Management API usage with five-hour and weekly quotas, subscription expiry, and USD PAYG balance. Thanks @kays0x!
+- CLI: show opt-in claude-swap multi-account usage in full and brief terminal cards while preserving explicit account/source overrides and ambient fallback diagnostics.
 
 ### Fixed
 - Claude: preserve each account’s last-good OAuth usage during rate limits and isolate retry cooldowns per credential. Thanks @ruushu!
