@@ -97,7 +97,7 @@ struct MenuCardProviderRegressionTests {
         #expect(model.placeholder == nil)
         #expect(model.planText == "API key")
         #expect(model.usageNotes == [
-            "API key verified. Sign in to Ollama in the selected browser to show Cloud quota limits.",
+            "API key verified. Cloud quotas need browser cookies. Sign in to Ollama.",
         ])
     }
 
