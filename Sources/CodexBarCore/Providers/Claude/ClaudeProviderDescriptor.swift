@@ -641,12 +641,23 @@ struct ClaudeCLIFetchStrategy: ProviderFetchStrategy {
     let hasWebFallback: Bool
 
     func isAvailable(_ context: ProviderFetchContext) async -> Bool {
-        // The interactive Claude REPL can open browser OAuth when it starts logged out. CLI runtime and background
-        // app Auto refreshes must establish authentication through the non-interactive status command first.
-        let requiresAuthPreflight = context.runtime == .cli || (
-            context.runtime == .app &&
-                context.sourceMode == .auto &&
-                ProviderInteractionContext.current == .background)
+        // Claude's "auth status" command is a child process that may invoke /usr/bin/security itself. A no-prompt
+        // policy in CodexBar cannot constrain that child process, so background Auto refresh must not launch it
+        // unless the user explicitly opted into Keychain access for background work.
+        let isBackgroundAutoRefresh = context.runtime == .app
+            && context.sourceMode == .auto
+            && ProviderInteractionContext.current == .background
+        if isBackgroundAutoRefresh {
+            guard !KeychainAccessGate.isDisabled,
+                  ClaudeOAuthKeychainPromptPreference.current() == .always
+            else {
+                return false
+            }
+        }
+
+        // The interactive Claude REPL can open browser OAuth when it starts logged out. CLI runtime and the
+        // explicitly opted-in background Auto path establish authentication through the status command first.
+        let requiresAuthPreflight = context.runtime == .cli || isBackgroundAutoRefresh
         guard requiresAuthPreflight else { return true }
         guard let binary = ClaudeCLIResolver.resolvedBinaryPath(environment: context.env) else { return false }
         return await ClaudeCLIAuthStatusProbe.isLoggedIn(binary: binary, environment: context.env)
