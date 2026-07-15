@@ -54,13 +54,15 @@ struct ClaudeOAuthFetchStrategyAvailabilityTests {
         let context = self.makeContext(sourceMode: .auto)
         let strategy = ClaudeOAuthFetchStrategy()
         let available = await KeychainAccessGate.withTaskOverrideForTesting(false) {
-            await ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.always) {
-                await ClaudeOAuthFetchStrategy.$nonInteractiveCredentialRecordOverride
-                    .withValue(self.expiredRecord()) {
-                        await ClaudeOAuthFetchStrategy.$claudeCLIAvailableOverride.withValue(true) {
-                            await strategy.isAvailable(context)
+            await self.withAvailabilityKeychainDoubles {
+                await ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.always) {
+                    await ClaudeOAuthFetchStrategy.$nonInteractiveCredentialRecordOverride
+                        .withValue(self.expiredRecord()) {
+                            await ClaudeOAuthFetchStrategy.$claudeCLIAvailableOverride.withValue(true) {
+                                await strategy.isAvailable(context)
+                            }
                         }
-                    }
+                }
             }
         }
         #expect(available == true)
@@ -269,11 +271,13 @@ struct ClaudeOAuthFetchStrategyAvailabilityTests {
             env: ["CLAUDE_CLI_PATH": cliURL.path])
         let strategy = ClaudeOAuthFetchStrategy()
         let available = await KeychainAccessGate.withTaskOverrideForTesting(false) {
-            await ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.always) {
-                await ClaudeOAuthFetchStrategy.$nonInteractiveCredentialRecordOverride
-                    .withValue(self.expiredRecord()) {
-                        await strategy.isAvailable(context)
-                    }
+            await self.withAvailabilityKeychainDoubles {
+                await ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.always) {
+                    await ClaudeOAuthFetchStrategy.$nonInteractiveCredentialRecordOverride
+                        .withValue(self.expiredRecord()) {
+                            await strategy.isAvailable(context)
+                        }
+                }
             }
         }
 
