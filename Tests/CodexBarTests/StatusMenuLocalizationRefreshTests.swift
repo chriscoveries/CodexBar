@@ -75,7 +75,8 @@ struct StatusMenuLocalizationRefreshTests {
         controller.menuRefreshEnabledOverrideForTesting = true
 
         #expect(Self.switcherButtons(in: menu).first?.title == "Resumen")
-        #expect(menu.items.first(where: { $0.representedObject as? String == "menuCardCost" })?.title == "Coste")
+        #expect(
+            menu.items.first(where: { $0.representedObject as? String == "menuCardCost" })?.title == "Coste (estimado)")
 
         let initialSwitcher = menu.items.first?.view as? ProviderSwitcherView
         let initialSwitcherID = initialSwitcher.map(ObjectIdentifier.init)
@@ -98,7 +99,8 @@ struct StatusMenuLocalizationRefreshTests {
         #expect(rebuildCount == 1)
         let updatedSwitcher = menu.items.first?.view as? ProviderSwitcherView
         #expect(Self.switcherButtons(in: menu).first?.title == "Overview")
-        #expect(menu.items.first(where: { $0.representedObject as? String == "menuCardCost" })?.title == "Cost")
+        #expect(
+            menu.items.first(where: { $0.representedObject as? String == "menuCardCost" })?.title == "Cost (estimated)")
         if let initialSwitcherID, let updatedSwitcher {
             #expect(initialSwitcherID != ObjectIdentifier(updatedSwitcher))
         }
