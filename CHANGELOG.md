@@ -5,6 +5,7 @@
 ### Fixed
 - Ollama: explain that API-key verification cannot show Cloud quota limits and direct users to browser-cookie mode (#2159). Thanks @kiranmagic7!
 - Claude: suppress duplicate all-model scoped quota rows that could appear as “All models only” beside Weekly.
+- Claude: keep automatic startup refreshes from interactively reading Claude Code credentials under the default “Only on user action” Keychain policy (#2115).
 
 ## 0.43.0 — 2026-07-14
 
