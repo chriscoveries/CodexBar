@@ -171,7 +171,10 @@ extension UsageMenuCardView.Model {
     static func tokenUsageHint(provider: UsageProvider) -> String? {
         switch provider {
         case .codex:
-            L("Estimated from local Codex logs for the selected account.")
+            [
+                L("Estimated from local Codex logs for the selected account."),
+                L("cost_estimate_hint"),
+            ].joined(separator: "\n")
         case .claude:
             UsageFormatter.costEstimateHint(provider: provider)
         case .vertexai:

@@ -21,8 +21,10 @@ struct StatusMenuCostMenuCardTests {
             hasSubmenu: true)
         #expect(visibleLines == [])
 
-        let fallbackTitle = StatusItemController.costMenuFallbackAttributedTitle(visibleDetailLines: visibleLines)
-        #expect(fallbackTitle.string == "Cost")
+        let fallbackTitle = StatusItemController.costMenuFallbackAttributedTitle(
+            title: "Cost (estimated)",
+            visibleDetailLines: visibleLines)
+        #expect(fallbackTitle.string == "Cost (estimated)")
     }
 
     @Test
@@ -43,7 +45,9 @@ struct StatusMenuCostMenuCardTests {
             "Cost refresh failed.",
         ])
 
-        let fallbackTitle = StatusItemController.costMenuFallbackAttributedTitle(visibleDetailLines: visibleLines)
+        let fallbackTitle = StatusItemController.costMenuFallbackAttributedTitle(
+            title: "Cost (estimated)",
+            visibleDetailLines: visibleLines)
         #expect(fallbackTitle.string.contains("Today: $74.83 - 87M tokens"))
         #expect(fallbackTitle.string.contains("Last 30 days: $4,279.64 - 5.7B tokens"))
         #expect(fallbackTitle.string.contains("Cost refresh failed."))
@@ -139,9 +143,15 @@ struct StatusMenuCostMenuCardTests {
 
         #expect(view is any MenuCardMeasuring)
         #expect(abs(view.frame.width - width) <= 0.5)
-        #expect(item.title == "Cost")
+        #expect(item.title == "Cost (estimated)")
         #expect(item.toolTip?.contains("$52,431.09") == true)
         #expect(item.submenu == nil)
+    }
+
+    @Test
+    func `cost menu title distinguishes Codex estimates from billing-backed cost`() {
+        #expect(StatusItemController.costMenuTitleForProvider(.codex) == "Cost (estimated)")
+        #expect(StatusItemController.costMenuTitleForProvider(.mistral) == "Cost")
     }
 
     private func makeSettings() -> SettingsStore {

@@ -1,4 +1,5 @@
 import AppKit
+import CodexBarCore
 import SwiftUI
 
 private struct CostMenuCardRowView: View {
@@ -32,17 +33,23 @@ extension StatusItemController {
         L("Cost")
     }
 
+    static func costMenuTitleForProvider(_ provider: UsageProvider) -> String {
+        provider == .codex ? L("cost_header_estimated") : self.costMenuTitle
+    }
+
     func makeCostMenuCardItem(
         model: UsageMenuCardView.Model,
         submenu: NSMenu?,
         width: CGFloat) -> NSMenuItem
     {
+        let title = Self.costMenuTitleForProvider(model.provider)
         let tooltipLines = Self.costMenuTooltipLines(tokenUsage: model.tokenUsage)
         let visibleDetailLines = Self.costMenuVisibleDetailLines(
             tokenUsage: model.tokenUsage,
             hasSubmenu: submenu != nil)
         guard visibleDetailLines.isEmpty == false, self.menuCardRenderingEnabledForController else {
             return Self.makeNativeCostMenuCardItem(
+                title: title,
                 visibleDetailLines: visibleDetailLines,
                 tooltipLines: tooltipLines,
                 submenu: submenu)
@@ -50,7 +57,7 @@ extension StatusItemController {
 
         let item = self.makeMenuCardItem(
             CostMenuCardRowView(
-                title: Self.costMenuTitle,
+                title: title,
                 detailLines: visibleDetailLines,
                 width: width),
             id: "menuCardCost",
@@ -60,17 +67,18 @@ extension StatusItemController {
             submenu: submenu,
             submenuIndicatorAlignment: .trailing,
             submenuIndicatorTopPadding: 0)
-        item.title = Self.costMenuTitle
+        item.title = title
         item.toolTip = tooltipLines.joined(separator: "\n")
         return item
     }
 
     private static func makeNativeCostMenuCardItem(
+        title: String,
         visibleDetailLines: [String],
         tooltipLines: [String],
         submenu: NSMenu?) -> NSMenuItem
     {
-        let item = NSMenuItem(title: Self.costMenuTitle, action: nil, keyEquivalent: "")
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
         item.isEnabled = true
         item.representedObject = "menuCardCost"
         item.submenu = submenu
@@ -82,7 +90,9 @@ extension StatusItemController {
         if #available(macOS 14.4, *) {
             item.subtitle = visibleDetailLines.joined(separator: "\n")
         } else if !visibleDetailLines.isEmpty {
-            item.attributedTitle = Self.costMenuFallbackAttributedTitle(visibleDetailLines: visibleDetailLines)
+            item.attributedTitle = Self.costMenuFallbackAttributedTitle(
+                title: title,
+                visibleDetailLines: visibleDetailLines)
         }
         return item
     }
@@ -117,9 +127,12 @@ extension StatusItemController {
             .filter { !$0.isEmpty }
     }
 
-    static func costMenuFallbackAttributedTitle(visibleDetailLines: [String]) -> NSAttributedString {
+    static func costMenuFallbackAttributedTitle(
+        title: String,
+        visibleDetailLines: [String]) -> NSAttributedString
+    {
         let detailText = visibleDetailLines.joined(separator: " | ")
-        let title = detailText.isEmpty ? self.costMenuTitle : "\(self.costMenuTitle)  \(detailText)"
+        let title = detailText.isEmpty ? title : "\(title)  \(detailText)"
         let attributedTitle = NSMutableAttributedString(
             string: title,
             attributes: [.font: NSFont.menuFont(ofSize: NSFont.systemFontSize)])
