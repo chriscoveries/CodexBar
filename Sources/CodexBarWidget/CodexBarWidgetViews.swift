@@ -209,7 +209,10 @@ enum CompactMetricFormatter {
             } ?? "—"
             let detail = entry.tokenUsage?.sessionTokens.map(WidgetFormat.tokenCount)
             let label = entry.tokenUsage.map {
-                WidgetFormat.tokenRowTitle("\($0.sessionLabel) cost", summary: $0, entryUpdatedAt: entry.updatedAt)
+                WidgetFormat.tokenRowTitle(
+                    Self.costMetricLabel($0.sessionLabel, provider: entry.provider),
+                    summary: $0,
+                    entryUpdatedAt: entry.updatedAt)
             } ?? "Today cost"
             return CompactMetricDisplay(value: value, label: label, detail: detail)
         case .last30DaysCost:
@@ -218,10 +221,17 @@ enum CompactMetricFormatter {
             } ?? "—"
             let detail = entry.tokenUsage?.last30DaysTokens.map(WidgetFormat.tokenCount)
             let label = entry.tokenUsage.map {
-                WidgetFormat.tokenRowTitle("\($0.last30DaysLabel) cost", summary: $0, entryUpdatedAt: entry.updatedAt)
+                WidgetFormat.tokenRowTitle(
+                    Self.costMetricLabel($0.last30DaysLabel, provider: entry.provider),
+                    summary: $0,
+                    entryUpdatedAt: entry.updatedAt)
             } ?? "30d cost"
             return CompactMetricDisplay(value: value, label: label, detail: detail)
         }
+    }
+
+    static func costMetricLabel(_ label: String, provider: UsageProvider) -> String {
+        provider == .codex ? label : "\(label) cost"
     }
 }
 

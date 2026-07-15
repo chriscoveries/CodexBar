@@ -56,7 +56,7 @@ struct InlineCostHistoryDashboardLabelTests {
     @Test
     func `local cost history KPI titles preserve one day and dynamic windows`() throws {
         let now = Date(timeIntervalSince1970: 1_700_179_200)
-        let metadata = try #require(ProviderDefaults.metadata[.claude])
+        let metadata = try #require(ProviderDefaults.metadata[.codex])
         let daily = [
             CostUsageDailyReport.Entry(
                 date: "2023-11-14",
@@ -145,7 +145,7 @@ struct InlineCostHistoryDashboardLabelTests {
             updatedAt: now)
 
         let model = UsageMenuCardView.Model.make(.init(
-            provider: .claude,
+            provider: .codex,
             metadata: metadata,
             snapshot: UsageSnapshot(
                 primary: nil,
@@ -218,6 +218,8 @@ struct InlineCostHistoryDashboardLabelTests {
 
         let dashboard = try #require(model.inlineUsageDashboard)
         #expect(dashboard.currencyCode == "USD")
+        #expect(dashboard.kpis[0].title == "Today · API-equivalent estimate")
+        #expect(dashboard.kpis[1].title == "30d · API-equivalent estimate")
         #expect(dashboard.detailLines.contains("not a subscription bill or plan value"))
         #expect(dashboard.detailLines.contains(
             "Local usage × public API prices · not a subscription bill or plan value"))
