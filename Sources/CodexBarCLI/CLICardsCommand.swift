@@ -179,7 +179,7 @@ extension CodexBarCLI {
                 sourceModeOverride: parsedSourceMode)
             let result = await CLIClaudeSwapCards.fetch(
                 eligible: claudeSwapEligible,
-                executablePath: claudeConfig?.claudeSwapExecutablePath ?? "",
+                executablePath: CLIClaudeSwapCards.executablePath(from: claudeConfig),
                 renderOptions: CLIClaudeSwapCardsRenderOptions(
                     status: status,
                     useColor: useColor,

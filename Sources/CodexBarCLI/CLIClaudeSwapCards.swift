@@ -94,6 +94,10 @@ enum CLIClaudeSwapCards {
         case claudeSwap(ReadResult)
     }
 
+    static func executablePath(from config: ProviderConfig?) -> String {
+        config?.sanitizedClaudeSwapExecutablePath ?? ""
+    }
+
     static func isEligible(
         provider: UsageProvider,
         integrationEnabled: Bool,

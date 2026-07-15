@@ -64,6 +64,15 @@ struct CLICardsClaudeSwapTests {
     }
 
     @Test
+    func `configured executable path strips surrounding quotes`() {
+        for rawPath in ["  \"/tmp/cswap\"  ", "  '/tmp/cswap'  "] {
+            let config = ProviderConfig(id: .claude, claudeSwapExecutablePath: rawPath)
+            #expect(CLIClaudeSwapCards.executablePath(from: config) == "/tmp/cswap")
+        }
+        #expect(CLIClaudeSwapCards.executablePath(from: nil).isEmpty)
+    }
+
+    @Test
     func `eligibility preserves explicit account and source intent`() {
         let eligibleSourceModes: [ProviderSourceMode?] = [nil, .auto]
         for sourceMode in eligibleSourceModes {
