@@ -7,7 +7,7 @@ struct InlineCostHistoryDashboardLabelTests {
     @Test
     func `local cost history Today KPI uses current day session value`() throws {
         let now = Date(timeIntervalSince1970: 1_700_179_200)
-        let metadata = try #require(ProviderDefaults.metadata[.codex])
+        let metadata = try #require(ProviderDefaults.metadata[.claude])
         let tokenSnapshot = CostUsageTokenSnapshot(
             sessionTokens: 0,
             sessionCostUSD: 0,
@@ -26,7 +26,7 @@ struct InlineCostHistoryDashboardLabelTests {
             updatedAt: now)
 
         let model = UsageMenuCardView.Model.make(.init(
-            provider: .codex,
+            provider: .claude,
             metadata: metadata,
             snapshot: UsageSnapshot(
                 primary: nil,
@@ -56,7 +56,7 @@ struct InlineCostHistoryDashboardLabelTests {
     @Test
     func `local cost history KPI titles preserve one day and dynamic windows`() throws {
         let now = Date(timeIntervalSince1970: 1_700_179_200)
-        let metadata = try #require(ProviderDefaults.metadata[.codex])
+        let metadata = try #require(ProviderDefaults.metadata[.claude])
         let daily = [
             CostUsageDailyReport.Entry(
                 date: "2023-11-14",
@@ -145,7 +145,7 @@ struct InlineCostHistoryDashboardLabelTests {
             updatedAt: now)
 
         let model = UsageMenuCardView.Model.make(.init(
-            provider: .codex,
+            provider: .claude,
             metadata: metadata,
             snapshot: UsageSnapshot(
                 primary: nil,
@@ -174,7 +174,7 @@ struct InlineCostHistoryDashboardLabelTests {
     @Test
     func `costHistoryInlineDashboard sets currencyCode from snapshot`() throws {
         let now = Date(timeIntervalSince1970: 1_700_179_200)
-        let metadata = try #require(ProviderDefaults.metadata[.claude])
+        let metadata = try #require(ProviderDefaults.metadata[.codex])
         let tokenSnapshot = CostUsageTokenSnapshot(
             sessionTokens: 275,
             sessionCostUSD: 0.25,
@@ -194,7 +194,7 @@ struct InlineCostHistoryDashboardLabelTests {
             updatedAt: now)
 
         let model = UsageMenuCardView.Model.make(.init(
-            provider: .claude,
+            provider: .codex,
             metadata: metadata,
             snapshot: UsageSnapshot(
                 primary: nil,
