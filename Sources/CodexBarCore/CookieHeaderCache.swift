@@ -296,6 +296,10 @@ public enum CookieHeaderCache {
         self.displayIntervalOverrideLock.withLock { self.displayUnavailableRetryIntervalOverride = interval }
     }
 
+    static func displayIntervalsForTesting() -> (staleness: TimeInterval, unavailableRetry: TimeInterval) {
+        (self.currentDisplayStalenessInterval, self.currentDisplayUnavailableRetryInterval)
+    }
+
     static func resetDisplayCacheForTesting() {
         self.displayCacheLock.lock()
         self.displayCache.removeAll()
