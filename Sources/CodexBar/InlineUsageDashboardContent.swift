@@ -110,7 +110,7 @@ extension UsageMenuCardView.Model {
         if input.provider == .ollama,
            input.snapshot?.identity?.loginMethod == "API key"
         {
-            return [L("API key verified. Ollama does not expose Cloud quota limits through the API.")]
+            return [L("API key verified. Sign in to Ollama in the selected browser to show Cloud quota limits.")]
         }
 
         return nil
