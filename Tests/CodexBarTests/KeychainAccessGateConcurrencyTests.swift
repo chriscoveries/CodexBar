@@ -12,7 +12,12 @@ import Testing
 /// pass condition is simply that no data race is reported while the lanes run.
 @Suite(.serialized)
 struct KeychainAccessGateConcurrencyTests {
-    @Test
+    /// Opt-in only: this case mutates the process-wide `KeychainAccessGate` override, which other
+    /// suites read (e.g. `keychainAccessAllowed`) — `@Suite(.serialized)` serializes this suite but
+    /// not the whole `swift test --parallel` process, so running it alongside other suites could flake
+    /// them. It exists to trip ThreadSanitizer deterministically; run it in isolation via
+    /// `CODEXBAR_TSAN_STRESS=1 swift test --sanitize=thread --filter KeychainAccessGateConcurrencyTests`.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["CODEXBAR_TSAN_STRESS"] == "1"))
     func `concurrent override writes, resets, and reads are race-free`() {
         let iterations = 5000
         let lanes = 4
