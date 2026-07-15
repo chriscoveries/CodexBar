@@ -328,6 +328,14 @@ struct ClaudeOAuthFetchStrategy: ProviderFetchStrategy {
                 guard sourceMode == .auto else { return true }
                 guard claudeCLIAvailable else { return false }
                 guard ProviderInteractionContext.current == .background else { return true }
+                // An expired Claude CLI credential requires the delegated Claude CLI refresh path.
+                // That child process can access Keychain outside CodexBar's no-UI controls, so do
+                // not plan it during background Auto refresh without an explicit opt-in.
+                guard !KeychainAccessGate.isDisabled,
+                      ClaudeOAuthKeychainPromptPreference.current() == .always
+                else {
+                    return false
+                }
                 return !Self.hasMcpOAuthOnlyClaudeKeychainPayload(environment: environment)
             case .environment:
                 return sourceMode != .auto
