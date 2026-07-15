@@ -70,7 +70,7 @@ struct ProviderConfettiPaletteSettingsView: View {
     }
 
     private func applyDraft() {
-        _ = self.settings.setConfettiPaletteHexValues(self.draftHexValues, for: self.provider)
+        guard self.settings.setConfettiPaletteHexValues(self.draftHexValues, for: self.provider) else { return }
         self.reloadDraft()
     }
 

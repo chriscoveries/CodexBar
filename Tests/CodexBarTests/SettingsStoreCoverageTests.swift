@@ -166,7 +166,7 @@ struct SettingsStoreCoverageTests {
     }
 
     @Test
-    func `malformed confetti palette overrides keep provider defaults`() throws {
+    func `malformed confetti palette overrides preserve defaults and saved overrides`() throws {
         let suite = "SettingsStoreCoverageTests-malformed-confetti-palette-overrides"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defaults.removePersistentDomain(forName: suite)
@@ -180,9 +180,12 @@ struct SettingsStoreCoverageTests {
         #expect(!settings.setConfettiPaletteHexValues(["#12345", "#FFFFFF"], for: .codex))
         #expect(settings.confettiPaletteHexValues(for: .codex) == codexDefault)
 
+        #expect(settings.setConfettiPaletteHexValues(["#123456", "#654321"], for: .codex))
+        let savedOverride = settings.confettiPaletteHexValues(for: .codex)
+
         #expect(!settings.setConfettiPaletteHexValues(["#123456"], for: .codex))
         #expect(!settings.setConfettiPaletteHexValues(["#123456", "#654321", "#ABCDEF", "#FEDCBA"], for: .codex))
-        #expect(settings.confettiPaletteHexValues(for: .codex) == codexDefault)
+        #expect(settings.confettiPaletteHexValues(for: .codex) == savedOverride)
     }
 
     @Test
