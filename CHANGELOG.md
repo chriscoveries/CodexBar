@@ -2,6 +2,9 @@
 
 ## 0.43.1 — Unreleased
 
+### Fixed
+- StepFun: show credit-based plan usage (e.g. Mini, Pro) from `plan_credit_rate_limit` instead of treating the inapplicable 5h/weekly rate windows as exhausted (showing a false 0%). Also derive Oasis-Webid from the token's `device_id` claim to avoid "oasis-token is embezzled" errors with browser-imported tokens.
+
 ## 0.43.0 — 2026-07-14
 
 ### Added
