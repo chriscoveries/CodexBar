@@ -4,6 +4,7 @@
 
 ### Fixed
 - Menu bar: prevent duplicate provider items when usage updates re-enter initial status-item setup (#2162). Thanks @ss251!
+- Codex cost usage: count restarted subagent token counters without subtracting the parent's unrelated cumulative baseline (#2193). Thanks @qiuruiyu!
 - Ollama: explain that API-key verification cannot show Cloud quota limits and direct users to browser-cookie mode (#2159). Thanks @kiranmagic7!
 - Claude: suppress duplicate all-model scoped quota rows that could appear as “All models only” beside Weekly.
 
