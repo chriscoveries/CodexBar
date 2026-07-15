@@ -2,6 +2,9 @@
 
 ## 0.43.1 — Unreleased
 
+### Fixed
+- Claude: suppress duplicate all-model scoped quota rows that could appear as “All models only” beside Weekly.
+
 ## 0.43.0 — 2026-07-14
 
 ### Added
