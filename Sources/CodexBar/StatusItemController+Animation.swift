@@ -324,6 +324,8 @@ extension StatusItemController {
             return false
         }
 
+        // Brand + percent returns above; remaining paths are image-only apart from the debug marker.
+        self.restoreButtonTitleForImageOnlyContent(for: button)
         if let morphProgress {
             let signature = [
                 "mode=morph",
@@ -508,6 +510,8 @@ extension StatusItemController {
         let wiggle = self.wiggleAmount(for: provider)
         let tilt = self.tiltAmount(for: provider) * .pi / 28 // limit to ~6.4°
         let statusIndicator = self.store.statusIndicator(for: provider)
+        // Brand + percent returns above; remaining paths are image-only apart from the debug marker.
+        self.restoreButtonTitleForImageOnlyContent(for: button)
         if let morphProgress {
             let signature = [
                 "mode=morph",
@@ -705,6 +709,20 @@ extension StatusItemController {
     private var shouldUseHighContrastStatusItemContent: Bool {
         self.settings.menuBarHighContrastOnInactiveDisplays
             && self.settings.menuBarIconStyle == .iconAndPercent
+    }
+
+    private func restoreButtonTitleForImageOnlyContent(for button: NSStatusBarButton) {
+        let value = Self.buttonTitle(
+            nil,
+            hasImage: true,
+            isDebugApp: Self.isDebugApp(bundleIdentifier: Bundle.main.bundleIdentifier))
+        if button.title != value {
+            button.title = value
+        }
+        let position: NSControl.ImagePosition = value.isEmpty ? .imageOnly : .imageLeft
+        if button.imagePosition != position {
+            button.imagePosition = position
+        }
     }
 
     private func setButtonContent(image: NSImage, title: String?, for button: NSStatusBarButton) {
