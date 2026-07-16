@@ -137,7 +137,7 @@ struct DeepInfraUsageFetcherTests {
         suspended: Bool = false,
         suspendReason: String? = nil) -> Data
     {
-        let limitJSON = limit.map(String.init) ?? "null"
+        let limitJSON = limit.map { Swift.String($0) } ?? "null"
         let reasonJSON = suspendReason.map { "\"\($0)\"" } ?? "null"
         return Data(
             """
