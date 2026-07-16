@@ -296,6 +296,7 @@ extension StatusItemController {
            let brand = ProviderBrandIcon.image(for: primaryProvider)
         {
             let displayText = self.menuBarDisplayText(for: primaryProvider, snapshot: snapshot)
+            let displayedImage = warningFlash ? Self.quotaWarningFlashImage(base: brand) : brand
             let signature = [
                 "mode=brandPercent",
                 "provider=\(primaryProvider.rawValue)",
@@ -309,22 +310,20 @@ extension StatusItemController {
                 "warningFlash=\(warningFlash ? "1" : "0")",
                 "anim=\(needsAnimation ? "1" : "0")",
                 "hideCritters=\(self.settings.menuBarHidesCritters ? "1" : "0")",
+                "highContrast=\(self.settings.menuBarHighContrastOnInactiveDisplays ? "1" : "0")",
             ].joined(separator: "|")
             if self.shouldSkipMergedIconRender(signature) {
-                // AppKit can lose button title/image-position state independently of the cached render signature.
-                // Keep the cheap title path self-healing even when the icon image itself can be skipped.
-                self.setButtonTitle(displayText, for: button)
+                // AppKit can lose button content state independently of the cached render signature.
+                // Keep this cheap path self-healing even when the provider image itself can be skipped.
+                self.setButtonContent(image: displayedImage, title: displayText, for: button)
                 self.noteIconPerfRender(skipped: true)
                 return true
             }
-            self.setButtonImage(
-                warningFlash ? Self.quotaWarningFlashImage(base: brand) : brand, for: button)
-            self.setButtonTitle(displayText, for: button)
+            self.setButtonContent(image: displayedImage, title: displayText, for: button)
             self.noteIconPerfRender(skipped: false)
             return false
         }
 
-        self.setButtonTitle(nil, for: button)
         if let morphProgress {
             let signature = [
                 "mode=morph",
@@ -335,6 +334,7 @@ extension StatusItemController {
                 "warningFlash=\(warningFlash ? "1" : "0")",
                 "anim=\(needsAnimation ? "1" : "0")",
                 "hideCritters=\(self.settings.menuBarHidesCritters ? "1" : "0")",
+                "highContrast=\(self.settings.menuBarHighContrastOnInactiveDisplays ? "1" : "0")",
             ].joined(separator: "|")
             if self.shouldSkipMergedIconRender(signature) {
                 self.noteIconPerfRender(skipped: true)
@@ -344,8 +344,10 @@ extension StatusItemController {
                 progress: morphProgress,
                 style: style,
                 hideCritters: self.settings.menuBarHidesCritters)
-            self.setButtonImage(
-                warningFlash ? Self.quotaWarningFlashImage(base: image) : image, for: button)
+            self.setButtonContent(
+                image: warningFlash ? Self.quotaWarningFlashImage(base: image) : image,
+                title: nil,
+                for: button)
         } else {
             let signature = [
                 "mode=icon",
@@ -362,6 +364,7 @@ extension StatusItemController {
                 "warningFlash=\(warningFlash ? "1" : "0")",
                 "anim=\(needsAnimation ? "1" : "0")",
                 "hideCritters=\(self.settings.menuBarHidesCritters ? "1" : "0")",
+                "highContrast=\(self.settings.menuBarHighContrastOnInactiveDisplays ? "1" : "0")",
             ].joined(separator: "|")
             if self.shouldSkipMergedIconRender(signature) {
                 self.noteIconPerfRender(skipped: true)
@@ -378,8 +381,10 @@ extension StatusItemController {
                 tilt: tilt,
                 statusIndicator: statusIndicator,
                 hideCritters: self.settings.menuBarHidesCritters)
-            self.setButtonImage(
-                warningFlash ? Self.quotaWarningFlashImage(base: image) : image, for: button)
+            self.setButtonContent(
+                image: warningFlash ? Self.quotaWarningFlashImage(base: image) : image,
+                title: nil,
+                for: button)
         }
         self.noteIconPerfRender(skipped: false)
         return false
@@ -439,25 +444,24 @@ extension StatusItemController {
            let brand = ProviderBrandIcon.image(for: provider)
         {
             let displayText = self.menuBarDisplayText(for: provider, snapshot: snapshot)
+            let displayedImage = warningFlash ? Self.quotaWarningFlashImage(base: brand) : brand
             let signature = [
                 "mode=brandPercent",
                 "provider=\(provider.rawValue)",
                 "style=\(String(describing: style))",
                 "text=\(displayText ?? "nil")",
                 "warningFlash=\(warningFlash ? "1" : "0")",
+                "highContrast=\(self.settings.menuBarHighContrastOnInactiveDisplays ? "1" : "0")",
             ].joined(separator: "|")
             if self.shouldSkipProviderIconRender(provider: provider, signature: signature) {
+                self.setButtonContent(image: displayedImage, title: displayText, for: button)
                 self.noteIconPerfRender(skipped: true)
                 return true
             }
-            self.setButtonImage(
-                warningFlash ? Self.quotaWarningFlashImage(base: brand) : brand, for: button)
-            self.setButtonTitle(displayText, for: button)
+            self.setButtonContent(image: displayedImage, title: displayText, for: button)
             self.noteIconPerfRender(skipped: false)
             return false
         }
-
-        self.setButtonTitle(nil, for: button)
 
         // OpenRouter always gets a meter here — the brand-logo fallback was removed on purpose.
         let resolved = self.resolvedMenuBarIconPercents(
@@ -514,6 +518,7 @@ extension StatusItemController {
                 "warningFlash=\(warningFlash ? "1" : "0")",
                 "loading=\(isLoading ? "1" : "0")",
                 "hideCritters=\(self.settings.menuBarHidesCritters ? "1" : "0")",
+                "highContrast=\(self.settings.menuBarHighContrastOnInactiveDisplays ? "1" : "0")",
             ].joined(separator: "|")
             if self.shouldSkipProviderIconRender(provider: provider, signature: signature) {
                 self.noteIconPerfRender(skipped: true)
@@ -523,8 +528,10 @@ extension StatusItemController {
                 progress: morphProgress,
                 style: style,
                 hideCritters: self.settings.menuBarHidesCritters)
-            self.setButtonImage(
-                warningFlash ? Self.quotaWarningFlashImage(base: image) : image, for: button)
+            self.setButtonContent(
+                image: warningFlash ? Self.quotaWarningFlashImage(base: image) : image,
+                title: nil,
+                for: button)
         } else {
             let signature = [
                 "mode=icon",
@@ -541,6 +548,7 @@ extension StatusItemController {
                 "warningFlash=\(warningFlash ? "1" : "0")",
                 "loading=\(isLoading ? "1" : "0")",
                 "hideCritters=\(self.settings.menuBarHidesCritters ? "1" : "0")",
+                "highContrast=\(self.settings.menuBarHighContrastOnInactiveDisplays ? "1" : "0")",
             ].joined(separator: "|")
             if self.shouldSkipProviderIconRender(provider: provider, signature: signature) {
                 self.noteIconPerfRender(skipped: true)
@@ -557,8 +565,10 @@ extension StatusItemController {
                 tilt: tilt,
                 statusIndicator: statusIndicator,
                 hideCritters: self.settings.menuBarHidesCritters)
-            self.setButtonImage(
-                warningFlash ? Self.quotaWarningFlashImage(base: image) : image, for: button)
+            self.setButtonContent(
+                image: warningFlash ? Self.quotaWarningFlashImage(base: image) : image,
+                title: nil,
+                for: button)
         }
         self.noteIconPerfRender(skipped: false)
         return false
@@ -692,17 +702,23 @@ extension StatusItemController {
         return image
     }
 
-    private func setButtonImage(_ image: NSImage, for button: NSStatusBarButton) {
-        if button.image === image { return }
-        button.image = image
-    }
-
-    private func setButtonTitle(_ title: String?, for button: NSStatusBarButton) {
+    private func setButtonContent(image: NSImage, title: String?, for button: NSStatusBarButton) {
         let isDebugApp = Self.isDebugApp(bundleIdentifier: Bundle.main.bundleIdentifier)
         let value = Self.buttonTitle(
             title,
-            hasImage: button.image != nil || title == nil,
+            hasImage: true,
             isDebugApp: isDebugApp)
+
+        if self.settings.menuBarHighContrastOnInactiveDisplays {
+            button.image = nil
+            button.imagePosition = .noImage
+            button.attributedTitle = Self.highContrastButtonTitle(image: image, title: value)
+            return
+        }
+
+        if button.image !== image {
+            button.image = image
+        }
         if button.title != value {
             button.title = value
         }
@@ -710,6 +726,28 @@ extension StatusItemController {
         if button.imagePosition != position {
             button.imagePosition = position
         }
+    }
+
+    static func highContrastButtonTitle(image: NSImage, title: String) -> NSAttributedString {
+        let font = NSFont.systemFont(ofSize: NSFont.systemFontSize)
+        let attachment = NSTextAttachment()
+        attachment.image = image
+        attachment.bounds = NSRect(
+            x: 0,
+            y: ((font.capHeight - image.size.height) / 2).rounded(),
+            width: image.size.width,
+            height: image.size.height)
+
+        let value = NSMutableAttributedString(attachment: attachment)
+        if !title.isEmpty {
+            value.append(NSAttributedString(
+                string: title,
+                attributes: [
+                    .font: font,
+                    .foregroundColor: NSColor.labelColor,
+                ]))
+        }
+        return value
     }
 
     nonisolated static func buttonTitle(_ title: String?, hasImage: Bool, isDebugApp: Bool = false) -> String {

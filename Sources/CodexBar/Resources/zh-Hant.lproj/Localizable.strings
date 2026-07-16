@@ -531,6 +531,8 @@
 "primary_api_key_limit" = "主要（API 金鑰限制）";
 "menu_bar_style_title" = "選單列樣式";
 "menu_bar_style_subtitle" = "選單列項目的繪製方式。";
+"menu_bar_inactive_display_contrast_title" = "改善非使用中顯示器上的可見度";
+"menu_bar_inactive_display_contrast_subtitle" = "使用高對比顯示，讓其他顯示器上的圖示與指標保持清晰可讀。";
 "menu_bar_style_critters" = "小動物";
 "menu_bar_style_bars" = "進度條";
 "menu_bar_style_icon_percent" = "圖示和百分比";

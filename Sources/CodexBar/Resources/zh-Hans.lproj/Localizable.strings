@@ -510,6 +510,8 @@
 "primary_api_key_limit" = "主要（API 密钥限制）";
 "menu_bar_style_title" = "菜单栏样式";
 "menu_bar_style_subtitle" = "菜单栏项目的绘制方式。";
+"menu_bar_inactive_display_contrast_title" = "提高非活跃显示器上的可见性";
+"menu_bar_inactive_display_contrast_subtitle" = "使用高对比度绘制，让其他显示器上的图标和指标仍清晰可读。";
 "menu_bar_style_critters" = "小动物";
 "menu_bar_style_bars" = "进度条";
 "menu_bar_style_icon_percent" = "图标和百分比";

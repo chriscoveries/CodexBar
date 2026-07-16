@@ -28,6 +28,7 @@ struct PreferencesPaneSmokeTests {
     func `builds preference panes with toggled settings`() {
         let settings = Self.makeSettingsStore(suite: "PreferencesPaneSmokeTests-toggled")
         settings.menuBarShowsBrandIconWithPercent = true
+        settings.menuBarHighContrastOnInactiveDisplays = true
         settings.menuBarShowsHighestUsage = true
         settings.multiAccountMenuLayout = .stacked
         settings.hidePersonalInfo = true

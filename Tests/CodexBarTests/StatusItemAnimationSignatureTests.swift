@@ -293,6 +293,61 @@ struct StatusItemAnimationSignatureTests {
     }
 
     @Test
+    func `inactive display contrast embeds the brand and restores standard content when disabled`() throws {
+        let suite = "StatusItemAnimationSignatureTests-inactive-display-contrast"
+        let settings = testSettingsStore(suiteName: suite)
+        settings.statusChecksEnabled = false
+        settings.refreshFrequency = .manual
+        settings.mergeIcons = true
+        settings.selectedMenuProvider = .codex
+        settings.menuBarShowsBrandIconWithPercent = true
+        settings.menuBarHighContrastOnInactiveDisplays = true
+        settings.menuBarDisplayMode = .percent
+        settings.usageBarsShowUsed = false
+
+        let registry = ProviderRegistry.shared
+        if let codexMeta = registry.metadata[.codex] {
+            settings.setProviderEnabled(provider: .codex, metadata: codexMeta, enabled: true)
+        }
+
+        let fetcher = UsageFetcher()
+        let store = UsageStore(fetcher: fetcher, browserDetection: BrowserDetection(cacheTTL: 0), settings: settings)
+        let controller = StatusItemController(
+            store: store,
+            settings: settings,
+            account: fetcher.loadAccountInfo(),
+            updater: DisabledUpdaterController(),
+            preferencesSelection: PreferencesSelection(),
+            statusBar: testStatusBar())
+        defer { controller.releaseStatusItemsForTesting() }
+
+        let snapshot = UsageSnapshot(
+            primary: RateWindow(usedPercent: 23, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
+            secondary: nil,
+            updatedAt: Date())
+        store._setSnapshotForTesting(snapshot, provider: .codex)
+
+        let displayText = try #require(controller.menuBarDisplayText(for: .codex, snapshot: snapshot))
+        let expectedTitle = StatusItemController.buttonTitle(displayText, hasImage: true)
+        controller.applyIcon(phase: nil)
+        let button = try #require(controller.statusItem.button)
+
+        #expect(button.image == nil)
+        #expect(button.imagePosition == .noImage)
+        #expect(button.attributedTitle.string == "\u{FFFC}\(expectedTitle)")
+        #expect(button.attributedTitle.attribute(.attachment, at: 0, effectiveRange: nil) is NSTextAttachment)
+
+        settings.menuBarHighContrastOnInactiveDisplays = false
+        let skipped = controller.applyIcon(phase: nil)
+
+        #expect(!skipped)
+        #expect(button.image != nil)
+        #expect(button.title == expectedTitle)
+        #expect(button.imagePosition == .imageLeft)
+        #expect(button.attributedTitle.attribute(.attachment, at: 0, effectiveRange: nil) == nil)
+    }
+
+    @Test
     func `merged icon render defers while merged menu is tracking`() async throws {
         let suite = "StatusItemAnimationSignatureTests-merged-icon-defers-during-tracking"
         let settings = testSettingsStore(suiteName: suite)

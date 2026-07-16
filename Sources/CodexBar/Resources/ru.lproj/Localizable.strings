@@ -533,6 +533,8 @@
 /* Display Pane */
 "menu_bar_style_title" = "Стиль строки меню";
 "menu_bar_style_subtitle" = "Как выглядит элемент строки меню.";
+"menu_bar_inactive_display_contrast_title" = "Повысить видимость на неактивных дисплеях";
+"menu_bar_inactive_display_contrast_subtitle" = "Использует высококонтрастную отрисовку, чтобы значок и показатель оставались читаемыми на других дисплеях.";
 "menu_bar_style_critters" = "Декоративные индикаторы";
 "menu_bar_style_bars" = "Полосы-индикаторы";
 "menu_bar_style_icon_percent" = "Значок и процент";

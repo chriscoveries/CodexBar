@@ -532,6 +532,8 @@
 /* Display Pane */
 "menu_bar_style_title" = "Menubalkstijl";
 "menu_bar_style_subtitle" = "Hoe het menubalkitem wordt weergegeven.";
+"menu_bar_inactive_display_contrast_title" = "Zichtbaarheid op inactieve beeldschermen verbeteren";
+"menu_bar_inactive_display_contrast_subtitle" = "Gebruikt weergave met hoog contrast zodat het pictogram en de metriek leesbaar blijven op andere beeldschermen.";
 "menu_bar_style_critters" = "Critters";
 "menu_bar_style_bars" = "Meterbalken";
 "menu_bar_style_icon_percent" = "Pictogram en percentage";

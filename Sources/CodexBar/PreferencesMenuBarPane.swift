@@ -49,6 +49,12 @@ struct MenuBarPane: View {
                 .disabled(
                     self.settings.menuBarIconStyle != .iconAndPercent
                         || self.settings.menuBarDisplayMode == .resetTime)
+
+                Toggle(isOn: self.$settings.menuBarHighContrastOnInactiveDisplays) {
+                    SettingsRowLabel(
+                        L("menu_bar_inactive_display_contrast_title"),
+                        subtitle: L("menu_bar_inactive_display_contrast_subtitle"))
+                }
             } header: {
                 Text(L("section_icon"))
             }
