@@ -123,35 +123,39 @@ struct ManusProviderTests {
     @Test
     func `environment token does not populate browser cache`() async throws {
         try await self.withIsolatedCacheStore {
+            let runFetch = {
+                let strategy = ManusWebFetchStrategy()
+                let settings = ProviderSettingsSnapshot.make(
+                    manus: ProviderSettingsSnapshot.ManusProviderSettings(
+                        cookieSource: .auto,
+                        manualCookieHeader: nil))
+                let context = self.makeContext(
+                    settings: settings,
+                    env: ["MANUS_SESSION_TOKEN": "env-token"])
+                let fetchOverride: @Sendable (String, Date) async throws -> ManusCreditsResponse = { token, _ in
+                    #expect(token == "env-token")
+                    return self.stubResponse()
+                }
+
+                _ = try await ManusUsageFetcher.$fetchCreditsOverride.withValue(fetchOverride, operation: {
+                    try await strategy.fetch(context)
+                })
+
+                #expect(CookieHeaderCache.load(provider: .manus) == nil)
+            }
+
             #if os(macOS)
-            ManusCookieImporter.importSessionsOverrideForTesting = { _, _ in
-                throw ManusCookieImportError.noCookies
+            let importSessionsOverride: (BrowserDetection, ((String) -> Void)?) throws
+                -> [ManusCookieImporter.SessionInfo] = { _, _ in
+                    throw ManusCookieImportError.noCookies
+                }
+
+            try await ManusCookieImporter.withImportSessionsOverrideForTesting(importSessionsOverride) {
+                try await runFetch()
             }
-            ManusCookieImporter.importSessionOverrideForTesting = nil
-            defer {
-                ManusCookieImporter.importSessionsOverrideForTesting = nil
-                ManusCookieImporter.importSessionOverrideForTesting = nil
-            }
+            #else
+            try await runFetch()
             #endif
-
-            let strategy = ManusWebFetchStrategy()
-            let settings = ProviderSettingsSnapshot.make(
-                manus: ProviderSettingsSnapshot.ManusProviderSettings(
-                    cookieSource: .auto,
-                    manualCookieHeader: nil))
-            let context = self.makeContext(
-                settings: settings,
-                env: ["MANUS_SESSION_TOKEN": "env-token"])
-            let fetchOverride: @Sendable (String, Date) async throws -> ManusCreditsResponse = { token, _ in
-                #expect(token == "env-token")
-                return self.stubResponse()
-            }
-
-            _ = try await ManusUsageFetcher.$fetchCreditsOverride.withValue(fetchOverride, operation: {
-                try await strategy.fetch(context)
-            })
-
-            #expect(CookieHeaderCache.load(provider: .manus) == nil)
         }
     }
 
@@ -166,39 +170,37 @@ struct ManusProviderTests {
                 .value: "browser-token",
                 .secure: "TRUE",
             ]))
-            ManusCookieImporter.importSessionOverrideForTesting = { _, _ in
-                ManusCookieImporter.SessionInfo(cookies: [browserCookie], sourceLabel: "Chrome")
-            }
-            ManusCookieImporter.importSessionsOverrideForTesting = nil
-            defer {
-                ManusCookieImporter.importSessionOverrideForTesting = nil
-                ManusCookieImporter.importSessionsOverrideForTesting = nil
-            }
-
-            let attempts = LockedArray<String>()
-            let strategy = ManusWebFetchStrategy()
-            let settings = ProviderSettingsSnapshot.make(
-                manus: ProviderSettingsSnapshot.ManusProviderSettings(
-                    cookieSource: .auto,
-                    manualCookieHeader: nil))
-            let context = self.makeContext(
-                settings: settings,
-                env: ["MANUS_SESSION_TOKEN": "env-token"])
-            let fetchOverride: @Sendable (String, Date) async throws -> ManusCreditsResponse = { token, _ in
-                attempts.append(token)
-                if token == "browser-token" {
-                    throw ManusAPIError.invalidToken
+            let importSessionOverride: (BrowserDetection, ((String) -> Void)?) throws
+                -> ManusCookieImporter.SessionInfo = { _, _ in
+                    ManusCookieImporter.SessionInfo(cookies: [browserCookie], sourceLabel: "Chrome")
                 }
-                #expect(token == "env-token")
-                return self.stubResponse()
+
+            try await ManusCookieImporter.withImportSessionOverrideForTesting(importSessionOverride) {
+                let attempts = LockedArray<String>()
+                let strategy = ManusWebFetchStrategy()
+                let settings = ProviderSettingsSnapshot.make(
+                    manus: ProviderSettingsSnapshot.ManusProviderSettings(
+                        cookieSource: .auto,
+                        manualCookieHeader: nil))
+                let context = self.makeContext(
+                    settings: settings,
+                    env: ["MANUS_SESSION_TOKEN": "env-token"])
+                let fetchOverride: @Sendable (String, Date) async throws -> ManusCreditsResponse = { token, _ in
+                    attempts.append(token)
+                    if token == "browser-token" {
+                        throw ManusAPIError.invalidToken
+                    }
+                    #expect(token == "env-token")
+                    return self.stubResponse()
+                }
+
+                _ = try await ManusUsageFetcher.$fetchCreditsOverride.withValue(fetchOverride, operation: {
+                    try await strategy.fetch(context)
+                })
+
+                #expect(attempts.snapshot() == ["browser-token", "env-token"])
+                #expect(CookieHeaderCache.load(provider: .manus) == nil)
             }
-
-            _ = try await ManusUsageFetcher.$fetchCreditsOverride.withValue(fetchOverride, operation: {
-                try await strategy.fetch(context)
-            })
-
-            #expect(attempts.snapshot() == ["browser-token", "env-token"])
-            #expect(CookieHeaderCache.load(provider: .manus) == nil)
         }
     }
 
@@ -212,32 +214,30 @@ struct ManusProviderTests {
                 .value: "browser-token",
                 .secure: "TRUE",
             ]))
-            ManusCookieImporter.importSessionOverrideForTesting = { _, _ in
-                ManusCookieImporter.SessionInfo(cookies: [browserCookie], sourceLabel: "Chrome")
-            }
-            ManusCookieImporter.importSessionsOverrideForTesting = nil
-            defer {
-                ManusCookieImporter.importSessionOverrideForTesting = nil
-                ManusCookieImporter.importSessionsOverrideForTesting = nil
-            }
+            let importSessionOverride: (BrowserDetection, ((String) -> Void)?) throws
+                -> ManusCookieImporter.SessionInfo = { _, _ in
+                    ManusCookieImporter.SessionInfo(cookies: [browserCookie], sourceLabel: "Chrome")
+                }
 
-            let strategy = ManusWebFetchStrategy()
-            let settings = ProviderSettingsSnapshot.make(
-                manus: ProviderSettingsSnapshot.ManusProviderSettings(
-                    cookieSource: .auto,
-                    manualCookieHeader: nil))
-            let context = self.makeContext(settings: settings)
-            let fetchOverride: @Sendable (String, Date) async throws -> ManusCreditsResponse = { token, _ in
-                #expect(token == "browser-token")
-                return self.stubResponse()
+            try await ManusCookieImporter.withImportSessionOverrideForTesting(importSessionOverride) {
+                let strategy = ManusWebFetchStrategy()
+                let settings = ProviderSettingsSnapshot.make(
+                    manus: ProviderSettingsSnapshot.ManusProviderSettings(
+                        cookieSource: .auto,
+                        manualCookieHeader: nil))
+                let context = self.makeContext(settings: settings)
+                let fetchOverride: @Sendable (String, Date) async throws -> ManusCreditsResponse = { token, _ in
+                    #expect(token == "browser-token")
+                    return self.stubResponse()
+                }
+
+                _ = try await ManusUsageFetcher.$fetchCreditsOverride.withValue(fetchOverride, operation: {
+                    try await strategy.fetch(context)
+                })
+
+                let cached = CookieHeaderCache.load(provider: .manus)
+                #expect(cached?.cookieHeader == "session_id=browser-token")
             }
-
-            _ = try await ManusUsageFetcher.$fetchCreditsOverride.withValue(fetchOverride, operation: {
-                try await strategy.fetch(context)
-            })
-
-            let cached = CookieHeaderCache.load(provider: .manus)
-            #expect(cached?.cookieHeader == "session_id=browser-token")
         }
     }
     #endif

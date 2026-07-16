@@ -677,24 +677,24 @@ struct AlibabaCodingPlanFallbackTests {
         let context = self.makeContext(sourceMode: .auto, settings: settings)
 
         CookieHeaderCache.clear(provider: .alibaba)
-        AlibabaCodingPlanCookieImporter.importSessionOverrideForTesting = { _, _ in
-            throw AlibabaCodingPlanSettingsError.missingCookie()
-        }
-        defer {
-            AlibabaCodingPlanCookieImporter.importSessionOverrideForTesting = nil
-        }
-
-        do {
-            _ = try AlibabaCodingPlanWebFetchStrategy.resolveCookieHeader(context: context, allowCached: false)
-            Issue.record("Expected auto mode to fail instead of borrowing the manual cookie header")
-        } catch let error as AlibabaCodingPlanSettingsError {
-            guard case .missingCookie = error else {
-                Issue.record("Expected missingCookie, got \(error)")
-                return
+        let importSessionOverride: (BrowserDetection, ((String) -> Void)?) throws
+            -> AlibabaCodingPlanCookieImporter.SessionInfo = { _, _ in
+                throw AlibabaCodingPlanSettingsError.missingCookie()
             }
-            #expect(strategy.shouldFallback(on: error, context: context))
-        } catch {
-            Issue.record("Expected AlibabaCodingPlanSettingsError, got \(error)")
+
+        try AlibabaCodingPlanCookieImporter.withImportSessionOverrideForTesting(importSessionOverride) {
+            do {
+                _ = try AlibabaCodingPlanWebFetchStrategy.resolveCookieHeader(context: context, allowCached: false)
+                Issue.record("Expected auto mode to fail instead of borrowing the manual cookie header")
+            } catch let error as AlibabaCodingPlanSettingsError {
+                guard case .missingCookie = error else {
+                    Issue.record("Expected missingCookie, got \(error)")
+                    return
+                }
+                #expect(strategy.shouldFallback(on: error, context: context))
+            } catch {
+                Issue.record("Expected AlibabaCodingPlanSettingsError, got \(error)")
+            }
         }
     }
 
@@ -712,14 +712,14 @@ struct AlibabaCodingPlanFallbackTests {
             env: [AlibabaCodingPlanSettingsReader.apiTokenKey: "token-abc"])
 
         CookieHeaderCache.clear(provider: .alibaba)
-        AlibabaCodingPlanCookieImporter.importSessionOverrideForTesting = { _, _ in
-            throw AlibabaCodingPlanSettingsError.missingCookie()
-        }
-        defer {
-            AlibabaCodingPlanCookieImporter.importSessionOverrideForTesting = nil
-        }
+        let importSessionOverride: (BrowserDetection, ((String) -> Void)?) throws
+            -> AlibabaCodingPlanCookieImporter.SessionInfo = { _, _ in
+                throw AlibabaCodingPlanSettingsError.missingCookie()
+            }
 
-        #expect(await strategy.isAvailable(context) == false)
+        await AlibabaCodingPlanCookieImporter.withImportSessionOverrideForTesting(importSessionOverride) {
+            #expect(await strategy.isAvailable(context) == false)
+        }
     }
 }
 

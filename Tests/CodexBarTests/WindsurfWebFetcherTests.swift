@@ -5,6 +5,9 @@ import Testing
 
 @Suite(.serialized)
 struct WindsurfWebFetcherTests {
+    private typealias SessionOverride = (BrowserDetection, ((String) -> Void)?)
+        -> [WindsurfDevinSessionImporter.SessionInfo]
+
     @Test
     func `missing session guidance names current and legacy origins`() {
         let message = WindsurfWebFetcherError.noSessionData.errorDescription
@@ -26,6 +29,21 @@ struct WindsurfWebFetcherTests {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [WindsurfWebFetcherStubURLProtocol.self]
         return URLSession(configuration: config)
+    }
+
+    private func withWindsurfSessionOverrides<T>(
+        importSessions: SessionOverride? = nil,
+        preferredSessions: SessionOverride? = nil,
+        fallbackSessions: SessionOverride? = nil,
+        operation: () async throws -> T) async rethrows -> T
+    {
+        try await WindsurfDevinSessionImporter.withImportSessionsOverrideForTesting(importSessions) {
+            try await WindsurfDevinSessionImporter.withImportPreferredSessionsOverrideForTesting(preferredSessions) {
+                try await WindsurfDevinSessionImporter.withImportFallbackSessionsOverrideForTesting(fallbackSessions) {
+                    try await operation()
+                }
+            }
+        }
     }
 
     @Test
@@ -93,14 +111,11 @@ struct WindsurfWebFetcherTests {
     @Test
     func `auto session import retries next profile after auth failure`() async throws {
         defer {
-            WindsurfDevinSessionImporter.importSessionsOverrideForTesting = nil
-            WindsurfDevinSessionImporter.importPreferredSessionsOverrideForTesting = nil
-            WindsurfDevinSessionImporter.importFallbackSessionsOverrideForTesting = nil
             WindsurfWebFetcherStubURLProtocol.requests = []
             WindsurfWebFetcherStubURLProtocol.handler = nil
         }
 
-        WindsurfDevinSessionImporter.importPreferredSessionsOverrideForTesting = { _, _ in
+        let preferredSessions: SessionOverride = { _, _ in
             [
                 WindsurfDevinSessionImporter.SessionInfo(
                     session: WindsurfDevinSessionAuth(
@@ -146,29 +161,28 @@ struct WindsurfWebFetcherTests {
                 statusCode: 200)
         }
 
-        let snapshot = try await WindsurfWebFetcher.fetchUsage(
-            browserDetection: BrowserDetection(cacheTTL: 0),
-            cookieSource: .auto,
-            timeout: 2,
-            session: self.makeSession())
+        try await self.withWindsurfSessionOverrides(preferredSessions: preferredSessions) {
+            let snapshot = try await WindsurfWebFetcher.fetchUsage(
+                browserDetection: BrowserDetection(cacheTTL: 0),
+                cookieSource: .auto,
+                timeout: 2,
+                session: self.makeSession())
 
-        #expect(WindsurfWebFetcherStubURLProtocol.requests.count == 2)
-        #expect(snapshot.identity?.loginMethod == "Teams")
-        #expect(snapshot.primary?.usedPercent == 25)
-        #expect(snapshot.secondary?.usedPercent == 10)
+            #expect(WindsurfWebFetcherStubURLProtocol.requests.count == 2)
+            #expect(snapshot.identity?.loginMethod == "Teams")
+            #expect(snapshot.primary?.usedPercent == 25)
+            #expect(snapshot.secondary?.usedPercent == 10)
+        }
     }
 
     @Test
     func `auto session import tries fallback browsers after preferred sessions fail`() async throws {
         defer {
-            WindsurfDevinSessionImporter.importSessionsOverrideForTesting = nil
-            WindsurfDevinSessionImporter.importPreferredSessionsOverrideForTesting = nil
-            WindsurfDevinSessionImporter.importFallbackSessionsOverrideForTesting = nil
             WindsurfWebFetcherStubURLProtocol.requests = []
             WindsurfWebFetcherStubURLProtocol.handler = nil
         }
 
-        WindsurfDevinSessionImporter.importPreferredSessionsOverrideForTesting = { _, _ in
+        let preferredSessions: SessionOverride = { _, _ in
             [
                 WindsurfDevinSessionImporter.SessionInfo(
                     session: WindsurfDevinSessionAuth(
@@ -179,7 +193,7 @@ struct WindsurfWebFetcherTests {
                     sourceLabel: "Chrome Default"),
             ]
         }
-        WindsurfDevinSessionImporter.importFallbackSessionsOverrideForTesting = { _, _ in
+        let fallbackSessions: SessionOverride = { _, _ in
             [
                 WindsurfDevinSessionImporter.SessionInfo(
                     session: WindsurfDevinSessionAuth(
@@ -218,24 +232,26 @@ struct WindsurfWebFetcherTests {
                 statusCode: 200)
         }
 
-        let snapshot = try await WindsurfWebFetcher.fetchUsage(
-            browserDetection: BrowserDetection(cacheTTL: 0),
-            cookieSource: .auto,
-            timeout: 2,
-            session: self.makeSession())
+        try await self.withWindsurfSessionOverrides(
+            preferredSessions: preferredSessions,
+            fallbackSessions: fallbackSessions)
+        {
+            let snapshot = try await WindsurfWebFetcher.fetchUsage(
+                browserDetection: BrowserDetection(cacheTTL: 0),
+                cookieSource: .auto,
+                timeout: 2,
+                session: self.makeSession())
 
-        #expect(WindsurfWebFetcherStubURLProtocol.requests.count == 2)
-        #expect(snapshot.identity?.loginMethod == "Teams")
-        #expect(snapshot.primary?.usedPercent == 36)
-        #expect(snapshot.secondary?.usedPercent == 20)
+            #expect(WindsurfWebFetcherStubURLProtocol.requests.count == 2)
+            #expect(snapshot.identity?.loginMethod == "Teams")
+            #expect(snapshot.primary?.usedPercent == 36)
+            #expect(snapshot.secondary?.usedPercent == 20)
+        }
     }
 
     @Test
     func `auto import uses complete legacy origin when app origin is partial`() async throws {
         defer {
-            WindsurfDevinSessionImporter.importSessionsOverrideForTesting = nil
-            WindsurfDevinSessionImporter.importPreferredSessionsOverrideForTesting = nil
-            WindsurfDevinSessionImporter.importFallbackSessionsOverrideForTesting = nil
             WindsurfWebFetcherStubURLProtocol.requests = []
             WindsurfWebFetcherStubURLProtocol.handler = nil
         }
@@ -264,8 +280,6 @@ struct WindsurfWebFetcherTests {
                 from: snapshot.storage,
                 sourceLabel: "Chrome Default (\(snapshot.sourceSuffix ?? "unknown"))")
         }
-        WindsurfDevinSessionImporter.importPreferredSessionsOverrideForTesting = { _, _ in sessionInfos }
-
         WindsurfWebFetcherStubURLProtocol.requests = []
         WindsurfWebFetcherStubURLProtocol.handler = { request in
             let url = try #require(request.url)
@@ -290,31 +304,32 @@ struct WindsurfWebFetcherTests {
                 statusCode: 200)
         }
 
-        let snapshot = try await WindsurfWebFetcher.fetchUsage(
-            browserDetection: BrowserDetection(cacheTTL: 0),
-            cookieSource: .auto,
-            timeout: 2,
-            session: self.makeSession())
+        let preferredSessions: SessionOverride = { _, _ in sessionInfos }
 
-        #expect(snapshots.count == 1)
-        #expect(sessionInfos.map(\.sourceLabel) == ["Chrome Default (windsurf.com)"])
-        #expect(WindsurfWebFetcherStubURLProtocol.requests.count == 1)
-        #expect(snapshot.identity?.loginMethod == "Pro")
-        #expect(snapshot.primary?.usedPercent == 30)
-        #expect(snapshot.secondary?.usedPercent == 15)
+        try await self.withWindsurfSessionOverrides(preferredSessions: preferredSessions) {
+            let snapshot = try await WindsurfWebFetcher.fetchUsage(
+                browserDetection: BrowserDetection(cacheTTL: 0),
+                cookieSource: .auto,
+                timeout: 2,
+                session: self.makeSession())
+
+            #expect(snapshots.count == 1)
+            #expect(sessionInfos.map(\.sourceLabel) == ["Chrome Default (windsurf.com)"])
+            #expect(WindsurfWebFetcherStubURLProtocol.requests.count == 1)
+            #expect(snapshot.identity?.loginMethod == "Pro")
+            #expect(snapshot.primary?.usedPercent == 30)
+            #expect(snapshot.secondary?.usedPercent == 15)
+        }
     }
 
     @Test
     func `manual mode with empty session does not fall back to imported session`() async {
         defer {
-            WindsurfDevinSessionImporter.importSessionsOverrideForTesting = nil
-            WindsurfDevinSessionImporter.importPreferredSessionsOverrideForTesting = nil
-            WindsurfDevinSessionImporter.importFallbackSessionsOverrideForTesting = nil
             WindsurfWebFetcherStubURLProtocol.requests = []
             WindsurfWebFetcherStubURLProtocol.handler = nil
         }
 
-        WindsurfDevinSessionImporter.importSessionsOverrideForTesting = { _, _ in
+        let importedSessions: SessionOverride = { _, _ in
             [
                 WindsurfDevinSessionImporter.SessionInfo(
                     session: WindsurfDevinSessionAuth(
@@ -327,16 +342,18 @@ struct WindsurfWebFetcherTests {
         }
         WindsurfWebFetcherStubURLProtocol.requests = []
 
-        await #expect {
-            _ = try await WindsurfWebFetcher.fetchUsage(
-                browserDetection: BrowserDetection(cacheTTL: 0),
-                cookieSource: .manual,
-                manualSessionInput: "   \n",
-                timeout: 2,
-                session: self.makeSession())
-        } throws: { error in
-            guard case let WindsurfWebFetcherError.invalidManualSession(message) = error else { return false }
-            return message == "empty input"
+        await self.withWindsurfSessionOverrides(importSessions: importedSessions) {
+            await #expect {
+                _ = try await WindsurfWebFetcher.fetchUsage(
+                    browserDetection: BrowserDetection(cacheTTL: 0),
+                    cookieSource: .manual,
+                    manualSessionInput: "   \n",
+                    timeout: 2,
+                    session: self.makeSession())
+            } throws: { error in
+                guard case let WindsurfWebFetcherError.invalidManualSession(message) = error else { return false }
+                return message == "empty input"
+            }
         }
         #expect(WindsurfWebFetcherStubURLProtocol.requests.isEmpty)
     }
