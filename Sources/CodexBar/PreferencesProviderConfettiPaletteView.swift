@@ -40,21 +40,13 @@ struct ProviderConfettiPaletteSettingsView: View {
 
             HStack(spacing: 10) {
                 Button(L("Default")) {
+                    self.clearFocus()
                     self.settings.resetConfettiPalette(for: self.provider)
                     self.reloadDraft()
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .disabled(!self.settings.hasConfettiPaletteOverride(for: self.provider))
-
-                Button(L("Done")) {
-                    if self.applyDraft() {
-                        self.clearFocus()
-                    }
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .disabled(!self.canApplyDraft)
 
                 Button(L("Preview")) {
                     guard self.applyDraft() else { return }
@@ -78,6 +70,7 @@ struct ProviderConfettiPaletteSettingsView: View {
         .onChange(of: self.focusedColorIndex) { previous, current in
             if let previous, previous != current {
                 self.stopValidation(for: previous)
+                _ = self.persistDraftIfValid()
             }
         }
         .onDisappear { self.stopAllValidation() }
@@ -104,12 +97,13 @@ struct ProviderConfettiPaletteSettingsView: View {
             }
             .background(self.focusMonitor(isActive: self.focusedColorIndex == index))
 
-            if self.focusedColorIndex == index {
+            let validationStatus = self.validationStatus(at: index)
+            if self.focusedColorIndex == index || self.shouldShowInvalidStatus(at: index) {
                 Circle()
-                    .fill(self.validationStatus(at: index).color)
+                    .fill(validationStatus.color)
                     .frame(width: 7, height: 7)
                     .accessibilityHidden(true)
-                    .animation(.easeInOut(duration: 0.15), value: self.validationStatus(at: index))
+                    .animation(.easeInOut(duration: 0.15), value: validationStatus)
             }
         }
     }
@@ -125,9 +119,14 @@ struct ProviderConfettiPaletteSettingsView: View {
 
     @discardableResult
     private func applyDraft() -> Bool {
-        guard self.settings.setConfettiPaletteHexValues(self.draftHexValues, for: self.provider) else { return false }
+        guard self.persistDraftIfValid() else { return false }
         self.reloadDraft()
         return true
+    }
+
+    @discardableResult
+    private func persistDraftIfValid() -> Bool {
+        self.settings.setConfettiPaletteHexValues(self.draftHexValues, for: self.provider)
     }
 
     private func reloadDraft() {
@@ -163,6 +162,7 @@ struct ProviderConfettiPaletteSettingsView: View {
                   self.validationRevisions[index] == revision
             else { return }
             self.processingColorIndices.remove(index)
+            _ = self.persistDraftIfValid()
         }
     }
 
@@ -177,10 +177,16 @@ struct ProviderConfettiPaletteSettingsView: View {
     }
 
     private func clearFocus() {
+        _ = self.persistDraftIfValid()
         #if os(macOS)
         NSApplication.shared.keyWindow?.makeFirstResponder(nil)
         #endif
         self.focusedColorIndex = nil
+    }
+
+    private func shouldShowInvalidStatus(at index: Int) -> Bool {
+        let value = self.draftHexValues[index].trimmingCharacters(in: .whitespacesAndNewlines)
+        return !value.isEmpty && self.validationStatus(at: index) == .invalid
     }
 
     @ViewBuilder
