@@ -140,7 +140,6 @@ extension ClaudeOAuthCredentialsStore {
     @TaskLocal static var taskCredentialsFileFingerprintStoreOverride: CredentialsFileFingerprintStore?
     @TaskLocal static var taskSecurityCLIReadOverride: SecurityCLIReadOverride?
     @TaskLocal static var taskSecurityCLIReadAccountOverride: String?
-    nonisolated(unsafe) static var securityCLIReadOverride: SecurityCLIReadOverride?
 
     public struct TestingOverridesSnapshot: Sendable {
         let keychainOverrideStore: ClaudeKeychainOverrideStore?
@@ -287,7 +286,7 @@ extension ClaudeOAuthCredentialsStore {
     }
 
     static func currentSecurityCLIReadOverrideForTesting() -> SecurityCLIReadOverride? {
-        self.taskSecurityCLIReadOverride ?? self.securityCLIReadOverride
+        self.taskSecurityCLIReadOverride
     }
 
     static func withSecurityCLIReadAccountOverrideForTesting<T>(
@@ -411,10 +410,6 @@ extension ClaudeOAuthCredentialsStore {
                 }
             }
         }
-    }
-
-    static func setSecurityCLIReadOverrideForTesting(_ readOverride: SecurityCLIReadOverride?) {
-        self.securityCLIReadOverride = readOverride
     }
 }
 #endif
