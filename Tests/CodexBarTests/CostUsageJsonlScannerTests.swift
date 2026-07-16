@@ -67,13 +67,13 @@ struct CostUsageJsonlScannerTests {
         let initial = #"{"type":"message","id":"partial"#
         try initial.write(to: fileURL, atomically: true, encoding: .utf8)
 
-        var firstPass: [String] = []
+        var firstPass: [String?] = []
         let resumeOffset = try CostUsageJsonl.scan(
             fileURL: fileURL,
             maxLineBytes: 1024,
             prefixBytes: 1024)
         { line in
-            firstPass.append(String(decoding: line.bytes, as: UTF8.self))
+            firstPass.append(String(bytes: line.bytes, encoding: .utf8))
         }
 
         #expect(firstPass.isEmpty)
@@ -85,14 +85,14 @@ struct CostUsageJsonlScannerTests {
         try handle.seekToEnd()
         try handle.write(contentsOf: Data(completion.utf8))
 
-        var secondPass: [String] = []
+        var secondPass: [String?] = []
         let endOffset = try CostUsageJsonl.scan(
             fileURL: fileURL,
             offset: resumeOffset,
             maxLineBytes: 1024,
             prefixBytes: 1024)
         { line in
-            secondPass.append(String(decoding: line.bytes, as: UTF8.self))
+            secondPass.append(String(bytes: line.bytes, encoding: .utf8))
         }
 
         #expect(secondPass == [initial + String(completion.dropLast())])
@@ -108,13 +108,13 @@ struct CostUsageJsonlScannerTests {
         let record = #"{"type":"message","id":"complete"}"#
         try record.write(to: fileURL, atomically: true, encoding: .utf8)
 
-        var scanned: [String] = []
+        var scanned: [String?] = []
         let endOffset = try CostUsageJsonl.scan(
             fileURL: fileURL,
             maxLineBytes: 1024,
             prefixBytes: 1024)
         { line in
-            scanned.append(String(decoding: line.bytes, as: UTF8.self))
+            scanned.append(String(bytes: line.bytes, encoding: .utf8))
         }
 
         #expect(scanned == [record])
@@ -264,13 +264,13 @@ struct CostUsageJsonlScannerTests {
         let initial = firstRecord + "\r\n" + partialRecord
         try initial.write(to: fileURL, atomically: true, encoding: .utf8)
 
-        var firstPass: [String] = []
+        var firstPass: [String?] = []
         let resumeOffset = try CostUsageJsonl.scan(
             fileURL: fileURL,
             maxLineBytes: 1024,
             prefixBytes: 1024)
         { line in
-            firstPass.append(String(decoding: line.bytes, as: UTF8.self))
+            firstPass.append(String(bytes: line.bytes, encoding: .utf8))
         }
 
         #expect(firstPass == [firstRecord + "\r"])
@@ -282,18 +282,18 @@ struct CostUsageJsonlScannerTests {
         try handle.seekToEnd()
         try handle.write(contentsOf: Data(completion.utf8))
 
-        var secondPass: [String] = []
+        var secondPass: [String?] = []
         let endOffset = try CostUsageJsonl.scan(
             fileURL: fileURL,
             offset: resumeOffset,
             maxLineBytes: 1024,
             prefixBytes: 1024)
         { line in
-            secondPass.append(String(decoding: line.bytes, as: UTF8.self))
+            secondPass.append(String(bytes: line.bytes, encoding: .utf8))
         }
 
-        let completedRecord = String(decoding: completion.utf8.dropLast(), as: UTF8.self)
-        #expect(secondPass == [partialRecord + completedRecord])
+        let completedRecord = partialRecord + #"tial"}"# + "\r"
+        #expect(secondPass == [completedRecord])
         #expect(endOffset == Int64(Data((initial + completion).utf8).count))
     }
 
