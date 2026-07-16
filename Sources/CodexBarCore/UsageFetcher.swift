@@ -980,27 +980,6 @@ private final class CodexRPCClient: @unchecked Sendable {
     private let initializeTimeoutSeconds: TimeInterval
     private let requestTimeoutSeconds: TimeInterval
 
-    private final class LineBuffer: @unchecked Sendable {
-        private let lock = NSLock()
-        private var buffer = Data()
-
-        func appendAndDrainLines(_ data: Data) -> [Data] {
-            self.lock.lock()
-            defer { self.lock.unlock() }
-
-            self.buffer.append(data)
-            var out: [Data] = []
-            while let newline = self.buffer.firstIndex(of: 0x0A) {
-                let lineData = Data(self.buffer[..<newline])
-                self.buffer.removeSubrange(...newline)
-                if !lineData.isEmpty {
-                    out.append(lineData)
-                }
-            }
-            return out
-        }
-    }
-
     private static func debugWriteStderr(_ message: String) {
         #if !os(Linux)
         fputs(message, stderr)
@@ -1061,7 +1040,8 @@ private final class CodexRPCClient: @unchecked Sendable {
 
         let stdoutHandle = self.stdoutPipe.fileHandleForReading
         let stdoutLineContinuation = self.stdoutLineContinuation
-        let stdoutBuffer = LineBuffer()
+        let stdoutBuffer = BoundedLineBuffer()
+        let process = self.process
         stdoutHandle.readabilityHandler = { handle in
             let data = handle.availableData
             if data.isEmpty {
@@ -1070,9 +1050,16 @@ private final class CodexRPCClient: @unchecked Sendable {
                 return
             }
 
-            let lines = stdoutBuffer.appendAndDrainLines(data)
+            let result = stdoutBuffer.appendAndDrainLines(data)
+            if result.didExceedLimit {
+                Self.log.warning("Codex RPC line exceeded memory limit; terminating process")
+                handle.readabilityHandler = nil
+                process.terminate()
+                stdoutLineContinuation.finish()
+                return
+            }
 
-            for lineData in lines {
+            for lineData in result.lines {
                 stdoutLineContinuation.yield(lineData)
             }
         }
