@@ -345,7 +345,7 @@ struct WindsurfWebFetcherTests {
             }
         WindsurfWebFetcherStubURLProtocol.requests = []
 
-        await self.withWindsurfSessionOverrides(importSessions: importedSessions) {
+        _ = await self.withWindsurfSessionOverrides(importSessions: importedSessions) {
             await #expect {
                 _ = try await WindsurfWebFetcher.fetchUsage(
                     browserDetection: BrowserDetection(cacheTTL: 0),
