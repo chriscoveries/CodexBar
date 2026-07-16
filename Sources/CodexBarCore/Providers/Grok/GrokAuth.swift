@@ -28,11 +28,11 @@ public struct GrokCredentials: Sendable {
         firstName: String?,
         lastName: String?,
         teamId: String?,
+        principalType: String? = nil,
         oidcIssuer: String?,
         oidcClientId: String?,
         expiresAt: Date?,
-        createTime: Date?,
-        principalType: String? = nil)
+        createTime: Date?)
     {
         self.accessToken = accessToken
         self.refreshToken = refreshToken
@@ -157,11 +157,11 @@ public enum GrokCredentialsStore {
             firstName: (entry["first_name"] as? String)?.nilIfEmpty,
             lastName: (entry["last_name"] as? String)?.nilIfEmpty,
             teamId: (entry["team_id"] as? String)?.nilIfEmpty,
+            principalType: (entry["principal_type"] as? String)?.nilIfEmpty,
             oidcIssuer: (entry["oidc_issuer"] as? String)?.nilIfEmpty,
             oidcClientId: (entry["oidc_client_id"] as? String)?.nilIfEmpty,
             expiresAt: Self.parseDate(entry["expires_at"]),
-            createTime: Self.parseDate(entry["create_time"]),
-            principalType: (entry["principal_type"] as? String)?.nilIfEmpty)
+            createTime: Self.parseDate(entry["create_time"]))
     }
 
     private static func selectPreferredEntry(in root: [String: Any]) -> (scope: String, entry: [String: Any])? {
@@ -186,7 +186,9 @@ public enum GrokCredentialsStore {
         guard let value = raw as? String, !value.isEmpty else { return nil }
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = formatter.date(from: value) { return date }
+        if let date = formatter.date(from: value) {
+            return date
+        }
         formatter.formatOptions = [.withInternetDateTime]
         return formatter.date(from: value)
     }

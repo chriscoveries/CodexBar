@@ -71,8 +71,12 @@ public enum GrokProviderDescriptor {
     private static func primaryLabel(duration seconds: TimeInterval) -> String? {
         guard seconds > 3600 else { return nil }
         let days = Int((seconds / 86400).rounded(.toNearestOrAwayFromZero))
-        if (4...12).contains(days) { return "Weekly" }
-        if (20...45).contains(days) { return "Monthly" }
+        if (4...12).contains(days) {
+            return "Weekly"
+        }
+        if (20...45).contains(days) {
+            return "Monthly"
+        }
         return nil
     }
 }

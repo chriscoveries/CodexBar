@@ -327,11 +327,11 @@ struct GrokWebBillingFetcherTests {
             firstName: Self.credentials.firstName,
             lastName: Self.credentials.lastName,
             teamId: Self.credentials.teamId,
+            principalType: Self.credentials.principalType,
             oidcIssuer: Self.credentials.oidcIssuer,
             oidcClientId: Self.credentials.oidcClientId,
             expiresAt: .distantPast,
-            createTime: Self.credentials.createTime,
-            principalType: Self.credentials.principalType)
+            createTime: Self.credentials.createTime)
 
         await #expect {
             _ = try await GrokWebBillingFetcher.fetch(
@@ -939,11 +939,11 @@ extension GrokWebBillingFetcherTests {
         firstName: "G",
         lastName: "Rok",
         teamId: "team-123",
+        principalType: "Team",
         oidcIssuer: "https://auth.x.ai",
         oidcClientId: "client",
         expiresAt: Date(timeIntervalSince1970: 1_900_000_000),
-        createTime: Date(timeIntervalSince1970: 1_799_000_000),
-        principalType: "Team")
+        createTime: Date(timeIntervalSince1970: 1_799_000_000))
 
     private static func protobufPayload(usedPercent: Float, resetEpoch: UInt64) -> Data {
         var data = Data()
@@ -969,7 +969,9 @@ extension GrokWebBillingFetcherTests {
         repeat {
             var byte = UInt8(remaining & 0x7F)
             remaining >>= 7
-            if remaining != 0 { byte |= 0x80 }
+            if remaining != 0 {
+                byte |= 0x80
+            }
             bytes.append(byte)
         } while remaining != 0
         return bytes
@@ -1000,7 +1002,11 @@ extension GrokWebBillingFetcherTests {
 final class GrokWebBillingStubURLProtocol: URLProtocol {
     nonisolated(unsafe) static var requests: [URLRequest] = []
     nonisolated(unsafe) static var requestBodies: [Data?] = []
-    nonisolated(unsafe) static var handler: (@Sendable (URLRequest) throws -> (HTTPURLResponse, Data))?
+    private static let _handlerBox = LockIsolated<(@Sendable (URLRequest) throws -> (HTTPURLResponse, Data))?>(nil)
+    static var handler: (@Sendable (URLRequest) throws -> (HTTPURLResponse, Data))? {
+        get { Self._handlerBox.value }
+        set { Self._handlerBox.setValue(newValue) }
+    }
 
     override static func canInit(with _: URLRequest) -> Bool {
         true
@@ -1031,7 +1037,9 @@ final class GrokWebBillingStubURLProtocol: URLProtocol {
     override func stopLoading() {}
 
     private static func readBody(from request: URLRequest) -> Data? {
-        if let body = request.httpBody { return body }
+        if let body = request.httpBody {
+            return body
+        }
         guard let stream = request.httpBodyStream else { return nil }
         stream.open()
         defer { stream.close() }
