@@ -5,9 +5,6 @@ import Testing
 
 @Suite(.serialized)
 struct WindsurfWebFetcherTests {
-    private typealias SessionOverride = (BrowserDetection, ((String) -> Void)?)
-        -> [WindsurfDevinSessionImporter.SessionInfo]
-
     @Test
     func `missing session guidance names current and legacy origins`() {
         let message = WindsurfWebFetcherError.noSessionData.errorDescription
