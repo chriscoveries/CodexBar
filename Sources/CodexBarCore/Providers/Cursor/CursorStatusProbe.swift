@@ -1011,7 +1011,6 @@ public struct CursorStatusProbe: Sendable {
             switch try await self.fetchCachedSession(
                 cached,
                 cookieHeaderOverride: cookieHeaderOverride,
-                allowCachedSessions: allowCachedSessions,
                 allowAppAuthFallback: allowAppAuthFallback,
                 logger: logger,
                 log: log)
@@ -1133,7 +1132,6 @@ public struct CursorStatusProbe: Sendable {
     private func fetchCachedSession(
         _ cached: CookieHeaderCache.Entry,
         cookieHeaderOverride: String?,
-        allowCachedSessions: Bool,
         allowAppAuthFallback: Bool,
         logger: ((String) -> Void)?,
         log: @escaping (String) -> Void) async throws -> CachedSessionFetchResult
@@ -1147,7 +1145,7 @@ public struct CursorStatusProbe: Sendable {
                 log("Cached session changed while its request was in flight; retrying replacement")
                 return try await .succeeded(self.fetch(
                     cookieHeaderOverride: cookieHeaderOverride,
-                    allowCachedSessions: allowCachedSessions,
+                    allowCachedSessions: true,
                     allowAppAuthFallback: allowAppAuthFallback,
                     logger: logger))
             }
@@ -1160,7 +1158,7 @@ public struct CursorStatusProbe: Sendable {
                     log("Cached session changed before stale-session cleanup; retrying replacement")
                     return try await .succeeded(self.fetch(
                         cookieHeaderOverride: cookieHeaderOverride,
-                        allowCachedSessions: allowCachedSessions,
+                        allowCachedSessions: true,
                         allowAppAuthFallback: allowAppAuthFallback,
                         logger: logger))
                 }
