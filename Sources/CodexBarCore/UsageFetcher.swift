@@ -140,7 +140,6 @@ public struct NamedRateWindow: Codable, Equatable, Sendable {
 
 public struct ProviderIdentitySnapshot: Codable, Sendable {
     public let providerID: UsageProvider?
-    public let accountID: String?
     public let accountEmail: String?
     public let accountOrganization: String?
     public let loginMethod: String?
@@ -148,14 +147,12 @@ public struct ProviderIdentitySnapshot: Codable, Sendable {
 
     public init(
         providerID: UsageProvider?,
-        accountID: String? = nil,
         accountEmail: String?,
         accountOrganization: String?,
         loginMethod: String?,
         accountID: String? = nil)
     {
         self.providerID = providerID
-        self.accountID = accountID
         self.accountEmail = accountEmail
         self.accountOrganization = accountOrganization
         self.loginMethod = loginMethod
@@ -168,7 +165,6 @@ public struct ProviderIdentitySnapshot: Codable, Sendable {
         }
         return ProviderIdentitySnapshot(
             providerID: provider,
-            accountID: self.accountID,
             accountEmail: self.accountEmail,
             accountOrganization: self.accountOrganization,
             loginMethod: self.loginMethod,

@@ -111,8 +111,8 @@ struct CursorImportedSessionScanningTests {
     @Test
     func `browser login candidates return earlier result when later profile reaches deadline`() async throws {
         let probe = CursorStatusProbe(browserDetection: BrowserDetection(cacheTTL: 0))
-        let valid = Self.makeSessionInfo(sourceLabel: "Comet Default", token: "valid")
-        let slow = Self.makeSessionInfo(sourceLabel: "Comet Profile 1", token: "slow")
+        let valid = Self.makeSessionInfo(sourceLabel: "Comet Default", cookieValue: "valid")
+        let slow = Self.makeSessionInfo(sourceLabel: "Comet Profile 1", cookieValue: "slow")
         let validatedHeaders = LockedArray<String>()
 
         let results = try await probe.fetchBrowserLoginCandidates(

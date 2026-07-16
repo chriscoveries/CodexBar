@@ -704,7 +704,6 @@ public struct CursorStatusSnapshot: Sendable {
 
         let identity = ProviderIdentitySnapshot(
             providerID: .cursor,
-            accountID: self.accountID,
             accountEmail: self.accountEmail,
             accountOrganization: nil,
             loginMethod: self.membershipType.map { Self.formatMembershipType($0) },

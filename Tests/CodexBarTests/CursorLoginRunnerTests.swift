@@ -144,7 +144,9 @@ struct CursorLoginRunnerTests {
         #expect(presentedChoices.map(\.displayLabel) == ["different@example.com · Browser"])
         #expect(result.email == "different@example.com")
     }
+}
 
+extension CursorLoginRunnerTests {
     @Test
     func `switch account accepts the same email when stable account ID changes`() async {
         let committedHeaders = LockedArray<String>()
@@ -159,12 +161,12 @@ struct CursorLoginRunnerTests {
                 Self.browserCandidate(
                     id: "account-a",
                     email: "same@example.com",
-                    token: "current-token",
+                    cookieValue: "current-session",
                     source: "Work"),
                 Self.browserCandidate(
                     id: "account-b",
                     email: "same@example.com",
-                    token: "different-token",
+                    cookieValue: "different-session",
                     source: "Personal"),
             ] },
             sleeper: { _ in },
@@ -186,7 +188,7 @@ struct CursorLoginRunnerTests {
             return
         }
         #expect(presentedChoices.map(\.displayLabel) == ["same@example.com · Personal"])
-        #expect(committedHeaders.snapshot() == ["WorkosCursorSessionToken=different-token"])
+        #expect(committedHeaders.snapshot() == ["WorkosCursorSessionToken=different-session"])
     }
 
     @Test
@@ -291,7 +293,7 @@ struct CursorLoginRunnerTests {
             Self.snapshot(id: "next-id", email: "same@example.com"),
         ])
         let runner = Self.runner(
-            priorAccount: .init(id: "current-id", email: "same@example.com"),
+            priorAccount: .init(accountID: "current-id", email: "same@example.com"),
             accountChooser: { $0.first?.selectionID },
             loadSnapshot: { sequence.next() })
 
@@ -312,7 +314,7 @@ struct CursorLoginRunnerTests {
             Self.snapshot(id: "next-id", email: nil),
         ])
         let runner = Self.runner(
-            priorAccount: .init(id: "current-id", email: nil),
+            priorAccount: .init(accountID: "current-id", email: nil),
             accountChooser: { $0.first?.selectionID },
             loadSnapshot: { sequence.next() })
 
