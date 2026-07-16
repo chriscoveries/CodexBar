@@ -8,7 +8,7 @@ extension UsageStorePlanUtilizationTests {
     @Test
     func `Claude weekly celebration ignores a stale high and duplicate low after reset`() async throws {
         let store = Self.makeStore()
-        let accountLabel = "claude-weekly-dedup@example.com"
+        let accountLabel = "claude-weekly-dedup-account"
         let recorder = ClaudeWeeklyResetEventRecorder(accountLabel: accountLabel)
         defer { recorder.invalidate() }
 
@@ -54,7 +54,7 @@ extension UsageStorePlanUtilizationTests {
     @Test
     func `Claude weekly recovery confirmation persists and later permits a new reset`() async throws {
         let firstStore = Self.makeStore()
-        let accountLabel = "claude-weekly-persisted-dedup@example.com"
+        let accountLabel = "claude-weekly-persisted-dedup-account"
         let recorder = ClaudeWeeklyResetEventRecorder(accountLabel: accountLabel)
         defer { recorder.invalidate() }
 
@@ -149,8 +149,8 @@ extension UsageStorePlanUtilizationTests {
     @Test
     func `Claude weekly recovery confirmation is isolated by account`() async {
         let store = Self.makeStore()
-        let firstAccount = "claude-weekly-dedup-a@example.com"
-        let secondAccount = "claude-weekly-dedup-b@example.com"
+        let firstAccount = "claude-weekly-dedup-account-a"
+        let secondAccount = "claude-weekly-dedup-account-b"
         let firstRecorder = ClaudeWeeklyResetEventRecorder(accountLabel: firstAccount)
         let secondRecorder = ClaudeWeeklyResetEventRecorder(accountLabel: secondAccount)
         defer {
@@ -280,11 +280,11 @@ private final class ClaudeWeeklyResetEventRecorder: @unchecked Sendable {
     private let accountLabel: String
     private let lock = NSLock()
     private var eventCount = 0
-    private var token: NSObjectProtocol?
+    private var observer: NSObjectProtocol?
 
     init(accountLabel: String) {
         self.accountLabel = accountLabel
-        self.token = NotificationCenter.default.addObserver(
+        self.observer = NotificationCenter.default.addObserver(
             forName: .codexbarWeeklyLimitReset,
             object: nil,
             queue: nil)
@@ -313,9 +313,9 @@ private final class ClaudeWeeklyResetEventRecorder: @unchecked Sendable {
     }
 
     func invalidate() {
-        guard let token else { return }
-        NotificationCenter.default.removeObserver(token)
-        self.token = nil
+        guard let observer else { return }
+        NotificationCenter.default.removeObserver(observer)
+        self.observer = nil
     }
 
     deinit {
