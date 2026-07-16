@@ -340,6 +340,93 @@ struct CostUsageJsonlScannerTests {
         #expect(endOffset == Int64(Data((initial + completion).utf8).count))
     }
 
+    @Test
+    func `jsonl scanner retries truncated literal prefixes`() throws {
+        let root = try self.makeTemporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let cases = [("tru", "e"), ("fals", "e"), ("nul", "l")]
+        for (index, testCase) in cases.enumerated() {
+            let fileURL = root.appendingPathComponent("literal-\(index).jsonl", isDirectory: false)
+            let initial = String(repeating: " ", count: 128) + testCase.0
+            try initial.write(to: fileURL, atomically: true, encoding: .utf8)
+
+            var firstPass: [CostUsageJsonl.Line] = []
+            let resumeOffset = try CostUsageJsonl.scan(
+                fileURL: fileURL,
+                maxLineBytes: 64,
+                prefixBytes: 64)
+            { line in
+                firstPass.append(line)
+            }
+
+            #expect(firstPass.isEmpty)
+            #expect(resumeOffset == 0)
+
+            let completion = testCase.1 + "\n"
+            let handle = try FileHandle(forWritingTo: fileURL)
+            try handle.seekToEnd()
+            try handle.write(contentsOf: Data(completion.utf8))
+            try handle.close()
+
+            var secondPass: [CostUsageJsonl.Line] = []
+            let endOffset = try CostUsageJsonl.scan(
+                fileURL: fileURL,
+                offset: resumeOffset,
+                maxLineBytes: 64,
+                prefixBytes: 64)
+            { line in
+                secondPass.append(line)
+            }
+
+            #expect(secondPass.count == 1)
+            #expect(secondPass[0].wasTruncated)
+            #expect(endOffset == Int64(Data((initial + completion).utf8).count))
+        }
+    }
+
+    @Test
+    func `jsonl scanner retries a truncated number exponent`() throws {
+        let root = try self.makeTemporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let fileURL = root.appendingPathComponent("number-exponent.jsonl", isDirectory: false)
+        let initial = String(repeating: "9", count: 300_000) + "e-"
+        try initial.write(to: fileURL, atomically: true, encoding: .utf8)
+
+        var firstPass: [CostUsageJsonl.Line] = []
+        let resumeOffset = try CostUsageJsonl.scan(
+            fileURL: fileURL,
+            maxLineBytes: 64,
+            prefixBytes: 64)
+        { line in
+            firstPass.append(line)
+        }
+
+        #expect(firstPass.isEmpty)
+        #expect(resumeOffset == 0)
+
+        let completion = "2\n"
+        let handle = try FileHandle(forWritingTo: fileURL)
+        defer { try? handle.close() }
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data(completion.utf8))
+
+        var secondPass: [CostUsageJsonl.Line] = []
+        let endOffset = try CostUsageJsonl.scan(
+            fileURL: fileURL,
+            offset: resumeOffset,
+            maxLineBytes: 64,
+            prefixBytes: 64)
+        { line in
+            secondPass.append(line)
+        }
+
+        #expect(secondPass.count == 1)
+        #expect(secondPass[0].wasTruncated)
+        #expect(endOffset == Int64(Data((initial + completion).utf8).count))
+    }
+
     private func makeTemporaryRoot() throws -> URL {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(
             "codexbar-cost-usage-jsonl-\(UUID().uuidString)",
