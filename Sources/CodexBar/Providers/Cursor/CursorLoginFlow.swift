@@ -13,12 +13,13 @@ extension StatusItemController {
         let cursorRunner = CursorLoginRunner(
             browserDetection: self.store.browserDetection,
             priorAccount: priorAccount,
-            commitSessionCache: { session in
-                // Finalize without suspending: future refreshes use the chosen cached browser session,
-                // while any refresh that started during the interactive flow loses publication ownership.
-                self.settings.cursorCookieSource = .auto
-                self.store.invalidateProviderRefreshRequests(.cursor)
-                CursorStatusProbe.commitBrowserLoginSession(session)
+            replaceSessionCache: { session in
+                await CursorLoginRunner.replaceCachedSession(session) {
+                    // Finalize without suspending: future refreshes use the chosen cached browser session,
+                    // while any refresh that started during the interactive flow loses publication ownership.
+                    self.settings.cursorCookieSource = .auto
+                    self.store.invalidateProviderRefreshRequests(.cursor)
+                }
             })
         let phaseHandler: @MainActor (CursorLoginRunner.Phase) -> Void = { [weak self] phase in
             switch phase {

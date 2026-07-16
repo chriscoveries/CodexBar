@@ -69,7 +69,7 @@ struct CursorLoginRunnerTests {
                 return Self.cometApplicationURL
             },
             routeResolver: Self.fixtureRouteResolver,
-            resetSessionCache: {})
+            replaceSessionCache: { _ in })
 
         #expect(resolvedURLs.isEmpty)
 
@@ -134,7 +134,8 @@ struct CursorLoginRunnerTests {
     }
 
     @Test
-    func `switch timeout explains that a different account is required`() async {
+    func `switch timeout preserves existing session and explains that a different account is required`() async {
+        let replacementEvents = LockedArray<String>()
         let runner = CursorLoginRunner(
             browserDetection: BrowserDetection(cacheTTL: 0),
             priorAccount: .init(email: "current@example.com"),
@@ -145,7 +146,7 @@ struct CursorLoginRunnerTests {
             sleeper: { _ in },
             browserApplicationResolver: { _ in Self.cometApplicationURL },
             routeResolver: Self.fixtureRouteResolver,
-            resetSessionCache: {})
+            replaceSessionCache: { _ in replacementEvents.append("replace") })
 
         let result = await runner.run { _ in }
 
@@ -154,10 +155,11 @@ struct CursorLoginRunnerTests {
             return
         }
         #expect(message.contains("different Cursor account"))
+        #expect(replacementEvents.snapshot().isEmpty)
     }
 
     @Test
-    func `login clears stale session state before opening auth URL`() async {
+    func `accepted login replaces stale session after selecting candidate`() async {
         let events = LockedArray<String>()
         let runner = CursorLoginRunner(
             browserDetection: BrowserDetection(cacheTTL: 0),
@@ -167,24 +169,29 @@ struct CursorLoginRunnerTests {
                 events.append("open")
                 return true
             },
-            loadSnapshot: {
+            loadBrowserLoginCandidates: { _, _ in
                 events.append("poll")
-                return Self.snapshot(email: "cursor@example.com")
+                return [Self.browserCandidate(
+                    id: "accepted-account",
+                    email: "cursor@example.com",
+                    token: "accepted-token",
+                    source: "Comet")]
             },
             sleeper: { _ in },
             browserApplicationResolver: { _ in Self.cometApplicationURL },
             routeResolver: Self.fixtureRouteResolver,
-            resetSessionCache: {
-                events.append("reset")
+            replaceSessionCache: { _ in
+                events.append("replace")
             })
 
         _ = await runner.run { _ in }
 
-        #expect(Array(events.snapshot().prefix(3)) == ["reset", "open", "poll"])
+        #expect(events.snapshot() == ["open", "poll", "replace"])
     }
 
     @Test
-    func `login reports launch failure when browser cannot open`() async {
+    func `login launch failure preserves existing session`() async {
+        let replacementEvents = LockedArray<String>()
         let runner = CursorLoginRunner(
             browserDetection: BrowserDetection(cacheTTL: 0),
             launchRoute: { _ in false },
@@ -195,7 +202,7 @@ struct CursorLoginRunnerTests {
             sleeper: { _ in },
             browserApplicationResolver: { _ in Self.cometApplicationURL },
             routeResolver: Self.fixtureRouteResolver,
-            resetSessionCache: {})
+            replaceSessionCache: { _ in replacementEvents.append("replace") })
 
         let result = await runner.run { _ in }
 
@@ -204,13 +211,53 @@ struct CursorLoginRunnerTests {
             return
         }
         #expect(message.contains("Could not open Cursor login"))
+        #expect(replacementEvents.snapshot().isEmpty)
+    }
+
+    @Test
+    func `login cancellation while waiting preserves existing session`() async {
+        let events = LockedArray<String>()
+        let runner = CursorLoginRunner(
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            timeout: 10,
+            pollInterval: 0.01,
+            launchRoute: { _ in
+                events.append("open")
+                return true
+            },
+            loadBrowserLoginCandidates: { _, _ in
+                events.append("poll")
+                return []
+            },
+            sleeper: { _ in
+                events.append("sleep")
+                try await Task.sleep(nanoseconds: .max)
+            },
+            browserApplicationResolver: { _ in Self.cometApplicationURL },
+            routeResolver: Self.fixtureRouteResolver,
+            replaceSessionCache: { _ in events.append("replace") })
+
+        let task = Task {
+            await runner.run { _ in }
+        }
+        while !events.snapshot().contains("sleep") {
+            await Task.yield()
+        }
+        task.cancel()
+        let result = await task.value
+
+        guard case .cancelled = result.outcome else {
+            Issue.record("Expected cancelled outcome")
+            return
+        }
+        #expect(!events.snapshot().contains("replace"))
     }
 
     @Test
     func `unsupported default browser fails before opening or polling`() async {
         var launchedRoutes: [CursorLoginBrowserRouter.Route] = []
         let pollEvents = LockedArray<String>()
-        let resetEvents = LockedArray<String>()
+        let replacementEvents = LockedArray<String>()
         let runner = CursorLoginRunner(
             browserDetection: BrowserDetection(cacheTTL: 0),
             launchRoute: {
@@ -226,7 +273,7 @@ struct CursorLoginRunnerTests {
                 URL(fileURLWithPath: "/Applications/Unsupported Browser.app")
             },
             routeResolver: { _, _ in .unavailable },
-            resetSessionCache: { resetEvents.append("reset") })
+            replaceSessionCache: { _ in replacementEvents.append("replace") })
 
         let result = await runner.run { _ in }
 
@@ -238,14 +285,14 @@ struct CursorLoginRunnerTests {
         #expect(message.contains("Cookie header"))
         #expect(launchedRoutes.isEmpty)
         #expect(pollEvents.snapshot().isEmpty)
-        #expect(resetEvents.snapshot().isEmpty)
+        #expect(replacementEvents.snapshot().isEmpty)
     }
 
     @Test
     func `unresolved default browser fails before opening or polling`() async {
         var launchedRoutes: [CursorLoginBrowserRouter.Route] = []
         let pollEvents = LockedArray<String>()
-        let resetEvents = LockedArray<String>()
+        let replacementEvents = LockedArray<String>()
         let runner = CursorLoginRunner(
             browserDetection: BrowserDetection(cacheTTL: 0),
             launchRoute: {
@@ -259,7 +306,7 @@ struct CursorLoginRunnerTests {
             sleeper: { _ in },
             browserApplicationResolver: { _ in nil },
             routeResolver: { _, _ in .unavailable },
-            resetSessionCache: { resetEvents.append("reset") })
+            replaceSessionCache: { _ in replacementEvents.append("replace") })
 
         let result = await runner.run { _ in }
 
@@ -271,11 +318,11 @@ struct CursorLoginRunnerTests {
         #expect(message.contains("Cookie header"))
         #expect(launchedRoutes.isEmpty)
         #expect(pollEvents.snapshot().isEmpty)
-        #expect(resetEvents.snapshot().isEmpty)
+        #expect(replacementEvents.snapshot().isEmpty)
     }
 
     @Test
-    func `browser chooser cancellation happens before reset launch and polling`() async {
+    func `browser chooser cancellation happens before replacement launch and polling`() async {
         let events = LockedArray<String>()
         let runner = CursorLoginRunner(
             browserDetection: BrowserDetection(cacheTTL: 0),
@@ -291,7 +338,7 @@ struct CursorLoginRunnerTests {
                 URL(fileURLWithPath: "/Applications/Link Router.app")
             },
             routeResolver: { _, _ in .cancelled },
-            resetSessionCache: { events.append("reset") })
+            replaceSessionCache: { _ in events.append("replace") })
 
         let result = await runner.run { _ in }
 
@@ -333,7 +380,7 @@ struct CursorLoginRunnerTests {
                     launchURL: URL(string: "https://example.invalid/intermediary")!,
                     browserApplicationURL: Self.cometApplicationURL))
             },
-            resetSessionCache: {})
+            replaceSessionCache: { _ in })
 
         _ = await runner.run { _ in }
 
@@ -369,8 +416,7 @@ struct CursorLoginRunnerTests {
                     presentedChoices = choices
                     return chosenID
                 },
-                resetSessionCache: {},
-                commitSessionCache: { session in
+                replaceSessionCache: { session in
                     committedHeaders.append(session.cookieHeader)
                 })
 
@@ -422,8 +468,7 @@ struct CursorLoginRunnerTests {
                 presentedChoices = choices
                 return choices.first(where: { $0.displayLabel.contains("Personal") })?.selectionID
             },
-            resetSessionCache: {},
-            commitSessionCache: { session in
+            replaceSessionCache: { session in
                 committedHeaders.append(session.cookieHeader)
             })
 
@@ -453,8 +498,7 @@ struct CursorLoginRunnerTests {
                 chooserCalls += 1
                 return nil
             },
-            resetSessionCache: {},
-            commitSessionCache: { session in
+            replaceSessionCache: { session in
                 committedHeaders.append(session.cookieHeader)
             })
 
@@ -492,8 +536,7 @@ struct CursorLoginRunnerTests {
                 chooserCalls += 1
                 return nil
             },
-            resetSessionCache: {},
-            commitSessionCache: { session in
+            replaceSessionCache: { session in
                 committedHeaders.append(session.cookieHeader)
             })
 
@@ -521,7 +564,7 @@ struct CursorLoginRunnerTests {
             sleeper: { _ in },
             browserApplicationResolver: browserApplicationResolver,
             routeResolver: self.fixtureRouteResolver,
-            resetSessionCache: {})
+            replaceSessionCache: { _ in })
     }
 
     private static func fixtureRouteResolver(

@@ -69,8 +69,7 @@ final class CursorLoginRunner {
     typealias BrowserLoginCandidatesLoader = @Sendable (URL, TimeInterval) async throws
         -> [CursorStatusProbe.BrowserLoginResult]
     typealias Sleeper = @Sendable (UInt64) async throws -> Void
-    typealias SessionCacheResetter = @Sendable () async -> Void
-    typealias SessionCacheCommitter = @MainActor (CursorStatusProbe.BrowserLoginSession) -> Void
+    typealias SessionCacheReplacer = @MainActor @Sendable (CursorStatusProbe.BrowserLoginSession) async -> Void
     typealias RouteLauncher = @MainActor (CursorLoginBrowserRouter.Route) async -> Bool
     typealias BrowserApplicationResolver = @MainActor (URL) -> URL?
     typealias RouteResolver = @MainActor (URL, URL?) -> CursorLoginBrowserRouter.Resolution
@@ -90,8 +89,7 @@ final class CursorLoginRunner {
     private let loadBrowserLoginCandidates: @Sendable (URL, TimeInterval) async throws -> [SnapshotLoadResult]
     private let launchRoute: RouteLauncher
     private let sleeper: Sleeper
-    private let resetSessionCache: SessionCacheResetter
-    private let commitSessionCache: SessionCacheCommitter
+    private let replaceSessionCache: SessionCacheReplacer
     private let priorAccount: AccountIdentity?
     private let browserApplicationResolver: BrowserApplicationResolver
     private let routeResolver: RouteResolver
@@ -121,12 +119,8 @@ final class CursorLoginRunner {
                 handlerApplicationURL: handlerApplicationURL)
         },
         accountChooser: AccountChooser? = nil,
-        resetSessionCache: @escaping SessionCacheResetter = {
-            CookieHeaderCache.clear(provider: .cursor)
-            CursorSessionStore.shared.clearCookies()
-        },
-        commitSessionCache: @escaping SessionCacheCommitter = { session in
-            CursorStatusProbe.commitBrowserLoginSession(session)
+        replaceSessionCache: @escaping SessionCacheReplacer = { session in
+            await CursorLoginRunner.replaceCachedSession(session)
         })
     {
         let resolvedPriorAccount = priorAccount?.hasIdentity == true ? priorAccount : nil
@@ -138,8 +132,7 @@ final class CursorLoginRunner {
         self.pollInterval = pollInterval
         self.launchRoute = launchRoute
         self.sleeper = sleeper
-        self.resetSessionCache = resetSessionCache
-        self.commitSessionCache = commitSessionCache
+        self.replaceSessionCache = replaceSessionCache
         if let loadBrowserLoginCandidates {
             self.loadBrowserLoginCandidates = { browserApplicationURL, timeout in
                 try await loadBrowserLoginCandidates(browserApplicationURL, timeout).map { result in
@@ -185,14 +178,6 @@ final class CursorLoginRunner {
             return result
         }
 
-        if let cancellation = self.continuationCancellationResult() {
-            return cancellation
-        }
-        await self.resetSessionCache()
-        if let cancellation = self.continuationCancellationResult() {
-            return cancellation
-        }
-
         let launched = await self.launchRoute(route)
         guard !Task.isCancelled else {
             return self.cancelAfterTaskCancellation()
@@ -222,7 +207,7 @@ final class CursorLoginRunner {
                 if let cancellation = self.continuationCancellationResult() {
                     return cancellation
                 }
-                if let result = self.completeLoadedCandidates(
+                if let result = await self.completeLoadedCandidates(
                     loaded,
                     onPhaseChange: onPhaseChange)
                 {
@@ -280,7 +265,7 @@ final class CursorLoginRunner {
 
     private func completeLoadedCandidates(
         _ loaded: [SnapshotLoadResult],
-        onPhaseChange: @MainActor (Phase) -> Void) -> Result?
+        onPhaseChange: @MainActor (Phase) -> Void) async -> Result?
     {
         switch self.selectCandidate(from: loaded) {
         case .none:
@@ -292,7 +277,7 @@ final class CursorLoginRunner {
             guard !Task.isCancelled else {
                 return self.cancelAfterTaskCancellation()
             }
-            return self.completeAcceptedLogin(
+            return await self.completeAcceptedLogin(
                 candidate,
                 onPhaseChange: onPhaseChange)
         }
@@ -366,11 +351,11 @@ final class CursorLoginRunner {
 
     private func completeAcceptedLogin(
         _ loaded: SnapshotLoadResult,
-        onPhaseChange: @MainActor (Phase) -> Void) -> Result
+        onPhaseChange: @MainActor (Phase) -> Void) async -> Result
     {
         let snapshot = loaded.snapshot
         if let session = loaded.session {
-            self.commitSessionCache(session)
+            await self.replaceSessionCache(session)
         }
         onPhaseChange(.success)
         self.logger.info("Cursor login completed", metadata: ["outcome": "success"])
@@ -380,6 +365,18 @@ final class CursorLoginRunner {
     private func cancelAfterTaskCancellation() -> Result {
         self.logger.info("Cursor login cancelled")
         return Result(outcome: .cancelled, email: nil)
+    }
+
+    @MainActor
+    static func replaceCachedSession(
+        _ session: CursorStatusProbe.BrowserLoginSession,
+        beforeCommit: @MainActor () -> Void = {}) async
+    {
+        // Candidate discovery is cache-independent. Preserve the active cache until a candidate is accepted and the
+        // actor-owned legacy store is cleared, then atomically overwrite current cache ownership.
+        await CursorSessionStore.shared.clearCookies()
+        beforeCommit()
+        CursorStatusProbe.commitBrowserLoginSession(session)
     }
 
     private static func launch(_ route: CursorLoginBrowserRouter.Route) async -> Bool {
