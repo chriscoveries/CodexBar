@@ -40,11 +40,11 @@ public struct DeepInfraUsageResponse: Decodable, Sendable {
 
 public struct DeepInfraUsageMonth: Decodable, Sendable {
     public let period: String
-    public let totalCost: Double
+    public let totalCostCents: Double
 
     enum CodingKeys: String, CodingKey {
         case period
-        case totalCost = "total_cost"
+        case totalCostCents = "total_cost"
     }
 }
 
@@ -79,12 +79,13 @@ public struct DeepInfraUsageSnapshot: Sendable {
     }
 
     public func toUsageSnapshot() -> UsageSnapshot {
+        let fundedAmount = self.availableBalanceUSD + self.recentCostUSD
         let usedPercent: Double = if self.suspended {
             100
-        } else if let limit = self.spendingLimitUSD, limit > 0 {
-            Self.clamp(self.recentCostUSD / limit * 100)
+        } else if self.amountOwedUSD > 0 || fundedAmount <= 0 {
+            100
         } else {
-            0
+            Self.clamp(self.recentCostUSD / fundedAmount * 100)
         }
 
         let balanceText = if self.amountOwedUSD > 0 {
@@ -164,7 +165,8 @@ public enum DeepInfraUsageError: LocalizedError, Sendable {
 public struct DeepInfraUsageFetcher: Sendable {
     private static let checklistURL = URL(string: "https://api.deepinfra.com/payment/checklist?compute_owed=true")!
     private static let usageURL = URL(string: "https://api.deepinfra.com/payment/usage?from=current")!
-    private static let timeoutSeconds: TimeInterval = 15
+    private static let timeoutSeconds: TimeInterval = 30
+    private static let centsPerDollar = 100.0
 
     public static func fetchUsage(apiKey: String) async throws -> DeepInfraUsageSnapshot {
         try await self.fetchUsage(apiKey: apiKey, transport: ProviderHTTPClient.shared, now: Date())
@@ -249,14 +251,18 @@ public struct DeepInfraUsageFetcher: Sendable {
             let decoder = JSONDecoder()
             let checklist = try decoder.decode(DeepInfraChecklistResponse.self, from: checklistData)
             let usage = try decoder.decode(DeepInfraUsageResponse.self, from: usageData)
-            let currentMonthCost = usage.months.last?.totalCost ?? checklist.recent
+            let recentCost = max(0, checklist.recent)
+            let currentMonthCost = usage.months.last
+                .map { max(0, $0.totalCostCents / Self.centsPerDollar) }
+                ?? recentCost
+            let netBalance = checklist.stripeBalance + recentCost
             let limit = checklist.limit.flatMap { $0 > 0 ? $0 : nil }
 
             return DeepInfraUsageSnapshot(
-                availableBalanceUSD: max(0, -checklist.stripeBalance),
-                amountOwedUSD: max(0, checklist.stripeBalance),
-                currentMonthCostUSD: max(0, currentMonthCost),
-                recentCostUSD: max(0, checklist.recent),
+                availableBalanceUSD: max(0, -netBalance),
+                amountOwedUSD: max(0, netBalance),
+                currentMonthCostUSD: currentMonthCost,
+                recentCostUSD: recentCost,
                 spendingLimitUSD: limit,
                 suspended: checklist.suspended,
                 suspendReason: checklist.suspendReason,

@@ -7,27 +7,28 @@ import Testing
 
 struct DeepInfraUsageFetcherTests {
     @Test
-    func `parses prepaid balance monthly spend and spending limit`() throws {
+    func `converts monthly cents and deducts recent usage from prepaid balance`() throws {
         let now = Date(timeIntervalSince1970: 1_700_000_000)
         let snapshot = try DeepInfraUsageFetcher._parseSnapshotForTesting(
             checklistData: Self.checklistData(
-                stripeBalance: -18.75,
-                recent: 4.5,
+                stripeBalance: -99.75,
+                recent: 3.94,
                 limit: 20),
-            usageData: Self.usageData(totalCost: 3.25),
+            usageData: Self.usageData(totalCostCents: 394),
             now: now)
 
-        #expect(snapshot.availableBalanceUSD == 18.75)
+        #expect(abs(snapshot.availableBalanceUSD - 95.81) < 0.000_001)
         #expect(snapshot.amountOwedUSD == 0)
-        #expect(snapshot.currentMonthCostUSD == 3.25)
-        #expect(snapshot.recentCostUSD == 4.5)
+        #expect(abs(snapshot.currentMonthCostUSD - 3.94) < 0.000_001)
+        #expect(snapshot.recentCostUSD == 3.94)
         #expect(snapshot.spendingLimitUSD == 20)
         #expect(snapshot.updatedAt == now)
 
         let usage = snapshot.toUsageSnapshot()
-        #expect(usage.primary?.usedPercent == 22.5)
-        #expect(usage.primary?.resetDescription == "$18.75 available · $3.25 spent this month")
-        #expect(usage.providerCost?.used == 4.5)
+        #expect(abs((usage.primary?.usedPercent ?? 0) - 3.949_874_686_7) < 0.000_001)
+        #expect(abs((usage.primary?.remainingPercent ?? 0) - 96.050_125_313_3) < 0.000_001)
+        #expect(usage.primary?.resetDescription == "$95.81 available · $3.94 spent this month")
+        #expect(usage.providerCost?.used == 3.94)
         #expect(usage.providerCost?.limit == 20)
         #expect(usage.providerCost?.period == "Billing cycle")
         #expect(usage.identity?.providerID == .deepinfra)
@@ -41,12 +42,13 @@ struct DeepInfraUsageFetcherTests {
                 stripeBalance: 2.75,
                 recent: 7,
                 limit: -1),
-            usageData: Self.usageData(totalCost: 6.5))
+            usageData: Self.usageData(totalCostCents: 650))
 
         #expect(snapshot.availableBalanceUSD == 0)
-        #expect(snapshot.amountOwedUSD == 2.75)
+        #expect(snapshot.amountOwedUSD == 9.75)
         #expect(snapshot.spendingLimitUSD == nil)
-        #expect(snapshot.toUsageSnapshot().primary?.resetDescription == "$2.75 owed · $6.50 spent this month")
+        #expect(snapshot.toUsageSnapshot().primary?.remainingPercent == 0)
+        #expect(snapshot.toUsageSnapshot().primary?.resetDescription == "$9.75 owed · $6.50 spent this month")
         #expect(snapshot.toUsageSnapshot().providerCost == nil)
     }
 
@@ -59,7 +61,7 @@ struct DeepInfraUsageFetcherTests {
                 limit: nil,
                 suspended: true,
                 suspendReason: "Payment review"),
-            usageData: Self.usageData(totalCost: 1))
+            usageData: Self.usageData(totalCostCents: 100))
             .toUsageSnapshot()
 
         #expect(snapshot.primary?.usedPercent == 100)
@@ -75,7 +77,7 @@ struct DeepInfraUsageFetcherTests {
             let data = if path == "/payment/checklist" {
                 Self.checklistData(stripeBalance: -9, recent: 2, limit: 10)
             } else {
-                Self.usageData(totalCost: 1.5)
+                Self.usageData(totalCostCents: 150)
             }
             let response = try HTTPURLResponse(
                 url: #require(request.url),
@@ -90,11 +92,12 @@ struct DeepInfraUsageFetcherTests {
             transport: transport)
         let requests = await recorder.values
 
-        #expect(snapshot.availableBalanceUSD == 9)
+        #expect(snapshot.availableBalanceUSD == 7)
         #expect(requests.map(\.url?.path) == ["/payment/checklist", "/payment/usage"])
         #expect(requests[0].url?.query == "compute_owed=true")
         #expect(requests[1].url?.query == "from=current")
         #expect(requests.allSatisfy { $0.value(forHTTPHeaderField: "Authorization") == "Bearer fixture-token" })
+        #expect(requests.allSatisfy { $0.timeoutInterval == 30 })
     }
 
     @Test
@@ -123,7 +126,7 @@ struct DeepInfraUsageFetcherTests {
         #expect {
             _ = try DeepInfraUsageFetcher._parseSnapshotForTesting(
                 checklistData: Data("{}".utf8),
-                usageData: Self.usageData(totalCost: 1))
+                usageData: Self.usageData(totalCostCents: 100))
         } throws: { error in
             guard case DeepInfraUsageError.parseFailed = error else { return false }
             return true
@@ -151,7 +154,7 @@ struct DeepInfraUsageFetcherTests {
             """.utf8)
     }
 
-    private static func usageData(totalCost: Double) -> Data {
+    private static func usageData(totalCostCents: Double) -> Data {
         Data(
             """
             {
@@ -159,7 +162,7 @@ struct DeepInfraUsageFetcherTests {
                 {
                   "period": "2026.07",
                   "items": [],
-                  "total_cost": \(totalCost)
+                  "total_cost": \(totalCostCents)
                 }
               ],
               "initial_month": "2026.07"
