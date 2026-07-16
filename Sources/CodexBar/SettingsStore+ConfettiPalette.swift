@@ -30,12 +30,16 @@ extension SettingsStore {
 
     @discardableResult
     func setConfettiPaletteHexValues(_ hexValues: [String], for provider: UsageProvider) -> Bool {
-        guard let palette = Self.confettiPalette(from: hexValues) else { return false }
+        guard let normalizedHexValues = Self.normalizedConfettiPaletteHexValues(hexValues) else { return false }
 
         var overrides = self.confettiPaletteOverridesRaw
-        overrides[provider.rawValue] = palette.map(\.hexString)
+        overrides[provider.rawValue] = normalizedHexValues
         self.confettiPaletteOverridesRaw = overrides
         return true
+    }
+
+    static func normalizedConfettiPaletteHexValues(_ hexValues: [String]) -> [String]? {
+        self.confettiPalette(from: hexValues)?.map(\.hexString)
     }
 
     func resetConfettiPalette(for provider: UsageProvider) {

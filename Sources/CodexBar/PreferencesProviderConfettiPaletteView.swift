@@ -52,8 +52,20 @@ struct ProviderConfettiPaletteSettingsView: View {
                         self.clearFocus()
                     }
                 }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(!self.canApplyDraft)
+
+                Button(L("Preview")) {
+                    guard self.applyDraft() else { return }
+                    self.clearFocus()
+                    NotificationCenter.default.post(
+                        name: .codexbarConfettiPreviewRequested,
+                        object: ConfettiPreviewEvent(provider: self.provider))
+                }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
+                .disabled(!self.canApplyDraft)
             }
         } header: {
             Text(L("section_celebrations"))
@@ -105,6 +117,10 @@ struct ProviderConfettiPaletteSettingsView: View {
     private func color(at index: Int) -> Color {
         guard let color = ProviderColor(hexString: self.draftHexValues[index]) else { return .clear }
         return Color(red: color.red, green: color.green, blue: color.blue)
+    }
+
+    private var canApplyDraft: Bool {
+        SettingsStore.normalizedConfettiPaletteHexValues(self.draftHexValues) != nil
     }
 
     @discardableResult

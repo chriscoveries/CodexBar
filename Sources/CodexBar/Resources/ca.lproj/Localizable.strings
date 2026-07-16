@@ -116,6 +116,7 @@
 "Display mode" = "Mode de visualització";
 "Display reset times as absolute clock values instead of countdowns." = "Mostreu les hores de reinici com a valors de rellotge absoluts en comptes de comptes enrere.";
 "Done" = "Fet";
+"Preview" = "Previsualitza";
 "Effective PATH" = "PATH efectiu";
 "Email" = "Correu electrònic";
 "Enable Merge Icons to configure Overview tab providers." = "Activeu Combina les icones per configurar els proveïdors de la pestanya Resum.";

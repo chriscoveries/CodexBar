@@ -117,6 +117,7 @@
 "Display mode" = "โหมดการแสดงผล";
 "Display reset times as absolute clock values instead of countdowns." = "แสดงเวลารีเซ็ตเป็นค่านาฬิกาสัมบูรณ์แทนการนับถอยหลัง";
 "Done" = "เสร็จสิ้น";
+"Preview" = "แสดงตัวอย่าง";
 "Effective PATH" = "PATH ที่มีประสิทธิภาพ";
 "Email" = "อีเมล";
 "Enable Merge Icons to configure Overview tab providers." = "เปิดใช้งานไอคอนผสานเพื่อกําหนดค่าผู้ให้บริการแท็บภาพรวม";

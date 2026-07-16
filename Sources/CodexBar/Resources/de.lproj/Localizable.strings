@@ -114,6 +114,7 @@
 "Display mode" = "Anzeigemodus";
 "Display reset times as absolute clock values instead of countdowns." = "Anzeige der Rücksetzzeiten als absolute Uhrwerte statt als Countdown.";
 "Done" = "Erledigt";
+"Preview" = "Vorschau";
 "Effective PATH" = "Effektiver WEG";
 "Email" = "E-Mail";
 "Enable Merge Icons to configure Overview tab providers." = "Aktivieren Sie \"Symbole zusammenführen\", um Anbieter für die Registerkarte \"Übersicht\" zu konfigurieren.";

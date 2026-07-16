@@ -116,6 +116,7 @@
 "Display mode" = "Режим відображення";
 "Display reset times as absolute clock values instead of countdowns." = "Відображення часу скидання як абсолютних значень годинника замість зворотного відліку.";
 "Done" = "Готово";
+"Preview" = "Попередній перегляд";
 "Effective PATH" = "Ефективний ШЛЯХ";
 "Email" = "Ел. пошта";
 "Enable Merge Icons to configure Overview tab providers." = "Увімкніть Merge Icons, щоб налаштувати постачальників вкладок «Огляд».";

@@ -349,6 +349,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let updaterController: UpdaterProviding = makeUpdaterController()
     private let confettiOverlayController = ScreenConfettiOverlayController()
     private let confettiLogger = CodexBarLog.logger(LogCategories.confetti)
+    #if DEBUG
+    var playConfettiForTesting: ((CGPoint?, [ProviderColor]) -> Void)?
+    #endif
     private lazy var memoryPressureMonitor = MemoryPressureMonitor(trimAppCaches: { [weak self] in
         self?.trimRebuildableCachesForMemoryPressure() ?? MemoryPressureCacheTrimSummary()
     })
@@ -360,7 +363,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var preferencesSelection: PreferencesSelection?
     private var managedCodexAccountCoordinator: ManagedCodexAccountCoordinator?
     private var codexAccountPromotionCoordinator: CodexAccountPromotionCoordinator?
-    private var hasInstalledLimitResetObservers = false
+    private var hasInstalledConfettiObservers = false
     #if DEBUG
     private var debugMemoryPressureObserver: NSObjectProtocol?
     #endif
@@ -394,7 +397,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.statusController?.openMenuFromShortcut()
             }
         }
-        if !self.hasInstalledLimitResetObservers {
+        if !self.hasInstalledConfettiObservers {
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(self.handleConfettiPreviewNotification(_:)),
+                name: .codexbarConfettiPreviewRequested,
+                object: nil)
             NotificationCenter.default.addObserver(
                 self,
                 selector: #selector(self.handleSessionLimitResetNotification(_:)),
@@ -405,7 +413,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 selector: #selector(self.handleWeeklyLimitResetNotification(_:)),
                 name: .codexbarWeeklyLimitReset,
                 object: nil)
-            self.hasInstalledLimitResetObservers = true
+            self.hasInstalledConfettiObservers = true
         }
     }
 
@@ -429,25 +437,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func handleSessionLimitResetNotification(_ notification: Notification) {
         guard let event = notification.object as? SessionLimitResetEvent else { return }
         guard self.settings?.confettiOnSessionLimitResetsEnabled == true else { return }
-        self.playLimitResetConfetti(
+        self.playConfetti(
             provider: event.provider,
             accountIdentifier: event.accountIdentifier,
-            resetKind: "session")
+            trigger: "session")
+    }
+
+    @objc private func handleConfettiPreviewNotification(_ notification: Notification) {
+        guard let event = notification.object as? ConfettiPreviewEvent else { return }
+        self.playConfetti(
+            provider: event.provider,
+            accountIdentifier: "settings-preview",
+            trigger: "preview")
     }
 
     @objc private func handleWeeklyLimitResetNotification(_ notification: Notification) {
         guard let event = notification.object as? WeeklyLimitResetEvent else { return }
         guard self.settings?.confettiOnWeeklyLimitResetsEnabled == true else { return }
-        self.playLimitResetConfetti(
+        self.playConfetti(
             provider: event.provider,
             accountIdentifier: event.accountIdentifier,
-            resetKind: "weekly")
+            trigger: "weekly")
     }
 
-    private func playLimitResetConfetti(
+    private func playConfetti(
         provider: UsageProvider,
         accountIdentifier: String,
-        resetKind: String)
+        trigger: String)
     {
         let origin = self.statusController?.celebrationOriginPoint(for: provider)
         let palette = self.settings?.confettiPalette(for: provider)
@@ -457,9 +473,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             metadata: [
                 "provider": provider.rawValue,
                 "accountIdentifier": accountIdentifier,
-                "resetKind": resetKind,
+                "trigger": trigger,
                 "originKnown": origin == nil ? "0" : "1",
             ])
+        #if DEBUG
+        if let playConfettiForTesting {
+            playConfettiForTesting(origin, palette)
+            return
+        }
+        #endif
         self.confettiOverlayController.play(originInScreen: origin, colors: palette)
     }
 

@@ -117,6 +117,7 @@
 "Display mode" = "حالت نمایش";
 "Display reset times as absolute clock values instead of countdowns." = "زمان بازنشانی را به جای شمارش معکوس، به صورت مقادیر مطلق ساعت نمایش دهید.";
 "Done" = "انجام شد";
+"Preview" = "پیش‌نمایش";
 "Effective PATH" = "PATH مؤثر";
 "Email" = "ایمیل";
 "Enable Merge Icons to configure Overview tab providers." = "فعال سازی Merge Icons برای پیکربندی ارائه دهندگان تب نمای کلی.";

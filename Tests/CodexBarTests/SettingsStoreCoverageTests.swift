@@ -186,6 +186,8 @@ struct SettingsStoreCoverageTests {
         #expect(!settings.setConfettiPaletteHexValues(["#123456"], for: .codex))
         #expect(!settings.setConfettiPaletteHexValues(["#123456", "#654321", "#ABCDEF", "#FEDCBA"], for: .codex))
         #expect(settings.confettiPaletteHexValues(for: .codex) == savedOverride)
+        #expect(SettingsStore.normalizedConfettiPaletteHexValues([" 123456 ", "abcdef"]) == ["#123456", "#ABCDEF"])
+        #expect(SettingsStore.normalizedConfettiPaletteHexValues(["#12345", "#FFFFFF"]) == nil)
     }
 
     @Test

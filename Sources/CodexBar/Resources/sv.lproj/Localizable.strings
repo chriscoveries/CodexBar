@@ -116,6 +116,7 @@
 "Display mode" = "Visningsläge";
 "Display reset times as absolute clock values instead of countdowns." = "Visa återställningstider som klockslag i stället för nedräkningar.";
 "Done" = "Klar";
+"Preview" = "Förhandsvisa";
 "Effective PATH" = "Effektiv PATH";
 "Email" = "E-post";
 "Enable Merge Icons to configure Overview tab providers." = "Aktivera Slå ihop ikoner för att konfigurera leverantörer på översiktsfliken.";

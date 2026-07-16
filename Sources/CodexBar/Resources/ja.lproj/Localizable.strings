@@ -116,6 +116,7 @@
 "Display mode" = "表示モード";
 "Display reset times as absolute clock values instead of countdowns." = "リセット時刻をカウントダウンではなく絶対時刻で表示します。";
 "Done" = "完了";
+"Preview" = "プレビュー";
 "Effective PATH" = "有効な PATH";
 "Email" = "メールアドレス";
 "Enable Merge Icons to configure Overview tab providers." = "「アイコンを統合」を有効にすると、概要タブのプロバイダを設定できます。";

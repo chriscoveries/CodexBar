@@ -118,6 +118,7 @@
 "Display mode" = "显示模式";
 "Display reset times as absolute clock values instead of countdowns." = "将重置时间显示为绝对时钟值，而不是倒计时。";
 "Done" = "完成";
+"Preview" = "预览";
 "Effective PATH" = "有效 PATH";
 "Email" = "电子邮件";
 "Enable Merge Icons to configure Overview tab providers." = "启用“合并图标”以配置“概览”标签中的提供商。";

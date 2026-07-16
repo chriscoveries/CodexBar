@@ -116,6 +116,7 @@
 "Display mode" = "표시 모드";
 "Display reset times as absolute clock values instead of countdowns." = "재설정 시간을 카운트다운 대신 절대 시각으로 표시합니다.";
 "Done" = "완료";
+"Preview" = "미리보기";
 "Effective PATH" = "유효 PATH";
 "Email" = "이메일";
 "Enable Merge Icons to configure Overview tab providers." = "개요 탭 공급자를 구성하려면 아이콘 병합을 사용하세요.";

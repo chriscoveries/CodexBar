@@ -117,6 +117,7 @@
 "Display mode" = "وضع العرض";
 "Display reset times as absolute clock values instead of countdowns." = "عرض أوقات إعادة الضبط كقيم ساعة مطلقة بدلا من العد التنازلي.";
 "Done" = "تم";
+"Preview" = "معاينة";
 "Effective PATH" = "PATH فعالة";
 "Email" = "البريد الإلكتروني";
 "Enable Merge Icons to configure Overview tab providers." = "تفعيل أيقونات الدمج لتكوين مزودي تبويب النظرة العامة.";

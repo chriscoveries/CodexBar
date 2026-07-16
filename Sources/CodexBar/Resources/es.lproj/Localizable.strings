@@ -115,6 +115,7 @@
 "Display mode" = "Modo de visualización";
 "Display reset times as absolute clock values instead of countdowns." = "Mostrar las horas de reinicio como valores de reloj absolutos en lugar de cuentas atrás.";
 "Done" = "Listo";
+"Preview" = "Vista previa";
 "Effective PATH" = "PATH efectivo";
 "Email" = "Correo electrónico";
 "Enable Merge Icons to configure Overview tab providers." = "Activa Combinar iconos para configurar los proveedores de la pestaña Resumen.";

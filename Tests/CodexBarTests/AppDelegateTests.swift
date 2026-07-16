@@ -60,6 +60,53 @@ struct AppDelegateTests {
         #expect(dummyStatusController.shutdowns == 1)
         #expect(ttyShutdowns == 1)
     }
+
+    @Test
+    func `confetti preview uses the saved provider palette`() throws {
+        let suite = "AppDelegateTests-confetti-preview"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(true, forKey: "debugDisableKeychainAccess")
+        let settings = SettingsStore(
+            userDefaults: defaults,
+            configStore: testConfigStore(suiteName: suite),
+            zaiTokenStore: NoopZaiTokenStore(),
+            syntheticTokenStore: NoopSyntheticTokenStore(),
+            performInitialProviderDetection: false)
+        #expect(settings.setConfettiPaletteHexValues(["#E94F37", "#22C55E", "#2563EB"], for: .codex))
+
+        let fetcher = UsageFetcher()
+        let store = UsageStore(fetcher: fetcher, browserDetection: BrowserDetection(cacheTTL: 0), settings: settings)
+        let managedCodexAccountCoordinator = ManagedCodexAccountCoordinator()
+        let promotionCoordinator = CodexAccountPromotionCoordinator(
+            settingsStore: settings,
+            usageStore: store,
+            managedAccountCoordinator: managedCodexAccountCoordinator)
+        let appDelegate = AppDelegate()
+        var playedPalette: [String]?
+        appDelegate.playConfettiForTesting = { _, colors in
+            playedPalette = colors.map(\.hexString)
+        }
+
+        StatusItemController.factory = { _, _, _, _, _, _, _ in DummyStatusController() }
+        defer { StatusItemController.factory = StatusItemController.defaultFactory }
+        appDelegate.configure(.init(
+            store: store,
+            settings: settings,
+            account: fetcher.loadAccountInfo(),
+            selection: PreferencesSelection(),
+            managedCodexAccountCoordinator: managedCodexAccountCoordinator,
+            codexAccountPromotionCoordinator: promotionCoordinator))
+        appDelegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+
+        NotificationCenter.default.post(
+            name: .codexbarConfettiPreviewRequested,
+            object: ConfettiPreviewEvent(provider: .codex))
+
+        #expect(playedPalette == ["#E94F37", "#22C55E", "#2563EB"])
+        appDelegate.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification))
+    }
 }
 
 @MainActor
