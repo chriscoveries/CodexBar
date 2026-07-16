@@ -1133,19 +1133,10 @@ extension CostUsageScanner {
             range: context.range,
             inheritedTotalsResolver: context.resources.inheritedResolver.inheritedTotals(for:atOrBefore:),
             checkCancellation: context.checkCancellation)
-        let forkBaselineDependencyKey: String? = if let parentSessionId = parsed.forkedFromId {
-            if parsed.dependsOnParentTotals {
-                if let dependencyKey = context.resources.inheritedResolver.dependencyKeyUsed(for: parentSessionId) {
-                    dependencyKey
-                } else {
-                    try context.resources.inheritedResolver.currentDependencyKey(for: parentSessionId)
-                }
-            } else {
-                Self.codexForkDependencyNotRequiredKey
-            }
-        } else {
-            nil
-        }
+        let forkBaselineDependencyKey = Self.codexForkBaselineDependencyKey(
+            parentSessionId: parsed.forkedFromId,
+            dependsOnParentTotals: parsed.dependsOnParentTotals,
+            inheritedResolver: context.resources.inheritedResolver)
         let sessionId = parsed.sessionId ?? input.cached?.sessionId
         let projectPath = parsed.projectPath ?? input.cached?.projectPath
         let canonicalProjectPath = parsed.projectPath.map {
@@ -1245,6 +1236,19 @@ extension CostUsageScanner {
             rows: uniqueRows,
             context: context,
             state: &state)
+    }
+
+    static func codexForkBaselineDependencyKey(
+        parentSessionId: String?,
+        dependsOnParentTotals: Bool,
+        inheritedResolver: CodexInheritedTotalsResolver) -> String?
+    {
+        guard let parentSessionId else { return nil }
+        guard dependsOnParentTotals else { return Self.codexForkDependencyNotRequiredKey }
+
+        // A nil key means the parent changed while its snapshots were read (or no stable
+        // snapshot was resolved). Preserve nil so the child cannot be reused on the next scan.
+        return inheritedResolver.dependencyKeyUsed(for: parentSessionId)
     }
 
     static func mergeFileDays(

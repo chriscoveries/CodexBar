@@ -4267,6 +4267,64 @@ struct CostUsageScannerBreakdownTests {
     }
 
     @Test
+    func `codex unstable parent snapshot keeps fork dependency uncached`() throws {
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+
+        let parentDay = try env.makeLocalNoon(year: 2026, month: 2, day: 1)
+        let parentSessionId = "sess-parent-unstable"
+        let model = "openai/gpt-5.2-codex"
+        let metadata: [String: Any] = [
+            "type": "session_meta",
+            "payload": ["id": parentSessionId],
+        ]
+        let firstContents = try env.jsonl([
+            metadata,
+            self.codexTurnContext(timestamp: env.isoString(for: parentDay), model: model),
+            self.codexTokenCount(
+                timestamp: env.isoString(for: parentDay.addingTimeInterval(1)),
+                model: model,
+                total: (input: 20, cached: 5, output: 2)),
+        ])
+        let secondContents = try env.jsonl([
+            metadata,
+            self.codexTurnContext(timestamp: env.isoString(for: parentDay), model: model),
+            self.codexTokenCount(
+                timestamp: env.isoString(for: parentDay.addingTimeInterval(1)),
+                model: model,
+                total: (input: 21, cached: 5, output: 2)),
+        ])
+        let parentURL = try env.writeCodexSessionFile(
+            day: parentDay,
+            filename: "rollout-2026-02-01T12-00-00-\(parentSessionId).jsonl",
+            contents: firstContents)
+        let fileIndex = CostUsageScanner.CodexSessionFileIndex(
+            files: [parentURL],
+            roots: [],
+            cachedSessionFiles: [parentSessionId: parentURL])
+        var mutationCount = 0
+        let resolver = CostUsageScanner.CodexInheritedTotalsResolver(
+            fileIndex: fileIndex,
+            checkCancellation: {
+                mutationCount += 1
+                let contents = mutationCount.isMultiple(of: 2) ? firstContents : secondContents
+                try contents.write(to: parentURL, atomically: true, encoding: .utf8)
+            })
+
+        let baseline = try resolver.inheritedTotals(
+            for: parentSessionId,
+            atOrBefore: env.isoString(for: parentDay.addingTimeInterval(2)))
+        if case .resolved = baseline {
+            Issue.record("Expected an unstable parent snapshot to stay unresolved")
+        }
+        #expect(resolver.dependencyKeyUsed(for: parentSessionId) == nil)
+        #expect(CostUsageScanner.codexForkBaselineDependencyKey(
+            parentSessionId: parentSessionId,
+            dependsOnParentTotals: true,
+            inheritedResolver: resolver) == nil)
+    }
+
+    @Test
     func `codex forked child skips cumulative totals when parent session is missing`() throws {
         let env = try CostUsageTestEnvironment()
         defer { env.cleanup() }
