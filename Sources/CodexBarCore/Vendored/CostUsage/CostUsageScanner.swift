@@ -2401,10 +2401,11 @@ enum CostUsageScanner {
                         // `turn_context` can carry very large prompts, but its model usually appears near the start.
                         // A truncated line cannot be structurally validated with Foundation, so
                         // only accept the canonical root discriminator to avoid prompt-text hits.
-                        if line.bytes.containsAscii(#""type":"turn_context""#) {
+                        let truncatedTurnContext = Self.extractCodexTruncatedTurnContext(from: line.bytes)
+                        if truncatedTurnContext.isValid {
                             do {
                                 try routeFastLine(
-                                    .turnContext(model: Self.extractCodexTurnContextModel(from: line.bytes)),
+                                    .turnContext(model: truncatedTurnContext.model),
                                     lineIndex: lineIndex)
                             } catch {
                                 deferredError = error

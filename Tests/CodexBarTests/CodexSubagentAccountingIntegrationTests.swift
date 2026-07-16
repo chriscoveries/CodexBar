@@ -395,6 +395,75 @@ struct CodexSubagentAccountingIntegrationTests {
     }
 
     @Test
+    func `oversized invalid suffix markers preserve parent dependency`() throws {
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+
+        let day = try env.makeLocalNoon(year: 2026, month: 7, day: 16)
+        let timestamp = env.isoString(for: day)
+        let opening = try env.jsonl([
+            [
+                "type": "session_meta",
+                "timestamp": timestamp,
+                "payload": [
+                    "id": "oversized-marker-child",
+                    "source": ["subagent": ["thread_spawn": [:]]],
+                ],
+            ],
+            self.tokenCount(
+                timestamp: env.isoString(for: day.addingTimeInterval(1)),
+                model: "openai/gpt-5.3",
+                total: (input: 1000, cached: 900, output: 100),
+                last: (input: 50, cached: 10, output: 5)),
+            [
+                "type": "session_meta",
+                "timestamp": timestamp,
+                "payload": ["id": "oversized-marker-parent"],
+            ],
+        ])
+        let padding = String(repeating: "x", count: 300_000)
+        let invalidTimestamp = "{\"type\":\"turn_context\",\"timestamp\":\"invalid\"," +
+            "\"payload\":{\"model\":\"openai/gpt-5.4\",\"padding\":\"\(padding)\"}}\n"
+        let nestedType = "{\"type\":\"event_msg\",\"timestamp\":\"\(timestamp)\"," +
+            "\"payload\":{\"type\":\"turn_context\",\"padding\":\"\(padding)\"}}\n"
+        let tail = try env.jsonl([
+            [
+                "type": "inter_agent_communication_metadata",
+                "timestamp": env.isoString(for: day.addingTimeInterval(2)),
+                "payload": ["trigger_turn": true],
+            ],
+            self.tokenCount(
+                timestamp: env.isoString(for: day.addingTimeInterval(3)),
+                model: "openai/gpt-5.4",
+                total: (input: 1050, cached: 910, output: 105),
+                last: (input: 50, cached: 10, output: 5)),
+        ])
+
+        let files = try [invalidTimestamp, nestedType].enumerated().map { index, marker in
+            try env.writeCodexSessionFile(
+                day: day,
+                filename: "rollout-\(timestamp)-oversized-invalid-marker-\(index).jsonl",
+                contents: opening + marker + tail)
+        }
+        let dayKey = CostUsageScanner.CostUsageDayRange.dayKey(from: day)
+        let model = CostUsagePricing.normalizeCodexModel("openai/gpt-5.4")
+        for fileURL in files {
+            var resolvedParentBaseline = false
+            let parsed = CostUsageScanner.parseCodexFile(
+                fileURL: fileURL,
+                range: CostUsageScanner.CostUsageDayRange(since: day, until: day),
+                inheritedTotalsResolver: { parentSessionID, _ in
+                    resolvedParentBaseline = true
+                    #expect(parentSessionID == "oversized-marker-parent")
+                    return .resolved(.init(input: 1000, cached: 900, output: 100))
+                })
+            #expect(parsed.days[dayKey]?[model] == [50, 10, 5])
+            #expect(parsed.dependsOnParentTotals)
+            #expect(resolvedParentBaseline)
+        }
+    }
+
+    @Test
     func `idless copied prefix without a parent or local marker is suppressed`() throws {
         let env = try CostUsageTestEnvironment()
         defer { env.cleanup() }

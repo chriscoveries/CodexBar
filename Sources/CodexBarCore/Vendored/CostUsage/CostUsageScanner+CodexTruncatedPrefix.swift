@@ -18,12 +18,14 @@ extension CostUsageScanner {
         return (true, sessionID)
     }
 
-    static func extractCodexTurnContextModel(from bytes: Data) -> String? {
-        guard let text = truncatedUTF8String(from: bytes) else { return nil }
+    static func extractCodexTruncatedTurnContext(from bytes: Data) -> (isValid: Bool, model: String?) {
+        guard let text = truncatedUTF8String(from: bytes) else { return (false, nil) }
         let object = text[...]
         guard Self.extractJSONStringField("type", from: object, atDepth: 1) == "turn_context",
+              let timestamp = Self.extractJSONStringField("timestamp", from: object, atDepth: 1),
+              Self.dayKeyFromTimestamp(timestamp) ?? Self.dayKeyFromParsedISO(timestamp) != nil,
               let payloadText = Self.extractJSONObjectField("payload", from: object, atDepth: 1)
-        else { return nil }
+        else { return (false, nil) }
 
         let infoText = Self.extractJSONObjectField("info", from: payloadText, atDepth: 1)
         let model = Self.codexTurnContextModel(
@@ -35,8 +37,8 @@ extension CostUsageScanner {
             infoModelName: infoText.flatMap {
                 Self.extractJSONStringFieldAllowingEmpty("model_name", from: $0, atDepth: 1)
             })
-        guard let model, model.isEmpty else { return model }
-        return Self.isCompleteJSONObject(payloadText) ? "" : nil
+        guard let model, model.isEmpty else { return (true, model) }
+        return (true, Self.isCompleteJSONObject(payloadText) ? "" : nil)
     }
 
     static func truncatedUTF8String(from bytes: Data) -> String? {
