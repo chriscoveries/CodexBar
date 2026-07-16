@@ -530,6 +530,8 @@ extension UsageMenuCardView.Model {
 
     private static func supportsResetWindowPace(provider: UsageProvider, window: RateWindow, now: Date) -> Bool {
         switch provider {
+        case .copilot:
+            window.resetsAt != nil
         case .cursor:
             return window.windowMinutes != nil
         case .grok:
@@ -564,12 +566,13 @@ extension UsageMenuCardView.Model {
     }
 
     private static func usesInferredMonthlyDuration(provider: UsageProvider, window: RateWindow) -> Bool {
-        guard window.windowMinutes == self.monthlyWindowSentinelMinutes else { return false }
         switch provider {
+        case .copilot:
+            window.windowMinutes == nil
         case .alibaba, .alibabatokenplan, .doubao, .opencodego:
-            return true
+            window.windowMinutes == self.monthlyWindowSentinelMinutes
         default:
-            return false
+            false
         }
     }
 
