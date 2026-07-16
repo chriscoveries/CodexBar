@@ -1013,7 +1013,29 @@ public struct CursorStatusProbe: Sendable {
                 return try await self.fetchWithCookieHeader(cached.cookieHeader)
             } catch let error as CursorStatusProbeError {
                 if case .notLoggedIn = error {
-                    CookieHeaderCache.clear(provider: .cursor)
+                    if cached.authenticationFailurePolicy == .stopFallback {
+                        if let replacement = CookieHeaderCache.load(provider: .cursor), replacement != cached {
+                            log("Selected cached session changed while its request was in flight; retrying replacement")
+                            return try await self.fetch(
+                                cookieHeaderOverride: cookieHeaderOverride,
+                                allowCachedSessions: allowCachedSessions,
+                                allowAppAuthFallback: allowAppAuthFallback,
+                                logger: logger)
+                        }
+                        log("Selected cached session was rejected; refusing automatic account fallback")
+                        throw error
+                    }
+                    guard CookieHeaderCache.clearIfCurrent(provider: .cursor, expected: cached) else {
+                        if let replacement = CookieHeaderCache.load(provider: .cursor), replacement != cached {
+                            log("Cached session changed while its request was in flight; retrying replacement")
+                            return try await self.fetch(
+                                cookieHeaderOverride: cookieHeaderOverride,
+                                allowCachedSessions: allowCachedSessions,
+                                allowAppAuthFallback: allowAppAuthFallback,
+                                logger: logger)
+                        }
+                        throw error
+                    }
                 } else {
                     throw error
                 }

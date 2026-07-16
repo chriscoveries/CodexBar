@@ -11,6 +11,10 @@ import Musl
 #endif
 
 public enum CookieHeaderCache {
+    public enum AuthenticationFailurePolicy: String, Codable, Equatable, Sendable {
+        case stopFallback
+    }
+
     public enum Scope: Sendable, Equatable {
         case managedAccount(UUID)
         case managedStoreUnreadable
@@ -62,15 +66,22 @@ public enum CookieHeaderCache {
         }
     }
 
-    public struct Entry: Codable, Sendable {
+    public struct Entry: Codable, Equatable, Sendable {
         public let cookieHeader: String
         public let storedAt: Date
         public let sourceLabel: String
+        public let authenticationFailurePolicy: AuthenticationFailurePolicy?
 
-        public init(cookieHeader: String, storedAt: Date, sourceLabel: String) {
+        public init(
+            cookieHeader: String,
+            storedAt: Date,
+            sourceLabel: String,
+            authenticationFailurePolicy: AuthenticationFailurePolicy? = nil)
+        {
             self.cookieHeader = cookieHeader
             self.storedAt = storedAt
             self.sourceLabel = sourceLabel
+            self.authenticationFailurePolicy = authenticationFailurePolicy
         }
     }
 
@@ -550,6 +561,7 @@ public enum CookieHeaderCache {
         return current.cookieHeader == expected.cookieHeader
             && current.storedAt == expected.storedAt
             && current.sourceLabel == expected.sourceLabel
+            && current.authenticationFailurePolicy == expected.authenticationFailurePolicy
     }
 
     @discardableResult
@@ -946,11 +958,16 @@ extension CookieHeaderCache {
         scope: Scope? = nil,
         cookieHeader: String,
         sourceLabel: String,
+        authenticationFailurePolicy: AuthenticationFailurePolicy? = nil,
         now: Date = Date()) -> Bool
     {
         let trimmed = cookieHeader.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let normalized = CookieHeaderNormalizer.normalize(trimmed), !normalized.isEmpty else { return false }
-        let entry = Entry(cookieHeader: normalized, storedAt: now, sourceLabel: sourceLabel)
+        let entry = Entry(
+            cookieHeader: normalized,
+            storedAt: now,
+            sourceLabel: sourceLabel,
+            authenticationFailurePolicy: authenticationFailurePolicy)
         do {
             return try self.withLegacyMutationLock {
                 self.store(entry: entry, provider: provider, scope: scope, sourceLabel: sourceLabel)
