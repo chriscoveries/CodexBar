@@ -397,10 +397,13 @@ extension UsageMenuCardView.Model {
             details.append(L("cost_estimate_hint"))
         }
         let providerName = ProviderDefaults.metadata[provider]?.displayName ?? provider.rawValue
+        let accessibilityLabel = if provider == .codex {
+            "\(providerName) \(periodLabel) \(L(\"codex_api_estimate_header\")) trend"
+        } else {
+            "\(providerName) \(periodLabel) cost trend"
+        }
         var model = InlineUsageDashboardModel(
-            accessibilityLabel: provider == .codex
-                ? "\(providerName) \(periodLabel) \(L(\"codex_api_estimate_header\")) trend"
-                : "\(providerName) \(periodLabel) cost trend",
+            accessibilityLabel: accessibilityLabel,
             valueStyle: Self.costValueStyle(currencyCode: snapshot.currencyCode),
             kpis: [
                 .init(
