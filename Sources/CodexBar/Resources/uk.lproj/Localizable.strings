@@ -532,6 +532,8 @@
 /* Display Pane */
 "menu_bar_style_title" = "Стиль рядка меню";
 "menu_bar_style_subtitle" = "Визначає вигляд елемента рядка меню.";
+"menu_bar_inactive_display_contrast_title" = "Покращити видимість на неактивних дисплеях";
+"menu_bar_inactive_display_contrast_subtitle" = "Використовує висококонтрастне відтворення, щоб піктограма й показник залишалися читабельними на інших дисплеях.";
 "menu_bar_style_critters" = "Тварини";
 "menu_bar_style_bars" = "Смуги-індикатори";
 "menu_bar_style_icon_percent" = "Значок і відсоток";
@@ -1187,3 +1189,16 @@
 "Sign in to DeepSeek Platform in Chrome for detailed usage." = "Увійдіть у DeepSeek Platform у Chrome, щоб переглянути докладні дані про використання.";
 "Select a DeepSeek Chrome profile in Settings." = "Виберіть профіль Chrome для DeepSeek у налаштуваннях.";
 "Select profile…" = "Вибрати профіль…";
+
+"%@: %@" = "%@: %@";
+"Alternatively, set a custom path in Settings." = "Або встановіть спеціальний шлях у налаштуваннях.";
+"Choose a supported browser so CodexBar can read the matching account." = "Виберіть підтримуваний браузер, щоб CodexBar міг читати відповідний обліковий запис.";
+"Choose Cursor account" = "Виберіть обліковий запис Cursor";
+"Choose which Cursor account CodexBar should use." = "Виберіть, який обліковий запис Cursor має використовувати CodexBar.";
+"Finish switching to a different Cursor account in your browser, then try again." = "Завершіть перехід до іншого облікового запису Cursor у своєму браузері та повторіть спробу.";
+"Install a JetBrains IDE with AI Assistant enabled, then refresh CodexBar." = "Встановіть JetBrains IDE із увімкненим AI Assistant, а потім оновіть CodexBar.";
+"Request quota: %@ / %@" = "Квота запитів: %@ / %@";
+"Sign in with Claude Code..." = "Увійдіть за допомогою Claude Code...";
+"Timed out waiting for Cursor account switch. %@" = "Минув час очікування зміни облікового запису Cursor. %@";
+"Timed out waiting for Cursor account switch. %@ Last error: %@" = "Минув час очікування зміни облікового запису Cursor. %@ Остання помилка: %@";
+"Use Account" = "Використати обліковий запис";

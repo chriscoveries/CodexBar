@@ -532,6 +532,8 @@
 /* Display Pane */
 "menu_bar_style_title" = "Menubalkstijl";
 "menu_bar_style_subtitle" = "Hoe het menubalkitem wordt weergegeven.";
+"menu_bar_inactive_display_contrast_title" = "Zichtbaarheid op inactieve beeldschermen verbeteren";
+"menu_bar_inactive_display_contrast_subtitle" = "Gebruikt weergave met hoog contrast zodat het pictogram en de metriek leesbaar blijven op andere beeldschermen.";
 "menu_bar_style_critters" = "Critters";
 "menu_bar_style_bars" = "Meterbalken";
 "menu_bar_style_icon_percent" = "Pictogram en percentage";
@@ -1187,3 +1189,16 @@
 "Sign in to DeepSeek Platform in Chrome for detailed usage." = "Meld je in Chrome aan bij DeepSeek Platform voor gedetailleerd gebruik.";
 "Select a DeepSeek Chrome profile in Settings." = "Selecteer een DeepSeek Chrome-profiel in Instellingen.";
 "Select profile…" = "Profiel selecteren…";
+
+"%@: %@" = "%@: %@";
+"Alternatively, set a custom path in Settings." = "U kunt ook een aangepast pad instellen in Instellingen.";
+"Choose a supported browser so CodexBar can read the matching account." = "Kies een ondersteunde browser zodat CodexBar het overeenkomende account kan lezen.";
+"Choose Cursor account" = "Kies Cursoraccount";
+"Choose which Cursor account CodexBar should use." = "Kies welk Cursor-account CodexBar moet gebruiken.";
+"Finish switching to a different Cursor account in your browser, then try again." = "Voltooi het overschakelen naar een ander Cursor-account in uw browser en probeer het vervolgens opnieuw.";
+"Install a JetBrains IDE with AI Assistant enabled, then refresh CodexBar." = "Installeer een JetBrains IDE met AI Assistant ingeschakeld en vernieuw vervolgens CodexBar.";
+"Request quota: %@ / %@" = "Aanvraagquotum: %@ / %@";
+"Sign in with Claude Code..." = "Aanmelden met Claude Code...";
+"Timed out waiting for Cursor account switch. %@" = "Er is een time-out opgetreden tijdens het wachten op het wisselen van Cursor-account. %@";
+"Timed out waiting for Cursor account switch. %@ Last error: %@" = "Er is een time-out opgetreden tijdens het wachten op het wisselen van Cursor-account. %@ Laatste fout: %@";
+"Use Account" = "Gebruik account";

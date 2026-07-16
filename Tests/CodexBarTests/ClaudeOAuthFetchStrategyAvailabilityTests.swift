@@ -213,7 +213,7 @@ struct ClaudeOAuthFetchStrategyAvailabilityTests {
     }
 
     @Test
-    func `auto mode only on user action background startup without cache is available for bootstrap`() async throws {
+    func `auto mode only on user action background startup without cache is unavailable`() async throws {
         let context = self.makeContext(sourceMode: .auto)
         let strategy = ClaudeOAuthFetchStrategy()
         let service = "com.steipete.codexbar.cache.tests.\(UUID().uuidString)"
@@ -253,7 +253,7 @@ struct ClaudeOAuthFetchStrategyAvailabilityTests {
                     }
                 }
 
-                #expect(available == true)
+                #expect(available == false)
             }
         }
     }
@@ -286,7 +286,7 @@ struct ClaudeOAuthFetchStrategyAvailabilityTests {
     }
 
     @Test
-    func `auto mode default reader keeps background startup bootstrap available`() async throws {
+    func `auto mode default reader does not bypass background startup prompt policy`() async throws {
         let context = self.makeContext(sourceMode: .auto)
         let strategy = ClaudeOAuthFetchStrategy()
         let service = "com.steipete.codexbar.cache.tests.\(UUID().uuidString)"
@@ -326,7 +326,7 @@ struct ClaudeOAuthFetchStrategyAvailabilityTests {
                     }
                 }
 
-                #expect(available == true)
+                #expect(available == false)
             }
         }
     }
