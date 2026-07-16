@@ -43,11 +43,11 @@ Manual option:
 - Paste the `Cookie:` header from a cursor.com request.
 
 ## Add and switch account
-- **Add Account** opens `https://authenticator.cursor.sh/` in the default browser.
+- **Add Account** opens `https://authenticator.cursor.sh/` in a supported browser.
 - **Switch Account** opens `https://cursor.com/mismatching-client-account`, Cursor's account-mismatch route.
-- When the system's HTTPS handler is a supported browser, CodexBar opens the route there automatically. When the handler is an intermediary app, CodexBar asks the user to confirm a concrete supported browser before clearing credentials or opening the route.
+- When the system's HTTPS handler is a supported browser, CodexBar opens the route there automatically. When the handler is an intermediary app, CodexBar asks the user to choose a concrete supported browser before opening the route.
 - CodexBar pins the original HTTPS route to that concrete browser and polls cookies only from the same application. Interactive login never falls back to another browser, a stored session, or Cursor.app; cancellation or the absence of a supported browser stops before login opens.
-- Before opening either route, CodexBar clears its cached and legacy stored Cursor sessions. Add completes only after the authenticated response includes a Cursor account identity. Switch waits for a different normalized account email.
+- CodexBar preserves its cached and legacy stored Cursor sessions while login is in progress. An accepted browser session must be durably cached before the legacy session is cleared, so cancellation or failure leaves the previous session intact. Add completes only after the authenticated response includes a Cursor account identity. Switch waits for a different normalized account email.
 - CodexBar checks all available profiles in the selected browser. If more than one distinct eligible Cursor account is signed in, Add and Switch both require an explicit account choice and cache only the chosen session.
 - A successful add or switch selects the Automatic cookie source. Saved manual headers and token accounts remain
   stored but passive: they do not override browser fetching, cached usage, quota warnings, or utilization/reset
@@ -94,4 +94,5 @@ The storage detail lists measured paths and their sizes. CodexBar does not delet
 ## Key files
 - `Sources/CodexBarCore/Providers/Cursor/CursorStatusProbe.swift`
 - `Sources/CodexBar/CursorLoginRunner.swift` (login flow)
-- `Sources/CodexBar/Providers/Cursor/CursorConnectionState.swift` (interactive login state)
+- `Sources/CodexBar/Providers/Cursor/CursorLoginFlow.swift` (menu integration)
+- `Sources/CodexBar/CursorLoginBrowserRouter.swift` (browser routing and selection)
