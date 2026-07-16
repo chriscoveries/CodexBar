@@ -17,6 +17,28 @@ enum CostUsageJsonl {
         }
 
         private enum NumberState {
+            private enum ByteKind {
+                case zero
+                case digit
+                case decimalPoint
+                case exponentMarker
+                case sign
+                case whitespace
+                case other
+
+                init(_ byte: UInt8) {
+                    switch byte {
+                    case 0x30: self = .zero
+                    case 0x31...0x39: self = .digit
+                    case 0x2E: self = .decimalPoint
+                    case 0x65, 0x45: self = .exponentMarker
+                    case 0x2B, 0x2D: self = .sign
+                    case 0x20, 0x09, 0x0A, 0x0D: self = .whitespace
+                    default: self = .other
+                    }
+                }
+            }
+
             case sign
             case zero
             case integer
@@ -38,77 +60,29 @@ enum CostUsageJsonl {
             }
 
             func appending(_ byte: UInt8) -> Self {
-                switch self {
-                case .sign:
-                    if byte == 0x30 {
-                        return .zero
-                    }
-                    if (0x31...0x39).contains(byte) {
-                        return .integer
-                    }
-                case .zero:
-                    if byte == 0x2E {
-                        return .decimalPoint
-                    }
-                    if byte == 0x65 || byte == 0x45 {
-                        return .exponentMarker
-                    }
-                    if JSONTailState.isWhitespace(byte) {
-                        return .finished
-                    }
-                case .integer:
-                    if (0x30...0x39).contains(byte) {
-                        return .integer
-                    }
-                    if byte == 0x2E {
-                        return .decimalPoint
-                    }
-                    if byte == 0x65 || byte == 0x45 {
-                        return .exponentMarker
-                    }
-                    if JSONTailState.isWhitespace(byte) {
-                        return .finished
-                    }
-                case .decimalPoint:
-                    if (0x30...0x39).contains(byte) {
-                        return .fraction
-                    }
-                case .fraction:
-                    if (0x30...0x39).contains(byte) {
-                        return .fraction
-                    }
-                    if byte == 0x65 || byte == 0x45 {
-                        return .exponentMarker
-                    }
-                    if JSONTailState.isWhitespace(byte) {
-                        return .finished
-                    }
-                case .exponentMarker:
-                    if byte == 0x2B || byte == 0x2D {
-                        return .exponentSign
-                    }
-                    if (0x30...0x39).contains(byte) {
-                        return .exponentDigits
-                    }
-                case .exponentSign:
-                    if (0x30...0x39).contains(byte) {
-                        return .exponentDigits
-                    }
-                case .exponentDigits:
-                    if (0x30...0x39).contains(byte) {
-                        return .exponentDigits
-                    }
-                    if JSONTailState.isWhitespace(byte) {
-                        return .finished
-                    }
-                case .finished:
-                    if JSONTailState.isWhitespace(byte) {
-                        return .finished
-                    }
-                case .invalid:
-                    return .invalid
+                switch (self, ByteKind(byte)) {
+                case (.invalid, _): .invalid
+                case (.finished, .whitespace): .finished
+                case (.sign, .zero): .zero
+                case (.sign, .digit): .integer
+                case (.zero, .decimalPoint): .decimalPoint
+                case (.zero, .exponentMarker): .exponentMarker
+                case (.integer, .zero), (.integer, .digit): .integer
+                case (.integer, .decimalPoint): .decimalPoint
+                case (.integer, .exponentMarker): .exponentMarker
+                case (.decimalPoint, .zero), (.decimalPoint, .digit): .fraction
+                case (.fraction, .zero), (.fraction, .digit): .fraction
+                case (.fraction, .exponentMarker): .exponentMarker
+                case (.exponentMarker, .sign): .exponentSign
+                case (.exponentMarker, .zero), (.exponentMarker, .digit): .exponentDigits
+                case (.exponentSign, .zero), (.exponentSign, .digit): .exponentDigits
+                case (.exponentDigits, .zero), (.exponentDigits, .digit): .exponentDigits
+                case (.zero, .whitespace),
+                     (.integer, .whitespace),
+                     (.fraction, .whitespace),
+                     (.exponentDigits, .whitespace): .finished
+                default: .invalid
                 }
-                return .invalid
             }
         }
 
@@ -146,53 +120,64 @@ enum CostUsageJsonl {
 
         mutating func append(_ byte: UInt8) {
             if !self.sawNonWhitespace {
-                guard !Self.isWhitespace(byte) else { return }
-                self.sawNonWhitespace = true
-                switch byte {
-                case 0x22:
-                    self.insideString = true
-                case 0x7B, 0x5B:
-                    self.containerDepth = 1
-                case 0x74:
-                    self.scalarState = .trueLiteral(1)
-                case 0x66:
-                    self.scalarState = .falseLiteral(1)
-                case 0x6E:
-                    self.scalarState = .nullLiteral(1)
-                case 0x2D:
-                    self.scalarState = .number(.sign)
-                case 0x30:
-                    self.scalarState = .number(.zero)
-                case 0x31...0x39:
-                    self.scalarState = .number(.integer)
-                default:
-                    self.scalarState = .invalid
-                }
+                self.start(byte)
                 return
             }
 
+            guard !self.appendScalar(byte) else { return }
+            self.appendContainer(byte)
+        }
+
+        private mutating func start(_ byte: UInt8) {
+            guard !Self.isWhitespace(byte) else { return }
+            self.sawNonWhitespace = true
+            switch byte {
+            case 0x22:
+                self.insideString = true
+            case 0x7B, 0x5B:
+                self.containerDepth = 1
+            case 0x74:
+                self.scalarState = .trueLiteral(1)
+            case 0x66:
+                self.scalarState = .falseLiteral(1)
+            case 0x6E:
+                self.scalarState = .nullLiteral(1)
+            case 0x2D:
+                self.scalarState = .number(.sign)
+            case 0x30:
+                self.scalarState = .number(.zero)
+            case 0x31...0x39:
+                self.scalarState = .number(.integer)
+            default:
+                self.scalarState = .invalid
+            }
+        }
+
+        private mutating func appendScalar(_ byte: UInt8) -> Bool {
             switch self.scalarState {
             case let .trueLiteral(matched):
                 self.scalarState = self.advanceLiteral(byte, expected: Self.trueLiteral, matched: matched)
                     .map(ScalarState.trueLiteral) ?? .invalid
-                return
+                return true
             case let .falseLiteral(matched):
                 self.scalarState = self.advanceLiteral(byte, expected: Self.falseLiteral, matched: matched)
                     .map(ScalarState.falseLiteral) ?? .invalid
-                return
+                return true
             case let .nullLiteral(matched):
                 self.scalarState = self.advanceLiteral(byte, expected: Self.nullLiteral, matched: matched)
                     .map(ScalarState.nullLiteral) ?? .invalid
-                return
+                return true
             case let .number(state):
                 self.scalarState = .number(state.appending(byte))
-                return
+                return true
             case .invalid:
-                return
+                return true
             case .notScalar:
-                break
+                return false
             }
+        }
 
+        private mutating func appendContainer(_ byte: UInt8) {
             if self.insideString {
                 if self.escaping {
                     self.escaping = false
@@ -230,7 +215,7 @@ enum CostUsageJsonl {
         }
 
         private static func isWhitespace(_ byte: UInt8) -> Bool {
-            byte == 0x20 || byte == 0x09 || byte == 0x0D
+            byte == 0x20 || byte == 0x09 || byte == 0x0A || byte == 0x0D
         }
     }
 
