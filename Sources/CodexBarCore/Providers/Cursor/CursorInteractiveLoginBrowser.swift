@@ -15,6 +15,7 @@ extension CursorStatusProbe {
         }
         return CursorCookieImporter.isInteractiveLoginSourceAvailable(
             browser: browser,
+            applicationURL: applicationURL,
             browserDetection: browserDetection)
     }
 

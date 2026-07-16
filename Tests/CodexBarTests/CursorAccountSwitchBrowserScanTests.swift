@@ -96,6 +96,60 @@ struct CursorAccountSwitchBrowserScanTests {
     }
 
     @Test
+    func `interactive browser support accepts a renamed installed application`() throws {
+        let temp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let applicationURL = try Self.makeBrowserApplication(
+            in: temp,
+            name: "Work Browser",
+            bundleIdentifier: "org.mozilla.firefox")
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let profileRoot = "\(temp.path)/Library/Application Support/Firefox/Profiles"
+        let profileName = "profile.default-release"
+        let cookieStore = "\(profileRoot)/\(profileName)/cookies.sqlite"
+        let detection = BrowserDetection(
+            homeDirectory: temp.path,
+            cacheTTL: 0,
+            now: Date.init,
+            fileExists: { path in
+                path == applicationURL.path || path == profileRoot || path == cookieStore
+            },
+            directoryContents: { path in path == profileRoot ? [profileName] : nil },
+            applicationURLs: { _ in [] },
+            profileAccessIssue: { path in path == profileRoot ? nil : .unreadable })
+
+        #expect(CursorStatusProbe.interactiveBrowser(forApplicationURL: applicationURL) == .firefox)
+        #expect(!detection.isAppInstalled(.firefox))
+        #expect(!CursorCookieImporter.isCookieSourceAvailable(
+            browser: .firefox,
+            browserDetection: detection))
+        #expect(CursorCookieImporter.isCookieSourceAvailable(
+            browser: .firefox,
+            applicationURL: applicationURL,
+            browserDetection: detection))
+        #expect(detection.isInteractiveCookieSourceAvailable(.firefox, applicationURL: applicationURL))
+        #expect(CursorStatusProbe.supportsInteractiveLoginBrowser(
+            applicationURL: applicationURL,
+            browserDetection: detection))
+
+        let canonicalApplicationPath = "/Applications/Firefox.app"
+        let canonicalDetection = BrowserDetection(
+            homeDirectory: temp.path,
+            cacheTTL: 0,
+            now: Date.init,
+            fileExists: { path in path == canonicalApplicationPath || path == profileRoot },
+            directoryContents: { _ in [] },
+            applicationURLs: { _ in [] },
+            profileAccessIssue: { path in path == profileRoot ? nil : .unreadable })
+        let missingApplicationURL = temp.appendingPathComponent("Removed Browser.app", isDirectory: true)
+
+        #expect(canonicalDetection.isAppInstalled(.firefox))
+        #expect(!canonicalDetection.isInteractiveCookieSourceAvailable(
+            .firefox,
+            applicationURL: missingApplicationURL))
+    }
+
+    @Test
     func `interactive Safari support accepts any existing readable source`() throws {
         let temp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let applicationURL = try Self.makeBrowserApplication(

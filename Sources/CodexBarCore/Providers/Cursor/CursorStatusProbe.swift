@@ -61,28 +61,34 @@ public enum CursorCookieImporter {
     /// cookie-access circuit breaker; it does not read cookies or request Keychain access.
     static func isCookieSourceAvailable(
         browser: Browser,
+        applicationURL: URL? = nil,
         browserDetection: BrowserDetection) -> Bool
     {
-        browserDetection.isCookieSourceAvailable(browser) && BrowserCookieAccessGate.shouldAttempt(browser)
+        browserDetection.isCookieSourceAvailable(browser, applicationURL: applicationURL)
+            && BrowserCookieAccessGate.shouldAttempt(browser)
     }
 
     /// Interactive login may create a profile or cookie store after the browser opens, but must not pin a known
     /// profile that CodexBar cannot read. Ordinary background imports remain stricter.
     static func isInteractiveLoginSourceAvailable(
         browser: Browser,
+        applicationURL: URL,
         browserDetection: BrowserDetection) -> Bool
     {
-        browserDetection.isInteractiveCookieSourceAvailable(browser) && BrowserCookieAccessGate.shouldAttempt(browser)
+        browserDetection.isInteractiveCookieSourceAvailable(browser, applicationURL: applicationURL)
+            && BrowserCookieAccessGate.shouldAttempt(browser)
     }
 
     /// Reads Cursor session cookies from one browser if present (no fallback to other browsers).
     static func importSessionIfPresent(
         browser: Browser,
+        applicationURL: URL? = nil,
         browserDetection: BrowserDetection,
         logger: ((String) -> Void)? = nil) -> SessionInfo?
     {
         self.importSessionsIfPresent(
             browser: browser,
+            applicationURL: applicationURL,
             browserDetection: browserDetection,
             logger: logger).first
     }
@@ -90,11 +96,13 @@ public enum CursorCookieImporter {
     /// Reads all Cursor session-cookie candidates from one browser source order.
     static func importSessionsIfPresent(
         browser: Browser,
+        applicationURL: URL? = nil,
         browserDetection: BrowserDetection,
         logger: ((String) -> Void)? = nil) -> [SessionInfo]
     {
         self.importCookiesFromBrowser(
             browser: browser,
+            applicationURL: applicationURL,
             browserDetection: browserDetection,
             requireKnownSessionName: true,
             logger: logger)
@@ -104,11 +112,13 @@ public enum CursorCookieImporter {
     /// (used after the strict name pass fails — e.g. new cookie names or host-only cookies).
     static func importDomainCookiesIfPresent(
         browser: Browser,
+        applicationURL: URL? = nil,
         browserDetection: BrowserDetection,
         logger: ((String) -> Void)? = nil) -> SessionInfo?
     {
         self.importDomainCookieSessionsIfPresent(
             browser: browser,
+            applicationURL: applicationURL,
             browserDetection: browserDetection,
             logger: logger).first
     }
@@ -116,11 +126,13 @@ public enum CursorCookieImporter {
     /// Reads fallback cookie candidates whose names are not already covered by the strict session-cookie pass.
     static func importDomainCookieSessionsIfPresent(
         browser: Browser,
+        applicationURL: URL? = nil,
         browserDetection: BrowserDetection,
         logger: ((String) -> Void)? = nil) -> [SessionInfo]
     {
         self.importCookiesFromBrowser(
             browser: browser,
+            applicationURL: applicationURL,
             browserDetection: browserDetection,
             requireKnownSessionName: false,
             logger: logger)
@@ -128,12 +140,19 @@ public enum CursorCookieImporter {
 
     private static func importCookiesFromBrowser(
         browser: Browser,
+        applicationURL: URL?,
         browserDetection: BrowserDetection,
         requireKnownSessionName: Bool,
         logger: ((String) -> Void)?) -> [SessionInfo]
     {
         let log: (String) -> Void = { msg in logger?("[cursor-cookie] \(msg)") }
-        guard self.isCookieSourceAvailable(browser: browser, browserDetection: browserDetection) else { return [] }
+        guard self.isCookieSourceAvailable(
+            browser: browser,
+            applicationURL: applicationURL,
+            browserDetection: browserDetection)
+        else {
+            return []
+        }
 
         do {
             let query = BrowserCookieQuery(domains: Self.cookieDomains)
@@ -1126,11 +1145,13 @@ public struct CursorStatusProbe: Sendable {
             importSessions: { browser in
                 CursorCookieImporter.importSessionsIfPresent(
                     browser: browser,
+                    applicationURL: browserApplicationURL,
                     browserDetection: self.browserDetection)
             },
             importDomainSessions: { browser in
                 CursorCookieImporter.importDomainCookieSessionsIfPresent(
                     browser: browser,
+                    applicationURL: browserApplicationURL,
                     browserDetection: self.browserDetection)
             },
             fetchSnapshot: { cookieHeader in

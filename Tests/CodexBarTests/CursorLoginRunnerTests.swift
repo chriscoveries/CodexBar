@@ -96,6 +96,100 @@ struct CursorLoginRunnerTests {
     }
 
     @Test
+    func `interactive login allows an explicit cookie retry in user initiated context`() async {
+        var observedInteraction: ProviderInteraction?
+        var retryAllowed = false
+        let runner = CursorLoginRunner(
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            timeout: 1,
+            pollInterval: 0.01,
+            launchRoute: { _ in true },
+            loadSnapshot: { Self.snapshot(email: "cursor@example.com") },
+            sleeper: { _ in },
+            browserApplicationResolver: { _ in Self.cometApplicationURL },
+            routeResolver: { loginURL, browserApplicationURL in
+                observedInteraction = ProviderInteractionContext.current
+                retryAllowed = BrowserCookieAccessGate.shouldAttempt(.chrome)
+                return .route(CursorLoginBrowserRouter.Route(
+                    launchURL: loginURL,
+                    browserApplicationURL: browserApplicationURL ?? Self.cometApplicationURL))
+            },
+            replaceSessionCache: { _ in true })
+
+        let result = await KeychainAccessGate.withTaskOverrideForTesting(false) {
+            await BrowserCookieAccessGate.withDeniedBrowsersForTesting([.chrome]) {
+                await runner.run { _ in }
+            }
+        }
+
+        #expect(observedInteraction == .userInitiated)
+        #expect(retryAllowed)
+        guard case .success = result.outcome else {
+            Issue.record("Expected a successful login")
+            return
+        }
+    }
+
+    @Test
+    func `manual cookie identity allows the same browser account after confirmation`() async {
+        let identity = ProviderIdentitySnapshot(
+            providerID: .cursor,
+            accountEmail: "same@example.com",
+            accountOrganization: nil,
+            loginMethod: "Pro",
+            accountID: "same-account")
+        let manualPolicy = CursorLoginRunner.accountPolicy(
+            configuredSource: .manual,
+            identity: identity,
+            hasPriorSnapshot: true)
+        let automaticPolicy = CursorLoginRunner.accountPolicy(
+            configuredSource: .auto,
+            identity: identity,
+            hasPriorSnapshot: true)
+        let unknownAutomaticPolicy = CursorLoginRunner.accountPolicy(
+            configuredSource: .auto,
+            identity: nil,
+            hasPriorSnapshot: true)
+        let absentAutomaticPolicy = CursorLoginRunner.accountPolicy(
+            configuredSource: .auto,
+            identity: nil,
+            hasPriorSnapshot: false)
+        var presentedChoices: [CursorLoginAccountSelector.Choice] = []
+        let runner = CursorLoginRunner(
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            priorAccount: manualPolicy.priorAccount,
+            requiresAccountConfirmation: manualPolicy.requiresConfirmation,
+            timeout: 1,
+            pollInterval: 0.01,
+            launchRoute: { _ in true },
+            loadSnapshot: { Self.snapshot(id: "same-account", email: "same@example.com") },
+            sleeper: { _ in },
+            browserApplicationResolver: { _ in Self.cometApplicationURL },
+            routeResolver: Self.fixtureRouteResolver,
+            accountChooser: { choices in
+                presentedChoices = choices
+                return choices.first?.selectionID
+            },
+            replaceSessionCache: { _ in true })
+
+        let result = await runner.run { _ in }
+
+        #expect(manualPolicy.priorAccount == nil)
+        #expect(manualPolicy.requiresConfirmation)
+        #expect(automaticPolicy.priorAccount == .init(accountID: "same-account", email: "same@example.com"))
+        #expect(automaticPolicy.requiresConfirmation)
+        #expect(unknownAutomaticPolicy.priorAccount == .init(accountID: nil, email: nil))
+        #expect(unknownAutomaticPolicy.requiresConfirmation)
+        #expect(absentAutomaticPolicy.priorAccount == nil)
+        #expect(!absentAutomaticPolicy.requiresConfirmation)
+        #expect(presentedChoices.map(\.displayLabel) == ["same@example.com · Browser"])
+        guard case .success = result.outcome else {
+            Issue.record("Expected the same browser account to replace Manual mode")
+            return
+        }
+    }
+
+    @Test
     func `add account ignores identity-less snapshots`() async {
         let sequence = SnapshotSequence([
             Self.snapshot(email: nil),

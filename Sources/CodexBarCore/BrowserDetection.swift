@@ -94,7 +94,7 @@ public final class BrowserDetection: Sendable {
     ///
     /// This is intentionally stricter than `isAppInstalled`: non-Safari browsers must still be installed,
     /// and Chromium browsers must have profile data (to avoid stale sources and unnecessary Keychain prompts).
-    public func isCookieSourceAvailable(_ browser: Browser) -> Bool {
+    public func isCookieSourceAvailable(_ browser: Browser, applicationURL: URL? = nil) -> Bool {
         let homeURL = URL(fileURLWithPath: self.homeDirectory, isDirectory: true)
         guard BrowserCookieAccessGate.cookieStoreAccessDecision(homeDirectories: [homeURL]) == .allowed else {
             return false
@@ -106,7 +106,7 @@ public final class BrowserDetection: Sendable {
         }
 
         // Do not cache app presence here: uninstalling a browser must remove it from the next import attempt.
-        guard self.detectAppInstalled(for: browser) else { return false }
+        guard self.hasInstalledApplication(browser, applicationURL: applicationURL) else { return false }
 
         // For browsers that typically require keychain-backed decryption, ensure an actual cookie store exists.
         if self.requiresProfileValidation(browser) {
@@ -118,8 +118,9 @@ public final class BrowserDetection: Sendable {
 
     /// Interactive login can create a browser profile or cookie store after launch. Allow an installed browser when
     /// its profile root is absent or readable, while rejecting a known profile root that CodexBar cannot inspect.
+    /// The concrete application URL lets callers recognize renamed bundles after separately validating their bundle ID.
     /// Ordinary background imports remain stricter and still require an existing cookie store.
-    func isInteractiveCookieSourceAvailable(_ browser: Browser) -> Bool {
+    func isInteractiveCookieSourceAvailable(_ browser: Browser, applicationURL: URL? = nil) -> Bool {
         let homeURL = URL(fileURLWithPath: self.homeDirectory, isDirectory: true)
         guard BrowserCookieAccessGate.cookieStoreAccessDecision(homeDirectories: [homeURL]) == .allowed else {
             return false
@@ -129,7 +130,7 @@ public final class BrowserDetection: Sendable {
             return self.hasReadableSafariCookieSource()
         }
 
-        guard self.detectAppInstalled(for: browser),
+        guard self.hasInstalledApplication(browser, applicationURL: applicationURL),
               let profilePath = self.profilePath(for: browser, homeDirectory: self.homeDirectory)
         else {
             return false
@@ -207,6 +208,13 @@ public final class BrowserDetection: Sendable {
 
         guard let appName = self.applicationName(for: browser) else { return false }
         return self.applicationURLs(appName).contains { self.fileExists($0.path) }
+    }
+
+    private func hasInstalledApplication(_ browser: Browser, applicationURL: URL?) -> Bool {
+        if let applicationURL {
+            return self.fileExists(applicationURL.path)
+        }
+        return self.detectAppInstalled(for: browser)
     }
 
     private func detectUsableProfileData(for browser: Browser) -> Bool {
@@ -421,7 +429,8 @@ public struct BrowserDetection: Sendable {
         false
     }
 
-    public func isCookieSourceAvailable(_ browser: Browser) -> Bool {
+    public func isCookieSourceAvailable(_ browser: Browser, applicationURL: URL? = nil) -> Bool {
+        _ = applicationURL
         false
     }
 

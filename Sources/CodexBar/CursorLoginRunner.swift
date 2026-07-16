@@ -38,6 +38,25 @@ final class CursorLoginRunner {
         }
     }
 
+    struct AccountPolicy: Equatable, Sendable {
+        let priorAccount: AccountIdentity?
+        let requiresConfirmation: Bool
+    }
+
+    static func accountPolicy(
+        configuredSource: ProviderCookieSource,
+        identity: ProviderIdentitySnapshot?,
+        hasPriorSnapshot: Bool) -> AccountPolicy
+    {
+        guard hasPriorSnapshot else {
+            return AccountPolicy(priorAccount: nil, requiresConfirmation: false)
+        }
+        let account = AccountIdentity(accountID: identity?.accountID, email: identity?.accountEmail)
+        return AccountPolicy(
+            priorAccount: configuredSource == .auto ? account : nil,
+            requiresConfirmation: true)
+    }
+
     enum Phase {
         case loading
         case waitingLogin
@@ -98,6 +117,7 @@ final class CursorLoginRunner {
     private let sleeper: Sleeper
     private let replaceSessionCache: SessionCacheReplacer
     private let priorAccount: AccountIdentity?
+    private let requiresAccountConfirmation: Bool
     private let browserApplicationResolver: BrowserApplicationResolver
     private let routeResolver: RouteResolver
     private let accountChooser: AccountChooser?
@@ -110,6 +130,7 @@ final class CursorLoginRunner {
     init(
         browserDetection: BrowserDetection,
         priorAccount: AccountIdentity? = nil,
+        requiresAccountConfirmation: Bool? = nil,
         timeout: TimeInterval = 120,
         pollInterval: TimeInterval = 2,
         launchRoute: @escaping RouteLauncher = { route in await CursorLoginRunner.launch(route) },
@@ -126,6 +147,7 @@ final class CursorLoginRunner {
         })
     {
         self.priorAccount = priorAccount
+        self.requiresAccountConfirmation = requiresAccountConfirmation ?? (priorAccount != nil)
         self.browserApplicationResolver = browserApplicationResolver
         self.routeResolver = routeResolver ?? { loginURL, handlerApplicationURL in
             CursorLoginBrowserRouter.resolve(
@@ -173,6 +195,14 @@ final class CursorLoginRunner {
     }
 
     func run(onPhaseChange: @escaping @MainActor (Phase) -> Void) async -> Result {
+        await BrowserCookieAccessGate.withExplicitRetry {
+            await ProviderInteractionContext.$current.withValue(.userInitiated) {
+                await self.runUserInitiated(onPhaseChange: onPhaseChange)
+            }
+        }
+    }
+
+    private func runUserInitiated(onPhaseChange: @escaping @MainActor (Phase) -> Void) async -> Result {
         onPhaseChange(.loading)
         self.logger.info("Cursor login started")
         guard !Task.isCancelled else {
@@ -302,7 +332,7 @@ final class CursorLoginRunner {
         guard !candidates.isEmpty else { return .none }
         // A sole Add candidate is unambiguous.
         // Switching still needs confirmation because browser profiles can be stale.
-        guard self.priorAccount != nil || candidates.count > 1 else {
+        guard self.requiresAccountConfirmation || candidates.count > 1 else {
             return .selected(candidates[0])
         }
 

@@ -10,17 +10,17 @@ extension StatusItemController {
 
         let currentSnapshot = self.store.snapshot(for: .cursor)
         let currentIdentity = currentSnapshot?.identity(for: .cursor)
-        let priorAccount = currentSnapshot.map { _ in
-            CursorLoginRunner.AccountIdentity(
-                accountID: currentIdentity?.accountID,
-                email: currentIdentity?.accountEmail)
-        }
+        let accountPolicy = CursorLoginRunner.accountPolicy(
+            configuredSource: self.settings.cursorCookieSource,
+            identity: currentIdentity,
+            hasPriorSnapshot: currentSnapshot != nil)
 
         // Stop older refreshes from publishing while the interactive login replaces the session.
         self.store.invalidateProviderRefreshRequests(.cursor)
         let cursorRunner = CursorLoginRunner(
             browserDetection: self.store.browserDetection,
-            priorAccount: priorAccount,
+            priorAccount: accountPolicy.priorAccount,
+            requiresAccountConfirmation: accountPolicy.requiresConfirmation,
             replaceSessionCache: { session in
                 await CursorLoginRunner.replaceCachedSession(session) {
                     // Finalize without suspending: future refreshes use the chosen cached browser session,
