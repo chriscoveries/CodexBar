@@ -1001,7 +1001,7 @@ public struct CursorStatusProbe: Sendable {
         #if os(macOS)
         // Capture before any authentication request can suspend. A later browser fallback must not replace an
         // interactive login that commits while this refresh is awaiting an earlier cached-session request.
-        let cacheObservation = CookieHeaderCache.observeForConditionalMutation(provider: .cursor)
+        var cacheObservation = CookieHeaderCache.observeForConditionalMutation(provider: .cursor)
         #endif
 
         if allowCachedSessions,
@@ -1016,7 +1016,12 @@ public struct CursorStatusProbe: Sendable {
                 log: log)
             {
             case let .succeeded(snapshot): return snapshot
-            case .resumeFallback: break
+            case .resumeFallback:
+                #if os(macOS)
+                // The cached-session path cleared its own stale entry. Browser fallback now owns that empty slot,
+                // while the original gate generation still protects any concurrent interactive login.
+                cacheObservation = cacheObservation.afterOwnedClear()
+                #endif
             }
         }
 

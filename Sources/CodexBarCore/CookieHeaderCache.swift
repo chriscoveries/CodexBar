@@ -998,6 +998,12 @@ extension CookieHeaderCache {
                 gateGeneration
             }
         }
+
+        /// Updates the expected cache contents after this flow clears its observed entry without
+        /// accepting interactive mutations that happened after the original observation.
+        func afterOwnedClear() -> Self {
+            .authoritative(nil, gateGeneration: self.gateGeneration)
+        }
     }
 
     /// Captures enough state to conditionally persist an asynchronous refresh after a transient
