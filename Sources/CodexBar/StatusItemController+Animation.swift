@@ -325,7 +325,7 @@ extension StatusItemController {
         }
 
         // Brand + percent returns above; remaining paths are image-only apart from the debug marker.
-        self.restoreButtonTitleForImageOnlyContent(for: button)
+        self.restoreStandardButtonTitleForImageOnlyContent(for: button)
         if let morphProgress {
             let signature = [
                 "mode=morph",
@@ -511,7 +511,7 @@ extension StatusItemController {
         let tilt = self.tiltAmount(for: provider) * .pi / 28 // limit to ~6.4°
         let statusIndicator = self.store.statusIndicator(for: provider)
         // Brand + percent returns above; remaining paths are image-only apart from the debug marker.
-        self.restoreButtonTitleForImageOnlyContent(for: button)
+        self.restoreStandardButtonTitleForImageOnlyContent(for: button)
         if let morphProgress {
             let signature = [
                 "mode=morph",
@@ -711,7 +711,8 @@ extension StatusItemController {
             && self.settings.menuBarIconStyle == .iconAndPercent
     }
 
-    private func restoreButtonTitleForImageOnlyContent(for button: NSStatusBarButton) {
+    func restoreStandardButtonTitleForImageOnlyContent(for button: NSStatusBarButton) {
+        guard !self.shouldUseHighContrastStatusItemContent else { return }
         let value = Self.buttonTitle(
             nil,
             hasImage: true,
