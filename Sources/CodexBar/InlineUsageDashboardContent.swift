@@ -398,7 +398,9 @@ extension UsageMenuCardView.Model {
         }
         let providerName = ProviderDefaults.metadata[provider]?.displayName ?? provider.rawValue
         var model = InlineUsageDashboardModel(
-            accessibilityLabel: "\(providerName) \(periodLabel) cost trend",
+            accessibilityLabel: provider == .codex
+                ? "\(providerName) \(periodLabel) \(L(\"codex_api_estimate_header\")) trend"
+                : "\(providerName) \(periodLabel) cost trend",
             valueStyle: Self.costValueStyle(currencyCode: snapshot.currencyCode),
             kpis: [
                 .init(
