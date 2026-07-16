@@ -84,7 +84,6 @@ public enum ClaudeOAuthCredentialsStore {
         }
     }
 
-    private nonisolated(unsafe) static var credentialsURLOverride: URL?
     #if DEBUG
     @TaskLocal private static var taskCredentialsURLOverride: URL?
     #endif
@@ -2183,10 +2182,6 @@ public enum ClaudeOAuthCredentialsStore {
             rateLimitTier: nil)
     }
 
-    static func setCredentialsURLOverrideForTesting(_ url: URL?) {
-        self.credentialsURLOverride = url
-    }
-
     #if DEBUG
     public static func withCredentialsURLOverrideForTesting<T>(_ url: URL?, operation: () throws -> T) rethrows -> T {
         try self.$taskCredentialsURLOverride.withValue(url) {
@@ -2401,7 +2396,7 @@ public enum ClaudeOAuthCredentialsStore {
             return override
         }
         #endif
-        return self.credentialsURLOverride ?? self.defaultCredentialsURL()
+        return self.defaultCredentialsURL()
     }
 
     private static func loadFileFingerprint() -> CredentialsFileFingerprint? {
