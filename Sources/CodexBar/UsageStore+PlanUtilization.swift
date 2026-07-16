@@ -37,6 +37,40 @@ extension UsageStore {
         let lastObservedAt: Date
         let sourceRawValue: String?
         var resetBoundary: Date?
+        /// Identity-less Claude CLI samples share one detector key and can be transient.
+        /// Require a second low sample before celebrating an apparent reset from that key.
+        var pendingLowConfirmation: Bool
+
+        init(
+            wasAboveThreshold: Bool,
+            lastObservedAt: Date,
+            sourceRawValue: String?,
+            resetBoundary: Date? = nil,
+            pendingLowConfirmation: Bool = false)
+        {
+            self.wasAboveThreshold = wasAboveThreshold
+            self.lastObservedAt = lastObservedAt
+            self.sourceRawValue = sourceRawValue
+            self.resetBoundary = resetBoundary
+            self.pendingLowConfirmation = pendingLowConfirmation
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case wasAboveThreshold
+            case lastObservedAt
+            case sourceRawValue
+            case resetBoundary
+            case pendingLowConfirmation
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.wasAboveThreshold = try container.decode(Bool.self, forKey: .wasAboveThreshold)
+            self.lastObservedAt = try container.decode(Date.self, forKey: .lastObservedAt)
+            self.sourceRawValue = try container.decodeIfPresent(String.self, forKey: .sourceRawValue)
+            self.resetBoundary = try container.decodeIfPresent(Date.self, forKey: .resetBoundary)
+            self.pendingLowConfirmation = try container.decodeIfPresent(Bool.self, forKey: .pendingLowConfirmation) ?? false
+        }
     }
 
     func supportsPlanUtilizationHistory(for provider: UsageProvider) -> Bool {
@@ -511,6 +545,8 @@ extension UsageStore {
         let detectorKey = Self.limitResetDetectorStateKey(
             provider: context.provider,
             accountIdentifier: accountIdentifier)
+        let requiresLowConfirmation = context.provider == .claude
+            && accountIdentifier == context.provider.rawValue
         let currentUsed = observation.usedPercent
         let currentObservedAt = observation.observedAt
         let wasAboveThreshold = currentUsed > Self.limitResetThreshold
@@ -537,8 +573,14 @@ extension UsageStore {
             true
         }
         let crossedBelowThreshold = !sourceChanged && previousState?.wasAboveThreshold == true && !wasAboveThreshold
-        let shouldPost = crossedBelowThreshold && resetBoundaryAllowsPost
+        let confirmingLowSample = !sourceChanged && previousState?.pendingLowConfirmation == true && !wasAboveThreshold
+        let shouldPost = if requiresLowConfirmation {
+            confirmingLowSample
+        } else {
+            crossedBelowThreshold && resetBoundaryAllowsPost
+        }
         let suppressedGuardedCrossing = crossedBelowThreshold && !resetBoundaryAllowsPost
+        let shouldAwaitLowConfirmation = requiresLowConfirmation && crossedBelowThreshold && resetBoundaryAllowsPost
         // Sessions retain the last non-regressed boundary on every guarded sample. Codex weekly crossings
         // adopt a newly appearing boundary so a later genuine advance can still trigger once.
         let shouldPreserveBoundary = !sourceChanged && !resetBoundaryAllowsPost
@@ -546,10 +588,11 @@ extension UsageStore {
         let shouldPreserveBaseline = suppressedGuardedCrossing
         states[detectorKey] = LimitResetDetectorState(
             // A transient zero must not erase the baseline needed to recognize the real reset that follows.
-            wasAboveThreshold: shouldPreserveBaseline ? true : wasAboveThreshold,
+            wasAboveThreshold: (shouldPreserveBaseline || shouldAwaitLowConfirmation) ? true : wasAboveThreshold,
             lastObservedAt: currentObservedAt,
             sourceRawValue: sourceRawValue,
-            resetBoundary: shouldPreserveBoundary ? previousState?.resetBoundary : observation.resetBoundary)
+            resetBoundary: shouldPreserveBoundary ? previousState?.resetBoundary : observation.resetBoundary,
+            pendingLowConfirmation: shouldAwaitLowConfirmation)
         self.persistLimitResetDetectorStates(
             states,
             defaultsKey: descriptor.defaultsKey,
