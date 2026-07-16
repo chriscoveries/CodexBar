@@ -50,11 +50,12 @@ enum CostUsageJsonl {
             case finished
             case invalid
 
-            var isComplete: Bool {
+            var canCommitAtEOF: Bool {
                 switch self {
-                case .zero, .integer, .fraction, .exponentDigits, .finished, .invalid:
+                case .finished, .invalid:
                     true
-                case .sign, .decimalPoint, .exponentMarker, .exponentSign:
+                case .sign, .zero, .integer, .decimalPoint, .fraction,
+                     .exponentMarker, .exponentSign, .exponentDigits:
                     false
                 }
             }
@@ -112,7 +113,7 @@ enum CostUsageJsonl {
             case let .nullLiteral(matched):
                 return matched == Self.nullLiteral.count
             case let .number(state):
-                return state.isComplete
+                return state.canCommitAtEOF
             case .invalid:
                 return true
             }
@@ -288,11 +289,11 @@ enum CostUsageJsonl {
         }
 
         func hasCompleteJSONTail() -> Bool {
+            guard jsonTailState.isStructurallyComplete else { return false }
             if truncated {
-                // The full record is intentionally not retained. Its structural state is enough
-                // to keep a still-open object or string retriable without changing the old
-                // behavior for complete records that exceed the safety limit.
-                return jsonTailState.isStructurallyComplete
+                // The full record is intentionally not retained. Its incremental state is enough
+                // to keep incomplete containers, strings, literals, and numbers retriable.
+                return true
             }
             guard lineBytes == current.count else { return false }
             return (try? JSONSerialization.jsonObject(with: current, options: [.fragmentsAllowed])) != nil
