@@ -431,7 +431,7 @@ public struct BrowserDetection: Sendable {
 
     public func isCookieSourceAvailable(_ browser: Browser, applicationURL: URL? = nil) -> Bool {
         _ = applicationURL
-        false
+        return false
     }
 
     public func hasUsableProfileData(_ browser: Browser) -> Bool {
