@@ -9,7 +9,9 @@ extension CodexBarCLI {
         case session
         case weekly
 
-        var payloadValue: String { self.rawValue }
+        var payloadValue: String {
+            self.rawValue
+        }
     }
 
     /// Pure gating outcome. Kept free of I/O so it is unit-testable off-network.
@@ -177,6 +179,7 @@ extension CodexBarCLI {
         let exitCode: Int32
     }
 
+    // swiftlint:disable:next function_parameter_count
     private static func emitGuardResult(
         provider: UsageProvider,
         window: GuardWindow,
@@ -197,7 +200,7 @@ extension CodexBarCLI {
             Self.printJSON(payload, pretty: pretty)
             return
         }
-        print(Self.guardHumanLine(
+        print(self.guardHumanLine(
             provider: provider,
             window: window,
             remainingPercent: remainingPercent,
@@ -214,7 +217,7 @@ extension CodexBarCLI {
     {
         let remainingText = remainingPercent
             .map { "\(Self.guardPercentString($0)) remaining" } ?? "unknown"
-        let verdict: String = switch decision {
+        let verdict = switch decision {
         case .ok: "OK"
         case .blocked: "BLOCKED"
         case .unknown: "UNKNOWN"

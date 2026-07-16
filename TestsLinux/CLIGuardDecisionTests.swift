@@ -2,7 +2,6 @@ import Foundation
 import Testing
 @testable import CodexBarCLI
 
-@Suite
 struct CLIGuardDecisionTests {
     @Test
     func `ample headroom is ok and exits zero`() {
