@@ -43,6 +43,24 @@ struct GrokMenuCardModelTests {
     }
 
     @Test
+    func `weekly web quota beyond default duration does not show projection`() throws {
+        let now = Date(timeIntervalSince1970: 0)
+        let model = try Self.model(
+            now: now,
+            window: RateWindow(
+                usedPercent: 50,
+                windowMinutes: nil,
+                resetsAt: now.addingTimeInterval(8 * 24 * 3600),
+                resetDescription: nil))
+
+        let metric = try #require(model.metrics.first { $0.id == "primary" })
+        #expect(metric.title == "Weekly")
+        #expect(metric.detailLeftText == nil)
+        #expect(metric.detailRightText == nil)
+        #expect(metric.pacePercent == nil)
+    }
+
+    @Test
     func `monthly quota does not show weekly projection`() throws {
         let now = Date(timeIntervalSince1970: 0)
         let model = try Self.model(
