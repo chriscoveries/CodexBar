@@ -309,6 +309,51 @@ struct StepFunUsageFetcherParsingTests {
     }
 
     @Test
+    func `weights mixed subscription and top-up credit buckets`() throws {
+        let json = """
+        {
+            "status": 1,
+            "plan_family": 2,
+            "plan_credit_rate_limit": {
+                "subscription_credit_left_rate": 0.8,
+                "topup_credit_left_rate": 0.5,
+                "credit_buckets": [
+                    { "credit_total": "100", "credit_residual": "80" },
+                    { "credit_total": "300", "credit_residual": "150" }
+                ]
+            }
+        }
+        """
+        let snapshot = try StepFunUsageFetcher._parseSnapshotForTesting(Data(json.utf8))
+
+        // The independent rates sum to 1.3, but the weighted balance is
+        // (80 + 150) / (100 + 300) = 0.575 remaining, or 42.5% used.
+        #expect(snapshot.creditLeftRate == 0.575)
+        #expect(abs((snapshot.toUsageSnapshot().primary?.usedPercent ?? 0) - 42.5) < 0.0001)
+    }
+
+    @Test
+    func `falls back to subscription rate for incomplete credit buckets`() throws {
+        let json = """
+        {
+            "status": 1,
+            "plan_family": 2,
+            "plan_credit_rate_limit": {
+                "subscription_credit_left_rate": 0.6,
+                "topup_credit_left_rate": 0.4,
+                "credit_buckets": [
+                    { "credit_total": "100" }
+                ]
+            }
+        }
+        """
+        let snapshot = try StepFunUsageFetcher._parseSnapshotForTesting(Data(json.utf8))
+
+        #expect(snapshot.creditLeftRate == 0.6)
+        #expect(snapshot.toUsageSnapshot().primary?.usedPercent == 40)
+    }
+
+    @Test
     func `credit plan does not throw when rate fields are missing`() throws {
         // A credit-plan response might omit the rate-window fields entirely.
         let json = """

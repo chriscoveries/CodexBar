@@ -122,20 +122,31 @@ public struct StepFunPlanCreditRateLimit: Decodable, Sendable {
 
     /// Combined remaining fraction across subscription + top-up credits.
     var totalCreditLeftRate: Double? {
-        let sub = self.subscriptionCreditLeftRate?.value
-        let top = self.topupCreditLeftRate?.value
-        // Prefer the explicit rates; fall back to bucket arithmetic.
-        if let sub {
-            return sub + (top ?? 0)
-        }
+        // Subscription and top-up rates are independent fractions, so adding them
+        // does not produce a combined rate. Prefer the absolute bucket balances.
         if let buckets = creditBuckets, !buckets.isEmpty {
-            let total = buckets.reduce(0.0) { $0 + ($1.creditTotal?.value ?? 0) }
-            let residual = buckets.reduce(0.0) { $0 + ($1.creditResidual?.value ?? 0) }
-            if total > 0 {
+            let balances = buckets.compactMap { bucket -> (total: Double, residual: Double)? in
+                guard let total = bucket.creditTotal?.value,
+                      let residual = bucket.creditResidual?.value,
+                      total.isFinite,
+                      residual.isFinite,
+                      total > 0,
+                      residual >= 0,
+                      residual <= total
+                else { return nil }
+                return (total, residual)
+            }
+            if balances.count == buckets.count {
+                let total = balances.reduce(0.0) { $0 + $1.total }
+                let residual = balances.reduce(0.0) { $0 + $1.residual }
                 return residual / total
             }
         }
-        return nil
+
+        // Without bucket sizes there is no sound way to weight both rates. The
+        // subscription balance is the primary plan allowance; use top-up only
+        // when no subscription rate is present.
+        return self.subscriptionCreditLeftRate?.value ?? self.topupCreditLeftRate?.value
     }
 }
 
