@@ -314,17 +314,14 @@ struct DevinUsageFetcherTests {
     #if os(macOS)
     @Test
     func `empty app organization setting preserves imported organization`() async throws {
-        let importSessionOverride: (BrowserDetection, String?, ((String) -> Void)?) -> DevinSessionImporter
-            .SessionInfo? = { _, organizationOverride, _ in
-                #expect(organizationOverride == nil)
-                return DevinSessionImporter.SessionInfo(
-                    accessToken: "auth1_abcdefghijklmnopqrstuvwxyz0123456789",
-                    organization: "org/example-org",
-                    internalOrganizationID: "org_GQ6LhcfkW1TSinM6",
-                    sourceLabel: "Chrome Default")
-            }
-
-        try await DevinSessionImporter.withImportSessionOverrideForTesting(importSessionOverride) {
+        try await DevinSessionImporter.withImportSessionOverrideForTesting { _, organizationOverride, _ in
+            #expect(organizationOverride == nil)
+            return DevinSessionImporter.SessionInfo(
+                accessToken: "auth1_abcdefghijklmnopqrstuvwxyz0123456789",
+                organization: "org/example-org",
+                internalOrganizationID: "org_GQ6LhcfkW1TSinM6",
+                sourceLabel: "Chrome Default")
+        } operation: {
             let stub = ProviderHTTPTransportStub { request in
                 #expect(request.url?.path == "/api/org_GQ6LhcfkW1TSinM6/billing/quota/usage")
                 let response = HTTPURLResponse(

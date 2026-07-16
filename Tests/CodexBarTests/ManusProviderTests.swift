@@ -123,7 +123,7 @@ struct ManusProviderTests {
     @Test
     func `environment token does not populate browser cache`() async throws {
         try await self.withIsolatedCacheStore {
-            let runFetch = {
+            let operation: () async throws -> Void = {
                 let strategy = ManusWebFetchStrategy()
                 let settings = ProviderSettingsSnapshot.make(
                     manus: ProviderSettingsSnapshot.ManusProviderSettings(
@@ -143,18 +143,14 @@ struct ManusProviderTests {
 
                 #expect(CookieHeaderCache.load(provider: .manus) == nil)
             }
-
             #if os(macOS)
-            let importSessionsOverride: (BrowserDetection, ((String) -> Void)?) throws
-                -> [ManusCookieImporter.SessionInfo] = { _, _ in
-                    throw ManusCookieImportError.noCookies
-                }
-
-            try await ManusCookieImporter.withImportSessionsOverrideForTesting(importSessionsOverride) {
-                try await runFetch()
+            try await ManusCookieImporter.withImportSessionsOverrideForTesting { _, _ in
+                throw ManusCookieImportError.noCookies
+            } operation: {
+                try await operation()
             }
             #else
-            try await runFetch()
+            try await operation()
             #endif
         }
     }
@@ -170,12 +166,9 @@ struct ManusProviderTests {
                 .value: "browser-token",
                 .secure: "TRUE",
             ]))
-            let importSessionOverride: (BrowserDetection, ((String) -> Void)?) throws
-                -> ManusCookieImporter.SessionInfo = { _, _ in
-                    ManusCookieImporter.SessionInfo(cookies: [browserCookie], sourceLabel: "Chrome")
-                }
-
-            try await ManusCookieImporter.withImportSessionOverrideForTesting(importSessionOverride) {
+            try await ManusCookieImporter.withImportSessionOverrideForTesting { _, _ in
+                ManusCookieImporter.SessionInfo(cookies: [browserCookie], sourceLabel: "Chrome")
+            } operation: {
                 let attempts = LockedArray<String>()
                 let strategy = ManusWebFetchStrategy()
                 let settings = ProviderSettingsSnapshot.make(
@@ -214,12 +207,9 @@ struct ManusProviderTests {
                 .value: "browser-token",
                 .secure: "TRUE",
             ]))
-            let importSessionOverride: (BrowserDetection, ((String) -> Void)?) throws
-                -> ManusCookieImporter.SessionInfo = { _, _ in
-                    ManusCookieImporter.SessionInfo(cookies: [browserCookie], sourceLabel: "Chrome")
-                }
-
-            try await ManusCookieImporter.withImportSessionOverrideForTesting(importSessionOverride) {
+            try await ManusCookieImporter.withImportSessionOverrideForTesting { _, _ in
+                ManusCookieImporter.SessionInfo(cookies: [browserCookie], sourceLabel: "Chrome")
+            } operation: {
                 let strategy = ManusWebFetchStrategy()
                 let settings = ProviderSettingsSnapshot.make(
                     manus: ProviderSettingsSnapshot.ManusProviderSettings(

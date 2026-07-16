@@ -32,9 +32,11 @@ struct WindsurfWebFetcherTests {
     }
 
     private func withWindsurfSessionOverrides<T>(
-        importSessions: SessionOverride? = nil,
-        preferredSessions: SessionOverride? = nil,
-        fallbackSessions: SessionOverride? = nil,
+        importSessions: ((BrowserDetection, ((String) -> Void)?) -> [WindsurfDevinSessionImporter.SessionInfo])? = nil,
+        preferredSessions: ((BrowserDetection, ((String) -> Void)?) -> [WindsurfDevinSessionImporter.SessionInfo])? =
+            nil,
+        fallbackSessions: ((BrowserDetection, ((String) -> Void)?) -> [WindsurfDevinSessionImporter.SessionInfo])? =
+            nil,
         operation: () async throws -> T) async rethrows -> T
     {
         try await WindsurfDevinSessionImporter.withImportSessionsOverrideForTesting(importSessions) {
@@ -115,24 +117,25 @@ struct WindsurfWebFetcherTests {
             WindsurfWebFetcherStubURLProtocol.handler = nil
         }
 
-        let preferredSessions: SessionOverride = { _, _ in
-            [
-                WindsurfDevinSessionImporter.SessionInfo(
-                    session: WindsurfDevinSessionAuth(
-                        sessionToken: "stale-token",
-                        auth1Token: "stale-auth1",
-                        accountID: "stale-account",
-                        primaryOrgID: "stale-org"),
-                    sourceLabel: "Chrome Default"),
-                WindsurfDevinSessionImporter.SessionInfo(
-                    session: WindsurfDevinSessionAuth(
-                        sessionToken: "fresh-token",
-                        auth1Token: "fresh-auth1",
-                        accountID: "fresh-account",
-                        primaryOrgID: "fresh-org"),
-                    sourceLabel: "Chrome Profile 1"),
-            ]
-        }
+        let preferredSessions: (BrowserDetection, ((String) -> Void)?)
+            -> [WindsurfDevinSessionImporter.SessionInfo] = { _, _ in
+                [
+                    WindsurfDevinSessionImporter.SessionInfo(
+                        session: WindsurfDevinSessionAuth(
+                            sessionToken: "stale-token",
+                            auth1Token: "stale-auth1",
+                            accountID: "stale-account",
+                            primaryOrgID: "stale-org"),
+                        sourceLabel: "Chrome Default"),
+                    WindsurfDevinSessionImporter.SessionInfo(
+                        session: WindsurfDevinSessionAuth(
+                            sessionToken: "fresh-token",
+                            auth1Token: "fresh-auth1",
+                            accountID: "fresh-account",
+                            primaryOrgID: "fresh-org"),
+                        sourceLabel: "Chrome Profile 1"),
+                ]
+            }
 
         WindsurfWebFetcherStubURLProtocol.requests = []
         WindsurfWebFetcherStubURLProtocol.handler = { request in
@@ -182,28 +185,30 @@ struct WindsurfWebFetcherTests {
             WindsurfWebFetcherStubURLProtocol.handler = nil
         }
 
-        let preferredSessions: SessionOverride = { _, _ in
-            [
-                WindsurfDevinSessionImporter.SessionInfo(
-                    session: WindsurfDevinSessionAuth(
-                        sessionToken: "stale-chrome-token",
-                        auth1Token: "stale-auth1",
-                        accountID: "stale-account",
-                        primaryOrgID: "stale-org"),
-                    sourceLabel: "Chrome Default"),
-            ]
-        }
-        let fallbackSessions: SessionOverride = { _, _ in
-            [
-                WindsurfDevinSessionImporter.SessionInfo(
-                    session: WindsurfDevinSessionAuth(
-                        sessionToken: "fresh-edge-token",
-                        auth1Token: "fresh-auth1",
-                        accountID: "fresh-account",
-                        primaryOrgID: "fresh-org"),
-                    sourceLabel: "Microsoft Edge Default"),
-            ]
-        }
+        let preferredSessions: (BrowserDetection, ((String) -> Void)?)
+            -> [WindsurfDevinSessionImporter.SessionInfo] = { _, _ in
+                [
+                    WindsurfDevinSessionImporter.SessionInfo(
+                        session: WindsurfDevinSessionAuth(
+                            sessionToken: "stale-chrome-token",
+                            auth1Token: "stale-auth1",
+                            accountID: "stale-account",
+                            primaryOrgID: "stale-org"),
+                        sourceLabel: "Chrome Default"),
+                ]
+            }
+        let fallbackSessions: (BrowserDetection, ((String) -> Void)?)
+            -> [WindsurfDevinSessionImporter.SessionInfo] = { _, _ in
+                [
+                    WindsurfDevinSessionImporter.SessionInfo(
+                        session: WindsurfDevinSessionAuth(
+                            sessionToken: "fresh-edge-token",
+                            auth1Token: "fresh-auth1",
+                            accountID: "fresh-account",
+                            primaryOrgID: "fresh-org"),
+                        sourceLabel: "Microsoft Edge Default"),
+                ]
+            }
 
         WindsurfWebFetcherStubURLProtocol.requests = []
         WindsurfWebFetcherStubURLProtocol.handler = { request in
@@ -304,22 +309,22 @@ struct WindsurfWebFetcherTests {
                 statusCode: 200)
         }
 
-        let preferredSessions: SessionOverride = { _, _ in sessionInfos }
+        try await self.withWindsurfSessionOverrides(
+            preferredSessions: { _, _ in sessionInfos },
+            operation: {
+                let snapshot = try await WindsurfWebFetcher.fetchUsage(
+                    browserDetection: BrowserDetection(cacheTTL: 0),
+                    cookieSource: .auto,
+                    timeout: 2,
+                    session: self.makeSession())
 
-        try await self.withWindsurfSessionOverrides(preferredSessions: preferredSessions) {
-            let snapshot = try await WindsurfWebFetcher.fetchUsage(
-                browserDetection: BrowserDetection(cacheTTL: 0),
-                cookieSource: .auto,
-                timeout: 2,
-                session: self.makeSession())
-
-            #expect(snapshots.count == 1)
-            #expect(sessionInfos.map(\.sourceLabel) == ["Chrome Default (windsurf.com)"])
-            #expect(WindsurfWebFetcherStubURLProtocol.requests.count == 1)
-            #expect(snapshot.identity?.loginMethod == "Pro")
-            #expect(snapshot.primary?.usedPercent == 30)
-            #expect(snapshot.secondary?.usedPercent == 15)
-        }
+                #expect(snapshots.count == 1)
+                #expect(sessionInfos.map(\.sourceLabel) == ["Chrome Default (windsurf.com)"])
+                #expect(WindsurfWebFetcherStubURLProtocol.requests.count == 1)
+                #expect(snapshot.identity?.loginMethod == "Pro")
+                #expect(snapshot.primary?.usedPercent == 30)
+                #expect(snapshot.secondary?.usedPercent == 15)
+            })
     }
 
     @Test
@@ -329,17 +334,18 @@ struct WindsurfWebFetcherTests {
             WindsurfWebFetcherStubURLProtocol.handler = nil
         }
 
-        let importedSessions: SessionOverride = { _, _ in
-            [
-                WindsurfDevinSessionImporter.SessionInfo(
-                    session: WindsurfDevinSessionAuth(
-                        sessionToken: "auto-token",
-                        auth1Token: "auto-auth1",
-                        accountID: "auto-account",
-                        primaryOrgID: "auto-org"),
-                    sourceLabel: "Chrome Default"),
-            ]
-        }
+        let importedSessions: (BrowserDetection, ((String) -> Void)?)
+            -> [WindsurfDevinSessionImporter.SessionInfo] = { _, _ in
+                [
+                    WindsurfDevinSessionImporter.SessionInfo(
+                        session: WindsurfDevinSessionAuth(
+                            sessionToken: "auto-token",
+                            auth1Token: "auto-auth1",
+                            accountID: "auto-account",
+                            primaryOrgID: "auto-org"),
+                        sourceLabel: "Chrome Default"),
+                ]
+            }
         WindsurfWebFetcherStubURLProtocol.requests = []
 
         await self.withWindsurfSessionOverrides(importSessions: importedSessions) {

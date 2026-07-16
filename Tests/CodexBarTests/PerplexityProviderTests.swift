@@ -149,12 +149,9 @@ struct PerplexityProviderTests {
                 PerplexityCookieImporter.invalidateImportSessionCache()
             }
 
-            let importSessionOverride: (BrowserDetection, ((String) -> Void)?) throws
-                -> PerplexityCookieImporter.SessionInfo = { _, _ in
-                    throw PerplexityCookieImportError.noCookies
-                }
-
-            try await PerplexityCookieImporter.withImportSessionOverrideForTesting(importSessionOverride) {
+            try await PerplexityCookieImporter.withImportSessionOverrideForTesting { _, _ in
+                throw PerplexityCookieImportError.noCookies
+            } operation: {
                 let strategy = PerplexityWebFetchStrategy()
                 let settings = ProviderSettingsSnapshot.make(
                     perplexity: ProviderSettingsSnapshot.PerplexityProviderSettings(
@@ -206,12 +203,9 @@ struct PerplexityProviderTests {
                 PerplexityCookieImporter.invalidateImportSessionCache()
             }
 
-            let importSessionOverride: (BrowserDetection, ((String) -> Void)?) throws
-                -> PerplexityCookieImporter.SessionInfo = { _, _ in
-                    throw PerplexityCookieImportError.noCookies
-                }
-
-            try await PerplexityCookieImporter.withImportSessionOverrideForTesting(importSessionOverride) {
+            try await PerplexityCookieImporter.withImportSessionOverrideForTesting { _, _ in
+                throw PerplexityCookieImportError.noCookies
+            } operation: {
                 let attemptedCookieNames = LockedArray<String>()
                 let strategy = PerplexityWebFetchStrategy()
                 let settings = ProviderSettingsSnapshot.make(
@@ -251,19 +245,16 @@ struct PerplexityProviderTests {
                 PerplexityCookieImporter.invalidateImportSessionCache()
             }
 
-            let importSessionOverride: (BrowserDetection, ((String) -> Void)?) throws
-                -> PerplexityCookieImporter.SessionInfo = { _, _ in
-                    let cookie = try #require(HTTPCookie(properties: [
-                        .domain: "www.perplexity.ai",
-                        .path: "/",
-                        .name: PerplexityCookieHeader.defaultSessionCookieName,
-                        .value: "browser-token",
-                        .secure: "TRUE",
-                    ]))
-                    return PerplexityCookieImporter.SessionInfo(cookies: [cookie], sourceLabel: "Chrome")
-                }
-
-            try await PerplexityCookieImporter.withImportSessionOverrideForTesting(importSessionOverride) {
+            try await PerplexityCookieImporter.withImportSessionOverrideForTesting { _, _ in
+                let cookie = try #require(HTTPCookie(properties: [
+                    .domain: "www.perplexity.ai",
+                    .path: "/",
+                    .name: PerplexityCookieHeader.defaultSessionCookieName,
+                    .value: "browser-token",
+                    .secure: "TRUE",
+                ]))
+                return PerplexityCookieImporter.SessionInfo(cookies: [cookie], sourceLabel: "Chrome")
+            } operation: {
                 let attemptedTokens = LockedArray<String>()
                 let strategy = PerplexityWebFetchStrategy()
                 let settings = ProviderSettingsSnapshot.make(
@@ -303,29 +294,26 @@ struct PerplexityProviderTests {
                 PerplexityCookieImporter.invalidateImportSessionCache()
             }
 
-            let importSessionsOverride: (BrowserDetection, ((String) -> Void)?) throws
-                -> [PerplexityCookieImporter.SessionInfo] = { _, _ in
-                    let staleCookie = try #require(HTTPCookie(properties: [
-                        .domain: "www.perplexity.ai",
-                        .path: "/",
-                        .name: "__Secure-authjs.session-token",
-                        .value: "stale-browser-token",
-                        .secure: "TRUE",
-                    ]))
-                    let liveCookie = try #require(HTTPCookie(properties: [
-                        .domain: "www.perplexity.ai",
-                        .path: "/",
-                        .name: "__Secure-authjs.session-token",
-                        .value: "live-browser-token",
-                        .secure: "TRUE",
-                    ]))
-                    return [
-                        PerplexityCookieImporter.SessionInfo(cookies: [staleCookie], sourceLabel: "Chrome"),
-                        PerplexityCookieImporter.SessionInfo(cookies: [liveCookie], sourceLabel: "Safari"),
-                    ]
-                }
-
-            try await PerplexityCookieImporter.withImportSessionsOverrideForTesting(importSessionsOverride) {
+            try await PerplexityCookieImporter.withImportSessionsOverrideForTesting { _, _ in
+                let staleCookie = try #require(HTTPCookie(properties: [
+                    .domain: "www.perplexity.ai",
+                    .path: "/",
+                    .name: "__Secure-authjs.session-token",
+                    .value: "stale-browser-token",
+                    .secure: "TRUE",
+                ]))
+                let liveCookie = try #require(HTTPCookie(properties: [
+                    .domain: "www.perplexity.ai",
+                    .path: "/",
+                    .name: "__Secure-authjs.session-token",
+                    .value: "live-browser-token",
+                    .secure: "TRUE",
+                ]))
+                return [
+                    PerplexityCookieImporter.SessionInfo(cookies: [staleCookie], sourceLabel: "Chrome"),
+                    PerplexityCookieImporter.SessionInfo(cookies: [liveCookie], sourceLabel: "Safari"),
+                ]
+            } operation: {
                 let attemptedTokens = LockedArray<String>()
                 let strategy = PerplexityWebFetchStrategy()
                 let settings = ProviderSettingsSnapshot.make(
@@ -364,20 +352,17 @@ struct PerplexityProviderTests {
                 PerplexityCookieImporter.invalidateImportSessionCache()
             }
 
-            let importSessionOverride: (BrowserDetection, ((String) -> Void)?) throws
-                -> PerplexityCookieImporter.SessionInfo = { _, _ in
-                    importCount.increment()
-                    let cookie = try #require(HTTPCookie(properties: [
-                        .domain: "www.perplexity.ai",
-                        .path: "/",
-                        .name: PerplexityCookieHeader.defaultSessionCookieName,
-                        .value: "browser-token",
-                        .secure: "TRUE",
-                    ]))
-                    return PerplexityCookieImporter.SessionInfo(cookies: [cookie], sourceLabel: "Chrome")
-                }
-
-            try await PerplexityCookieImporter.withImportSessionOverrideForTesting(importSessionOverride) {
+            try await PerplexityCookieImporter.withImportSessionOverrideForTesting { _, _ in
+                importCount.increment()
+                let cookie = try #require(HTTPCookie(properties: [
+                    .domain: "www.perplexity.ai",
+                    .path: "/",
+                    .name: PerplexityCookieHeader.defaultSessionCookieName,
+                    .value: "browser-token",
+                    .secure: "TRUE",
+                ]))
+                return PerplexityCookieImporter.SessionInfo(cookies: [cookie], sourceLabel: "Chrome")
+            } operation: {
                 let strategy = PerplexityWebFetchStrategy()
                 let settings = ProviderSettingsSnapshot.make(
                     perplexity: ProviderSettingsSnapshot.PerplexityProviderSettings(

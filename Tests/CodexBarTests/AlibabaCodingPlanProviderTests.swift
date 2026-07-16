@@ -667,7 +667,7 @@ struct AlibabaCodingPlanFallbackTests {
     }
 
     @Test
-    func `auto mode does not borrow manual cookie authority when browser import fails`() {
+    func `auto mode does not borrow manual cookie authority when browser import fails`() throws {
         let strategy = AlibabaCodingPlanWebFetchStrategy()
         let settings = ProviderSettingsSnapshot.make(
             alibaba: ProviderSettingsSnapshot.AlibabaCodingPlanProviderSettings(
@@ -677,12 +677,9 @@ struct AlibabaCodingPlanFallbackTests {
         let context = self.makeContext(sourceMode: .auto, settings: settings)
 
         CookieHeaderCache.clear(provider: .alibaba)
-        let importSessionOverride: (BrowserDetection, ((String) -> Void)?) throws
-            -> AlibabaCodingPlanCookieImporter.SessionInfo = { _, _ in
-                throw AlibabaCodingPlanSettingsError.missingCookie()
-            }
-
-        try AlibabaCodingPlanCookieImporter.withImportSessionOverrideForTesting(importSessionOverride) {
+        try AlibabaCodingPlanCookieImporter.withImportSessionOverrideForTesting { _, _ in
+            throw AlibabaCodingPlanSettingsError.missingCookie()
+        } operation: {
             do {
                 _ = try AlibabaCodingPlanWebFetchStrategy.resolveCookieHeader(context: context, allowCached: false)
                 Issue.record("Expected auto mode to fail instead of borrowing the manual cookie header")
@@ -699,7 +696,7 @@ struct AlibabaCodingPlanFallbackTests {
     }
 
     @Test
-    func `auto mode skips web when no alibaba session is available`() async {
+    func `auto mode skips web when no alibaba session is available`() async throws {
         let strategy = AlibabaCodingPlanWebFetchStrategy()
         let settings = ProviderSettingsSnapshot.make(
             alibaba: ProviderSettingsSnapshot.AlibabaCodingPlanProviderSettings(
@@ -712,12 +709,9 @@ struct AlibabaCodingPlanFallbackTests {
             env: [AlibabaCodingPlanSettingsReader.apiTokenKey: "token-abc"])
 
         CookieHeaderCache.clear(provider: .alibaba)
-        let importSessionOverride: (BrowserDetection, ((String) -> Void)?) throws
-            -> AlibabaCodingPlanCookieImporter.SessionInfo = { _, _ in
-                throw AlibabaCodingPlanSettingsError.missingCookie()
-            }
-
-        await AlibabaCodingPlanCookieImporter.withImportSessionOverrideForTesting(importSessionOverride) {
+        try await AlibabaCodingPlanCookieImporter.withImportSessionOverrideForTesting { _, _ in
+            throw AlibabaCodingPlanSettingsError.missingCookie()
+        } operation: {
             #expect(await strategy.isAvailable(context) == false)
         }
     }

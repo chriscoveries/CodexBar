@@ -924,19 +924,16 @@ extension MiMoProviderTests {
         CookieHeaderCache.clear(provider: .mimo)
         CookieHeaderCache.store(provider: .mimo, cookieHeader: "invalid", sourceLabel: "invalid")
 
-        let importSessionsOverride: (BrowserDetection, ((String) -> Void)?) throws
-            -> [MiMoCookieImporter.SessionInfo] = { _, _ in
-                [
-                    .init(
-                        cookieHeader: "api-platform_serviceToken=expired-token; userId=111",
-                        sourceLabel: "Expired Chrome"),
-                    .init(
-                        cookieHeader: "api-platform_serviceToken=valid-token; userId=222",
-                        sourceLabel: "Active Chrome"),
-                ]
-            }
-
-        try await MiMoCookieImporter.withImportSessionsOverrideForTesting(importSessionsOverride) {
+        try await MiMoCookieImporter.withImportSessionsOverrideForTesting { _, _ in
+            [
+                .init(
+                    cookieHeader: "api-platform_serviceToken=expired-token; userId=111",
+                    sourceLabel: "Expired Chrome"),
+                .init(
+                    cookieHeader: "api-platform_serviceToken=valid-token; userId=222",
+                    sourceLabel: "Active Chrome"),
+            ]
+        } operation: {
             let lock = NSLock()
             var requestedCookies: [String] = []
             MiMoStubURLProtocol.handler = { request in
@@ -999,19 +996,16 @@ extension MiMoProviderTests {
             cookieHeader: "api-platform_serviceToken=stale-chrome-token; userId=111",
             sourceLabel: "Chrome")
 
-        let importSessionsOverride: (BrowserDetection, ((String) -> Void)?) throws
-            -> [MiMoCookieImporter.SessionInfo] = { _, _ in
-                [
-                    .init(
-                        cookieHeader: "api-platform_serviceToken=stale-chrome-token; userId=111",
-                        sourceLabel: "Chrome"),
-                    .init(
-                        cookieHeader: "api-platform_serviceToken=valid-safari-token; userId=222",
-                        sourceLabel: "Safari"),
-                ]
-            }
-
-        try await MiMoCookieImporter.withImportSessionsOverrideForTesting(importSessionsOverride) {
+        try await MiMoCookieImporter.withImportSessionsOverrideForTesting { _, _ in
+            [
+                .init(
+                    cookieHeader: "api-platform_serviceToken=stale-chrome-token; userId=111",
+                    sourceLabel: "Chrome"),
+                .init(
+                    cookieHeader: "api-platform_serviceToken=valid-safari-token; userId=222",
+                    sourceLabel: "Safari"),
+            ]
+        } operation: {
             let lock = NSLock()
             var requestedCookies: [String] = []
             MiMoStubURLProtocol.handler = { request in
