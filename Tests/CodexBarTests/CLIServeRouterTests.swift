@@ -106,6 +106,11 @@ struct CLIServeRouterTests {
                 method: "GET",
                 path: "/cost",
                 queryItems: ["provider": "codex"]) == .cost(provider: "codex"))
+        #expect(
+            try CLIServeRouter.route(
+                method: "GET",
+                path: "/dashboard/v1/snapshot",
+                queryItems: [:]) == .dashboardSnapshot)
     }
 
     @Test

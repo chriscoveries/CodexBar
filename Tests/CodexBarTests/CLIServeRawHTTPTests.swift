@@ -122,7 +122,187 @@ struct CLIServeRawHTTPTests {
         })
     }
 
+    // MARK: - Dashboard snapshot auth (production handler)
+
+    @Test
+    func `snapshot without credentials returns 401 with challenge and no-store`() async throws {
+        try await Self.withServeRuntime(token: "secret", body: { port in
+            let response = try await Self.rawExchange(
+                port: port,
+                request: "GET /dashboard/v1/snapshot HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
+
+            #expect(response.statusLine == "HTTP/1.1 401 Unauthorized")
+            #expect(response.headerValue("WWW-Authenticate") == "Bearer")
+            #expect(response.headerValue("Cache-Control") == "no-store")
+            #expect(response.body == #"{"error":"unauthorized"}"#)
+        })
+    }
+
+    @Test
+    func `snapshot with wrong token returns 401`() async throws {
+        try await Self.withServeRuntime(token: "secret", body: { port in
+            let response = try await Self.rawExchange(
+                port: port,
+                request: "GET /dashboard/v1/snapshot HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+                    + "Authorization: Bearer wrong\r\n\r\n")
+
+            #expect(response.statusLine == "HTTP/1.1 401 Unauthorized")
+            #expect(response.headerValue("WWW-Authenticate") == "Bearer")
+            #expect(response.headerValue("Cache-Control") == "no-store")
+        })
+    }
+
+    @Test
+    func `snapshot with correct token returns decodable JSON with no-store`() async throws {
+        try await Self.withServeRuntime(token: "secret", body: { port in
+            let response = try await Self.rawExchange(
+                port: port,
+                request: "GET /dashboard/v1/snapshot HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+                    + "Authorization: Bearer secret\r\n\r\n")
+
+            #expect(response.statusLine == "HTTP/1.1 200 OK")
+            #expect(response.headerValue("Cache-Control") == "no-store")
+            let object = try #require(
+                JSONSerialization.jsonObject(with: Data(response.body.utf8)) as? [String: Any])
+            #expect(object["schemaVersion"] as? Int == 1)
+            #expect((object["providers"] as? [Any])?.isEmpty == true)
+            #expect(object["host"] is [String: Any])
+        })
+    }
+
+    @Test
+    func `snapshot never accepts the token from the query string`() async throws {
+        try await Self.withServeRuntime(token: "secret", body: { port in
+            let response = try await Self.rawExchange(
+                port: port,
+                request: "GET /dashboard/v1/snapshot?token=secret HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
+
+            #expect(response.statusLine == "HTTP/1.1 401 Unauthorized")
+            #expect(response.headerValue("Cache-Control") == "no-store")
+        })
+    }
+
+    @Test
+    func `snapshot with duplicate authorization headers returns 400`() async throws {
+        try await Self.withServeRuntime(token: "secret", body: { port in
+            let response = try await Self.rawExchange(
+                port: port,
+                request: [
+                    "GET /dashboard/v1/snapshot HTTP/1.1",
+                    "Host: 127.0.0.1",
+                    "Authorization: Bearer secret",
+                    "Authorization: Bearer secret",
+                    "",
+                    "",
+                ].joined(separator: "\r\n"))
+
+            #expect(response.statusLine == "HTTP/1.1 400 Bad Request")
+        })
+    }
+
+    @Test
+    func `snapshot rejects non get methods with 405`() async throws {
+        try await Self.withServeRuntime(token: "secret", body: { port in
+            let response = try await Self.rawExchange(
+                port: port,
+                request: "POST /dashboard/v1/snapshot HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+                    + "Authorization: Bearer secret\r\nContent-Length: 0\r\n\r\n")
+
+            #expect(response.statusLine == "HTTP/1.1 405 Method Not Allowed")
+        })
+    }
+
+    @Test
+    func `snapshot fails closed when no token is configured`() async throws {
+        try await Self.withServeRuntime(token: nil, body: { port in
+            let response = try await Self.rawExchange(
+                port: port,
+                request: "GET /dashboard/v1/snapshot HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+                    + "Authorization: Bearer anything\r\n\r\n")
+
+            #expect(response.statusLine == "HTTP/1.1 401 Unauthorized")
+            #expect(response.headerValue("Cache-Control") == "no-store")
+        })
+    }
+
+    @Test
+    func `non-loopback binds gate usage and cost behind the token`() async throws {
+        try await Self.withServeRuntime(token: "secret", bindHost: "0.0.0.0", body: { port in
+            let usageDenied = try await Self.rawExchange(
+                port: port,
+                request: "GET /usage HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
+            let costDenied = try await Self.rawExchange(
+                port: port,
+                request: "GET /cost HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
+            let usageAllowed = try await Self.rawExchange(
+                port: port,
+                request: "GET /usage HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+                    + "Authorization: Bearer secret\r\n\r\n")
+            let health = try await Self.rawExchange(
+                port: port,
+                request: "GET /health HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
+
+            #expect(usageDenied.statusLine == "HTTP/1.1 401 Unauthorized")
+            #expect(usageDenied.headerValue("WWW-Authenticate") == "Bearer")
+            #expect(usageDenied.headerValue("Cache-Control") == "no-store")
+            #expect(costDenied.statusLine == "HTTP/1.1 401 Unauthorized")
+            #expect(costDenied.headerValue("Cache-Control") == "no-store")
+            #expect(usageAllowed.statusLine == "HTTP/1.1 200 OK")
+            // /health carries no account data and stays open for liveness probes.
+            #expect(health.statusLine == "HTTP/1.1 200 OK")
+        })
+    }
+
+    @Test
+    func `health stays open when a dashboard token is configured`() async throws {
+        try await Self.withServeRuntime(token: "secret", body: { port in
+            let response = try await Self.rawExchange(
+                port: port,
+                request: "GET /health HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
+
+            #expect(response.statusLine == "HTTP/1.1 200 OK")
+            let object = try #require(
+                JSONSerialization.jsonObject(with: Data(response.body.utf8)) as? [String: Any])
+            #expect(object["status"] as? String == "ok")
+        })
+    }
+
     // MARK: - Harness
+
+    /// Boots the production serve handler with an isolated config store whose providers
+    /// are all disabled, so snapshot fetches stay local while the full route/auth/cache
+    /// path is exercised end to end.
+    ///
+    /// `bindHost` configures the runtime exactly as `runServe` would for that bind
+    /// host (a non-loopback value gates every data route); the test listener itself
+    /// always binds loopback.
+    static func withServeRuntime(
+        token: String?,
+        bindHost: String = "127.0.0.1",
+        body: (UInt16) async throws -> Void) async throws
+    {
+        let store = testConfigStore(suiteName: "CLIServeRawHTTPTests-\(UUID().uuidString)")
+        defer { try? store.deleteIfPresent() }
+        try store.save(CodexBarConfig(providers: UsageProvider.allCases.map {
+            ProviderConfig(id: $0, enabled: false)
+        }))
+
+        let runtime = ServeRuntime(
+            configStore: store,
+            cache: CLIServeResponseCache(),
+            providerOperations: CLIServeOperationCoordinator(),
+            costOperations: CLIServeOperationCoordinator(),
+            refreshInterval: 60,
+            requestTimeout: 5,
+            healthVersion: "0.0.0-test",
+            dashboardAuth: CLIServeDashboardAuth(token: token),
+            bindHost: bindHost)
+        try await Self.withServer(
+            handler: { request in
+                await CodexBarCLI.handleServeRequest(request, runtime: runtime)
+            },
+            body: body)
+    }
 
     static func okResponse() -> CLILocalHTTPResponse {
         CLILocalHTTPResponse(status: .ok, body: Data(#"{"status":"ok"}"#.utf8))

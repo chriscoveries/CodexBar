@@ -164,6 +164,7 @@ enum CLILocalHTTPRequestParseError: Error, Equatable {
 enum CLIHTTPStatus {
     case ok
     case badRequest
+    case unauthorized
     case forbidden
     case notFound
     case methodNotAllowed
@@ -173,6 +174,7 @@ enum CLIHTTPStatus {
         switch self {
         case .ok: 200
         case .badRequest: 400
+        case .unauthorized: 401
         case .forbidden: 403
         case .notFound: 404
         case .methodNotAllowed: 405
@@ -185,6 +187,7 @@ enum CLIHTTPStatus {
         switch self {
         case .ok: "OK"
         case .badRequest: "Bad Request"
+        case .unauthorized: "Unauthorized"
         case .forbidden: "Forbidden"
         case .notFound: "Not Found"
         case .methodNotAllowed: "Method Not Allowed"
