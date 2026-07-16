@@ -335,24 +335,6 @@ public struct UsageSnapshot: Codable, Sendable {
             secondary: .value(secondary))
     }
 
-    public func withoutDeepSeekDetailedUsage(
-        state: DeepSeekDetailedUsageState = .unavailable) -> UsageSnapshot
-    {
-        self.replacing(
-            deepseekUsage: .value(nil),
-            deepseekDetailedUsageState: .value(state))
-    }
-
-    public func preservingDeepSeekPlatformProfiles(from previous: UsageSnapshot?) -> UsageSnapshot {
-        guard self.deepseekDetailedUsageState == .unavailable,
-              self.deepseekPlatformProfiles.isEmpty,
-              let previous,
-              !previous.deepseekPlatformProfiles.isEmpty
-        else { return self }
-        return self.replacing(
-            deepseekPlatformProfiles: .value(previous.deepseekPlatformProfiles))
-    }
-
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.primary = try container.decodeIfPresent(RateWindow.self, forKey: .primary)
@@ -595,7 +577,7 @@ public struct UsageSnapshot: Codable, Sendable {
         return true
     }
 
-    private enum Replacement<Value> {
+    enum Replacement<Value> {
         case unchanged
         case value(Value)
 
@@ -607,7 +589,7 @@ public struct UsageSnapshot: Codable, Sendable {
         }
     }
 
-    private func replacing(
+    func replacing(
         primary: Replacement<RateWindow?> = .unchanged,
         secondary: Replacement<RateWindow?> = .unchanged,
         tertiary: Replacement<RateWindow?> = .unchanged,

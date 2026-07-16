@@ -1,7 +1,4 @@
 import Foundation
-#if os(macOS)
-import SweetCookieKit
-#endif
 
 enum DeepSeekPlatformTokenImporter {
     struct TokenInfo: Sendable, Equatable {
@@ -97,103 +94,34 @@ enum DeepSeekPlatformTokenImporter {
     #if os(macOS)
     static func importTokens(
         browserDetection: BrowserDetection,
-        logger: (@Sendable (String) -> Void)? = nil) -> [TokenInfo]
+        logger: (@Sendable (String) -> Void)? = nil,
+        localStorage: BrowserLocalStorageAPI = .live) -> [TokenInfo]
     {
-        let log: (String) -> Void = { message in logger?("[deepseek-storage] \(message)") }
-        let installedBrowsers = [Browser.chrome].browsersWithProfileData(using: browserDetection)
-        let roots = ChromiumProfileLocator.roots(
-            for: installedBrowsers,
-            homeDirectories: BrowserCookieClient.defaultHomeDirectories())
+        let log: @Sendable (String) -> Void = { message in logger?("[deepseek-storage] \(message)") }
+        let profiles = localStorage.profiles(
+            for: "https://platform.deepseek.com",
+            browsers: [.chrome],
+            using: browserDetection,
+            logger: log)
 
         var results: [TokenInfo] = []
-        for root in roots {
+        for profile in profiles {
             guard !Task.isCancelled else { return results }
-            for candidate in self.localStorageCandidates(
-                root: root.url,
-                browserID: root.browser.rawValue,
-                labelPrefix: root.labelPrefix)
-            {
-                guard !Task.isCancelled else { return results }
-                log("Checking \(candidate.id)")
-                let entries = SweetCookieKit.ChromiumLocalStorageReader.readEntries(
-                    for: "https://platform.deepseek.com",
-                    in: candidate.url,
-                    logger: log)
-                guard let entry = entries.first(where: { $0.key == "userToken" }),
-                      let token = self.extractUserToken(from: entry.value)
-                else {
-                    log("No DeepSeek userToken found in \(candidate.id)")
-                    continue
-                }
-
-                log("Found DeepSeek platform token in \(candidate.id)")
-                results.append(TokenInfo(id: candidate.id, token: token, sourceLabel: candidate.label))
+            guard let entry = profile.entries.first(where: { $0.key == "userToken" }),
+                  let token = self.extractUserToken(from: entry.value)
+            else {
+                log("No DeepSeek userToken found in \(profile.id)")
+                continue
             }
+
+            log("Found DeepSeek platform token in \(profile.id)")
+            results.append(TokenInfo(id: profile.id, token: token, sourceLabel: profile.label))
         }
 
         if results.isEmpty {
             log("No DeepSeek userToken found in Chrome local storage")
         }
         return results
-    }
-
-    private struct LocalStorageCandidate {
-        let id: String
-        let label: String
-        let url: URL
-    }
-
-    private static func localStorageCandidates(
-        root: URL,
-        browserID: String,
-        labelPrefix: String) -> [LocalStorageCandidate]
-    {
-        guard let entries = try? FileManager.default.contentsOfDirectory(
-            at: root,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles])
-        else { return [] }
-
-        let profileNames = self.chromeProfileNames(root: root)
-        return entries.compactMap { directory in
-            guard let isDirectory = try? directory.resourceValues(forKeys: [.isDirectoryKey]).isDirectory,
-                  isDirectory
-            else { return nil }
-            let name = directory.lastPathComponent
-            guard name == "Default" || name.hasPrefix("Profile ") || name.hasPrefix("user-") else {
-                return nil
-            }
-            let levelDB = directory.appendingPathComponent("Local Storage").appendingPathComponent("leveldb")
-            guard FileManager.default.fileExists(atPath: levelDB.path) else { return nil }
-
-            let displayName = profileNames[name]?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let label = if let displayName, !displayName.isEmpty, displayName != name {
-                "\(labelPrefix) — \(displayName)"
-            } else {
-                "\(labelPrefix) \(name)"
-            }
-            return LocalStorageCandidate(
-                id: "\(browserID):\(name)",
-                label: label,
-                url: levelDB)
-        }
-        .sorted { $0.label.localizedStandardCompare($1.label) == .orderedAscending }
-    }
-
-    private static func chromeProfileNames(root: URL) -> [String: String] {
-        let localStateURL = root.appendingPathComponent("Local State")
-        guard let data = try? Data(contentsOf: localStateURL),
-              let rootObject = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let profile = rootObject["profile"] as? [String: Any],
-              let infoCache = profile["info_cache"] as? [String: Any]
-        else { return [:] }
-
-        return infoCache.reduce(into: [:]) { result, entry in
-            guard let info = entry.value as? [String: Any] else { return }
-            let name = (info["gaia_given_name"] as? String) ?? (info["name"] as? String)
-            guard let name else { return }
-            result[entry.key] = name
-        }
     }
 
     #endif
@@ -252,7 +180,9 @@ enum DeepSeekPlatformTokenImporter {
         let profiles = validCandidates.map { DeepSeekPlatformProfile(id: $0.id, name: $0.sourceLabel) }
         guard !validCandidates.isEmpty else {
             let validationWasUnavailable = outcomes.contains { result in
-                if case .unavailable = result.outcome { return true }
+                if case .unavailable = result.outcome {
+                    return true
+                }
                 return false
             }
             return Resolution(

@@ -34,6 +34,31 @@ struct DeepSeekPlatformTokenImporterTests {
         #expect(DeepSeekPlatformTokenImporter._extractUserTokenForTesting("token with embedded spaces 12345") == nil)
     }
 
+    #if os(macOS)
+    @Test
+    func `imports platform token through browser local storage host API`() {
+        let localStorage = BrowserLocalStorageAPI { _, _, _, _ in
+            [
+                BrowserLocalStorageAPI.Profile(
+                    id: "chrome:Profile 2",
+                    label: "Chrome — Work",
+                    entries: [
+                        BrowserLocalStorageAPI.Entry(
+                            key: "userToken",
+                            value: "browser-user-token-through-host-api"),
+                    ]),
+            ]
+        }
+
+        let tokens = DeepSeekPlatformTokenImporter.importTokens(
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            localStorage: localStorage)
+
+        #expect(tokens.map(\.id) == ["chrome:Profile 2"])
+        #expect(tokens.map(\.sourceLabel) == ["Chrome — Work"])
+    }
+    #endif
+
     @Test
     func `multiple profiles expose only server accepted sessions`() async {
         let candidates = [
