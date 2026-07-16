@@ -9,14 +9,30 @@ import Musl
 
 private let requestReadTimeoutMilliseconds: Int32 = 5000
 
+/// Host header values a `CLILocalHTTPServer` accepts. Loopback names are always allowed;
+/// non-loopback bind hosts extend the set instead of replacing the loopback check.
+enum CLILocalHTTPAllowedHosts: Equatable, Sendable {
+    /// Only loopback names (`127.0.0.1`, `localhost`, `[::1]`).
+    case loopbackOnly
+    /// Loopback names plus the given lowercased host names (without port).
+    case loopbackAnd(Set<String>)
+    /// Any syntactically valid host, for wildcard binds such as `0.0.0.0`.
+    case any
+}
+
 struct CLILocalHTTPRequest {
     let method: String
     let target: String
     let host: String
     let path: String
     let queryItems: [String: String]
+    let authorization: String?
 
-    static func parse(_ data: Data) -> Result<CLILocalHTTPRequest, CLILocalHTTPRequestParseError> {
+    static func parse(
+        _ data: Data,
+        allowedHosts: CLILocalHTTPAllowedHosts = .loopbackOnly)
+        -> Result<CLILocalHTTPRequest, CLILocalHTTPRequestParseError>
+    {
         guard let raw = String(data: data, encoding: .utf8),
               let firstLine = raw.components(separatedBy: "\r\n").first
         else {
@@ -32,6 +48,7 @@ struct CLILocalHTTPRequest {
 
         let headerResult = Self.parseHeaders(raw)
         let host: String
+        let authorization: String?
         switch headerResult {
         case let .success(headers):
             let hosts = headers.compactMap { name, value in
@@ -39,8 +56,14 @@ struct CLILocalHTTPRequest {
             }
             guard let candidate = hosts.first else { return .failure(.missingHost) }
             guard hosts.count == 1 else { return .failure(.duplicateHost) }
-            guard Self.isAllowedLoopbackHost(candidate) else { return .failure(.disallowedHost) }
+            guard Self.isAllowedHost(candidate, allowedHosts: allowedHosts) else { return .failure(.disallowedHost) }
             host = candidate
+
+            let authorizations = headers.compactMap { name, value in
+                name.lowercased() == "authorization" ? value : nil
+            }
+            guard authorizations.count <= 1 else { return .failure(.duplicateAuthorization) }
+            authorization = authorizations.first
         case let .failure(error):
             return .failure(error)
         }
@@ -59,7 +82,8 @@ struct CLILocalHTTPRequest {
             target: target,
             host: host,
             path: path,
-            queryItems: queryItems))
+            queryItems: queryItems,
+            authorization: authorization))
     }
 
     private static func parseHeaders(_ raw: String) -> Result<[(String, String)], CLILocalHTTPRequestParseError> {
@@ -80,7 +104,7 @@ struct CLILocalHTTPRequest {
         return .success(headers)
     }
 
-    private static func isAllowedLoopbackHost(_ host: String) -> Bool {
+    private static func isAllowedHost(_ host: String, allowedHosts: CLILocalHTTPAllowedHosts) -> Bool {
         let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !trimmed.contains(",") else { return false }
 
@@ -107,7 +131,14 @@ struct CLILocalHTTPRequest {
         case "127.0.0.1", "localhost", "localhost.", "[::1]":
             return true
         default:
-            return false
+            switch allowedHosts {
+            case .loopbackOnly:
+                return false
+            case let .loopbackAnd(hosts):
+                return hosts.contains(hostWithoutPort.lowercased())
+            case .any:
+                return true
+            }
         }
     }
 
@@ -127,6 +158,7 @@ enum CLILocalHTTPRequestParseError: Error, Equatable {
     case missingHost
     case duplicateHost
     case disallowedHost
+    case duplicateAuthorization
 }
 
 enum CLIHTTPStatus {
@@ -166,17 +198,20 @@ struct CLILocalHTTPResponse {
     let status: CLIHTTPStatus
     let body: Data
     let contentType: String
+    let extraHeaders: [(String, String)]
     let usageCacheKeys: [String?]?
 
     init(
         status: CLIHTTPStatus,
         body: Data,
         contentType: String = "application/json; charset=utf-8",
+        extraHeaders: [(String, String)] = [],
         usageCacheKeys: [String?]? = nil)
     {
         self.status = status
         self.body = body
         self.contentType = contentType
+        self.extraHeaders = extraHeaders
         self.usageCacheKeys = usageCacheKeys
     }
 
@@ -185,6 +220,9 @@ struct CLILocalHTTPResponse {
         headers += "Content-Type: \(self.contentType)\r\n"
         headers += "Content-Length: \(self.body.count)\r\n"
         headers += "Connection: close\r\n"
+        for (name, value) in self.extraHeaders {
+            headers += "\(name): \(value)\r\n"
+        }
         headers += "\r\n"
 
         var data = Data(headers.utf8)
@@ -198,15 +236,31 @@ final class CLILocalHTTPServer: @unchecked Sendable {
 
     private let host: String
     private let port: UInt16
+    private let allowedHosts: CLILocalHTTPAllowedHosts
     private let handler: Handler
     private let stateLock = NSLock()
     private var listeningFD: Int32?
+    private var boundPort: UInt16?
     private var stopRequested = false
 
-    init(host: String, port: UInt16, handler: @escaping Handler) {
+    init(
+        host: String,
+        port: UInt16,
+        allowedHosts: CLILocalHTTPAllowedHosts = .loopbackOnly,
+        handler: @escaping Handler)
+    {
         self.host = host
         self.port = port
+        self.allowedHosts = allowedHosts
         self.handler = handler
+    }
+
+    /// The port the listening socket is bound to, once `run` is accepting connections.
+    /// Resolves ephemeral (`0`) port requests to the kernel-assigned port.
+    var listeningPort: UInt16? {
+        self.stateLock.lock()
+        defer { self.stateLock.unlock() }
+        return self.boundPort
     }
 
     func stop() {
@@ -267,7 +321,7 @@ final class CLILocalHTTPServer: @unchecked Sendable {
         guard listen(serverFD, 16) == 0 else {
             throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
         }
-        guard self.installListeningFD(serverFD) else {
+        guard self.installListeningFD(serverFD, port: Self.resolvedPort(of: serverFD) ?? self.port) else {
             return
         }
         ownsServerFD = false
@@ -293,9 +347,10 @@ final class CLILocalHTTPServer: @unchecked Sendable {
                 throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
             }
             let handler = self.handler
+            let allowedHosts = self.allowedHosts
             Task {
                 defer { closeSocket(clientFD) }
-                await handleClient(clientFD, handler: handler)
+                await handleClient(clientFD, allowedHosts: allowedHosts, handler: handler)
             }
         }
     }
@@ -307,12 +362,25 @@ final class CLILocalHTTPServer: @unchecked Sendable {
         return value
     }
 
-    private func installListeningFD(_ fd: Int32) -> Bool {
+    private func installListeningFD(_ fd: Int32, port: UInt16) -> Bool {
         self.stateLock.lock()
         defer { self.stateLock.unlock() }
         guard !self.stopRequested else { return false }
         self.listeningFD = fd
+        self.boundPort = port
         return true
+    }
+
+    private static func resolvedPort(of fd: Int32) -> UInt16? {
+        var address = sockaddr_in()
+        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let result = withUnsafeMutablePointer(to: &address) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { socketAddress in
+                getsockname(fd, socketAddress, &length)
+            }
+        }
+        guard result == 0 else { return nil }
+        return UInt16(bigEndian: address.sin_port)
     }
 
     private func releaseListeningFD(_ fd: Int32) -> Bool {
@@ -326,10 +394,11 @@ final class CLILocalHTTPServer: @unchecked Sendable {
 
 private func handleClient(
     _ clientFD: Int32,
+    allowedHosts: CLILocalHTTPAllowedHosts,
     handler: @Sendable (CLILocalHTTPRequest) async -> CLILocalHTTPResponse) async
 {
     let request: CLILocalHTTPRequest
-    switch readRequest(clientFD) {
+    switch readRequest(clientFD, allowedHosts: allowedHosts) {
     case let .success(parsedRequest):
         request = parsedRequest
     case .failure(.disallowedHost):
@@ -352,7 +421,10 @@ private func handleClient(
     sendResponse(response, to: clientFD)
 }
 
-private func readRequest(_ fd: Int32) -> Result<CLILocalHTTPRequest, CLILocalHTTPRequestParseError> {
+private func readRequest(
+    _ fd: Int32,
+    allowedHosts: CLILocalHTTPAllowedHosts) -> Result<CLILocalHTTPRequest, CLILocalHTTPRequestParseError>
+{
     var data = Data()
     var buffer = [UInt8](repeating: 0, count: 4096)
     let bufferSize = buffer.count
@@ -374,7 +446,7 @@ private func readRequest(_ fd: Int32) -> Result<CLILocalHTTPRequest, CLILocalHTT
     }
 
     guard sawHeaderEnd else { return .failure(.invalidRequest) }
-    return CLILocalHTTPRequest.parse(data)
+    return CLILocalHTTPRequest.parse(data, allowedHosts: allowedHosts)
 }
 
 private func sendResponse(_ response: CLILocalHTTPResponse, to fd: Int32) {

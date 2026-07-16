@@ -48,6 +48,51 @@ struct CLIServeRouterTests {
     }
 
     @Test
+    func `local http parser captures a single authorization header`() throws {
+        let raw = [
+            "GET /usage HTTP/1.1",
+            "Host: localhost",
+            "authorization: Bearer token",
+            "",
+            "",
+        ].joined(separator: "\r\n")
+        let request = try CLILocalHTTPRequest.parse(Data(raw.utf8)).get()
+
+        #expect(request.authorization == "Bearer token")
+        #expect(try Self.parsedRequest(host: "localhost").authorization == nil)
+        Self.expectParseFailure(
+            raw: "GET /usage HTTP/1.1\r\nHost: localhost\r\nAuthorization: a\r\nAuthorization: b\r\n\r\n",
+            .duplicateAuthorization)
+    }
+
+    @Test
+    func `local http parser extends the allowed host set without replacing loopback`() throws {
+        let raw = "GET /usage HTTP/1.1\r\nHost: 192.168.1.10:8080\r\n\r\n"
+
+        Self.expectParseFailure(raw: raw, .disallowedHost)
+
+        let allowed = CLILocalHTTPAllowedHosts.loopbackAnd(["192.168.1.10"])
+        let request = try CLILocalHTTPRequest.parse(Data(raw.utf8), allowedHosts: allowed).get()
+        #expect(request.host == "192.168.1.10:8080")
+        #expect(request.path == "/usage")
+        let loopback = try CLILocalHTTPRequest.parse(
+            Data("GET /usage HTTP/1.1\r\nHost: localhost\r\n\r\n".utf8),
+            allowedHosts: allowed).get()
+        #expect(loopback.host == "localhost")
+        Self.expectParseFailure(
+            raw: "GET /usage HTTP/1.1\r\nHost: evil.test\r\n\r\n",
+            .disallowedHost,
+            allowedHosts: allowed)
+
+        let wildcard = try CLILocalHTTPRequest.parse(Data(raw.utf8), allowedHosts: .any).get()
+        #expect(wildcard.host == "192.168.1.10:8080")
+        Self.expectParseFailure(
+            raw: "GET /usage HTTP/1.1\r\nHost: 192.168.1.10, evil.test\r\n\r\n",
+            .disallowedHost,
+            allowedHosts: .any)
+    }
+
+    @Test
     func `routes health usage and cost endpoints`() throws {
         #expect(try CLIServeRouter.route(method: "GET", path: "/health", queryItems: [:]) == .health)
         #expect(try CLIServeRouter.route(method: "GET", path: "/usage", queryItems: [:]) == .usage(provider: nil))
@@ -1404,8 +1449,12 @@ struct CLIServeRouterTests {
         return try CLILocalHTTPRequest.parse(Data(raw.utf8)).get()
     }
 
-    private static func expectParseFailure(raw: String, _ expected: CLILocalHTTPRequestParseError) {
-        switch CLILocalHTTPRequest.parse(Data(raw.utf8)) {
+    private static func expectParseFailure(
+        raw: String,
+        _ expected: CLILocalHTTPRequestParseError,
+        allowedHosts: CLILocalHTTPAllowedHosts = .loopbackOnly)
+    {
+        switch CLILocalHTTPRequest.parse(Data(raw.utf8), allowedHosts: allowedHosts) {
         case .success:
             Issue.record("Expected \(expected)")
         case let .failure(error):
