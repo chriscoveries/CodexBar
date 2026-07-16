@@ -14,6 +14,7 @@
 - Codex cost usage: count restarted subagent token counters without subtracting the parent's unrelated cumulative baseline (#2193). Thanks @qiuruiyu and @harjothkhara!
 - Ollama: explain that API-key verification cannot show Cloud quota limits and direct users to browser-cookie mode (#2159). Thanks @kiranmagic7!
 - Claude: suppress duplicate all-model scoped quota rows that could appear as “All models only” beside Weekly.
+- Copilot: hide quota bars explicitly marked unlimited while preserving finite Premium and Chat quotas. Thanks @Zihao-Qi!
 
 ## 0.43.0 — 2026-07-14
 
