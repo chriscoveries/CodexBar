@@ -149,8 +149,6 @@ public enum ProviderConfigEnvironment {
             OpenRouterSettingsReader.envKey
         case .elevenlabs:
             ElevenLabsSettingsReader.apiKeyEnvironmentKey
-        case .neuralwatt:
-            NeuralWattSettingsReader.apiKeyEnvironmentKey
         case .moonshot:
             MoonshotSettingsReader.apiKeyEnvironmentKeys.first
         case .kimi:
@@ -165,7 +163,7 @@ public enum ProviderConfigEnvironment {
             GroqSettingsReader.apiKeyEnvironmentKey
         case .llmproxy:
             LLMProxySettingsReader.apiKeyEnvironmentKey
-        case .chutes, .poe, .litellm, .crossmodel, .clawrouter, .factory, .sub2api, .zenmux:
+        case .chutes, .poe, .litellm, .crossmodel, .clawrouter, .factory, .sub2api, .neuralwatt, .zenmux:
             self.additionalAPIKeyEnvironmentKey(for: provider)
         default:
             nil
@@ -186,6 +184,8 @@ public enum ProviderConfigEnvironment {
             ClawRouterSettingsReader.apiKeyEnvironmentKey
         case .sub2api:
             Sub2APISettingsReader.apiKeyEnvironmentKey
+        case .neuralwatt:
+            NeuralWattSettingsReader.apiKeyEnvironmentKey
         case .factory:
             FactorySettingsReader.apiTokenKey
         case .zenmux:
