@@ -343,12 +343,21 @@ extension UsageMenuCardView.Model {
         comparisonPeriodsEnabled: Bool) -> InlineUsageDashboardModel
     {
         let historyDays = max(1, min(365, snapshot.historyDays))
-        let historyTitle = snapshot.historyLabel
+        let defaultHistoryTitle = snapshot.historyLabel
             ?? (historyDays == 1
                 ? L("Today")
                 : historyDays == 30
                 ? L("30d cost")
                 : "\(String(format: L("Last %d days"), historyDays)) \(L("Cost"))")
+        let codexHistoryPeriod = snapshot.historyLabel
+            ?? (historyDays == 1
+                ? L("Today")
+                : historyDays == 30
+                ? "30d"
+                : String(format: L("Last %d days"), historyDays))
+        let historyTitle = provider == .codex
+            ? "\(codexHistoryPeriod) · \(L("codex_api_estimate_header"))"
+            : defaultHistoryTitle
         let tokenHistoryTitle = snapshot.historyLabel.map { "\($0) \(L("tokens"))" }
             ?? (historyDays == 1
                 ? L("Today tokens")
@@ -388,19 +397,28 @@ extension UsageMenuCardView.Model {
                 details
                     .append("\(requestHistoryTitle): \(UsageFormatter.tokenCountString(requestCount)) \(L("requests"))")
             }
-            if let hint = Self.tokenUsageHint(provider: provider) {
-                details.append(hint)
+            let hintLines = Self.tokenUsageHintLines(provider: provider)
+            if hintLines.isEmpty == false {
+                details.append(contentsOf: hintLines)
             } else {
                 details.append(L("cost_estimate_hint"))
             }
         }
         let providerName = ProviderDefaults.metadata[provider]?.displayName ?? provider.rawValue
+        let codexEstimateHeader = L("codex_api_estimate_header")
+        let accessibilityLabel = if provider == .codex {
+            "\(providerName) \(periodLabel) \(codexEstimateHeader) trend"
+        } else {
+            "\(providerName) \(periodLabel) cost trend"
+        }
         var model = InlineUsageDashboardModel(
-            accessibilityLabel: "\(providerName) \(periodLabel) cost trend",
+            accessibilityLabel: accessibilityLabel,
             valueStyle: Self.costValueStyle(currencyCode: snapshot.currencyCode),
             kpis: [
                 .init(
-                    title: usesLatestPrimary ? L("Latest") : L("Today"),
+                    title: provider == .codex
+                        ? "\(L("Today")) · \(L("codex_api_estimate_header"))"
+                        : usesLatestPrimary ? L("Latest") : L("Today"),
                     value: primaryCostUSD.map { Self.costString($0, currencyCode: snapshot.currencyCode) } ?? "—",
                     emphasis: true),
                 .init(
