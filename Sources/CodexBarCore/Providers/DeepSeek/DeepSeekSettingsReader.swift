@@ -29,6 +29,24 @@ public struct DeepSeekSettingsReader: Sendable {
         self.value(for: self.platformTokenEnvironmentKeys, environment: environment)
     }
 
+    static func scopedPlatformToken(
+        environment: [String: String],
+        selectedTokenAccountID: UUID?,
+        apiKey: String?) -> String?
+    {
+        guard let token = self.platformToken(environment: environment),
+              let expectedScope = self.profileScope(
+                  selectedTokenAccountID: selectedTokenAccountID,
+                  apiKey: apiKey)
+        else { return nil }
+        if self.profileScope(environment: environment) == expectedScope {
+            return token
+        }
+        // Preserve unscoped legacy/manual sessions only as a standalone browser balance source.
+        guard apiKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true else { return nil }
+        return token
+    }
+
     public static func profileID(
         environment: [String: String] = ProcessInfo.processInfo.environment) -> String?
     {

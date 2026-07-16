@@ -103,8 +103,12 @@ public enum DeepSeekProviderDescriptor {
         guard context.includeOptionalUsage else {
             return try await operations.fetchUsage(apiKey, nil, false).toUsageSnapshot()
         }
-        if let platformToken = DeepSeekSettingsReader.platformToken(environment: context.env) {
-            return try await operations.fetchUsage(apiKey, platformToken, true).toUsageSnapshot()
+        if let session = DeepSeekSettingsReader.scopedPlatformToken(
+            environment: context.env,
+            selectedTokenAccountID: context.selectedTokenAccountID,
+            apiKey: apiKey)
+        {
+            return try await operations.fetchUsage(apiKey, session, true).toUsageSnapshot()
         }
 
         return try await self.loadAutomaticUsage(
@@ -198,16 +202,20 @@ public enum DeepSeekProviderDescriptor {
         resolutionJoinGrace: Duration = DeepSeekProviderDescriptor.platformResolutionJoinGrace,
         operations: FetchOperations = .live) async throws -> UsageSnapshot
     {
-        if let platformToken = DeepSeekSettingsReader.platformToken(environment: context.env) {
+        if let session = DeepSeekSettingsReader.scopedPlatformToken(
+            environment: context.env,
+            selectedTokenAccountID: context.selectedTokenAccountID,
+            apiKey: ProviderTokenResolver.deepseekToken(environment: context.env))
+        {
             return try await DeepSeekUsageFetcher.fetchPlatformUsage(
-                platformToken: platformToken,
+                platformToken: session,
                 includeOptionalUsage: context.includeOptionalUsage).toUsageSnapshot()
         }
 
         let profileSelection = DeepSeekSettingsReader.profileSelection(
             environment: context.env,
-            selectedTokenAccountID: nil,
-            apiKey: nil)
+            selectedTokenAccountID: context.selectedTokenAccountID,
+            apiKey: ProviderTokenResolver.deepseekToken(environment: context.env))
         let resolutionTask = Task<DeepSeekPlatformTokenImporter.Resolution, Error> {
             await operations.resolveAutomaticSession(
                 profileSelection.profileID,

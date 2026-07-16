@@ -39,8 +39,9 @@ CodexBar resolves the Platform `userToken` in this order:
    `providers[].cookieHeader` value preserved from an existing config.
 2. A prompt-free read of `userToken` from the `https://platform.deepseek.com` local-storage origin in Chrome.
 
-The legacy config value remains a compatibility fallback so upgrading cannot silently erase a working session. New
-automatic imports are never written back to config.
+The legacy config value remains a compatibility fallback so upgrading cannot silently erase a working browser-only
+session. An unscoped legacy or environment token is never combined with an API-key balance; API enrichment requires
+a session saved for that credential scope. New automatic imports are never written back to config.
 
 CodexBar checks every Chrome profile containing a parseable `userToken` against DeepSeek. Rejected or expired
 sessions are omitted. Settings shows a **Chrome profile** picker containing only valid sessions. With no API key, one

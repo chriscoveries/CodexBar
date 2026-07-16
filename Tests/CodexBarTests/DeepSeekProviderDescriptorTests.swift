@@ -30,6 +30,14 @@ struct DeepSeekProviderDescriptorTests {
         }
     }
 
+    private actor UsageInputProbe {
+        private(set) var platformTokens: [String?] = []
+
+        func record(platformToken: String?) {
+            self.platformTokens.append(platformToken)
+        }
+    }
+
     @Test
     func `balance failure cancels automatic session resolution promptly`() async {
         let probe = CancellationProbe()
@@ -242,6 +250,36 @@ struct DeepSeekProviderDescriptorTests {
     }
 
     @Test
+    func `platform session from another account does not enrich api balance`() async throws {
+        let probe = UsageInputProbe()
+        let activeAccountID = UUID()
+        let credential = "api-key-value"
+        let otherAccountScope = try #require(DeepSeekSettingsReader.profileScope(
+            selectedTokenAccountID: UUID(),
+            apiKey: credential))
+        let environment = [
+            DeepSeekSettingsReader.platformTokenEnvironmentKey: "platform-session",
+            DeepSeekSettingsReader.profileScopeEnvironmentKey: otherAccountScope,
+        ]
+        let operations = DeepSeekProviderDescriptor.FetchOperations(
+            fetchUsage: { _, platformToken, _ in
+                await probe.record(platformToken: platformToken)
+                return Self.balance
+            },
+            resolveAutomaticSession: { _, _, _, _, _, _ in Self.unavailableResolution })
+
+        _ = try await DeepSeekProviderDescriptor._loadUsageForTesting(
+            apiKey: credential,
+            context: Self.makeContext(
+                environment: environment,
+                selectedTokenAccountID: activeAccountID),
+            optionalResolutionJoinGrace: .seconds(1),
+            operations: operations)
+
+        #expect(await probe.platformTokens == [nil])
+    }
+
+    @Test
     func `browser only mode returns Platform balance and usage without an API key`() async throws {
         let probe = ResolutionInputProbe()
         let summary = DeepSeekUsageSummary(
@@ -285,6 +323,48 @@ struct DeepSeekProviderDescriptorTests {
         #expect(await probe.requiresExplicitSelection == false)
         #expect(await probe.includesPlatformBalance)
         #expect(await probe.includesOptionalUsage)
+    }
+
+    @Test
+    func `forced web mode preserves the active credential profile scope`() async throws {
+        let probe = ResolutionInputProbe()
+        let selectedAccountID = UUID()
+        let credential = "api-key-value"
+        let scope = try #require(DeepSeekSettingsReader.profileScope(
+            selectedTokenAccountID: selectedAccountID,
+            apiKey: credential))
+        let environment = [
+            DeepSeekSettingsReader.apiKeyEnvironmentKey: credential,
+            DeepSeekSettingsReader.profileIDEnvironmentKey: "chrome:Profile 2",
+            DeepSeekSettingsReader.profileScopeEnvironmentKey: scope,
+        ]
+        let operations = DeepSeekProviderDescriptor.FetchOperations(
+            fetchUsage: { _, _, _ in
+                throw DeepSeekUsageError.missingCredentials
+            },
+            resolveAutomaticSession: { profileID, explicit, includeBalance, includeOptional, _, _ in
+                await probe.record(
+                    profileID: profileID,
+                    requiresExplicitSelection: explicit,
+                    includesPlatformBalance: includeBalance,
+                    includesOptionalUsage: includeOptional)
+                return DeepSeekPlatformTokenImporter.Resolution(
+                    profiles: [DeepSeekPlatformProfile(id: "chrome:Profile 2", name: "Chrome — Work")],
+                    selectedSummary: nil,
+                    selectedBalance: Self.balance,
+                    detailedUsageState: .available)
+            })
+
+        _ = try await DeepSeekProviderDescriptor._loadPlatformUsageForTesting(
+            context: Self.makeContext(
+                environment: environment,
+                selectedTokenAccountID: selectedAccountID,
+                sourceMode: .web),
+            operations: operations)
+
+        #expect(await probe.profileID == "chrome:Profile 2")
+        #expect(await probe.requiresExplicitSelection == false)
+        #expect(await probe.includesPlatformBalance)
     }
 
     @Test

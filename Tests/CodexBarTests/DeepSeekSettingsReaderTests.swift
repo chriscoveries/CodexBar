@@ -1,6 +1,6 @@
-import CodexBarCore
 import Foundation
 import Testing
+@testable import CodexBarCore
 
 struct DeepSeekSettingsReaderTests {
     @Test
@@ -66,6 +66,36 @@ struct DeepSeekSettingsReaderTests {
     func `falls back to DeepSeek user token environment key`() {
         let env = ["DEEPSEEK_USER_TOKEN": "browser-user-token"]
         #expect(DeepSeekSettingsReader.platformToken(environment: env) == "browser-user-token")
+    }
+
+    @Test
+    func `platform session token requires the active credential scope`() throws {
+        let accountID = UUID()
+        let credential = "api-key-value"
+        let scope = try #require(DeepSeekSettingsReader.profileScope(
+            selectedTokenAccountID: accountID,
+            apiKey: credential))
+        let environment = [
+            DeepSeekSettingsReader.platformTokenEnvironmentKey: "platform-session",
+            DeepSeekSettingsReader.profileScopeEnvironmentKey: scope,
+        ]
+
+        #expect(DeepSeekSettingsReader.scopedPlatformToken(
+            environment: environment,
+            selectedTokenAccountID: accountID,
+            apiKey: credential) == "platform-session")
+        #expect(DeepSeekSettingsReader.scopedPlatformToken(
+            environment: environment,
+            selectedTokenAccountID: UUID(),
+            apiKey: credential) == nil)
+        #expect(DeepSeekSettingsReader.scopedPlatformToken(
+            environment: [DeepSeekSettingsReader.platformTokenEnvironmentKey: "platform-session"],
+            selectedTokenAccountID: accountID,
+            apiKey: credential) == nil)
+        #expect(DeepSeekSettingsReader.scopedPlatformToken(
+            environment: [DeepSeekSettingsReader.platformTokenEnvironmentKey: "platform-session"],
+            selectedTokenAccountID: nil,
+            apiKey: nil) == "platform-session")
     }
 
     @Test
