@@ -30,6 +30,7 @@ extension UsageStore {
         self.snapshots.removeValue(forKey: provider)
         self.lastKnownResetSnapshots.removeValue(forKey: provider)
         self.errors[provider] = nil
+        self.diagnostics[provider] = nil
         if provider == .deepseek {
             self.clearDeepSeekProfileTransition()
         }
