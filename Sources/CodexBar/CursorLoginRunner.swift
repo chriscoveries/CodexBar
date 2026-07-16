@@ -181,6 +181,9 @@ final class CursorLoginRunner {
             return Result(outcome: .cancelled, email: nil)
         }
 
+        let cacheMutationGate = CookieHeaderCache.beginConditionalMutationGate(provider: .cursor)
+        defer { CookieHeaderCache.endConditionalMutationGate(cacheMutationGate) }
+
         let route: CursorLoginBrowserRouter.Route
         switch self.prepareRoute(onPhaseChange: onPhaseChange) {
         case let .ready(preparedRoute):
