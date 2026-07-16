@@ -295,6 +295,16 @@ struct CursorLoginRunnerTests {
     }
 
     @Test
+    func `late cancellation still finalizes a committed login`() {
+        let success = CursorLoginRunner.Result(outcome: .success, email: "cursor@example.com")
+        let cancelled = CursorLoginRunner.Result(outcome: .cancelled, email: nil)
+
+        #expect(StatusItemController.shouldFinalizeCursorLoginResult(success, taskIsCancelled: true))
+        #expect(!StatusItemController.shouldFinalizeCursorLoginResult(cancelled, taskIsCancelled: true))
+        #expect(StatusItemController.shouldFinalizeCursorLoginResult(cancelled, taskIsCancelled: false))
+    }
+
+    @Test
     func `switch timeout preserves existing session and explains that a different account is required`() async {
         let replacementEvents = LockedArray<String>()
         let runner = CursorLoginRunner(

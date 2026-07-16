@@ -30,7 +30,7 @@ extension StatusItemController {
             }
         }
         let result = await cursorRunner.run(onPhaseChange: phaseHandler)
-        guard !Task.isCancelled else { return false }
+        guard Self.shouldFinalizeCursorLoginResult(result, taskIsCancelled: Task.isCancelled) else { return false }
         self.loginPhase = .idle
         self.presentCursorLoginResult(result)
         let outcome = self.describe(result.outcome)
@@ -40,5 +40,15 @@ extension StatusItemController {
             return true
         }
         return false
+    }
+
+    nonisolated static func shouldFinalizeCursorLoginResult(
+        _ result: CursorLoginRunner.Result,
+        taskIsCancelled: Bool) -> Bool
+    {
+        if case .success = result.outcome {
+            return true
+        }
+        return !taskIsCancelled
     }
 }
