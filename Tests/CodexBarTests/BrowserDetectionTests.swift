@@ -247,7 +247,7 @@ struct BrowserDetectionTests {
     }
 
     @Test
-    func `background cookie import allows authorized chromium keychain sources`() {
+    func `background cookie import skips chromium before keychain preflight`() {
         BrowserCookieAccessGate.resetForTesting()
         defer { BrowserCookieAccessGate.resetForTesting() }
 
@@ -259,17 +259,17 @@ struct BrowserDetectionTests {
                 return .allowed
             } operation: {
                 ProviderInteractionContext.$current.withValue(.background) {
-                    #expect(BrowserCookieAccessGate.shouldAttempt(.chrome) == true)
+                    #expect(BrowserCookieAccessGate.shouldAttempt(.chrome) == false)
                     #expect(BrowserCookieAccessGate.shouldAttempt(.safari) == true)
                 }
             }
         }
 
-        #expect(preflightCount == 1)
+        #expect(preflightCount == 0)
     }
 
     @Test
-    func `background cookie import suppresses chromium keychain sources requiring interaction`() {
+    func `background cookie import skips chromium without probing keychain interaction`() {
         BrowserCookieAccessGate.resetForTesting()
         defer { BrowserCookieAccessGate.resetForTesting() }
 
@@ -287,7 +287,7 @@ struct BrowserDetectionTests {
             }
         }
 
-        #expect(preflightCount == 1)
+        #expect(preflightCount == 0)
     }
 
     @Test
