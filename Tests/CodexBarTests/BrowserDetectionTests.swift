@@ -130,7 +130,9 @@ struct BrowserDetectionTests {
         let client = BrowserCookieClient(configuration: .init(homeDirectories: [temp]))
         let stores = try KeychainAccessGate.withTaskOverrideForTesting(false) {
             try KeychainAccessPreflight.withCheckGenericPasswordOverrideForTesting { _, _ in .allowed } operation: {
-                try client.codexBarStores(for: .chrome)
+                try ProviderInteractionContext.$current.withValue(.userInitiated) {
+                    try client.codexBarStores(for: .chrome)
+                }
             }
         }
         #expect(stores.count == 1)
@@ -221,7 +223,7 @@ struct BrowserDetectionTests {
         var preflightCount = 0
 
         KeychainAccessGate.withTaskOverrideForTesting(false) {
-            ProviderInteractionContext.$current.withValue(.background) {
+            ProviderInteractionContext.$current.withValue(.userInitiated) {
                 KeychainAccessPreflight.withCheckGenericPasswordOverrideForTesting { _, _ in
                     preflightCount += 1
                     return .interactionRequired
@@ -320,7 +322,7 @@ struct BrowserDetectionTests {
                         BrowserCookieAccessGate.recordAllowed(for: .arc)
                     }
                 }
-                ProviderInteractionContext.$current.withValue(.background) {
+                ProviderInteractionContext.$current.withValue(.userInitiated) {
                     #expect(BrowserCookieAccessGate.shouldAttempt(.chrome, now: start.addingTimeInterval(3)) == true)
                 }
             }
@@ -367,7 +369,9 @@ struct BrowserDetectionTests {
                 queriedLabels.append(label)
                 return .notFound
             } operation: {
-                #expect(BrowserCookieAccessGate.shouldAttempt(.chrome) == true)
+                ProviderInteractionContext.$current.withValue(.userInitiated) {
+                    #expect(BrowserCookieAccessGate.shouldAttempt(.chrome) == true)
+                }
             }
         }
 
@@ -390,7 +394,9 @@ struct BrowserDetectionTests {
                 queriedLabels.append(label)
                 return .notFound
             } operation: {
-                #expect(BrowserCookieAccessGate.shouldAttempt(.dia) == true)
+                ProviderInteractionContext.$current.withValue(.userInitiated) {
+                    #expect(BrowserCookieAccessGate.shouldAttempt(.dia) == true)
+                }
             }
         }
 
@@ -419,7 +425,7 @@ struct BrowserDetectionTests {
                 if label == firstDiaLabel { return .interactionRequired }
                 return .notFound
             } operation: {
-                ProviderInteractionContext.$current.withValue(.background) {
+                ProviderInteractionContext.$current.withValue(.userInitiated) {
                     #expect(BrowserCookieAccessGate.shouldAttempt(.chrome, now: start) == true)
                     #expect(BrowserCookieAccessGate.shouldAttempt(.dia, now: start.addingTimeInterval(1)) == false)
                     #expect(BrowserCookieAccessGate.shouldAttempt(.chrome, now: start.addingTimeInterval(60)) == false)
