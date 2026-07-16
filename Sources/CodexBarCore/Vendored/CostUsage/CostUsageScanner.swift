@@ -14,6 +14,9 @@ enum CostUsageScanner {
     static let log = CodexBarLog.logger(LogCategories.tokenCost)
     static let codexActiveSessionLookbackDays = 30
     static let costScale = 1_000_000_000.0
+    /// Reserved cache marker. Resolver-produced dependencies use `file|...` or `missing:...`;
+    /// this value records that lineage exists but this rollout owns its counter or suffix.
+    static let codexForkDependencyNotRequiredKey = "mode:lineage-only:v1"
 
     enum ClaudeLogProviderFilter {
         case all
@@ -62,6 +65,7 @@ enum CostUsageScanner {
         let lastCodexTurnID: String?
         let sessionId: String?
         let forkedFromId: String?
+        let dependsOnParentTotals: Bool
         let projectPath: String?
         let rows: [CodexUsageRow]
     }
@@ -1306,8 +1310,14 @@ enum CostUsageScanner {
     private enum CodexFastLine {
         case sessionMeta(CodexSessionMetadata)
         case turnContext(model: String?)
+        case interAgentCommunication(triggerTurn: Bool)
         case taskStarted(turnID: String?)
         case tokenCount(CodexTokenCountRecord)
+    }
+
+    private struct CodexBufferedFastLine {
+        let lineIndex: Int
+        let line: CodexFastLine
     }
 
     private static let codexJSONFieldCachedInputTokens = Array("cached_input_tokens".utf8)
@@ -1593,6 +1603,12 @@ enum CostUsageScanner {
                     })
                 return .turnContext(model: model)
 
+            case "inter_agent_communication_metadata":
+                // Compact Codex JSONL uses this exact spelling. Whitespace/escaped variants fall
+                // through to Foundation so a fast-path miss cannot change boundary semantics.
+                guard bytes.containsAscii(#""trigger_turn":true"#) else { return nil }
+                return .interAgentCommunication(triggerTurn: true)
+
             case "event_msg":
                 guard let payloadRange = Self.extractJSONByteObjectField(
                     Self.codexJSONFieldPayload,
@@ -1838,7 +1854,7 @@ enum CostUsageScanner {
                             }
                         case let .tokenCount(record):
                             appendSnapshot(timestamp: record.timestamp, last: record.last, total: record.total)
-                        case .turnContext, .taskStarted:
+                        case .turnContext, .interAgentCommunication, .taskStarted:
                             break
                         }
                         return
@@ -1942,6 +1958,7 @@ enum CostUsageScanner {
             lastCodexTurnID: initialCodexTurnID,
             sessionId: nil,
             forkedFromId: nil,
+            dependsOnParentTotals: false,
             projectPath: nil,
             rows: [])
     }
@@ -1969,6 +1986,10 @@ enum CostUsageScanner {
         var forkedFromId: String?
         var projectPath: String?
         var isSubagentThread = false
+        var didCaptureLeafMetadata = false
+        var forkTimestamp: String?
+        var subagentCounterSemantics: CodexSubagentCounterSemantics?
+        var usesLocalSubagentBoundary = false
         var inheritedTotals: CostUsageCodexTotals?
         var remainingInheritedTotals: CostUsageCodexTotals?
         var forkBaselineResolved = false
@@ -2015,29 +2036,47 @@ enum CostUsageScanner {
             }
         }
 
+        func configureForkAccountingIfReady() throws {
+            guard let forkedFromId else { return }
+            if isSubagentThread, subagentCounterSemantics == nil {
+                return
+            }
+            if subagentCounterSemantics == .independent || usesLocalSubagentBoundary {
+                forkBaselineResolved = true
+                inheritedTotals = nil
+                remainingInheritedTotals = nil
+                hasUnresolvedForkBaseline = false
+                return
+            }
+            try resolveForkBaseline(
+                parentSessionId: forkedFromId,
+                forkedAt: forkTimestamp ?? "")
+        }
+
         func handleSessionMetadata(_ metadata: CodexSessionMetadata) throws {
-            if sessionId == nil {
-                sessionId = metadata.sessionId
-            }
-            if forkedFromId == nil {
-                forkedFromId = metadata.forkedFromId
-            }
-            if projectPath == nil {
-                projectPath = metadata.projectPath
-            }
-            isSubagentThread = isSubagentThread || metadata.isSubagentThread
-            if let forkedFromId {
-                if isSubagentThread {
-                    // Codex subagent rollouts own an independent cumulative counter; their parent
-                    // identifiers describe lineage, not a token baseline to subtract (#2193).
-                    forkBaselineResolved = true
-                    inheritedTotals = nil
-                    remainingInheritedTotals = nil
-                    hasUnresolvedForkBaseline = false
-                } else {
-                    try resolveForkBaseline(parentSessionId: forkedFromId, forkedAt: metadata.forkTimestamp ?? "")
+            // The first parsed session_meta is the authoritative leaf. Copied prefixes can
+            // contain many embedded ancestor metas; they are shape evidence, never new identity.
+            if didCaptureLeafMetadata {
+                // A same-leaf restart may add metadata that was absent from the initial record.
+                // Enrich missing fork/project fields without allowing an ancestor to replace identity.
+                guard CodexSubagentRolloutShape.sameConcreteSessionID(metadata.sessionId, sessionId) else { return }
+                if forkedFromId == nil, let enrichedParentID = metadata.forkedFromId {
+                    forkedFromId = enrichedParentID
+                    forkTimestamp = metadata.forkTimestamp ?? forkTimestamp
+                    try configureForkAccountingIfReady()
                 }
+                if projectPath == nil {
+                    projectPath = metadata.projectPath
+                }
+                return
             }
+            didCaptureLeafMetadata = true
+            sessionId = metadata.sessionId
+            forkedFromId = metadata.forkedFromId
+            forkTimestamp = metadata.forkTimestamp
+            projectPath = metadata.projectPath
+            isSubagentThread = metadata.isSubagentThread
+            try configureForkAccountingIfReady()
         }
 
         // swiftlint:disable:next function_body_length
@@ -2077,9 +2116,8 @@ enum CostUsageScanner {
                 return adjusted
             }
 
-            // Generic fork children are measured against their parent-inherited baseline so every
-            // cumulative comparison in this file happens on a single scale. Subagents use their
-            // independent counter directly.
+            // Fork totals are normalized against the selected baseline. Classified independent
+            // counters and locally delimited suffixes intentionally bypass the parent baseline.
             let adjustedTotal: CostUsageCodexTotals? = total.map { rawTotals in
                 guard let inheritedTotals, !hasUnresolvedForkBaseline else { return rawTotals }
                 return CostUsageCodexTotals(
@@ -2248,7 +2286,7 @@ enum CostUsageScanner {
             }
         }
 
-        func handleFastLine(_ fastLine: CodexFastLine) throws {
+        func processFastLine(_ fastLine: CodexFastLine) throws {
             switch fastLine {
             case let .sessionMeta(metadata):
                 try handleSessionMetadata(metadata)
@@ -2256,6 +2294,8 @@ enum CostUsageScanner {
                 if let model {
                     currentModel = model
                 }
+            case .interAgentCommunication:
+                break
             case let .taskStarted(turnID):
                 currentTurnID = turnID
             case let .tokenCount(record):
@@ -2266,15 +2306,31 @@ enum CostUsageScanner {
         let maxLineBytes = 256 * 1024
         let prefixBytes = maxLineBytes
 
+        var pendingSubagentLines: [CodexBufferedFastLine]?
+
         if startOffset == 0,
            let metadata = try Self.parseCodexSessionMetadata(
                fileURL: fileURL,
                checkCancellation: checkCancellation)
         {
             try handleSessionMetadata(metadata)
+            if metadata.isSubagentThread {
+                // Subagent provenance can omit a fork id. Buffer parsed events, not JSON, so
+                // classification remains one disk pass and reuses the existing totals reducer.
+                pendingSubagentLines = []
+            }
+        }
+
+        func routeFastLine(_ fastLine: CodexFastLine, lineIndex: Int) throws {
+            if pendingSubagentLines != nil {
+                pendingSubagentLines?.append(Self.CodexBufferedFastLine(lineIndex: lineIndex, line: fastLine))
+            } else {
+                try processFastLine(fastLine)
+            }
         }
 
         var parsedBytes: Int64
+        var physicalLineIndex = 0
         do {
             parsedBytes = try CostUsageJsonl.scan(
                 fileURL: fileURL,
@@ -2283,14 +2339,24 @@ enum CostUsageScanner {
                 prefixBytes: prefixBytes,
                 checkCancellation: checkCancellation,
                 onLine: { line in
+                    let lineIndex = physicalLineIndex
+                    physicalLineIndex += 1
                     if deferredError != nil {
                         return
                     }
                     guard !line.bytes.isEmpty else { return }
                     if line.wasTruncated {
                         // `turn_context` can carry very large prompts, but its model usually appears near the start.
-                        if let model = Self.extractCodexTurnContextModel(from: line.bytes) {
-                            currentModel = model
+                        // A truncated line cannot be structurally validated with Foundation, so
+                        // only accept the canonical root discriminator to avoid prompt-text hits.
+                        if line.bytes.containsAscii(#""type":"turn_context""#) {
+                            do {
+                                try routeFastLine(
+                                    .turnContext(model: Self.extractCodexTurnContextModel(from: line.bytes)),
+                                    lineIndex: lineIndex)
+                            } catch {
+                                deferredError = error
+                            }
                         }
                         return
                     }
@@ -2298,7 +2364,11 @@ enum CostUsageScanner {
                     guard
                         line.bytes.containsAscii(#""type":"event_msg""#)
                         || line.bytes.containsAscii(#""type":"turn_context""#)
+                        || line.bytes.containsAscii(#""turn_context""#)
                         || line.bytes.containsAscii(#""type":"session_meta""#)
+                        || line.bytes.containsAscii(#""session_meta""#)
+                        || line.bytes.containsAscii(#""type":"inter_agent_communication_metadata""#)
+                        || line.bytes.containsAscii(#""inter_agent_communication_metadata""#)
                     else { return }
 
                     if line.bytes.containsAscii(#""type":"event_msg""#),
@@ -2310,7 +2380,7 @@ enum CostUsageScanner {
 
                     if let fastLine = Self.parseCodexFastLine(line.bytes) {
                         do {
-                            try handleFastLine(fastLine)
+                            try routeFastLine(fastLine, lineIndex: lineIndex)
                         } catch {
                             deferredError = error
                         }
@@ -2326,7 +2396,7 @@ enum CostUsageScanner {
                         if type == "session_meta" {
                             guard let metadata = Self.codexSessionMetadata(from: obj) else { return }
                             do {
-                                try handleSessionMetadata(metadata)
+                                try routeFastLine(.sessionMeta(metadata), lineIndex: lineIndex)
                             } catch {
                                 deferredError = error
                             }
@@ -2337,17 +2407,32 @@ enum CostUsageScanner {
                         guard Self.dayKeyFromTimestamp(tsText) ?? Self.dayKeyFromParsedISO(tsText) != nil
                         else { return }
 
+                        if type == "inter_agent_communication_metadata" {
+                            let payload = obj["payload"] as? [String: Any]
+                            do {
+                                try routeFastLine(
+                                    .interAgentCommunication(triggerTurn: payload?["trigger_turn"] as? Bool == true),
+                                    lineIndex: lineIndex)
+                            } catch {
+                                deferredError = error
+                            }
+                            return
+                        }
+
                         if type == "turn_context" {
+                            var model: String?
                             if let payload = obj["payload"] as? [String: Any] {
                                 let info = payload["info"] as? [String: Any]
-                                if let model = Self.codexTurnContextModel(
+                                model = Self.codexTurnContextModel(
                                     payloadModel: payload["model"] as? String,
                                     payloadModelName: payload["model_name"] as? String,
                                     infoModel: info?["model"] as? String,
                                     infoModelName: info?["model_name"] as? String)
-                                {
-                                    currentModel = model
-                                }
+                            }
+                            do {
+                                try routeFastLine(.turnContext(model: model), lineIndex: lineIndex)
+                            } catch {
+                                deferredError = error
                             }
                             return
                         }
@@ -2355,7 +2440,13 @@ enum CostUsageScanner {
                         guard type == "event_msg" else { return }
                         guard let payload = obj["payload"] as? [String: Any] else { return }
                         if (payload["type"] as? String) == "task_started" {
-                            currentTurnID = Self.codexTurnID(from: payload)
+                            do {
+                                try routeFastLine(
+                                    .taskStarted(turnID: Self.codexTurnID(from: payload)),
+                                    lineIndex: lineIndex)
+                            } catch {
+                                deferredError = error
+                            }
                             return
                         }
                         guard (payload["type"] as? String) == "token_count" else { return }
@@ -2387,7 +2478,7 @@ enum CostUsageScanner {
                             last: (info?["last_token_usage"] as? [String: Any]).map(tokenTotals),
                             total: (info?["total_token_usage"] as? [String: Any]).map(tokenTotals))
                         do {
-                            try handleTokenCount(record)
+                            try routeFastLine(.tokenCount(record), lineIndex: lineIndex)
                         } catch {
                             deferredError = error
                         }
@@ -2395,6 +2486,83 @@ enum CostUsageScanner {
                 })
             if let deferredError {
                 throw deferredError
+            }
+
+            if let pendingSubagentLines {
+                // Same-leaf metadata can fill lineage fields after the opening record. Collect it
+                // before replay so copied-prefix totals never run once on the wrong baseline, and
+                // so an owned-suffix filter cannot discard the only fork identifier.
+                for buffered in pendingSubagentLines {
+                    guard case let .sessionMeta(metadata) = buffered.line,
+                          CodexSubagentRolloutShape.sameConcreteSessionID(metadata.sessionId, sessionId)
+                    else { continue }
+                    if forkedFromId == nil, let enrichedParentID = metadata.forkedFromId {
+                        forkedFromId = enrichedParentID
+                        forkTimestamp = metadata.forkTimestamp ?? forkTimestamp
+                    }
+                    if projectPath == nil {
+                        projectPath = metadata.projectPath
+                    }
+                }
+                let observations = pendingSubagentLines.compactMap { buffered -> CodexSubagentRolloutShape
+                    .Observation? in
+                    let kind: CodexSubagentRolloutShape.Observation.Kind
+                    switch buffered.line {
+                    case let .sessionMeta(metadata):
+                        kind = .sessionMetadata(id: metadata.sessionId)
+                    case .turnContext:
+                        kind = .turnContext
+                    case let .interAgentCommunication(triggerTurn):
+                        kind = .interAgentCommunication(triggerTurn: triggerTurn)
+                    case let .tokenCount(record):
+                        kind = .tokenCount(total: record.total, last: record.last)
+                    case .taskStarted:
+                        return nil
+                    }
+                    return Self.CodexSubagentRolloutShape.Observation(
+                        lineIndex: buffered.lineIndex,
+                        kind: kind)
+                }
+                let shape = CodexSubagentRolloutShape.classify(
+                    leafSessionID: sessionId,
+                    observations: observations)
+                subagentCounterSemantics = shape.counterSemantics
+                if let ownedSuffix = shape.ownedSuffix {
+                    usesLocalSubagentBoundary = true
+                    previousTotals = nil
+                    // Keep totals-derived accounting after the boundary. Real flat-total rows
+                    // repeat the previous token payload with a fresh outer timestamp; their
+                    // non-zero `last` is replay evidence, not new usage (#2037).
+                    rawTotalsBaseline = ownedSuffix.rawTotalsBaseline
+                    sawDivergentTotals = false
+                    tracker = CodexTotalsTracker(
+                        watermark: ownedSuffix.rawTotalsBaseline,
+                        seenRawTotals: [],
+                        sawInterleavedTotals: false)
+                    currentModel = nil
+                    currentTurnID = nil
+                    unresolvedForkTotalWatermark = nil
+                }
+                self.log.debug(
+                    "Codex cost usage classified subagent rollout counter semantics",
+                    metadata: [
+                        "sessionId": sessionId ?? "unknown",
+                        "semantics": subagentCounterSemantics == .copiedPrefix ? "copiedPrefix" : "independent",
+                        "localBoundary": shape.ownedSuffix == nil ? "false" : "true",
+                        "sessionMetadataCount": String(observations.count(where: {
+                            if case .sessionMetadata = $0.kind {
+                                true
+                            } else {
+                                false
+                            }
+                        })),
+                    ])
+                try configureForkAccountingIfReady()
+                for buffered in pendingSubagentLines
+                    where shape.ownedSuffix.map({ buffered.lineIndex >= $0.startLineIndex }) ?? true
+                {
+                    try processFastLine(buffered.line)
+                }
             }
         } catch is CancellationError {
             throw CancellationError()
@@ -2421,6 +2589,9 @@ enum CostUsageScanner {
             lastCodexTurnID: currentTurnID,
             sessionId: sessionId,
             forkedFromId: forkedFromId,
+            dependsOnParentTotals: forkedFromId != nil
+                && subagentCounterSemantics != .independent
+                && !usesLocalSubagentBoundary,
             projectPath: projectPath,
             rows: rows)
     }

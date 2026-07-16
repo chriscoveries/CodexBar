@@ -4774,15 +4774,28 @@ struct CostUsageScannerBreakdownTests {
             claudeProjectsRoots: nil,
             cacheRoot: env.cacheRoot)
         options.refreshMinIntervalSeconds = 0
-        options.forceRescan = true
-
-        let report = CostUsageScanner.loadDailyReport(
+        let coldReport = CostUsageScanner.loadDailyReport(
             provider: .codex,
             since: day,
             until: day,
             now: forkDate.addingTimeInterval(3),
             options: options)
+        let warmReport = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: forkDate.addingTimeInterval(4),
+            options: options)
+        options.forceRescan = true
+        let report = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: forkDate.addingTimeInterval(5),
+            options: options)
 
+        #expect(coldReport.data.first?.totalTokens == 63_065_400)
+        #expect(warmReport.data.first?.totalTokens == 63_065_400)
         #expect(report.data.count == 1)
         #expect(report.data[0].inputTokens == 60_062_200)
         #expect(report.data[0].cacheReadTokens == 48_051_000)
@@ -4802,6 +4815,8 @@ struct CostUsageScannerBreakdownTests {
         #expect(abs((report.data[0].costUSD ?? 0) - expectedCost) < 0.000001)
 
         let cache = CostUsageCacheIO.load(provider: .codex, cacheRoot: env.cacheRoot)
+        let childUsage = try #require(cache.files.values.first(where: { $0.sessionId == "child-session" }))
+        #expect(childUsage.forkBaselineDependencyKey == CostUsageScanner.codexForkDependencyNotRequiredKey)
         let projects = CostUsageScanner.buildCodexProjectBreakdownsFromCache(
             cache: cache,
             range: CostUsageScanner.CostUsageDayRange(since: day, until: day),

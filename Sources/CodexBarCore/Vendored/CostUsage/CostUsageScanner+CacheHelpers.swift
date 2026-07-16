@@ -907,9 +907,11 @@ extension CostUsageScanner {
         }
         if let parentSessionId = cached.forkedFromId {
             guard let cachedDependencyKey = cached.forkBaselineDependencyKey else { return false }
-            let currentDependencyKey = try context.resources.inheritedResolver
-                .currentDependencyKey(for: parentSessionId)
-            guard cachedDependencyKey == currentDependencyKey else { return false }
+            if cachedDependencyKey != Self.codexForkDependencyNotRequiredKey {
+                let currentDependencyKey = try context.resources.inheritedResolver
+                    .currentDependencyKey(for: parentSessionId)
+                guard cachedDependencyKey == currentDependencyKey else { return false }
+            }
         }
 
         if sessionAlreadyContributed {
@@ -1132,7 +1134,15 @@ extension CostUsageScanner {
             inheritedTotalsResolver: context.resources.inheritedResolver.inheritedTotals(for:atOrBefore:),
             checkCancellation: context.checkCancellation)
         let forkBaselineDependencyKey: String? = if let parentSessionId = parsed.forkedFromId {
-            context.resources.inheritedResolver.dependencyKeyUsed(for: parentSessionId)
+            if parsed.dependsOnParentTotals {
+                if let dependencyKey = context.resources.inheritedResolver.dependencyKeyUsed(for: parentSessionId) {
+                    dependencyKey
+                } else {
+                    try context.resources.inheritedResolver.currentDependencyKey(for: parentSessionId)
+                }
+            } else {
+                Self.codexForkDependencyNotRequiredKey
+            }
         } else {
             nil
         }
