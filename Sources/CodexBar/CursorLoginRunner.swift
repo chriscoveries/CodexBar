@@ -99,7 +99,6 @@ final class CursorLoginRunner {
     private let logger = CodexBarLog.logger(LogCategories.cursorLogin)
 
     static let authURL = URL(string: "https://authenticator.cursor.sh/")!
-    static let switchAccountURL = URL(string: "https://cursor.com/mismatching-client-account")!
 
     init(
         browserDetection: BrowserDetection,
@@ -246,7 +245,7 @@ final class CursorLoginRunner {
     }
 
     private func prepareRoute(onPhaseChange: @MainActor (Phase) -> Void) -> RoutePreparation {
-        let loginURL = self.priorAccount == nil ? Self.authURL : Self.switchAccountURL
+        let loginURL = Self.authURL
         let handlerApplicationURL = self.browserApplicationResolver(loginURL)
         let route: CursorLoginBrowserRouter.Route
 

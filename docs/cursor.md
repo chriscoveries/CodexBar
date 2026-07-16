@@ -44,7 +44,7 @@ Manual option:
 
 ## Add and switch account
 - **Add Account** opens `https://authenticator.cursor.sh/` in a supported browser.
-- **Switch Account** opens `https://cursor.com/mismatching-client-account`, Cursor's account-mismatch route.
+- **Switch Account** opens the same authenticator and waits for a different normalized account email.
 - When the system's HTTPS handler is a supported browser, CodexBar opens the route there automatically. When the handler is an intermediary app, CodexBar asks the user to choose a concrete supported browser before opening the route.
 - CodexBar pins the original HTTPS route to that concrete browser and polls cookies only from the same application. Interactive login never falls back to another browser, a stored session, or Cursor.app; cancelling browser selection or the absence of a supported browser stops before login opens.
 - CodexBar preserves its cached and legacy stored Cursor sessions while login is in progress. An accepted browser session must be durably cached before the legacy session is cleared, so cancellation or failure leaves the previous session intact. Add completes only after the authenticated response includes a Cursor account identity. Switch waits for a different normalized account email.

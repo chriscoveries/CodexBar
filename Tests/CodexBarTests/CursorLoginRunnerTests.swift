@@ -104,7 +104,7 @@ struct CursorLoginRunnerTests {
     }
 
     @Test
-    func `switch account opens mismatch route and waits for a different normalized email`() async {
+    func `switch account opens Cursor auth URL and waits for a different normalized email`() async {
         var launchedRoutes: [CursorLoginBrowserRouter.Route] = []
         var resolvedURLs: [URL] = []
         let sequence = SnapshotSequence([
@@ -126,9 +126,9 @@ struct CursorLoginRunnerTests {
 
         let result = await runner.run { _ in }
 
-        #expect(launchedRoutes.map(\.launchURL) == [CursorLoginRunner.switchAccountURL])
+        #expect(launchedRoutes.map(\.launchURL) == [CursorLoginRunner.authURL])
         #expect(launchedRoutes.map(\.browserApplicationURL) == [Self.cometApplicationURL])
-        #expect(resolvedURLs == [CursorLoginRunner.switchAccountURL])
+        #expect(resolvedURLs == [CursorLoginRunner.authURL])
         #expect(sequence.count() == 3)
         #expect(result.email == "different@example.com")
     }

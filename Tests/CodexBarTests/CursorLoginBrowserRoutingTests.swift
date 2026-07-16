@@ -5,17 +5,13 @@ import Testing
 @MainActor
 struct CursorLoginBrowserRoutingTests {
     private static let authURL = URL(string: "https://authenticator.cursor.sh/")!
-    private static let switchURL = URL(string: "https://cursor.com/mismatching-client-account")!
     private static let cometApplicationURL = URL(fileURLWithPath: "/Applications/Comet.app")
     private static let chromeApplicationURL = URL(fileURLWithPath: "/Applications/Google Chrome.app")
     private static let handlerApplicationURL = URL(fileURLWithPath: "/Applications/Link Router.app")
 
-    @Test(arguments: [
-        "https://authenticator.cursor.sh/",
-        "https://cursor.com/mismatching-client-account",
-    ])
-    func `supported handler is pinned for launch and polling`(loginURLString: String) throws {
-        let loginURL = try #require(URL(string: loginURLString))
+    @Test
+    func `supported handler is pinned for launch and polling`() {
+        let loginURL = Self.authURL
         var discoveryURLs: [URL] = []
         var chooserCalls = 0
 
@@ -60,14 +56,9 @@ struct CursorLoginBrowserRoutingTests {
             browserApplicationURL: Self.chromeApplicationURL)))
     }
 
-    @Test(arguments: [
-        "https://authenticator.cursor.sh/",
-        "https://cursor.com/mismatching-client-account",
-    ])
-    func `unsupported handler asks for explicit selection of the sole supported application`(
-        loginURLString: String) throws
-    {
-        let loginURL = try #require(URL(string: loginURLString))
+    @Test
+    func `unsupported handler asks for explicit selection of the sole supported application`() {
+        let loginURL = Self.authURL
         var discoveryURLs: [URL] = []
         var chooserCalls = 0
 
