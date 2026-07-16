@@ -30,7 +30,7 @@ struct KeychainAccessGateConcurrencyTests {
                     switch (lane + i) % 3 {
                     case 0: KeychainAccessGate.isDisabled = (i % 2 == 0)
                     case 1: KeychainAccessGate.resetOverrideForTesting()
-                    default: _ = KeychainAccessGate.isDisabled
+                    default: _ = KeychainAccessGate.currentOverrideForTesting
                     }
                 }
                 group.leave()
