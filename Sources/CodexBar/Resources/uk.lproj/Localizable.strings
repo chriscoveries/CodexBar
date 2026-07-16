@@ -532,6 +532,8 @@
 /* Display Pane */
 "menu_bar_style_title" = "Стиль рядка меню";
 "menu_bar_style_subtitle" = "Визначає вигляд елемента рядка меню.";
+"menu_bar_inactive_display_contrast_title" = "Покращити видимість на неактивних дисплеях";
+"menu_bar_inactive_display_contrast_subtitle" = "Використовує висококонтрастне відтворення, щоб піктограма й показник залишалися читабельними на інших дисплеях.";
 "menu_bar_style_critters" = "Тварини";
 "menu_bar_style_bars" = "Смуги-індикатори";
 "menu_bar_style_icon_percent" = "Значок і відсоток";

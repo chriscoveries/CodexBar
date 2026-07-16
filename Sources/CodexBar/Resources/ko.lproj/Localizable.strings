@@ -521,6 +521,8 @@
 "primary_api_key_limit" = "기본 (API 키 한도)";
 "menu_bar_style_title" = "메뉴 막대 스타일";
 "menu_bar_style_subtitle" = "메뉴 막대 항목의 표시 방식을 선택합니다.";
+"menu_bar_inactive_display_contrast_title" = "비활성 디스플레이에서 가시성 향상";
+"menu_bar_inactive_display_contrast_subtitle" = "고대비 렌더링을 사용하여 다른 디스플레이에서도 아이콘과 지표를 읽기 쉽게 유지합니다.";
 "menu_bar_style_critters" = "크리터";
 "menu_bar_style_bars" = "미터 막대";
 "menu_bar_style_icon_percent" = "아이콘 및 백분율";

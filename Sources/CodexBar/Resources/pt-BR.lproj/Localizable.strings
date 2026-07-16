@@ -529,6 +529,8 @@
 /* Display Pane */
 "menu_bar_style_title" = "Estilo da barra de menus";
 "menu_bar_style_subtitle" = "Como o item da barra de menus é desenhado.";
+"menu_bar_inactive_display_contrast_title" = "Melhorar a visibilidade em telas inativas";
+"menu_bar_inactive_display_contrast_subtitle" = "Usa renderização de alto contraste para manter o ícone e a métrica legíveis em outras telas.";
 "menu_bar_style_critters" = "Bichinhos";
 "menu_bar_style_bars" = "Barras de medição";
 "menu_bar_style_icon_percent" = "Ícone e porcentagem";

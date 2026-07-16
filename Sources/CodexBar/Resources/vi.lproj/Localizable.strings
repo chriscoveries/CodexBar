@@ -528,6 +528,8 @@
 /* Display Pane */
 "menu_bar_style_title" = "Kiểu thanh menu";
 "menu_bar_style_subtitle" = "Cách hiển thị mục trên thanh menu.";
+"menu_bar_inactive_display_contrast_title" = "Cải thiện khả năng hiển thị trên màn hình không hoạt động";
+"menu_bar_inactive_display_contrast_subtitle" = "Sử dụng hiển thị tương phản cao để biểu tượng và chỉ số vẫn dễ đọc trên các màn hình khác.";
 "menu_bar_style_critters" = "Sinh vật";
 "menu_bar_style_bars" = "Thanh đo";
 "menu_bar_style_icon_percent" = "Biểu tượng & phần trăm";
