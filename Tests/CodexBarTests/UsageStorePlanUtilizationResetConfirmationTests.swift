@@ -92,4 +92,101 @@ extension UsageStorePlanUtilizationTests {
         #expect(sessionRecorder.events.count == 1)
         #expect(weeklyRecorder.events.count == 1)
     }
+
+    @MainActor
+    @Test
+    func `identity-less confirmation and identified weekly dedup compose`() async {
+        let identitylessStore = Self.makeStore()
+        let identitylessSessionRecorder = SessionLimitResetEventRecorder(provider: .claude, accountLabel: nil)
+        let identitylessWeeklyRecorder = WeeklyLimitResetEventRecorder(provider: .claude, accountLabel: nil)
+        let identifiedStore = Self.makeStore()
+        let identifiedAccount = "claude-composed-reset-account"
+        let identifiedWeeklyRecorder = WeeklyLimitResetEventRecorder(
+            provider: .claude,
+            accountLabel: identifiedAccount)
+        defer {
+            identitylessSessionRecorder.invalidate()
+            identitylessWeeklyRecorder.invalidate()
+            identifiedWeeklyRecorder.invalidate()
+        }
+
+        let start = Date(timeIntervalSince1970: 1_784_500_000)
+        let firstSessionBoundary = start.addingTimeInterval(5 * 60 * 60)
+        let resetSessionBoundary = firstSessionBoundary.addingTimeInterval(5 * 60 * 60)
+        let weeklyBoundary = start.addingTimeInterval(4 * 24 * 60 * 60)
+
+        func snapshot(
+            accountLabel: String?,
+            sessionUsed: Double,
+            weeklyUsed: Double,
+            sessionBoundary: Date,
+            updatedAt: Date) -> UsageSnapshot
+        {
+            UsageSnapshot(
+                primary: RateWindow(
+                    usedPercent: sessionUsed,
+                    windowMinutes: 300,
+                    resetsAt: sessionBoundary,
+                    resetDescription: nil),
+                secondary: RateWindow(
+                    usedPercent: weeklyUsed,
+                    windowMinutes: 10080,
+                    resetsAt: weeklyBoundary,
+                    resetDescription: nil),
+                updatedAt: updatedAt,
+                identity: accountLabel.map {
+                    ProviderIdentitySnapshot(
+                        providerID: .claude,
+                        accountEmail: $0,
+                        accountOrganization: nil,
+                        loginMethod: "test")
+                })
+        }
+
+        let identitylessSnapshots = [
+            snapshot(
+                accountLabel: nil,
+                sessionUsed: 3,
+                weeklyUsed: 3,
+                sessionBoundary: firstSessionBoundary,
+                updatedAt: start),
+            snapshot(
+                accountLabel: nil,
+                sessionUsed: 0,
+                weeklyUsed: 0,
+                sessionBoundary: resetSessionBoundary,
+                updatedAt: start.addingTimeInterval(60)),
+            snapshot(
+                accountLabel: nil,
+                sessionUsed: 3,
+                weeklyUsed: 3,
+                sessionBoundary: resetSessionBoundary,
+                updatedAt: start.addingTimeInterval(120)),
+        ]
+        for current in identitylessSnapshots {
+            await identitylessStore.recordPlanUtilizationHistorySample(
+                provider: .claude,
+                snapshot: current,
+                now: current.updatedAt)
+        }
+
+        #expect(identitylessSessionRecorder.events.isEmpty)
+        #expect(identitylessWeeklyRecorder.events.isEmpty)
+
+        let identifiedWeeklyUsage = [73.0, 0.0, 73.0, 0.0]
+        for (index, weeklyUsed) in identifiedWeeklyUsage.enumerated() {
+            let current = snapshot(
+                accountLabel: identifiedAccount,
+                sessionUsed: 50,
+                weeklyUsed: weeklyUsed,
+                sessionBoundary: firstSessionBoundary,
+                updatedAt: start.addingTimeInterval(TimeInterval(300 + index * 60)))
+            await identifiedStore.recordPlanUtilizationHistorySample(
+                provider: .claude,
+                snapshot: current,
+                now: current.updatedAt)
+        }
+
+        #expect(identifiedWeeklyRecorder.events.count == 1)
+    }
 }
