@@ -142,14 +142,14 @@ struct GrokWebFetchStrategy: ProviderFetchStrategy {
         do {
             (webBilling, sourceLabel, authenticatedByAuthFile) = try await fetchWebBilling()
         } catch GrokWebBillingError.teamUsageUnsupported {
-            guard let credentials = try? GrokCredentialsStore.load(env: context.env),
-                  !credentials.isExpired,
-                  credentials.isTeamPrincipal
+            guard let authState = try? GrokCredentialsStore.load(env: context.env),
+                  !authState.isExpired,
+                  authState.isTeamPrincipal
             else {
                 throw GrokWebBillingError.teamUsageUnsupported
             }
             let identitySnapshot = GrokStatusProbe.identityOnlySnapshot(
-                credentials: credentials,
+                credentials: authState,
                 localSummary: GrokLocalSessionScanner.summarize(env: context.env),
                 cliVersion: GrokStatusProbe.detectVersion(env: context.env))
             return self.makeResult(
