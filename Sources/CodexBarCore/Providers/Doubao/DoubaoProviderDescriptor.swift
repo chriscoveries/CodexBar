@@ -54,45 +54,41 @@ public enum DoubaoProviderDescriptor {
 struct DoubaoAPIFetchStrategy: ProviderFetchStrategy {
     let id: String = "doubao.api"
     let kind: ProviderFetchKind = .apiToken
-    private let codingPlanUsageLoader: @Sendable (DoubaoCodingPlanCredentials) async throws -> DoubaoUsageSnapshot
+    private let cliUsageLoader: @Sendable () async throws -> DoubaoUsageSnapshot
     private let arkUsageLoader: @Sendable (String) async throws -> DoubaoUsageSnapshot
 
     init(
-        codingPlanUsageLoader: @escaping @Sendable (DoubaoCodingPlanCredentials) async throws
-            -> DoubaoUsageSnapshot = { credentials in
-                try await DoubaoUsageFetcher.fetchCodingPlanUsage(credentials: credentials)
-            },
+        cliUsageLoader: @escaping @Sendable () async throws -> DoubaoUsageSnapshot = {
+            try await DoubaoUsageFetcher.fetchCodingPlanUsage()
+        },
         arkUsageLoader: @escaping @Sendable (String) async throws -> DoubaoUsageSnapshot = { apiKey in
             try await DoubaoUsageFetcher.fetchUsage(apiKey: apiKey)
         })
     {
-        self.codingPlanUsageLoader = codingPlanUsageLoader
+        self.cliUsageLoader = cliUsageLoader
         self.arkUsageLoader = arkUsageLoader
     }
 
     func isAvailable(_ context: ProviderFetchContext) async -> Bool {
-        DoubaoSettingsReader.codingPlanCredentials(environment: context.env) != nil ||
+        DoubaoAPIFetchStrategy.arkcliInstalled(environment: context.env) ||
             ProviderTokenResolver.doubaoToken(environment: context.env) != nil
     }
 
     func fetch(_ context: ProviderFetchContext) async throws -> ProviderFetchResult {
-        let apiKey = ProviderTokenResolver.doubaoToken(environment: context.env)
-        if let credentials = DoubaoSettingsReader.codingPlanCredentials(environment: context.env) {
-            do {
-                let usage = try await self.codingPlanUsageLoader(credentials)
-                return self.makeResult(usage: usage.toUsageSnapshot(), sourceLabel: "api")
-            } catch {
-                if Self.isCancellation(error) {
-                    throw error
-                }
-                guard let apiKey else {
-                    throw error
-                }
-                let usage = try await self.arkUsageLoader(apiKey)
-                return self.makeResult(usage: usage.toUsageSnapshot(), sourceLabel: "api")
+        // 1) Try arkcli CLI (SSO-based, no credentials needed).
+        // The loader throws quickly if arkcli is not installed.
+        do {
+            let usage = try await self.cliUsageLoader()
+            return self.makeResult(usage: usage.toUsageSnapshot(), sourceLabel: "cli")
+        } catch {
+            if Self.isCancellation(error) {
+                throw error
             }
+            // Fall through to API key probe
         }
 
+        // 2) Fall back to Ark API key probe (rate-limit headers)
+        let apiKey = ProviderTokenResolver.doubaoToken(environment: context.env)
         guard let apiKey else {
             throw DoubaoUsageError.missingCredentials
         }
@@ -106,5 +102,15 @@ struct DoubaoAPIFetchStrategy: ProviderFetchStrategy {
 
     private static func isCancellation(_ error: Error) -> Bool {
         error is CancellationError || (error as? URLError)?.code == .cancelled || Task.isCancelled
+    }
+
+    private static func arkcliInstalled(environment: [String: String]) -> Bool {
+        if let envPath = environment["ARKCLI_PATH"],
+           FileManager.default.isExecutableFile(atPath: envPath)
+        {
+            return true
+        }
+        let candidates = ["/usr/local/bin/arkcli", "/opt/homebrew/bin/arkcli"]
+        return candidates.contains { FileManager.default.isExecutableFile(atPath: $0) }
     }
 }

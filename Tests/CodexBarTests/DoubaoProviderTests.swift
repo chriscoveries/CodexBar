@@ -80,17 +80,13 @@ struct DoubaoProviderTests {
     }
 
     @Test
-    func `signed credential failure falls back to ark API key`() async throws {
+    func `cli failure falls back to ark API key`() async throws {
         let expectedDate = Date(timeIntervalSince1970: 42)
         let context = Self.makeContext(environment: [
             DoubaoSettingsReader.apiKeyEnvironmentKeys[0]: "ark-env",
-            DoubaoSettingsReader.accessKeyIDEnvironmentKeys[0]: "AKLT-env",
-            DoubaoSettingsReader.secretAccessKeyEnvironmentKeys[0]: "sk-env",
         ])
         let strategy = DoubaoAPIFetchStrategy(
-            codingPlanUsageLoader: { credentials in
-                #expect(credentials.accessKeyID == "AKLT-env")
-                #expect(credentials.secretAccessKey == "sk-env")
+            cliUsageLoader: {
                 throw DoubaoProviderTestError.signedFailed
             },
             arkUsageLoader: { apiKey in
@@ -113,14 +109,12 @@ struct DoubaoProviderTests {
     }
 
     @Test
-    func `signed credential cancellation does not fall back to ark API key`() async {
+    func `cli cancellation does not fall back to ark API key`() async {
         let context = Self.makeContext(environment: [
             DoubaoSettingsReader.apiKeyEnvironmentKeys[0]: "ark-env",
-            DoubaoSettingsReader.accessKeyIDEnvironmentKeys[0]: "AKLT-env",
-            DoubaoSettingsReader.secretAccessKeyEnvironmentKeys[0]: "sk-env",
         ])
         let strategy = DoubaoAPIFetchStrategy(
-            codingPlanUsageLoader: { _ in
+            cliUsageLoader: {
                 throw CancellationError()
             },
             arkUsageLoader: { _ in

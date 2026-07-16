@@ -67,9 +67,35 @@ public struct DoubaoUsageSnapshot: Sendable {
             primary: primary,
             secondary: nil,
             tertiary: nil,
+            extraRateWindows: nil,
+            kiroUsage: nil,
+            ampUsage: nil,
             providerCost: nil,
+            zaiUsage: nil,
+            minimaxUsage: nil,
+            deepseekUsage: nil,
+            mimoUsage: nil,
+            openRouterUsage: nil,
+            sakanaPayAsYouGo: nil,
+            crossModelUsage: nil,
+            clawRouterUsage: nil,
+            sub2APIUsage: nil,
+            wayfinderUsage: nil,
+            openAIAPIUsage: nil,
+            codexResetCredits: nil,
+            claudeAdminAPIUsage: nil,
+            mistralUsage: nil,
+            deepgramUsage: nil,
+            poeUsage: nil,
+            cursorRequests: nil,
+            commandCodeSubscriptionEnrichmentUnavailable: false,
+            commandCodeHasSubscriptionPlan: false,
+            commandCodeMonthlyGrantDepleted: false,
+            subscriptionExpiresAt: nil,
+            subscriptionRenewsAt: nil,
             updatedAt: self.updatedAt,
-            identity: identity)
+            identity: identity,
+            dataConfidence: .unknown)
     }
 }
 
@@ -97,9 +123,32 @@ public struct DoubaoCodingPlanUsage: Sendable, Equatable {
     }
 
     public func toUsageSnapshot(updatedAt: Date) -> UsageSnapshot {
-        let primary = self.rateWindow(levels: ["session", "5-hour", "five_hour"], minutes: 5 * 60)
-        let secondary = self.rateWindow(levels: ["weekly", "week"], minutes: 7 * 24 * 60)
-        let tertiary = self.rateWindow(levels: ["monthly", "month"], minutes: 30 * 24 * 60)
+        let codingPrimary = self.rateWindow(levels: ["session", "5-hour", "five_hour", "5h"], minutes: 5 * 60)
+        let codingSecondary = self.rateWindow(levels: ["weekly", "week"], minutes: 7 * 24 * 60)
+        let codingTertiary = self.rateWindow(levels: ["monthly", "month"], minutes: 30 * 24 * 60)
+
+        let agentPrimary = self.rateWindow(
+            levels: ["agent_session", "agent_5-hour", "agent_five_hour", "agent_5h"], minutes: 5 * 60)
+        let agentSecondary = self.rateWindow(levels: ["agent_weekly", "agent_week"], minutes: 7 * 24 * 60)
+        let agentTertiary = self.rateWindow(levels: ["agent_monthly", "agent_month"], minutes: 30 * 24 * 60)
+
+        let primary = codingPrimary ?? agentPrimary
+        let secondary = codingSecondary ?? agentSecondary
+        let tertiary = codingTertiary ?? agentTertiary
+
+        var extraRateWindows: [NamedRateWindow] = []
+        if codingPrimary != nil, let a = agentPrimary {
+            extraRateWindows.append(NamedRateWindow(id: "doubao-agent-session", title: "5-hour", window: a))
+        }
+        if codingSecondary != nil, let a = agentSecondary {
+            extraRateWindows.append(NamedRateWindow(id: "doubao-agent-weekly", title: "Weekly", window: a))
+        }
+        if codingTertiary != nil, let a = agentTertiary {
+            extraRateWindows.append(NamedRateWindow(id: "doubao-agent-monthly", title: "Monthly", window: a))
+        }
+
+        let finalExtraWindows = extraRateWindows.isEmpty ? nil : extraRateWindows
+
         let identity = ProviderIdentitySnapshot(
             providerID: .doubao,
             accountEmail: nil,
@@ -110,9 +159,35 @@ public struct DoubaoCodingPlanUsage: Sendable, Equatable {
             primary: primary,
             secondary: secondary,
             tertiary: tertiary,
+            extraRateWindows: finalExtraWindows,
+            kiroUsage: nil,
+            ampUsage: nil,
             providerCost: nil,
+            zaiUsage: nil,
+            minimaxUsage: nil,
+            deepseekUsage: nil,
+            mimoUsage: nil,
+            openRouterUsage: nil,
+            sakanaPayAsYouGo: nil,
+            crossModelUsage: nil,
+            clawRouterUsage: nil,
+            sub2APIUsage: nil,
+            wayfinderUsage: nil,
+            openAIAPIUsage: nil,
+            codexResetCredits: nil,
+            claudeAdminAPIUsage: nil,
+            mistralUsage: nil,
+            deepgramUsage: nil,
+            poeUsage: nil,
+            cursorRequests: nil,
+            commandCodeSubscriptionEnrichmentUnavailable: false,
+            commandCodeHasSubscriptionPlan: false,
+            commandCodeMonthlyGrantDepleted: false,
+            subscriptionExpiresAt: nil,
+            subscriptionRenewsAt: nil,
             updatedAt: self.updateTime ?? updatedAt,
-            identity: identity)
+            identity: identity,
+            dataConfidence: .unknown)
     }
 
     private func rateWindow(levels: Set<String>, minutes: Int) -> RateWindow? {
@@ -151,8 +226,9 @@ public enum DoubaoUsageError: LocalizedError, Sendable {
 public struct DoubaoUsageFetcher: Sendable {
     private static let log = CodexBarLog.logger(LogCategories.doubaoUsage)
     private static let apiURL = URL(string: "https://ark.cn-beijing.volces.com/api/coding/v3/chat/completions")!
-    private static let codingPlanAPIURL = URL(
-        string: "https://open.volcengineapi.com/?Action=GetCodingPlanUsage&Version=2024-01-01")!
+
+    /// Closure that runs `arkcli usage plan` and returns raw stdout.
+    public typealias ArkcliRunner = @Sendable () async throws -> Data
 
     /// Models to probe, ordered by likelihood. We try multiple models because
     /// different key types may not have access to every model.
@@ -208,68 +284,141 @@ public struct DoubaoUsageFetcher: Sendable {
     }
 
     public static func fetchCodingPlanUsage(
-        credentials: DoubaoCodingPlanCredentials,
-        session transport: any ProviderHTTPTransport = ProviderHTTPClient.shared,
+        runArkcli: ArkcliRunner? = nil,
         date: Date = Date()) async throws -> DoubaoUsageSnapshot
     {
-        guard !credentials.accessKeyID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              !credentials.secretAccessKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        else {
-            throw DoubaoUsageError.missingCredentials
+        let stdoutData: Data
+        if let runArkcli {
+            stdoutData = try await runArkcli()
+        } else {
+            stdoutData = try await Self.runArkcliUsagePlan()
         }
 
-        let body = Data()
-        var request = URLRequest(url: self.codingPlanAPIURL)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 15
-        request.httpBody = body
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        DoubaoVolcengineSigner.sign(
-            request: &request,
-            body: body,
-            credentials: credentials,
-            date: date)
+        let usage = try Self.decodeArkcliUsage(from: stdoutData, date: date)
 
-        let response = try await transport.response(for: request)
-        guard response.statusCode == 200 else {
-            let summary = Self.apiErrorSummary(statusCode: response.statusCode, data: response.data)
-            Self.log.error("Doubao coding plan API returned \(response.statusCode): \(summary)")
-            throw DoubaoUsageError.apiError(response.statusCode, summary)
-        }
-
-        let codingPlanUsage = try self.decodeCodingPlanUsage(from: response.data)
         return DoubaoUsageSnapshot(
             remainingRequests: 0,
             limitRequests: 0,
             resetTime: nil,
-            updatedAt: codingPlanUsage.updateTime ?? date,
+            updatedAt: usage.updateTime ?? date,
             apiKeyValid: true,
-            codingPlanUsage: codingPlanUsage)
+            codingPlanUsage: usage)
     }
 
-    static func decodeCodingPlanUsage(from data: Data) throws -> DoubaoCodingPlanUsage {
-        let response: CodingPlanUsageResponse
+    static func decodeArkcliUsage(from data: Data, date: Date = Date()) throws -> DoubaoCodingPlanUsage {
+        let response: ArkcliUsageResponse
         do {
-            response = try JSONDecoder().decode(CodingPlanUsageResponse.self, from: data)
+            response = try JSONDecoder().decode(ArkcliUsageResponse.self, from: data)
         } catch {
             throw DoubaoUsageError.parseFailed(error.localizedDescription)
         }
-        let usage = response.result
-        let quotas = usage.quotaUsage.map { quota in
-            DoubaoCodingPlanUsage.Quota(
-                level: quota.level,
-                percent: quota.percent,
-                resetTime: self.date(fromEpoch: quota.resetTimestamp))
+
+        var allQuotas: [DoubaoCodingPlanUsage.Quota] = []
+        var updateTime: Date?
+        var status: String?
+
+        for item in response.items {
+            let isAgent = item.product == "agent-plan"
+            if let updatedAt = item.updatedAt, updatedAt > 0 {
+                updateTime = updateTime ?? Date(timeIntervalSince1970: updatedAt)
+            }
+            if item.subscribed == true {
+                status = status ?? "subscribed"
+            }
+            for period in item.periods {
+                let level = isAgent ? "agent_" + period.label : period.label
+                let resetTime = period.resetAt.flatMap(Self.parseISO8601)
+                allQuotas.append(DoubaoCodingPlanUsage.Quota(
+                    level: level,
+                    percent: period.percent,
+                    resetTime: resetTime))
+            }
         }
-        return DoubaoCodingPlanUsage(
-            status: usage.status,
-            updateTime: self.date(fromEpoch: usage.updateTimestamp),
-            quotas: quotas)
+
+        return DoubaoCodingPlanUsage(status: status, updateTime: updateTime, quotas: allQuotas)
     }
 
-    private static func date(fromEpoch timestamp: TimeInterval?) -> Date? {
-        guard let timestamp, timestamp > 0 else { return nil }
-        return Date(timeIntervalSince1970: timestamp)
+    private static func runArkcliUsagePlan() async throws -> Data {
+        guard let arkcliPath = Self.findArkcli() else {
+            throw DoubaoUsageError.missingCredentials
+        }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: arkcliPath)
+        process.arguments = ["usage", "plan"]
+
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
+
+        do {
+            try process.run()
+        } catch {
+            throw DoubaoUsageError.networkError("Failed to launch arkcli: \(error.localizedDescription)")
+        }
+
+        process.waitUntilExit()
+
+        guard process.terminationStatus == 0 else {
+            let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+            let stderrText = String(data: stderrData, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? "unknown error"
+            throw DoubaoUsageError.apiError(Int(process.terminationStatus), stderrText)
+        }
+
+        return stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+    }
+
+    private static func findArkcli() -> String? {
+        if let envPath = ProcessInfo.processInfo.environment["ARKCLI_PATH"],
+           FileManager.default.isExecutableFile(atPath: envPath)
+        {
+            return envPath
+        }
+
+        let candidates = [
+            "/usr/local/bin/arkcli",
+            "/opt/homebrew/bin/arkcli",
+        ]
+        for path in candidates {
+            if FileManager.default.isExecutableFile(atPath: path) {
+                return path
+            }
+        }
+        return Self.which("arkcli")
+    }
+
+    private static func which(_ tool: String) -> String? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+        process.arguments = [tool]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        try? process.run()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return nil }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        guard let path = String(data: data, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !path.isEmpty
+        else { return nil }
+        return path
+    }
+
+    private static func parseISO8601(_ value: String) -> Date? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatter.date(from: trimmed) { return date }
+
+        let fallback = ISO8601DateFormatter()
+        fallback.formatOptions = [.withInternetDateTime]
+        if let date = fallback.date(from: trimmed) { return date }
+
+        return nil
     }
 
     private static func confirmAmbiguousZeroRemaining(
@@ -514,35 +663,35 @@ public struct DoubaoUsageFetcher: Sendable {
         return "\(collapsed[..<limitIndex])..."
     }
 
-    private struct CodingPlanUsageResponse: Decodable {
-        let result: ResultPayload
+    // MARK: - arkcli JSON response
 
-        private enum CodingKeys: String, CodingKey {
-            case result = "Result"
+    private struct ArkcliUsageResponse: Decodable {
+        let items: [ArkcliUsageItem]
+    }
+
+    private struct ArkcliUsageItem: Decodable {
+        let product: String
+        let subscribed: Bool?
+        let periods: [ArkcliPeriod]
+        let updatedAt: TimeInterval?
+
+        enum CodingKeys: String, CodingKey {
+            case product
+            case subscribed
+            case periods
+            case updatedAt = "updated_at"
         }
     }
 
-    private struct ResultPayload: Decodable {
-        let status: String?
-        let updateTimestamp: TimeInterval?
-        let quotaUsage: [QuotaPayload]
-
-        private enum CodingKeys: String, CodingKey {
-            case status = "Status"
-            case updateTimestamp = "UpdateTimestamp"
-            case quotaUsage = "QuotaUsage"
-        }
-    }
-
-    private struct QuotaPayload: Decodable {
-        let level: String
+    private struct ArkcliPeriod: Decodable {
+        let label: String
         let percent: Double
-        let resetTimestamp: TimeInterval?
+        let resetAt: String?
 
-        private enum CodingKeys: String, CodingKey {
-            case level = "Level"
-            case percent = "Percent"
-            case resetTimestamp = "ResetTimestamp"
+        enum CodingKeys: String, CodingKey {
+            case label
+            case percent
+            case resetAt = "reset_at"
         }
     }
 }
