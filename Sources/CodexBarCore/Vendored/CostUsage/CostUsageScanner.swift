@@ -1313,6 +1313,15 @@ enum CostUsageScanner {
         case interAgentCommunication(triggerTurn: Bool)
         case taskStarted(turnID: String?)
         case tokenCount(CodexTokenCountRecord)
+
+        var requiresValidTimestamp: Bool {
+            switch self {
+            case .sessionMeta:
+                false
+            case .turnContext, .interAgentCommunication, .taskStarted, .tokenCount:
+                true
+            }
+        }
     }
 
     private struct CodexBufferedFastLine {
@@ -1702,6 +1711,20 @@ enum CostUsageScanner {
                 return nil
             }
         }
+    }
+
+    private static func codexFastLineTimestampValidity(_ bytes: Data) -> Bool? {
+        let timestamp = bytes.withUnsafeBytes { rawBytes in
+            let rawBuffer = rawBytes.bindMemory(to: UInt8.self)
+            guard !rawBuffer.isEmpty else { return nil as String? }
+            return Self.extractJSONByteStringField(
+                Self.codexJSONFieldTimestamp,
+                from: rawBuffer,
+                in: 0..<rawBuffer.count,
+                atDepth: 1)
+        }
+        guard let timestamp else { return nil }
+        return (Self.dayKeyFromTimestamp(timestamp) ?? Self.dayKeyFromParsedISO(timestamp)) != nil
     }
 
     static func parseCodexSessionIdentifier(
@@ -2387,6 +2410,23 @@ enum CostUsageScanner {
                                 deferredError = error
                             }
                         }
+                        if pendingSubagentLines != nil {
+                            let truncatedMetadata = Self.extractCodexTruncatedSessionMetadata(from: line.bytes)
+                            if truncatedMetadata.isSessionMetadata {
+                                do {
+                                    try routeFastLine(
+                                        .sessionMeta(CodexSessionMetadata(
+                                            sessionId: truncatedMetadata.sessionID,
+                                            forkedFromId: nil,
+                                            forkTimestamp: nil,
+                                            projectPath: nil,
+                                            isSubagentThread: false)),
+                                        lineIndex: lineIndex)
+                                } catch {
+                                    deferredError = error
+                                }
+                            }
+                        }
                         return
                     }
 
@@ -2408,12 +2448,20 @@ enum CostUsageScanner {
                     }
 
                     if let fastLine = Self.parseCodexFastLine(line.bytes) {
-                        do {
-                            try routeFastLine(fastLine, lineIndex: lineIndex)
-                        } catch {
-                            deferredError = error
+                        let timestampValidity = fastLine.requiresValidTimestamp
+                            ? Self.codexFastLineTimestampValidity(line.bytes)
+                            : true
+                        if timestampValidity == true {
+                            do {
+                                try routeFastLine(fastLine, lineIndex: lineIndex)
+                            } catch {
+                                deferredError = error
+                            }
+                            return
                         }
-                        return
+                        if timestampValidity == false {
+                            return
+                        }
                     }
 
                     autoreleasepool {

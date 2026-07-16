@@ -158,10 +158,16 @@ struct CodexSubagentAccountingIntegrationTests {
                 .replacingOccurrences(
                     of: "\"type\":\"inter_agent_communication_metadata\"",
                     with: "\"ty\\u0070e\":\"inter_agent_communication_metadata\""))
+        let escapedTimestampFileURL = try env.writeCodexSessionFile(
+            day: day,
+            filename: "rollout-\(forkTimestamp)-marker-child-escaped-timestamp.jsonl",
+            contents: fastContents
+                .replacingOccurrences(of: "marker-child", with: "marker-child-escaped-timestamp")
+                .replacingOccurrences(of: "\"timestamp\":", with: "\"time\\u0073tamp\":"))
 
         let dayKey = CostUsageScanner.CostUsageDayRange.dayKey(from: day)
         let normalizedLeafModel = CostUsagePricing.normalizeCodexModel(leafModel)
-        for fileURL in [fastFileURL, fallbackFileURL] {
+        for fileURL in [fastFileURL, fallbackFileURL, escapedTimestampFileURL] {
             var resolvedParentBaseline = false
             let parsed = CostUsageScanner.parseCodexFile(
                 fileURL: fileURL,
@@ -187,11 +193,11 @@ struct CodexSubagentAccountingIntegrationTests {
             until: day,
             now: day,
             options: options)
-        #expect(report.data.first?.totalTokens == 110)
+        #expect(report.data.first?.totalTokens == 165)
 
         let cache = CostUsageCacheIO.load(provider: .codex, cacheRoot: env.cacheRoot)
         let childUsages = cache.files.values.filter { $0.sessionId?.hasPrefix("marker-child") == true }
-        #expect(childUsages.count == 2)
+        #expect(childUsages.count == 3)
         #expect(childUsages.allSatisfy {
             $0.forkBaselineDependencyKey == CostUsageScanner.codexForkDependencyNotRequiredKey
         })
@@ -259,6 +265,133 @@ struct CodexSubagentAccountingIntegrationTests {
         #expect(parsed.forkedFromId == "inferred-parent")
         #expect(parsed.dependsOnParentTotals)
         #expect(resolvedParentBaseline)
+    }
+
+    @Test
+    func `oversized ancestor metadata remains conservative copied-prefix evidence`() throws {
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+
+        let day = try env.makeLocalNoon(year: 2026, month: 7, day: 16)
+        let timestamp = env.isoString(for: day)
+        let opening = try env.jsonl([
+            [
+                "type": "session_meta",
+                "timestamp": timestamp,
+                "payload": [
+                    "id": "oversized-child",
+                    "source": ["subagent": ["thread_spawn": [:]]],
+                ],
+            ],
+            self.tokenCount(
+                timestamp: env.isoString(for: day.addingTimeInterval(1)),
+                model: "openai/gpt-5.3",
+                total: (input: 1000, cached: 900, output: 100),
+                last: (input: 50, cached: 10, output: 5)),
+        ])
+        let oversizedAncestor = "{\"type\":\"session_meta\",\"timestamp\":\"\(timestamp)\"," +
+            "\"payload\":{\"id\":\"oversized-parent\",\"padding\":\"" +
+            String(repeating: "x", count: 300_000) + "\"}}\n"
+        let tail = try env.jsonl([
+            self.tokenCount(
+                timestamp: env.isoString(for: day.addingTimeInterval(2)),
+                model: "openai/gpt-5.4",
+                total: (input: 1050, cached: 910, output: 105),
+                last: (input: 50, cached: 10, output: 5)),
+        ])
+        let fileURL = try env.writeCodexSessionFile(
+            day: day,
+            filename: "rollout-\(timestamp)-oversized-ancestor.jsonl",
+            contents: opening + oversizedAncestor + tail)
+
+        var resolvedParentBaseline = false
+        let parsed = CostUsageScanner.parseCodexFile(
+            fileURL: fileURL,
+            range: CostUsageScanner.CostUsageDayRange(since: day, until: day),
+            inheritedTotalsResolver: { parentSessionID, _ in
+                resolvedParentBaseline = true
+                #expect(parentSessionID == "oversized-parent")
+                return .resolved(.init(input: 1000, cached: 900, output: 100))
+            })
+
+        let dayKey = CostUsageScanner.CostUsageDayRange.dayKey(from: day)
+        let model = CostUsagePricing.normalizeCodexModel("openai/gpt-5.4")
+        #expect(parsed.days[dayKey]?[model] == [50, 10, 5])
+        #expect(parsed.forkedFromId == "oversized-parent")
+        #expect(parsed.dependsOnParentTotals)
+        #expect(resolvedParentBaseline)
+    }
+
+    @Test
+    func `invalid timestamp suffix markers preserve parent dependency on both parser paths`() throws {
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+
+        let day = try env.makeLocalNoon(year: 2026, month: 7, day: 16)
+        let timestamp = env.isoString(for: day)
+        let contents = try env.jsonl([
+            [
+                "type": "session_meta",
+                "timestamp": timestamp,
+                "payload": [
+                    "id": "invalid-marker-child",
+                    "source": ["subagent": ["thread_spawn": [:]]],
+                ],
+            ],
+            self.tokenCount(
+                timestamp: env.isoString(for: day.addingTimeInterval(1)),
+                model: "openai/gpt-5.3",
+                total: (input: 1000, cached: 900, output: 100),
+                last: (input: 50, cached: 10, output: 5)),
+            [
+                "type": "session_meta",
+                "timestamp": timestamp,
+                "payload": ["id": "invalid-marker-parent"],
+            ],
+            [
+                "type": "turn_context",
+                "payload": ["model": "openai/gpt-5.4"],
+            ],
+            [
+                "type": "inter_agent_communication_metadata",
+                "payload": ["trigger_turn": true],
+            ],
+            self.tokenCount(
+                timestamp: env.isoString(for: day.addingTimeInterval(2)),
+                model: "openai/gpt-5.4",
+                total: (input: 1050, cached: 910, output: 105),
+                last: (input: 50, cached: 10, output: 5)),
+        ])
+        let fastFileURL = try env.writeCodexSessionFile(
+            day: day,
+            filename: "rollout-\(timestamp)-invalid-marker.jsonl",
+            contents: contents)
+        let fallbackFileURL = try env.writeCodexSessionFile(
+            day: day,
+            filename: "rollout-\(timestamp)-invalid-marker-fallback.jsonl",
+            contents: contents
+                .replacingOccurrences(of: "invalid-marker-child", with: "invalid-marker-child-fallback")
+                .replacingOccurrences(of: "\"type\":\"turn_context\"", with: "\"ty\\u0070e\":\"turn_context\"")
+                .replacingOccurrences(
+                    of: "\"type\":\"inter_agent_communication_metadata\"",
+                    with: "\"ty\\u0070e\":\"inter_agent_communication_metadata\""))
+
+        let dayKey = CostUsageScanner.CostUsageDayRange.dayKey(from: day)
+        let model = CostUsagePricing.normalizeCodexModel("openai/gpt-5.4")
+        for fileURL in [fastFileURL, fallbackFileURL] {
+            var resolvedParentBaseline = false
+            let parsed = CostUsageScanner.parseCodexFile(
+                fileURL: fileURL,
+                range: CostUsageScanner.CostUsageDayRange(since: day, until: day),
+                inheritedTotalsResolver: { parentSessionID, _ in
+                    resolvedParentBaseline = true
+                    #expect(parentSessionID == "invalid-marker-parent")
+                    return .resolved(.init(input: 1000, cached: 900, output: 100))
+                })
+            #expect(parsed.days[dayKey]?[model] == [50, 10, 5])
+            #expect(parsed.dependsOnParentTotals)
+            #expect(resolvedParentBaseline)
+        }
     }
 
     @Test

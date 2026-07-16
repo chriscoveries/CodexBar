@@ -1,6 +1,23 @@
 import Foundation
 
 extension CostUsageScanner {
+    static func extractCodexTruncatedSessionMetadata(from bytes: Data) ->
+        (isSessionMetadata: Bool, sessionID: String?)
+    {
+        guard let text = truncatedUTF8String(from: bytes) else { return (false, nil) }
+        let object = text[...]
+        guard Self.extractJSONStringField("type", from: object, atDepth: 1) == "session_meta" else {
+            return (false, nil)
+        }
+        guard let payloadText = Self.extractJSONObjectField("payload", from: object, atDepth: 1) else {
+            return (true, nil)
+        }
+        let sessionID = Self.extractJSONStringField("id", from: payloadText, atDepth: 1)
+            ?? Self.extractJSONStringField("session_id", from: payloadText, atDepth: 1)
+            ?? Self.extractJSONStringField("sessionId", from: payloadText, atDepth: 1)
+        return (true, sessionID)
+    }
+
     static func extractCodexTurnContextModel(from bytes: Data) -> String? {
         guard let text = truncatedUTF8String(from: bytes) else { return nil }
         let object = text[...]
@@ -44,8 +61,12 @@ extension CostUsageScanner {
             case "}":
                 depth -= 1
                 text.formIndex(after: &index)
-                if depth == 0 { return true }
-                if depth < 0 { return false }
+                if depth == 0 {
+                    return true
+                }
+                if depth < 0 {
+                    return false
+                }
             case "\"":
                 guard Self.parseJSONString(in: text, index: &index) != nil else { return false }
             default:
