@@ -29,7 +29,7 @@ enum CursorLoginBrowserRouter {
         chooseApplication: ApplicationChooser = { applications in
             CursorLoginBrowserRouter.chooseApplication(applications)
         },
-        supportsBrowser: BrowserSupportCheck = CursorStatusProbe.supportsInteractiveLoginBrowser(applicationURL:))
+        supportsBrowser: BrowserSupportCheck)
         -> Resolution
     {
         if let handlerApplicationURL, supportsBrowser(handlerApplicationURL) {
@@ -58,7 +58,7 @@ enum CursorLoginBrowserRouter {
 
     static func supportedApplications(
         _ applicationURLs: [URL],
-        supportsBrowser: BrowserSupportCheck = CursorStatusProbe.supportsInteractiveLoginBrowser(applicationURL:))
+        supportsBrowser: BrowserSupportCheck)
         -> [URL]
     {
         var seen = Set<String>()

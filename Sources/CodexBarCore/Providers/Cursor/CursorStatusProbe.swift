@@ -57,6 +57,27 @@ public enum CursorCookieImporter {
         }
     }
 
+    /// Whether Cursor cookie import may inspect this browser. This only checks browser/profile availability and the
+    /// cookie-access circuit breaker; it does not read cookies or request Keychain access.
+    static func isCookieSourceAvailable(
+        browser: Browser,
+        browserDetection: BrowserDetection) -> Bool
+    {
+        browserDetection.isCookieSourceAvailable(browser) && BrowserCookieAccessGate.shouldAttempt(browser)
+    }
+
+    /// Interactive login must not pin Safari when macOS privacy controls make its cookie directories unreadable.
+    /// Keep ordinary Safari imports best-effort; they already surface structured read failures and may support new
+    /// paths.
+    static func isInteractiveLoginSourceAvailable(
+        browser: Browser,
+        browserDetection: BrowserDetection) -> Bool
+    {
+        guard self.isCookieSourceAvailable(browser: browser, browserDetection: browserDetection) else { return false }
+        guard browser == .safari else { return true }
+        return browserDetection.hasReadableSafariCookieSource()
+    }
+
     /// Reads Cursor session cookies from one browser if present (no fallback to other browsers).
     static func importSessionIfPresent(
         browser: Browser,
@@ -115,8 +136,7 @@ public enum CursorCookieImporter {
         logger: ((String) -> Void)?) -> [SessionInfo]
     {
         let log: (String) -> Void = { msg in logger?("[cursor-cookie] \(msg)") }
-        guard browserDetection.isCookieSourceAvailable(browser) else { return [] }
-        guard BrowserCookieAccessGate.shouldAttempt(browser) else { return [] }
+        guard self.isCookieSourceAvailable(browser: browser, browserDetection: browserDetection) else { return [] }
 
         do {
             let query = BrowserCookieQuery(domains: Self.cookieDomains)
@@ -1633,10 +1653,6 @@ public struct CursorStatusProbe: Sendable {
         timeout _: TimeInterval = 120) async throws -> [BrowserLoginResult]
     {
         throw CursorStatusProbeError.notSupported
-    }
-
-    public static func supportsInteractiveLoginBrowser(applicationURL _: URL?) -> Bool {
-        false
     }
 }
 

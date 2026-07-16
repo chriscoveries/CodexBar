@@ -3,10 +3,19 @@ import SweetCookieKit
 
 #if os(macOS)
 extension CursorStatusProbe {
-    /// Whether CodexBar can import cookies from the app LaunchServices will use for the login URL.
-    public static func supportsInteractiveLoginBrowser(applicationURL: URL?) -> Bool {
-        guard let applicationURL else { return false }
-        return Self.interactiveBrowser(forApplicationURL: applicationURL) != nil
+    /// Whether the application maps to a browser whose Cursor cookie source can be inspected without prompting.
+    public static func supportsInteractiveLoginBrowser(
+        applicationURL: URL?,
+        browserDetection: BrowserDetection) -> Bool
+    {
+        guard let applicationURL,
+              let browser = self.interactiveBrowser(forApplicationURL: applicationURL)
+        else {
+            return false
+        }
+        return CursorCookieImporter.isInteractiveLoginSourceAvailable(
+            browser: browser,
+            browserDetection: browserDetection)
     }
 
     static func interactiveBrowser(forApplicationURL applicationURL: URL) -> Browser? {
@@ -49,13 +58,6 @@ extension CursorStatusProbe {
             return nil
         }
         return value.lowercased()
-    }
-}
-
-#elseif os(Linux)
-extension CursorStatusProbe {
-    public static func supportsInteractiveLoginBrowser(applicationURL _: URL?) -> Bool {
-        false
     }
 }
 #endif

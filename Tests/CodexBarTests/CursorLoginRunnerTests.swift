@@ -69,7 +69,7 @@ struct CursorLoginRunnerTests {
                 return Self.cometApplicationURL
             },
             routeResolver: Self.fixtureRouteResolver,
-            replaceSessionCache: { _ in })
+            replaceSessionCache: { _ in true })
 
         #expect(resolvedURLs.isEmpty)
 
@@ -146,7 +146,10 @@ struct CursorLoginRunnerTests {
             sleeper: { _ in },
             browserApplicationResolver: { _ in Self.cometApplicationURL },
             routeResolver: Self.fixtureRouteResolver,
-            replaceSessionCache: { _ in replacementEvents.append("replace") })
+            replaceSessionCache: { _ in
+                replacementEvents.append("replace")
+                return true
+            })
 
         let result = await runner.run { _ in }
 
@@ -182,11 +185,49 @@ struct CursorLoginRunnerTests {
             routeResolver: Self.fixtureRouteResolver,
             replaceSessionCache: { _ in
                 events.append("replace")
+                return true
             })
 
         _ = await runner.run { _ in }
 
         #expect(events.snapshot() == ["open", "poll", "replace"])
+    }
+
+    @Test
+    func `accepted login reports failure when the replacement is not durable`() async {
+        var phases: [String] = []
+        let runner = CursorLoginRunner(
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            timeout: 1,
+            pollInterval: 0.01,
+            launchRoute: { _ in true },
+            loadBrowserLoginCandidates: { _, _ in [
+                Self.browserCandidate(
+                    id: "accepted-account",
+                    email: "cursor@example.com",
+                    token: "accepted-token",
+                    source: "Comet"),
+            ] },
+            sleeper: { _ in },
+            browserApplicationResolver: { _ in Self.cometApplicationURL },
+            routeResolver: Self.fixtureRouteResolver,
+            replaceSessionCache: { _ in false })
+
+        let result = await runner.run { phase in
+            switch phase {
+            case .loading: phases.append("loading")
+            case .waitingLogin: phases.append("waitingLogin")
+            case .success: phases.append("success")
+            case .failed: phases.append("failed")
+            }
+        }
+
+        guard case .failed = result.outcome else {
+            Issue.record("Expected failed outcome")
+            return
+        }
+        #expect(result.email == nil)
+        #expect(phases == ["loading", "waitingLogin", "failed"])
     }
 
     @Test
@@ -202,7 +243,10 @@ struct CursorLoginRunnerTests {
             sleeper: { _ in },
             browserApplicationResolver: { _ in Self.cometApplicationURL },
             routeResolver: Self.fixtureRouteResolver,
-            replaceSessionCache: { _ in replacementEvents.append("replace") })
+            replaceSessionCache: { _ in
+                replacementEvents.append("replace")
+                return true
+            })
 
         let result = await runner.run { _ in }
 
@@ -235,7 +279,10 @@ struct CursorLoginRunnerTests {
             },
             browserApplicationResolver: { _ in Self.cometApplicationURL },
             routeResolver: Self.fixtureRouteResolver,
-            replaceSessionCache: { _ in events.append("replace") })
+            replaceSessionCache: { _ in
+                events.append("replace")
+                return true
+            })
 
         let task = Task {
             await runner.run { _ in }
@@ -273,7 +320,10 @@ struct CursorLoginRunnerTests {
                 URL(fileURLWithPath: "/Applications/Unsupported Browser.app")
             },
             routeResolver: { _, _ in .unavailable },
-            replaceSessionCache: { _ in replacementEvents.append("replace") })
+            replaceSessionCache: { _ in
+                replacementEvents.append("replace")
+                return true
+            })
 
         let result = await runner.run { _ in }
 
@@ -306,7 +356,10 @@ struct CursorLoginRunnerTests {
             sleeper: { _ in },
             browserApplicationResolver: { _ in nil },
             routeResolver: { _, _ in .unavailable },
-            replaceSessionCache: { _ in replacementEvents.append("replace") })
+            replaceSessionCache: { _ in
+                replacementEvents.append("replace")
+                return true
+            })
 
         let result = await runner.run { _ in }
 
@@ -338,7 +391,10 @@ struct CursorLoginRunnerTests {
                 URL(fileURLWithPath: "/Applications/Link Router.app")
             },
             routeResolver: { _, _ in .cancelled },
-            replaceSessionCache: { _ in events.append("replace") })
+            replaceSessionCache: { _ in
+                events.append("replace")
+                return true
+            })
 
         let result = await runner.run { _ in }
 
@@ -380,7 +436,7 @@ struct CursorLoginRunnerTests {
                     launchURL: URL(string: "https://example.invalid/intermediary")!,
                     browserApplicationURL: Self.cometApplicationURL))
             },
-            replaceSessionCache: { _ in })
+            replaceSessionCache: { _ in true })
 
         _ = await runner.run { _ in }
 
@@ -418,6 +474,7 @@ struct CursorLoginRunnerTests {
                 },
                 replaceSessionCache: { session in
                     committedHeaders.append(session.cookieHeader)
+                    return true
                 })
 
             let result = await runner.run { _ in }
@@ -470,6 +527,7 @@ struct CursorLoginRunnerTests {
             },
             replaceSessionCache: { session in
                 committedHeaders.append(session.cookieHeader)
+                return true
             })
 
         _ = await runner.run { _ in }
@@ -500,6 +558,7 @@ struct CursorLoginRunnerTests {
             },
             replaceSessionCache: { session in
                 committedHeaders.append(session.cookieHeader)
+                return true
             })
 
         _ = await runner.run { _ in }
@@ -538,6 +597,7 @@ struct CursorLoginRunnerTests {
             },
             replaceSessionCache: { session in
                 committedHeaders.append(session.cookieHeader)
+                return true
             })
 
         _ = await runner.run { _ in }
@@ -564,7 +624,7 @@ struct CursorLoginRunnerTests {
             sleeper: { _ in },
             browserApplicationResolver: browserApplicationResolver,
             routeResolver: self.fixtureRouteResolver,
-            replaceSessionCache: { _ in })
+            replaceSessionCache: { _ in true })
     }
 
     private static func fixtureRouteResolver(

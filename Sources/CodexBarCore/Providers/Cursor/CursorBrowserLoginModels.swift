@@ -20,8 +20,9 @@ extension CursorStatusProbe {
 #if os(macOS) || os(Linux)
 extension CursorStatusProbe {
     /// Stores the browser session selected by the user after candidate discovery completes.
-    public static func commitBrowserLoginSession(_ session: BrowserLoginSession) {
-        CookieHeaderCache.store(
+    @discardableResult
+    public static func commitBrowserLoginSession(_ session: BrowserLoginSession) -> Bool {
+        CookieHeaderCache.storeResult(
             provider: .cursor,
             cookieHeader: session.cookieHeader,
             sourceLabel: session.sourceLabel)
@@ -29,6 +30,9 @@ extension CursorStatusProbe {
 }
 #else
 extension CursorStatusProbe {
-    public static func commitBrowserLoginSession(_: BrowserLoginSession) {}
+    @discardableResult
+    public static func commitBrowserLoginSession(_: BrowserLoginSession) -> Bool {
+        false
+    }
 }
 #endif

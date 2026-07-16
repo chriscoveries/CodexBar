@@ -51,6 +51,119 @@ struct CursorAccountSwitchBrowserScanTests {
     }
 
     @Test
+    func `interactive browser support requires a readable cookie source`() throws {
+        let temp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let applicationURL = temp.appendingPathComponent("Firefox.app", isDirectory: true)
+        let contentsURL = applicationURL.appendingPathComponent("Contents", isDirectory: true)
+        try FileManager.default.createDirectory(at: contentsURL, withIntermediateDirectories: true)
+        let info = try PropertyListSerialization.data(
+            fromPropertyList: [
+                "CFBundleIdentifier": "org.mozilla.firefox",
+                "CFBundleName": "Firefox",
+            ],
+            format: .xml,
+            options: 0)
+        try info.write(to: contentsURL.appendingPathComponent("Info.plist"))
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let profileRoot = temp
+            .appendingPathComponent("Library/Application Support/Firefox/Profiles", isDirectory: true)
+            .path
+        let cookieStore = "\(profileRoot)/profile.default-release/cookies.sqlite"
+        let makeDetection: (Bool) -> BrowserDetection = { readable in
+            BrowserDetection(
+                homeDirectory: temp.path,
+                cacheTTL: 0,
+                now: Date.init,
+                fileExists: { path in
+                    path == applicationURL.path || path == profileRoot || path == cookieStore
+                },
+                directoryContents: { path in
+                    path == profileRoot && readable ? ["profile.default-release"] : nil
+                },
+                applicationURLs: { _ in [applicationURL] },
+                profileAccessIssue: { _ in readable ? nil : .unreadable })
+        }
+
+        #expect(CursorStatusProbe.supportsInteractiveLoginBrowser(
+            applicationURL: applicationURL,
+            browserDetection: makeDetection(true)))
+        let unreadableDetection = makeDetection(false)
+        #expect(unreadableDetection.cookieSourceProfileAccessIssue(.firefox) == .unreadable)
+        #expect(!CursorStatusProbe.supportsInteractiveLoginBrowser(
+            applicationURL: applicationURL,
+            browserDetection: unreadableDetection))
+    }
+
+    @Test
+    func `interactive Safari support accepts any existing readable source`() throws {
+        let temp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let applicationURL = try Self.makeBrowserApplication(
+            in: temp,
+            name: "Safari",
+            bundleIdentifier: "com.apple.Safari")
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let legacyRoot = "\(temp.path)/Library/Cookies"
+        let containerRoot = "\(temp.path)/Library/Containers/com.apple.Safari/Data/Library/Cookies"
+        let detection = BrowserDetection(
+            homeDirectory: temp.path,
+            cacheTTL: 0,
+            now: Date.init,
+            fileExists: { path in path == legacyRoot || path == containerRoot },
+            directoryContents: { _ in nil },
+            applicationURLs: { _ in [applicationURL] },
+            profileAccessIssue: { path in path == legacyRoot ? .accessDenied : nil })
+
+        #expect(detection.isCookieSourceAvailable(.safari))
+        #expect(CursorStatusProbe.supportsInteractiveLoginBrowser(
+            applicationURL: applicationURL,
+            browserDetection: detection))
+    }
+
+    @Test
+    func `interactive Safari support rejects missing and denied sources while imports remain eligible`() throws {
+        let temp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let applicationURL = try Self.makeBrowserApplication(
+            in: temp,
+            name: "Safari",
+            bundleIdentifier: "com.apple.Safari")
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let noRootProbeCalls = LockedArray<String>()
+        let noRootDetection = BrowserDetection(
+            homeDirectory: temp.path,
+            cacheTTL: 0,
+            now: Date.init,
+            fileExists: { _ in false },
+            directoryContents: { _ in nil },
+            applicationURLs: { _ in [applicationURL] },
+            profileAccessIssue: { path in
+                noRootProbeCalls.append(path)
+                return nil
+            })
+        #expect(noRootDetection.isCookieSourceAvailable(.safari))
+        #expect(!CursorStatusProbe.supportsInteractiveLoginBrowser(
+            applicationURL: applicationURL,
+            browserDetection: noRootDetection))
+        #expect(noRootProbeCalls.snapshot().isEmpty)
+
+        let legacyRoot = "\(temp.path)/Library/Cookies"
+        let deniedDetection = BrowserDetection(
+            homeDirectory: temp.path,
+            cacheTTL: 0,
+            now: Date.init,
+            fileExists: { $0 == legacyRoot },
+            directoryContents: { _ in nil },
+            applicationURLs: { _ in [applicationURL] },
+            profileAccessIssue: { _ in .accessDenied })
+        #expect(deniedDetection.isCookieSourceAvailable(.safari))
+        #expect(!CursorStatusProbe.supportsInteractiveLoginBrowser(
+            applicationURL: applicationURL,
+            browserDetection: deniedDetection))
+    }
+
+    @Test
     func `interactive Comet candidate scan ignores valid Safari account and returns only Comet account`() async throws {
         let probe = CursorStatusProbe(browserDetection: BrowserDetection(cacheTTL: 0))
         let safari = Self.makeSessionInfo(sourceLabel: "Safari Personal")
@@ -180,6 +293,25 @@ struct CursorAccountSwitchBrowserScanTests {
 
         let cookie = HTTPCookie(properties: cookieProps)!
         return CursorCookieImporter.SessionInfo(cookies: [cookie], sourceLabel: sourceLabel)
+    }
+
+    private static func makeBrowserApplication(
+        in root: URL,
+        name: String,
+        bundleIdentifier: String) throws -> URL
+    {
+        let applicationURL = root.appendingPathComponent("\(name).app", isDirectory: true)
+        let contentsURL = applicationURL.appendingPathComponent("Contents", isDirectory: true)
+        try FileManager.default.createDirectory(at: contentsURL, withIntermediateDirectories: true)
+        let info = try PropertyListSerialization.data(
+            fromPropertyList: [
+                "CFBundleIdentifier": bundleIdentifier,
+                "CFBundleName": name,
+            ],
+            format: .xml,
+            options: 0)
+        try info.write(to: contentsURL.appendingPathComponent("Info.plist"))
+        return applicationURL
     }
 
     private static func snapshot(accountID: String, email: String) -> CursorStatusSnapshot {

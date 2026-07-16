@@ -51,6 +51,28 @@ struct CookieHeaderCacheConditionalMutationTests {
             #expect(CookieHeaderCache.load(provider: .claude)?.cookieHeader == "sessionKey=sk-ant-concurrent")
         }
     }
+
+    @Test
+    func `observable store failure preserves the current cookie entry`() {
+        self.withIsolatedCookieCache {
+            let initiallyStored = CookieHeaderCache.storeResult(
+                provider: .cursor,
+                cookieHeader: "WorkosCursorSessionToken=existing",
+                sourceLabel: "Chrome")
+
+            let replaced = KeychainCacheStore.withStoreFailureStatusOverrideForTesting(errSecInteractionNotAllowed) {
+                CookieHeaderCache.storeResult(
+                    provider: .cursor,
+                    cookieHeader: "WorkosCursorSessionToken=replacement",
+                    sourceLabel: "Comet")
+            }
+
+            #expect(initiallyStored)
+            #expect(!replaced)
+            #expect(CookieHeaderCache.load(provider: .cursor)?.cookieHeader ==
+                "WorkosCursorSessionToken=existing")
+        }
+    }
     #endif
 
     @Test

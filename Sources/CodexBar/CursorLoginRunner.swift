@@ -69,7 +69,7 @@ final class CursorLoginRunner {
     typealias BrowserLoginCandidatesLoader = @Sendable (URL, TimeInterval) async throws
         -> [CursorStatusProbe.BrowserLoginResult]
     typealias Sleeper = @Sendable (UInt64) async throws -> Void
-    typealias SessionCacheReplacer = @MainActor @Sendable (CursorStatusProbe.BrowserLoginSession) async -> Void
+    typealias SessionCacheReplacer = @MainActor @Sendable (CursorStatusProbe.BrowserLoginSession) async -> Bool
     typealias RouteLauncher = @MainActor (CursorLoginBrowserRouter.Route) async -> Bool
     typealias BrowserApplicationResolver = @MainActor (URL) -> URL?
     typealias RouteResolver = @MainActor (URL, URL?) -> CursorLoginBrowserRouter.Resolution
@@ -113,11 +113,7 @@ final class CursorLoginRunner {
         browserApplicationResolver: @escaping BrowserApplicationResolver = {
             NSWorkspace.shared.urlForApplication(toOpen: $0)
         },
-        routeResolver: @escaping RouteResolver = { loginURL, handlerApplicationURL in
-            CursorLoginBrowserRouter.resolve(
-                loginURL: loginURL,
-                handlerApplicationURL: handlerApplicationURL)
-        },
+        routeResolver: RouteResolver? = nil,
         accountChooser: AccountChooser? = nil,
         replaceSessionCache: @escaping SessionCacheReplacer = { session in
             await CursorLoginRunner.replaceCachedSession(session)
@@ -126,7 +122,16 @@ final class CursorLoginRunner {
         let resolvedPriorAccount = priorAccount?.hasIdentity == true ? priorAccount : nil
         self.priorAccount = resolvedPriorAccount
         self.browserApplicationResolver = browserApplicationResolver
-        self.routeResolver = routeResolver
+        self.routeResolver = routeResolver ?? { loginURL, handlerApplicationURL in
+            CursorLoginBrowserRouter.resolve(
+                loginURL: loginURL,
+                handlerApplicationURL: handlerApplicationURL,
+                supportsBrowser: { applicationURL in
+                    CursorStatusProbe.supportsInteractiveLoginBrowser(
+                        applicationURL: applicationURL,
+                        browserDetection: browserDetection)
+                })
+        }
         self.accountChooser = accountChooser
         self.timeout = timeout
         self.pollInterval = pollInterval
@@ -355,7 +360,12 @@ final class CursorLoginRunner {
     {
         let snapshot = loaded.snapshot
         if let session = loaded.session {
-            await self.replaceSessionCache(session)
+            guard await self.replaceSessionCache(session) else {
+                let message = L("Cursor login failed")
+                onPhaseChange(.failed(message))
+                self.logger.error("Cursor login session cache commit failed")
+                return Result(outcome: .failed(message), email: nil)
+            }
         }
         onPhaseChange(.success)
         self.logger.info("Cursor login completed", metadata: ["outcome": "success"])
@@ -370,13 +380,13 @@ final class CursorLoginRunner {
     @MainActor
     static func replaceCachedSession(
         _ session: CursorStatusProbe.BrowserLoginSession,
-        beforeCommit: @MainActor () -> Void = {}) async
+        afterCommit: @MainActor () -> Void = {}) async -> Bool
     {
-        // Candidate discovery is cache-independent. Preserve the active cache until a candidate is accepted and the
-        // actor-owned legacy store is cleared, then atomically overwrite current cache ownership.
+        // Candidate discovery is cache-independent. Keep both active stores intact until the replacement is durable.
+        guard CursorStatusProbe.commitBrowserLoginSession(session) else { return false }
+        afterCommit()
         await CursorSessionStore.shared.clearCookies()
-        beforeCommit()
-        CursorStatusProbe.commitBrowserLoginSession(session)
+        return true
     }
 
     private static func launch(_ route: CursorLoginBrowserRouter.Route) async -> Bool {

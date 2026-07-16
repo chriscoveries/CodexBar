@@ -39,6 +39,27 @@ struct CursorLoginBrowserRoutingTests {
         #expect(chooserCalls == 0)
     }
 
+    @Test
+    func `known handler with unavailable cookie source falls back to browser chooser`() {
+        var chooserCandidates: [URL] = []
+        let resolution = CursorLoginBrowserRouter.resolve(
+            loginURL: Self.authURL,
+            handlerApplicationURL: Self.cometApplicationURL,
+            applicationURLs: { _ in [Self.cometApplicationURL, Self.chromeApplicationURL] },
+            chooseApplication: { candidates in
+                chooserCandidates = candidates
+                return Self.chromeApplicationURL
+            },
+            supportsBrowser: { applicationURL in
+                applicationURL == Self.chromeApplicationURL
+            })
+
+        #expect(chooserCandidates == [Self.chromeApplicationURL])
+        #expect(resolution == .route(.init(
+            launchURL: Self.authURL,
+            browserApplicationURL: Self.chromeApplicationURL)))
+    }
+
     @Test(arguments: [
         "https://authenticator.cursor.sh/",
         "https://cursor.com/mismatching-client-account",
