@@ -112,7 +112,14 @@ extension StatusItemController {
         tokenUsage: UsageMenuCardView.Model.TokenUsageSection?,
         hasSubmenu: Bool) -> [String]
     {
-        guard !hasSubmenu else { return [] }
+        // A submenu hides the regular detail rows, so retain the provenance hint on the parent
+        // item. Otherwise Codex's API-equivalent estimate can be opened as a chart labelled as
+        // cost with no visible non-billing disclaimer.
+        guard !hasSubmenu else {
+            return [tokenUsage?.hintLine]
+                .compactMap(\.self)
+                .filter { !$0.isEmpty }
+        }
         let primaryLines = ([
             tokenUsage?.sessionLine,
             tokenUsage?.monthLine,

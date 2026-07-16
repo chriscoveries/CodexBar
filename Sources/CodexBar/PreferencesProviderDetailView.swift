@@ -431,6 +431,9 @@ struct ProviderMetricsInlineView: View {
                 if isCodexEstimate {
                     ProviderMetricInlineTextRow(title: "", value: L("codex_api_estimate_not_billed"))
                 }
+                if let hint = tokenUsage.hintLine, !hint.isEmpty {
+                    ProviderMetricInlineTextRow(title: "", value: hint)
+                }
             }
         }
     }
