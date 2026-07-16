@@ -76,6 +76,16 @@ public enum ClaudeUsageError: LocalizedError, Sendable {
     case parseFailed(String)
     case oauthFailed(String)
 
+    public static func isClaudeOAuthUsageRateLimit(_ error: Error) -> Bool {
+        if let fetchError = error as? ClaudeOAuthFetchError,
+           case .rateLimited = fetchError
+        {
+            return true
+        }
+        guard case let ClaudeUsageError.oauthFailed(message) = error else { return false }
+        return ClaudeOAuthFetchError.isUsageRateLimitDescription(message)
+    }
+
     public var errorDescription: String? {
         switch self {
         case .claudeNotInstalled:
@@ -226,7 +236,7 @@ public struct ClaudeUsageFetcher: ClaudeUsageFetching, Sendable {
         {
             throw ClaudeUsageError.oauthFailed(
                 "Claude OAuth token expired, but background repair is suppressed when Keychain prompt policy "
-                    + "is set to only prompt on user action. Open the CodexBar menu or click Refresh to retry.")
+                    + "is set to only prompt on user action. Click Refresh in the CodexBar menu to retry.")
         }
     }
 
@@ -374,7 +384,7 @@ public struct ClaudeUsageFetcher: ClaudeUsageFetching, Sendable {
             do {
                 if self.fetcher.oauthKeychainPromptCooldownEnabled {
                     switch delegatedOutcome {
-                    case .skippedByCooldown, .cliUnavailable:
+                    case .skippedByCooldown, .skippedByPromptPolicy, .cliUnavailable:
                         throw ClaudeUsageError.oauthFailed(
                             "Claude OAuth token expired; delegated refresh is unavailable (outcome="
                                 + "\(ClaudeUsageFetcher.delegatedRefreshOutcomeLabel(delegatedOutcome))).")
@@ -896,6 +906,8 @@ extension ClaudeUsageFetcher {
         switch outcome {
         case .skippedByCooldown:
             "skippedByCooldown"
+        case .skippedByPromptPolicy:
+            "skippedByPromptPolicy"
         case .cliUnavailable:
             "cliUnavailable"
         case .attemptedSucceeded:
@@ -919,6 +931,9 @@ extension ClaudeUsageFetcher {
         case .skippedByCooldown:
             return "Claude OAuth token expired and delegated refresh is cooling down. "
                 + "Please retry shortly, or run `claude login`."
+        case .skippedByPromptPolicy:
+            return "Claude OAuth token expired; background refresh is disabled by the Keychain prompt policy. "
+                + "Refresh CodexBar manually or run `claude login`."
         case .cliUnavailable:
             return "Claude OAuth token expired and Claude CLI is not available for delegated refresh. "
                 + "Install/configure `claude`, or run `claude login`."

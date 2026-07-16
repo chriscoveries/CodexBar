@@ -317,6 +317,8 @@ struct ClaudeUsageTests {
                 return
             }
             #expect(message.contains("background repair is suppressed"))
+            #expect(message.contains("Click Refresh in the CodexBar menu"))
+            #expect(!message.contains("Open the CodexBar menu or"))
         } catch {
             Issue.record("Expected ClaudeUsageError, got \(error)")
         }
@@ -1295,7 +1297,11 @@ struct ClaudeAutoFetcherCharacterizationTests {
 }
 
 final class ClaudeAutoFetcherStubURLProtocol: URLProtocol {
-    nonisolated(unsafe) static var handler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
+    private static let _handlerBox = LockIsolated<((URLRequest) throws -> (HTTPURLResponse, Data))?>(nil)
+    static var handler: ((URLRequest) throws -> (HTTPURLResponse, Data))? {
+        get { Self._handlerBox.value }
+        set { Self._handlerBox.setValue(newValue) }
+    }
 
     override static func canInit(with request: URLRequest) -> Bool {
         request.url?.host == "claude.ai"

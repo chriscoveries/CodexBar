@@ -143,17 +143,20 @@ public struct ProviderIdentitySnapshot: Codable, Sendable {
     public let accountEmail: String?
     public let accountOrganization: String?
     public let loginMethod: String?
+    public let accountID: String?
 
     public init(
         providerID: UsageProvider?,
         accountEmail: String?,
         accountOrganization: String?,
-        loginMethod: String?)
+        loginMethod: String?,
+        accountID: String? = nil)
     {
         self.providerID = providerID
         self.accountEmail = accountEmail
         self.accountOrganization = accountOrganization
         self.loginMethod = loginMethod
+        self.accountID = accountID
     }
 
     public func scoped(to provider: UsageProvider) -> ProviderIdentitySnapshot {
@@ -164,7 +167,8 @@ public struct ProviderIdentitySnapshot: Codable, Sendable {
             providerID: provider,
             accountEmail: self.accountEmail,
             accountOrganization: self.accountOrganization,
-            loginMethod: self.loginMethod)
+            loginMethod: self.loginMethod,
+            accountID: self.accountID)
     }
 }
 
@@ -194,6 +198,7 @@ public struct UsageSnapshot: Codable, Sendable {
     public let sub2APIUsage: Sub2APIUsageDetails?
     public let wayfinderUsage: WayfinderUsageSnapshot?
     public let openAIAPIUsage: OpenAIAPIUsageSnapshot?
+    public let groqConsoleUsage: GroqConsoleUsageSnapshot?
     public let codexResetCredits: CodexRateLimitResetCreditsSnapshot?
     public let claudeAdminAPIUsage: ClaudeAdminAPIUsageSnapshot?
     public let mistralUsage: MistralUsageSnapshot?
@@ -228,6 +233,7 @@ public struct UsageSnapshot: Codable, Sendable {
         case sub2APIUsage
         case wayfinderUsage
         case openAIAPIUsage
+        case groqConsoleUsage
         case codexResetCredits
         case claudeAdminAPIUsage
         case mistralUsage
@@ -262,6 +268,7 @@ public struct UsageSnapshot: Codable, Sendable {
         sub2APIUsage: Sub2APIUsageDetails? = nil,
         wayfinderUsage: WayfinderUsageSnapshot? = nil,
         openAIAPIUsage: OpenAIAPIUsageSnapshot? = nil,
+        groqConsoleUsage: GroqConsoleUsageSnapshot? = nil,
         codexResetCredits: CodexRateLimitResetCreditsSnapshot? = nil,
         claudeAdminAPIUsage: ClaudeAdminAPIUsageSnapshot? = nil,
         mistralUsage: MistralUsageSnapshot? = nil,
@@ -295,6 +302,7 @@ public struct UsageSnapshot: Codable, Sendable {
         self.sub2APIUsage = sub2APIUsage
         self.wayfinderUsage = wayfinderUsage
         self.openAIAPIUsage = openAIAPIUsage
+        self.groqConsoleUsage = groqConsoleUsage
         self.codexResetCredits = codexResetCredits
         self.claudeAdminAPIUsage = claudeAdminAPIUsage
         self.mistralUsage = mistralUsage
@@ -347,6 +355,9 @@ public struct UsageSnapshot: Codable, Sendable {
         self.sub2APIUsage = try container.decodeIfPresent(Sub2APIUsageDetails.self, forKey: .sub2APIUsage)
         self.wayfinderUsage = try container.decodeIfPresent(WayfinderUsageSnapshot.self, forKey: .wayfinderUsage)
         self.openAIAPIUsage = try container.decodeIfPresent(OpenAIAPIUsageSnapshot.self, forKey: .openAIAPIUsage)
+        self.groqConsoleUsage = try container.decodeIfPresent(
+            GroqConsoleUsageSnapshot.self,
+            forKey: .groqConsoleUsage)
         self.codexResetCredits = try container.decodeIfPresent(
             CodexRateLimitResetCreditsSnapshot.self,
             forKey: .codexResetCredits)
@@ -404,6 +415,7 @@ public struct UsageSnapshot: Codable, Sendable {
         try container.encodeIfPresent(self.sub2APIUsage, forKey: .sub2APIUsage)
         try container.encodeIfPresent(self.wayfinderUsage, forKey: .wayfinderUsage)
         try container.encodeIfPresent(self.openAIAPIUsage, forKey: .openAIAPIUsage)
+        try container.encodeIfPresent(self.groqConsoleUsage, forKey: .groqConsoleUsage)
         try container.encodeIfPresent(self.codexResetCredits, forKey: .codexResetCredits)
         try container.encodeIfPresent(self.claudeAdminAPIUsage, forKey: .claudeAdminAPIUsage)
         try container.encodeIfPresent(self.mistralUsage, forKey: .mistralUsage)
@@ -552,6 +564,11 @@ public struct UsageSnapshot: Codable, Sendable {
             return true
         }
         guard let lhs, let rhs else { return false }
+        let lhsAccountID = lhs.accountID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rhsAccountID = rhs.accountID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let lhsAccountID, let rhsAccountID, !lhsAccountID.isEmpty, !rhsAccountID.isEmpty {
+            return lhsAccountID == rhsAccountID
+        }
         let lhsEmail = lhs.accountEmail?.trimmingCharacters(in: .whitespacesAndNewlines)
         let rhsEmail = rhs.accountEmail?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let lhsEmail, let rhsEmail, !lhsEmail.isEmpty, !rhsEmail.isEmpty {
@@ -600,6 +617,7 @@ public struct UsageSnapshot: Codable, Sendable {
             sub2APIUsage: self.sub2APIUsage,
             wayfinderUsage: self.wayfinderUsage,
             openAIAPIUsage: self.openAIAPIUsage,
+            groqConsoleUsage: self.groqConsoleUsage,
             codexResetCredits: codexResetCredits.resolving(self.codexResetCredits),
             claudeAdminAPIUsage: self.claudeAdminAPIUsage,
             mistralUsage: self.mistralUsage,
