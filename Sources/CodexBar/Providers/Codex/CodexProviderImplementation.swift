@@ -72,7 +72,7 @@ struct CodexProviderImplementation: ProviderImplementation {
         let batterySaverBinding = context.boolBinding(\.openAIWebBatterySaverEnabled)
         let historicalTrackingSubtitle = [
             L("Stores local Codex usage history (8 weeks) to personalize Pace predictions."),
-            "(\(L("weekly_progress_work_days_title")): \(L("Automatic")))",
+            "[\(L("weekly_progress_work_days_title")) = \(L("Automatic"))]",
         ].joined(separator: " ")
 
         return [
