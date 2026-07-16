@@ -165,6 +165,35 @@ struct CookieHeaderCacheConditionalMutationTests {
         }
     }
 
+    @Test
+    func `nested interactive mutation gate blocks until outer flow ends`() {
+        self.withIsolatedCookieCache {
+            CookieHeaderCache.store(
+                provider: .cursor,
+                cookieHeader: "fixtureSession=original",
+                sourceLabel: "Original")
+            let outerGate = CookieHeaderCache.beginConditionalMutationGate(provider: .cursor)
+            let runnerGate = CookieHeaderCache.beginConditionalMutationGate(provider: .cursor)
+            CookieHeaderCache.endConditionalMutationGate(runnerGate)
+
+            let whileOuterGateIsActive = CookieHeaderCache.observeForConditionalMutation(provider: .cursor)
+            #expect(!CookieHeaderCache.storeIfObservationCurrent(
+                provider: .cursor,
+                expected: whileOuterGateIsActive,
+                cookieHeader: "fixtureSession=background",
+                sourceLabel: "Background"))
+            CookieHeaderCache.endConditionalMutationGate(outerGate)
+
+            let afterOuterGateEnds = CookieHeaderCache.observeForConditionalMutation(provider: .cursor)
+            #expect(CookieHeaderCache.storeIfObservationCurrent(
+                provider: .cursor,
+                expected: afterOuterGateEnds,
+                cookieHeader: "fixtureSession=late-background",
+                sourceLabel: "Background"))
+            #expect(CookieHeaderCache.load(provider: .cursor)?.cookieHeader == "fixtureSession=late-background")
+        }
+    }
+
     private func withIsolatedCookieCache<T>(_ operation: () -> T) -> T {
         KeychainCacheStore.withServiceOverrideForTesting("cookie-conditional-\(UUID().uuidString)") {
             let legacyBase = FileManager.default.temporaryDirectory

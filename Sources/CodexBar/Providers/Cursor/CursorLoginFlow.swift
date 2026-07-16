@@ -3,6 +3,11 @@ import CodexBarCore
 @MainActor
 extension StatusItemController {
     func runCursorLoginFlow() async -> Bool {
+        // Acquire cache ownership before retiring refreshes so a cancellation-ignoring refresh cannot write in the
+        // gap. CursorLoginRunner also holds a nested gate for standalone callers and tests.
+        let cacheMutationGate = CookieHeaderCache.beginConditionalMutationGate(provider: .cursor)
+        defer { CookieHeaderCache.endConditionalMutationGate(cacheMutationGate) }
+
         let currentSnapshot = self.store.snapshot(for: .cursor)
         let currentIdentity = currentSnapshot?.identity(for: .cursor)
         let priorAccount = currentSnapshot.map { _ in
