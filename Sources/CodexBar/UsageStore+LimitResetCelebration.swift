@@ -137,6 +137,7 @@ extension UsageStore {
         let suppressedGuardedCrossing = crossedBelowThreshold && !resetBoundaryAllowsPost
         let shouldAwaitLowConfirmation = requiresLowConfirmation
             && crossedBelowThreshold
+            && !confirmingLowSample
             && resetBoundaryAllowsPost
             && !claudeWeeklyRecoveryPending
         // Sessions retain the last non-regressed boundary on every guarded sample. Codex weekly crossings

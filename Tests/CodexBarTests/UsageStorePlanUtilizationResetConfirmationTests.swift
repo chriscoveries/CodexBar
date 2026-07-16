@@ -91,6 +91,19 @@ extension UsageStorePlanUtilizationTests {
             now: confirmedReset.updatedAt)
         #expect(sessionRecorder.events.count == 1)
         #expect(weeklyRecorder.events.count == 1)
+
+        let repeatedLow = try snapshot(
+            sessionUsed: 0.5,
+            weeklyUsed: 0.5,
+            sessionBoundary: #require(confirmedReset.primary?.resetsAt),
+            weeklyBoundary: #require(confirmedReset.secondary?.resetsAt),
+            updatedAt: firstDate.addingTimeInterval(300))
+        await store.recordPlanUtilizationHistorySample(
+            provider: .claude,
+            snapshot: repeatedLow,
+            now: repeatedLow.updatedAt)
+        #expect(sessionRecorder.events.count == 1)
+        #expect(weeklyRecorder.events.count == 1)
     }
 
     @MainActor
