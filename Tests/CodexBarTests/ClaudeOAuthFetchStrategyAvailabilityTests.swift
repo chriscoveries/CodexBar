@@ -99,11 +99,12 @@ struct ClaudeOAuthFetchStrategyAvailabilityTests {
     }
 
     @Test
-    func `auto mode keeps expired CLI credentials unavailable in background`() async {
+    func `stored user action policy blocks expired CLI credentials with experimental reader`() async {
         let available = await self.expiredCLIAvailability(
             sourceMode: .auto,
             interaction: .background,
-            keychainData: self.ordinaryOAuthKeychainPayload)
+            keychainData: self.ordinaryOAuthKeychainPayload,
+            readStrategy: .securityCLIExperimental)
 
         #expect(!available)
     }
@@ -458,7 +459,8 @@ struct ClaudeOAuthFetchStrategyAvailabilityTests {
         interaction: ProviderInteraction,
         keychainData: Data,
         keychainAccessDisabled: Bool = false,
-        promptMode: ClaudeOAuthKeychainPromptMode = .onlyOnUserAction) async -> Bool
+        promptMode: ClaudeOAuthKeychainPromptMode = .onlyOnUserAction,
+        readStrategy: ClaudeOAuthKeychainReadStrategy = .securityFramework) async -> Bool
     {
         let context = self.makeContext(sourceMode: sourceMode)
         let strategy = ClaudeOAuthFetchStrategy()
@@ -468,7 +470,7 @@ struct ClaudeOAuthFetchStrategyAvailabilityTests {
                     await KeychainAccessGate.withTaskOverrideForTesting(keychainAccessDisabled) {
                         await ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(promptMode) {
                             await ClaudeOAuthKeychainReadStrategyPreference
-                                .withTaskOverrideForTesting(.securityFramework) {
+                                .withTaskOverrideForTesting(readStrategy) {
                                     await ClaudeOAuthCredentialsStore.withClaudeKeychainOverridesForTesting(
                                         data: keychainData,
                                         fingerprint: nil)

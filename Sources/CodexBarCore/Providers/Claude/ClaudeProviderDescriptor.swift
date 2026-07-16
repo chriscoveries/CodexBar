@@ -332,7 +332,7 @@ struct ClaudeOAuthFetchStrategy: ProviderFetchStrategy {
                 // That child process can access Keychain outside CodexBar's no-UI controls, so do
                 // not plan it during background Auto refresh without an explicit opt-in.
                 guard !KeychainAccessGate.isDisabled,
-                      ClaudeOAuthKeychainPromptPreference.current() == .always
+                      ClaudeOAuthKeychainPromptPreference.storedMode() == .always
                 else {
                     return false
                 }
@@ -657,7 +657,7 @@ struct ClaudeCLIFetchStrategy: ProviderFetchStrategy {
             && ProviderInteractionContext.current == .background
         if isBackgroundAutoRefresh {
             guard !KeychainAccessGate.isDisabled,
-                  ClaudeOAuthKeychainPromptPreference.current() == .always
+                  ClaudeOAuthKeychainPromptPreference.storedMode() == .always
             else {
                 return false
             }
