@@ -220,7 +220,7 @@ struct CursorLoginRunnerTests {
                 Self.browserCandidate(
                     id: "different-account",
                     email: "different@example.com",
-                    token: "different-token",
+                    cookieValue: "different-cookie",
                     source: "Comet"),
             ] },
             sleeper: { _ in },
