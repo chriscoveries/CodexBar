@@ -143,17 +143,20 @@ public struct ProviderIdentitySnapshot: Codable, Sendable {
     public let accountEmail: String?
     public let accountOrganization: String?
     public let loginMethod: String?
+    public let accountID: String?
 
     public init(
         providerID: UsageProvider?,
         accountEmail: String?,
         accountOrganization: String?,
-        loginMethod: String?)
+        loginMethod: String?,
+        accountID: String? = nil)
     {
         self.providerID = providerID
         self.accountEmail = accountEmail
         self.accountOrganization = accountOrganization
         self.loginMethod = loginMethod
+        self.accountID = accountID
     }
 
     public func scoped(to provider: UsageProvider) -> ProviderIdentitySnapshot {
@@ -164,7 +167,8 @@ public struct ProviderIdentitySnapshot: Codable, Sendable {
             providerID: provider,
             accountEmail: self.accountEmail,
             accountOrganization: self.accountOrganization,
-            loginMethod: self.loginMethod)
+            loginMethod: self.loginMethod,
+            accountID: self.accountID)
     }
 }
 
@@ -552,6 +556,11 @@ public struct UsageSnapshot: Codable, Sendable {
             return true
         }
         guard let lhs, let rhs else { return false }
+        let lhsAccountID = lhs.accountID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rhsAccountID = rhs.accountID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let lhsAccountID, let rhsAccountID, !lhsAccountID.isEmpty, !rhsAccountID.isEmpty {
+            return lhsAccountID == rhsAccountID
+        }
         let lhsEmail = lhs.accountEmail?.trimmingCharacters(in: .whitespacesAndNewlines)
         let rhsEmail = rhs.accountEmail?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let lhsEmail, let rhsEmail, !lhsEmail.isEmpty, !rhsEmail.isEmpty {
@@ -949,13 +958,6 @@ enum RPCWireError: Error, LocalizedError {
     }
 }
 
-typealias CodexExecutableResolver = @Sendable (_ environment: [String: String], _ executable: String) -> String?
-
-let defaultCodexExecutableResolver: CodexExecutableResolver = { environment, executable in
-    BinaryLocator.resolveCodexBinary(env: environment)
-        ?? TTYCommandRunner.which(executable)
-}
-
 /// RPC helper used on background tasks; safe because we confine it to the owning task.
 private final class CodexRPCClient: @unchecked Sendable {
     private static let log = CodexBarLog.logger(LogCategories.codexRPC)
@@ -1012,16 +1014,19 @@ private final class CodexRPCClient: @unchecked Sendable {
         }
         self.stdoutLineContinuation = stdoutContinuation
 
-        let resolvedExec = resolveExecutable(environment, executable)
+        let resolution = resolveExecutable(environment, executable)
 
-        guard let resolvedExec else {
+        guard let resolution else {
             Self.log.warning("Codex RPC binary not found", metadata: ["binary": executable])
             throw CodexStatusProbeError.codexNotInstalled
         }
+        let resolvedExec = resolution.executable
         var env = environment
+        let loginPATH = resolution.loginPATH ?? LoginShellPathCache.shared.current
         env["PATH"] = PathBuilder.effectivePATH(
             purposes: [.rpc, .nodeTooling],
-            env: env)
+            env: env,
+            loginPATH: loginPATH)
 
         self.process.environment = env
         self.process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
@@ -1240,7 +1245,6 @@ public struct UsageFetcher: Sendable {
         self.requestTimeoutSeconds = 3.0
         self.codexExecutableResolver = defaultCodexExecutableResolver
         self.codexArguments = ["-s", "read-only", "-a", "untrusted", "app-server"]
-        LoginShellPathCache.shared.captureOnce()
     }
 
     init(
@@ -1255,7 +1259,6 @@ public struct UsageFetcher: Sendable {
         self.requestTimeoutSeconds = requestTimeoutSeconds
         self.codexExecutableResolver = codexExecutableResolver
         self.codexArguments = codexArguments
-        LoginShellPathCache.shared.captureOnce()
     }
 
     public func loadLatestUsage(keepCLISessionsAlive: Bool = false) async throws -> UsageSnapshot {
