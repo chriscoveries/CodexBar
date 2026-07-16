@@ -825,6 +825,11 @@ extension StatusItemController {
         {
             return balance
         }
+        if provider == .deepinfra,
+           let balance = Self.deepInfraBalanceDisplayText(snapshot: snapshot)
+        {
+            return balance
+        }
         if provider == .mimo,
            let balance = Self.miMoBalanceDisplayText(
                snapshot: snapshot,
@@ -955,6 +960,20 @@ extension StatusItemController {
 
         let balance = rawValue.split(separator: " ", maxSplits: 1).first
         return balance.map(String.init)
+    }
+
+    nonisolated static func deepInfraBalanceDisplayText(snapshot: UsageSnapshot?) -> String? {
+        guard
+            let detail = snapshot?.primary?.resetDescription?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+                detail.hasPrefix("$"),
+                let value = detail.split(separator: " ", maxSplits: 1).first
+        else {
+            return nil
+        }
+
+        let prefix = detail.contains(" owed") ? "-" : ""
+        return prefix + String(value)
     }
 
     nonisolated static func miMoBalanceDisplayText(

@@ -243,6 +243,46 @@ struct StatusItemBalanceDisplayTests {
     }
 
     @Test
+    func `menu bar display text uses DeepInfra available balance`() {
+        let settings = self.makeSettings(
+            suiteName: "StatusItemBalanceDisplayTests-deepinfra-balance",
+            provider: .deepinfra)
+        let (store, controller) = self.makeStoreAndController(settings: settings)
+        defer { controller.releaseStatusItemsForTesting() }
+        let snapshot = DeepInfraUsageSnapshot(
+            availableBalanceUSD: 12.34,
+            amountOwedUSD: 0,
+            currentMonthCostUSD: 1.25,
+            recentCostUSD: 1.25,
+            spendingLimitUSD: nil,
+            suspended: false,
+            suspendReason: nil,
+            updatedAt: Date())
+            .toUsageSnapshot()
+
+        store._setSnapshotForTesting(snapshot, provider: .deepinfra)
+        store._setErrorForTesting(nil, provider: .deepinfra)
+
+        #expect(controller.menuBarDisplayText(for: .deepinfra, snapshot: snapshot) == "$12.34")
+    }
+
+    @Test
+    func `menu bar display text marks DeepInfra amount owed`() {
+        let snapshot = DeepInfraUsageSnapshot(
+            availableBalanceUSD: 0,
+            amountOwedUSD: 2.75,
+            currentMonthCostUSD: 3,
+            recentCostUSD: 3,
+            spendingLimitUSD: nil,
+            suspended: false,
+            suspendReason: nil,
+            updatedAt: Date())
+            .toUsageSnapshot()
+
+        #expect(StatusItemController.deepInfraBalanceDisplayText(snapshot: snapshot) == "-$2.75")
+    }
+
+    @Test
     func `menu bar display text uses mimo balance without token plan`() {
         let settings = self.makeSettings(
             suiteName: "StatusItemBalanceDisplayTests-mimo-balance",

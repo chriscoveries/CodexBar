@@ -163,7 +163,7 @@ public enum ProviderConfigEnvironment {
             GroqSettingsReader.apiKeyEnvironmentKey
         case .llmproxy:
             LLMProxySettingsReader.apiKeyEnvironmentKey
-        case .chutes, .poe, .litellm, .crossmodel, .clawrouter, .factory, .sub2api, .zenmux:
+        case .chutes, .poe, .litellm, .crossmodel, .clawrouter, .factory, .sub2api, .zenmux, .deepinfra:
             self.additionalAPIKeyEnvironmentKey(for: provider)
         default:
             nil
@@ -188,6 +188,8 @@ public enum ProviderConfigEnvironment {
             FactorySettingsReader.apiTokenKey
         case .zenmux:
             ZenMuxSettingsReader.managementAPIKeyEnvironmentKey
+        case .deepinfra:
+            DeepInfraSettingsReader.apiKeyEnvironmentKey
         default:
             nil
         }
