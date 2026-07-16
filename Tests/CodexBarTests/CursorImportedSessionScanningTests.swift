@@ -24,14 +24,14 @@ struct CursorImportedSessionScanningTests {
     @Test
     func `browser login candidates return every valid unique session without committing cache`() async throws {
         let probe = CursorStatusProbe(browserDetection: BrowserDetection(cacheTTL: 0))
-        let strictPersonal = Self.makeSessionInfo(sourceLabel: "Comet Default", token: "personal")
-        let strictTeam = Self.makeSessionInfo(sourceLabel: "Comet Profile 1", token: "team")
+        let strictPersonal = Self.makeSessionInfo(sourceLabel: "Comet Default", cookieValue: "personal")
+        let strictTeam = Self.makeSessionInfo(sourceLabel: "Comet Profile 1", cookieValue: "team")
         let duplicatePersonal = Self.makeSessionInfo(
             sourceLabel: "Comet Alternate Personal Label",
-            token: "personal")
+            cookieValue: "personal")
         let domainValid = Self.makeSessionInfo(
             sourceLabel: "Comet Profile 2 (domain cookies)",
-            token: "domain")
+            cookieValue: "domain")
         var importPhases: [String] = []
         let validatedHeaders = LockedArray<String>()
         let cacheOperations = KeychainCacheStore.OperationRecorder()
@@ -84,9 +84,9 @@ struct CursorImportedSessionScanningTests {
     @Test
     func `browser login candidates keep valid results when another profile has a transient failure`() async throws {
         let probe = CursorStatusProbe(browserDetection: BrowserDetection(cacheTTL: 0))
-        let valid = Self.makeSessionInfo(sourceLabel: "Comet Default", token: "valid")
-        let transient = Self.makeSessionInfo(sourceLabel: "Comet Profile 1", token: "transient")
-        let authRejected = Self.makeSessionInfo(sourceLabel: "Comet Profile 2", token: "auth-rejected")
+        let valid = Self.makeSessionInfo(sourceLabel: "Comet Default", cookieValue: "valid")
+        let transient = Self.makeSessionInfo(sourceLabel: "Comet Profile 1", cookieValue: "transient")
+        let authRejected = Self.makeSessionInfo(sourceLabel: "Comet Profile 2", cookieValue: "auth-rejected")
 
         let results = try await probe.fetchBrowserLoginCandidates(
             browser: .comet,
@@ -138,8 +138,8 @@ struct CursorImportedSessionScanningTests {
     @Test
     func `browser login candidates skip identity-less success when another profile is valid`() async throws {
         let probe = CursorStatusProbe(browserDetection: BrowserDetection(cacheTTL: 0))
-        let incomplete = Self.makeSessionInfo(sourceLabel: "Comet Default", token: "incomplete")
-        let valid = Self.makeSessionInfo(sourceLabel: "Comet Profile 1", token: "valid")
+        let incomplete = Self.makeSessionInfo(sourceLabel: "Comet Default", cookieValue: "incomplete")
+        let valid = Self.makeSessionInfo(sourceLabel: "Comet Profile 1", cookieValue: "valid")
 
         let results = try await probe.fetchBrowserLoginCandidates(
             browser: .comet,
@@ -162,8 +162,8 @@ struct CursorImportedSessionScanningTests {
     @Test
     func `browser login candidate deadline fails closed before validating later profiles`() async {
         let probe = CursorStatusProbe(browserDetection: BrowserDetection(cacheTTL: 0))
-        let first = Self.makeSessionInfo(sourceLabel: "Comet Default", token: "first")
-        let second = Self.makeSessionInfo(sourceLabel: "Comet Profile 1", token: "second")
+        let first = Self.makeSessionInfo(sourceLabel: "Comet Default", cookieValue: "first")
+        let second = Self.makeSessionInfo(sourceLabel: "Comet Profile 1", cookieValue: "second")
         let validatedHeaders = LockedArray<String>()
 
         do {
@@ -386,11 +386,11 @@ struct CursorImportedSessionScanningTests {
 
     private static func makeSessionInfo(
         sourceLabel: String,
-        token: String? = nil) -> CursorCookieImporter.SessionInfo
+        cookieValue: String? = nil) -> CursorCookieImporter.SessionInfo
     {
         let cookieProps: [HTTPCookiePropertyKey: Any] = [
             .name: "WorkosCursorSessionToken",
-            .value: token ?? sourceLabel.lowercased(),
+            .value: cookieValue ?? sourceLabel.lowercased(),
             .domain: "cursor.com",
             .path: "/",
             .secure: true,
