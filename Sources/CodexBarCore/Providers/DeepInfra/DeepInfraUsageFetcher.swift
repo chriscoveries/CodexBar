@@ -103,14 +103,15 @@ public struct DeepInfraUsageSnapshot: Sendable {
             "\(balanceText) · \(spendingText)"
         }
 
-        let providerCost = self.spendingLimitUSD.flatMap { limit in
-            guard limit > 0 else { return nil }
-            return ProviderCostSnapshot(
+        let providerCost: ProviderCostSnapshot? = if let limit = self.spendingLimitUSD, limit > 0 {
+            ProviderCostSnapshot(
                 used: self.recentCostUSD,
                 limit: limit,
                 currencyCode: "USD",
                 period: "Billing cycle",
                 updatedAt: self.updatedAt)
+        } else {
+            nil
         }
         let identity = ProviderIdentitySnapshot(
             providerID: .deepinfra,
