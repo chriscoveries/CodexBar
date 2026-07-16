@@ -4394,9 +4394,10 @@ struct CostUsageScannerBreakdownTests {
             contents: env.jsonl([
                 [
                     "type": "session_meta",
+                    "id": "parent-session",
                     "timestamp": parentTimestamp,
                     "payload": [
-                        "id": "parent-session",
+                        "session_id": "shared-agent-tree",
                         "timestamp": parentTimestamp,
                         "cwd": projectPath,
                     ],
@@ -4414,9 +4415,10 @@ struct CostUsageScannerBreakdownTests {
             contents: env.jsonl([
                 [
                     "type": "session_meta",
+                    "id": "child-session",
                     "timestamp": forkTimestamp,
                     "payload": [
-                        "id": "child-session",
+                        "session_id": "shared-agent-tree",
                         "forked_from_id": "parent-session",
                         "parent_thread_id": "parent-session",
                         "timestamp": forkTimestamp,

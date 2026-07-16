@@ -1394,21 +1394,24 @@ enum CostUsageScanner {
         in rootRange: Range<Int>,
         payloadRange: Range<Int>?) -> String?
     {
-        if let payloadRange {
-            for key in [self.codexJSONFieldSessionId, self.codexJSONFieldSessionIdCamel, self.codexJSONFieldId] {
-                if let value = extractJSONByteStringField(key, from: bytes, in: payloadRange, atDepth: 1),
-                   !value.isEmpty
-                {
-                    return value
-                }
-            }
-        }
-        for key in [Self.codexJSONFieldSessionId, Self.codexJSONFieldSessionIdCamel, Self.codexJSONFieldId] {
-            if let value = Self.extractJSONByteStringField(key, from: bytes, in: rootRange, atDepth: 1),
-               !value.isEmpty
-            {
-                return value
-            }
+        // `session_id` identifies the shared multi-agent tree. `id` identifies this rollout/thread,
+        // and both fields have appeared at either metadata level.
+        let candidates: [String?] = [
+            payloadRange.flatMap {
+                Self.extractJSONByteStringField(Self.codexJSONFieldId, from: bytes, in: $0, atDepth: 1)
+            },
+            Self.extractJSONByteStringField(Self.codexJSONFieldId, from: bytes, in: rootRange, atDepth: 1),
+            payloadRange.flatMap {
+                Self.extractJSONByteStringField(Self.codexJSONFieldSessionId, from: bytes, in: $0, atDepth: 1)
+            },
+            payloadRange.flatMap {
+                Self.extractJSONByteStringField(Self.codexJSONFieldSessionIdCamel, from: bytes, in: $0, atDepth: 1)
+            },
+            Self.extractJSONByteStringField(Self.codexJSONFieldSessionId, from: bytes, in: rootRange, atDepth: 1),
+            Self.extractJSONByteStringField(Self.codexJSONFieldSessionIdCamel, from: bytes, in: rootRange, atDepth: 1),
+        ]
+        for value in candidates where value?.isEmpty == false {
+            return value
         }
         return nil
     }
@@ -1623,12 +1626,12 @@ enum CostUsageScanner {
         guard obj["type"] as? String == "session_meta" else { return nil }
         let payload = obj["payload"] as? [String: Any]
         return CodexSessionMetadata(
-            sessionId: payload?["session_id"] as? String
+            sessionId: payload?["id"] as? String
+                ?? obj["id"] as? String
+                ?? payload?["session_id"] as? String
                 ?? payload?["sessionId"] as? String
-                ?? payload?["id"] as? String
                 ?? obj["session_id"] as? String
-                ?? obj["sessionId"] as? String
-                ?? obj["id"] as? String,
+                ?? obj["sessionId"] as? String,
             forkedFromId: Self.codexForkParentId(from: payload),
             forkTimestamp: payload?["timestamp"] as? String
                 ?? obj["timestamp"] as? String,
