@@ -81,9 +81,12 @@ struct CLIServeAuthTests {
     func `dashboard token resolution prefers the environment and rejects blanks`() {
         let flagValues = ParsedValues(
             positional: [],
-            options: ["dashboardToken": [" flag-token "]],
+            options: ["dashboardBearer": [" flag-token "]],
             flags: [])
         let emptyValues = ParsedValues(positional: [], options: [:], flags: [])
+        let envOverride = Dictionary(uniqueKeysWithValues: [
+            (CodexBarCLI.dashboardTokenEnvironmentVariable, "ENV_VALUE"),
+        ])
 
         #expect(CodexBarCLI.resolveDashboardToken(
             from: emptyValues,
@@ -93,13 +96,13 @@ struct CLIServeAuthTests {
             environment: [:]) == .token("flag-token"))
         #expect(CodexBarCLI.resolveDashboardToken(
             from: flagValues,
-            environment: ["CODEXBAR_DASHBOARD_TOKEN": "ENV_VALUE"]) == .token("ENV_VALUE"))
+            environment: envOverride) == .token("ENV_VALUE"))
         #expect(CodexBarCLI.resolveDashboardToken(
             from: emptyValues,
             environment: ["CODEXBAR_DASHBOARD_TOKEN": "  "])
             == .empty(source: "CODEXBAR_DASHBOARD_TOKEN"))
         #expect(CodexBarCLI.resolveDashboardToken(
-            from: ParsedValues(positional: [], options: ["dashboardToken": [""]], flags: []),
+            from: ParsedValues(positional: [], options: ["dashboardBearer": [""]], flags: []),
             environment: [:]) == .empty(source: "--dashboard-token"))
     }
 

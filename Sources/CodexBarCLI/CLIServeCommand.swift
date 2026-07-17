@@ -29,7 +29,7 @@ struct ServeOptions: CommanderParsable {
     @Option(
         name: .long("dashboard-token"),
         help: "Bearer token for /dashboard/v1/snapshot (prefer CODEXBAR_DASHBOARD_TOKEN)")
-    var dashboardToken: String?
+    var dashboardBearer: String?
 
     @Flag(
         name: .long("allow-plain-http"),
@@ -734,7 +734,7 @@ extension CodexBarCLI {
                 ? .empty(source: Self.dashboardTokenEnvironmentVariable)
                 : .token(bearer)
         }
-        guard let raw = values.options["dashboardToken"]?.last else { return .absent }
+        guard let raw = values.options["dashboardBearer"]?.last else { return .absent }
         let bearer = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         return bearer.isEmpty ? .empty(source: "--dashboard-token") : .token(bearer)
     }
