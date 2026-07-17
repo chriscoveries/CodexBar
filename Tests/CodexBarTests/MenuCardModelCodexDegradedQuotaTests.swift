@@ -41,6 +41,7 @@ struct MenuCardModelCodexDegradedQuotaTests {
             usageBarsShowUsed: false,
             resetTimeDisplayStyle: .countdown,
             tokenCostUsageEnabled: true,
+            codexLocalSessionCostLedgerEnabled: true,
             showOptionalCreditsAndExtraUsage: true,
             hidePersonalInfo: false,
             now: now))
@@ -53,6 +54,19 @@ struct MenuCardModelCodexDegradedQuotaTests {
         #expect(model.tokenUsage?.sessionLine.contains("tokens") == true)
         #expect(model.tokenUsage?.monthLine.contains("$583.13") == true)
         #expect(model.tokenUsage?.monthLine.contains("tokens") == true)
+    }
+
+    @Test
+    func `codex managed token usage keeps remote quota unavailable error visible`() throws {
+        let error = "Codex usage is temporarily unavailable. Try refreshing."
+        let model = try self.makeModel(
+            tokenCostUsageEnabled: true,
+            codexLocalSessionCostLedgerEnabled: false,
+            lastError: error)
+
+        #expect(model.subtitleStyle == .error)
+        #expect(model.subtitleText == error)
+        #expect(model.tokenUsage != nil)
     }
 
     @Test
@@ -122,6 +136,7 @@ struct MenuCardModelCodexDegradedQuotaTests {
             usageBarsShowUsed: false,
             resetTimeDisplayStyle: .countdown,
             tokenCostUsageEnabled: true,
+            codexLocalSessionCostLedgerEnabled: true,
             showOptionalCreditsAndExtraUsage: true,
             hidePersonalInfo: false,
             now: now))
@@ -173,6 +188,7 @@ struct MenuCardModelCodexDegradedQuotaTests {
             usageBarsShowUsed: false,
             resetTimeDisplayStyle: .countdown,
             tokenCostUsageEnabled: true,
+            codexLocalSessionCostLedgerEnabled: true,
             showOptionalCreditsAndExtraUsage: true,
             hidePersonalInfo: false,
             now: now))
@@ -212,6 +228,7 @@ struct MenuCardModelCodexDegradedQuotaTests {
 
     private func makeModel(
         tokenCostUsageEnabled: Bool,
+        codexLocalSessionCostLedgerEnabled: Bool = true,
         lastError: String?) throws -> UsageMenuCardView.Model
     {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
@@ -240,6 +257,7 @@ struct MenuCardModelCodexDegradedQuotaTests {
             usageBarsShowUsed: false,
             resetTimeDisplayStyle: .countdown,
             tokenCostUsageEnabled: tokenCostUsageEnabled,
+            codexLocalSessionCostLedgerEnabled: codexLocalSessionCostLedgerEnabled,
             showOptionalCreditsAndExtraUsage: true,
             hidePersonalInfo: false,
             now: now))

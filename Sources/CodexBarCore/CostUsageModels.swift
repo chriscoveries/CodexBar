@@ -150,13 +150,19 @@ public struct CostUsageTokenSnapshot: Sendable, Equatable {
             return (entry, date)
         }
         .max { lhs, rhs in
-            if lhs.date != rhs.date { return lhs.date < rhs.date }
+            if lhs.date != rhs.date {
+                return lhs.date < rhs.date
+            }
             let lCost = lhs.entry.costUSD ?? -1
             let rCost = rhs.entry.costUSD ?? -1
-            if lCost != rCost { return lCost < rCost }
+            if lCost != rCost {
+                return lCost < rCost
+            }
             let lTokens = lhs.entry.totalTokens ?? -1
             let rTokens = rhs.entry.totalTokens ?? -1
-            if lTokens != rTokens { return lTokens < rTokens }
+            if lTokens != rTokens {
+                return lTokens < rTokens
+            }
             return lhs.entry.date < rhs.entry.date
         }?.entry
     }
@@ -169,7 +175,9 @@ public struct CostUsageTokenSnapshot: Sendable, Equatable {
         let dayKey = CostUsageLocalDay.key(from: date, calendar: calendar)
         return entries.first { entry in
             let rawDate = entry.date.trimmingCharacters(in: .whitespacesAndNewlines)
-            if rawDate == dayKey { return true }
+            if rawDate == dayKey {
+                return true
+            }
             guard let parsed = CostUsageDateParser.parse(rawDate) else { return false }
             return CostUsageLocalDay.key(from: parsed, calendar: calendar) == dayKey
         }
@@ -393,8 +401,12 @@ public struct CostUsageDailyReport: Sendable, Decodable {
                 (try? container.decodeIfPresent([String].self, forKey: key)).flatMap(\.self)
             }
 
-            if let modelsUsed = decodeStringList(.modelsUsed) { return modelsUsed }
-            if let models = decodeStringList(.models) { return models }
+            if let modelsUsed = decodeStringList(.modelsUsed) {
+                return modelsUsed
+            }
+            if let models = decodeStringList(.models) {
+                return models
+            }
 
             guard container.contains(.models) else { return nil }
 
@@ -959,16 +971,22 @@ enum CostUsageDateParser {
             key: self.isoWithFractionalSecondsKey,
             options: [.withInternetDateTime, .withFractionalSeconds])
             .date(from: trimmed)
-        { return d }
+        {
+            return d
+        }
         if let d = self.isoFormatter(key: self.isoInternetDateTimeKey, options: [.withInternetDateTime])
             .date(from: trimmed)
-        { return d }
+        {
+            return d
+        }
         if let d = self.dateFormatter(key: self.dayFormatterKey, format: "yyyy-MM-dd").date(from: trimmed) {
             return d
         }
         if let d = self.dateFormatter(key: self.monthDayYearFormatterKey, format: "MMM d, yyyy")
             .date(from: trimmed)
-        { return d }
+        {
+            return d
+        }
 
         return nil
     }

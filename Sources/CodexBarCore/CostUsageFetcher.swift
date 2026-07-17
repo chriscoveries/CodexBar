@@ -65,6 +65,7 @@ public struct CostUsageFetcher: Sendable {
         allowVertexClaudeFallback: Bool = false,
         codexHomePath: String? = nil,
         historyDays: Int = 30,
+        allowPricingRefresh: Bool = true,
         refreshPricingInBackground: Bool = true) async throws -> CostUsageTokenSnapshot
     {
         try await Self.loadTokenSnapshot(
@@ -75,6 +76,7 @@ public struct CostUsageFetcher: Sendable {
             allowVertexClaudeFallback: allowVertexClaudeFallback,
             codexHomePath: codexHomePath,
             historyDays: historyDays,
+            allowPricingRefresh: allowPricingRefresh,
             refreshPricingInBackground: refreshPricingInBackground,
             bypassScannerDebounce: false,
             scannerOptions: self.scannerOptionsOverride())
@@ -88,6 +90,7 @@ public struct CostUsageFetcher: Sendable {
         allowVertexClaudeFallback: Bool = false,
         codexHomePath: String? = nil,
         historyDays: Int = 30,
+        allowPricingRefresh: Bool = true,
         refreshPricingInBackground: Bool = true,
         bypassScannerDebounce: Bool) async throws -> CostUsageTokenSnapshot
     {
@@ -99,6 +102,7 @@ public struct CostUsageFetcher: Sendable {
             allowVertexClaudeFallback: allowVertexClaudeFallback,
             codexHomePath: codexHomePath,
             historyDays: historyDays,
+            allowPricingRefresh: allowPricingRefresh,
             refreshPricingInBackground: refreshPricingInBackground,
             bypassScannerDebounce: bypassScannerDebounce,
             scannerOptions: self.scannerOptionsOverride())
@@ -113,6 +117,7 @@ public struct CostUsageFetcher: Sendable {
         allowVertexClaudeFallback: Bool = false,
         codexHomePath: String? = nil,
         historyDays: Int = 30,
+        allowPricingRefresh: Bool = true,
         refreshPricingInBackground: Bool = true,
         automaticCodexScanByteLimit _: Int64?) async throws -> CostUsageTokenSnapshot
     {
@@ -124,6 +129,7 @@ public struct CostUsageFetcher: Sendable {
             allowVertexClaudeFallback: allowVertexClaudeFallback,
             codexHomePath: codexHomePath,
             historyDays: historyDays,
+            allowPricingRefresh: allowPricingRefresh,
             refreshPricingInBackground: refreshPricingInBackground)
     }
 
@@ -139,6 +145,7 @@ public struct CostUsageFetcher: Sendable {
         allowVertexClaudeFallback: Bool = false,
         codexHomePath: String? = nil,
         historyDays: Int = 30,
+        allowPricingRefresh: Bool = true,
         refreshPricingInBackground: Bool = true,
         bypassScannerDebounce: Bool = false,
         scannerOptions overrideScannerOptions: CostUsageScanner.Options? = nil,
@@ -176,22 +183,15 @@ public struct CostUsageFetcher: Sendable {
             options.codexSessionsRoot = URL(fileURLWithPath: codexHomePath, isDirectory: true)
                 .appendingPathComponent("sessions", isDirectory: true)
         }
-        if retryUnknownPricing, provider == .codex || provider == .claude {
-            let pricingCacheRoot = options.cacheRoot
-            if refreshPricingInBackground {
-                Task.detached(priority: .utility) {
-                    await ModelsDevPricingPipeline.refreshIfNeeded(
-                        now: now,
-                        cacheRoot: pricingCacheRoot,
-                        client: modelsDevClient)
-                }
-            } else {
-                await ModelsDevPricingPipeline.refreshIfNeeded(
-                    now: now,
-                    cacheRoot: pricingCacheRoot,
-                    client: modelsDevClient)
-            }
-        }
+        await Self.refreshPricingIfAllowed(
+            options: PricingRefreshOptions(
+                provider: provider,
+                isAllowed: allowPricingRefresh,
+                retryUnknown: retryUnknownPricing,
+                inBackground: refreshPricingInBackground),
+            now: now,
+            cacheRoot: options.cacheRoot,
+            client: modelsDevClient)
 
         if provider == .vertexai {
             options.claudeLogProviderFilter = allowVertexClaudeFallback ? .all : .vertexAIOnly
@@ -275,11 +275,15 @@ public struct CostUsageFetcher: Sendable {
             if provider == .codex {
                 projects = Self.mergedProjectBreakdowns(
                     projects + [piDaily.flatMap(Self.unknownProjectBreakdown(from:))].compactMap(\.self))
+                if piDaily?.data.isEmpty == false {
+                    sessions = []
+                }
             }
             return (daily: daily, projects: projects, sessions: sessions)
         }
 
-        if retryUnknownPricing,
+        if allowPricingRefresh,
+           retryUnknownPricing,
            let request = Self.unknownPricingRefreshRequest(
                provider: provider,
                daily: scanResult.daily,
@@ -296,6 +300,7 @@ public struct CostUsageFetcher: Sendable {
                 allowVertexClaudeFallback: allowVertexClaudeFallback,
                 codexHomePath: codexHomePath,
                 historyDays: historyDays,
+                allowPricingRefresh: allowPricingRefresh,
                 refreshPricingInBackground: false,
                 scannerOptions: options,
                 piScannerOptions: piOptions,
@@ -309,6 +314,33 @@ public struct CostUsageFetcher: Sendable {
             historyDays: clampedHistoryDays,
             projects: scanResult.projects,
             sessions: scanResult.sessions)
+    }
+
+    private struct PricingRefreshOptions: Sendable {
+        let provider: UsageProvider
+        let isAllowed: Bool
+        let retryUnknown: Bool
+        let inBackground: Bool
+    }
+
+    private static func refreshPricingIfAllowed(
+        options: PricingRefreshOptions,
+        now: Date,
+        cacheRoot: URL?,
+        client: ModelsDevClient) async
+    {
+        guard options.isAllowed,
+              options.retryUnknown,
+              options.provider == .codex || options.provider == .claude
+        else { return }
+
+        if options.inBackground {
+            Task.detached(priority: .utility) {
+                await ModelsDevPricingPipeline.refreshIfNeeded(now: now, cacheRoot: cacheRoot, client: client)
+            }
+        } else {
+            await ModelsDevPricingPipeline.refreshIfNeeded(now: now, cacheRoot: cacheRoot, client: client)
+        }
     }
 
     private struct UnknownPricingRefreshRequest: Sendable {
@@ -457,6 +489,9 @@ public struct CostUsageFetcher: Sendable {
                 }
                 if let piProject = Self.unknownProjectBreakdown(from: piResult.report) {
                     projects.append(piProject)
+                }
+                if !piResult.report.data.isEmpty {
+                    sessions = []
                 }
             }
 

@@ -27,6 +27,7 @@ extension SettingsStore {
         _ = self.providerChangelogLinksEnabled
         _ = self.menuBarShowsBrandIconWithPercent
         _ = self.menuBarHidesCritters
+        _ = self.menuBarHighContrastOnInactiveDisplays
         _ = self.menuBarShowsHighestUsage
         _ = self.menuBarDisplayMode
         _ = self.menuBarShowsResetTimeWhenExhausted
@@ -36,6 +37,7 @@ extension SettingsStore {
         _ = self.menuBarMetricPreferencesRaw
         _ = self.copilotIconSecondaryWindowIDRaw
         _ = self.costUsageEnabled
+        _ = self.codexLocalSessionCostLedgerEnabled
         _ = self.costUsageHistoryDays
         _ = self.costComparisonPeriodsEnabled
         _ = self.costSummaryDisplayStyle

@@ -15,6 +15,7 @@ extension UsageStore {
 
         let fetcher = self.costUsageFetcher
         let timeoutSeconds = self.tokenFetchTimeout
+        let allowPricingRefresh = provider != .codex || !self.settings.codexLocalSessionCostLedgerEnabled
         let environment = provider == .bedrock
             ? ProviderRegistry.makeEnvironment(
                 base: self.environmentBase,
@@ -32,6 +33,7 @@ extension UsageStore {
                     allowVertexClaudeFallback: !self.isEnabled(.claude),
                     codexHomePath: codexHomePath,
                     historyDays: historyDays,
+                    allowPricingRefresh: allowPricingRefresh,
                     bypassScannerDebounce: true)
             }
             group.addTask {
@@ -57,7 +59,7 @@ extension UsageStore {
     }
 
     func hydrateCachedTokenSnapshots(now: Date = Date()) {
-        guard self.settings.costUsageEnabled else { return }
+        guard self.settings.isCostUsageEffectivelyEnabled(for: .codex) else { return }
         guard self.settings.enabledProvidersOrdered(metadataByProvider: self.providerMetadata).contains(.codex) else {
             return
         }
@@ -84,7 +86,7 @@ extension UsageStore {
                 return
             }
             guard self.providerPublicationRevisionIsCurrent(publicationRevision, for: .codex),
-                  self.settings.costUsageEnabled,
+                  self.settings.isCostUsageEffectivelyEnabled(for: .codex),
                   self.isEnabled(.codex),
                   self.tokenCostScope(for: .codex).signature == scope.signature,
                   self.settings.costUsageHistoryDays == historyDays,
@@ -112,10 +114,15 @@ extension UsageStore {
         guard provider == .codex else {
             return (nil, provider.rawValue)
         }
-        // The cost ledger represents locally executed Codex sessions, including sessions
-        // authenticated with an organization API key. It must remain independent from the
-        // selected managed account, which only controls the remote quota and web-dashboard path.
-        return (nil, "codex:ambient")
+        if self.settings.codexLocalSessionCostLedgerEnabled {
+            return (nil, "codex:ambient")
+        }
+        let homePath = self.settings.activeManagedCodexRemoteHomePath?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let homePath, !homePath.isEmpty else {
+            return (nil, "codex:ambient")
+        }
+        return (homePath, "codex:managed:\(homePath)")
     }
 
     func tokenSnapshot(

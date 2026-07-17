@@ -52,7 +52,9 @@ extension CostUsageScanner {
                 modelBreakdowns: Self.codexProjectModelBreakdowns(from: report.data) ?? [])
         }
         .sorted { lhs, rhs in
-            if lhs.lastActivity != rhs.lastActivity { return lhs.lastActivity > rhs.lastActivity }
+            if lhs.lastActivity != rhs.lastActivity {
+                return lhs.lastActivity > rhs.lastActivity
+            }
             return lhs.sessionID > rhs.sessionID
         }
     }
@@ -111,10 +113,14 @@ extension CostUsageScanner {
         .sorted { lhs, rhs in
             let lhsCost = lhs.totalCostUSD ?? -1
             let rhsCost = rhs.totalCostUSD ?? -1
-            if lhsCost != rhsCost { return lhsCost > rhsCost }
+            if lhsCost != rhsCost {
+                return lhsCost > rhsCost
+            }
             let lhsTokens = lhs.totalTokens ?? -1
             let rhsTokens = rhs.totalTokens ?? -1
-            if lhsTokens != rhsTokens { return lhsTokens > rhsTokens }
+            if lhsTokens != rhsTokens {
+                return lhsTokens > rhsTokens
+            }
             return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
         }
     }
@@ -152,10 +158,14 @@ extension CostUsageScanner {
         .sorted { lhs, rhs in
             let lhsCost = lhs.totalCostUSD ?? -1
             let rhsCost = rhs.totalCostUSD ?? -1
-            if lhsCost != rhsCost { return lhsCost > rhsCost }
+            if lhsCost != rhsCost {
+                return lhsCost > rhsCost
+            }
             let lhsTokens = lhs.totalTokens ?? -1
             let rhsTokens = rhs.totalTokens ?? -1
-            if lhsTokens != rhsTokens { return lhsTokens > rhsTokens }
+            if lhsTokens != rhsTokens {
+                return lhsTokens > rhsTokens
+            }
             return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
         }
     }

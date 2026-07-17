@@ -68,7 +68,10 @@ struct ProviderSettingsDescriptorTests {
         #expect(localLedgerToggle.subtitle.contains("organization API keys"))
         #expect(!localLedgerToggle.binding.wrappedValue)
         localLedgerToggle.binding.wrappedValue = true
-        #expect(fixture.settings.costUsageEnabled)
+        #expect(fixture.settings.codexLocalSessionCostLedgerEnabled)
+        #expect(!fixture.settings.costUsageEnabled)
+        #expect(fixture.settings.isCostUsageEffectivelyEnabled(for: .codex))
+        #expect(!fixture.settings.isCostUsageEffectivelyEnabled(for: .claude))
         #expect(toggles.contains(where: { $0.id == "codex-historical-tracking" }))
         let sparkToggle = try #require(toggles.first(where: { $0.id == "codex-spark-usage-visible" }))
         #expect(sparkToggle.title == "Show Codex Spark usage")
@@ -90,10 +93,14 @@ struct ProviderSettingsDescriptorTests {
         fixture.settings.codexActiveSource = .managedAccount(id: UUID())
         defer { fixture.settings._test_activeManagedCodexRemoteHomePath = nil }
 
-        let scope = fixture.store.tokenCostScope(for: .codex)
+        let managedScope = fixture.store.tokenCostScope(for: .codex)
+        fixture.settings.codexLocalSessionCostLedgerEnabled = true
+        let localScope = fixture.store.tokenCostScope(for: .codex)
 
-        #expect(scope.codexHomePath == nil)
-        #expect(scope.signature == "codex:ambient")
+        #expect(managedScope.codexHomePath == "/tmp/managed-codex-home")
+        #expect(managedScope.signature == "codex:managed:/tmp/managed-codex-home")
+        #expect(localScope.codexHomePath == nil)
+        #expect(localScope.signature == "codex:ambient")
     }
 
     @Test

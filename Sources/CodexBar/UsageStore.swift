@@ -11,6 +11,7 @@ extension UsageStore {
     var menuObservationToken: Int {
         _ = self.snapshots
         _ = self.errors
+        _ = self.diagnostics
         _ = self.knownLimitsAvailabilityByProvider
         _ = self.lastSourceLabels
         _ = self.lastFetchAttempts
@@ -44,6 +45,7 @@ extension UsageStore {
     var iconObservationToken: Int {
         _ = self.snapshots
         _ = self.errors
+        _ = self.diagnostics
         _ = self.knownLimitsAvailabilityByProvider
         _ = self.credits
         _ = self.lastCreditsError
@@ -153,6 +155,7 @@ final class UsageStore {
 
     var snapshots: [UsageProvider: UsageSnapshot] = [:]
     var errors: [UsageProvider: String] = [:]
+    var diagnostics: [UsageProvider: String] = [:]
     var geminiObservedConsumerTierDeprecation = false
     var knownLimitsAvailabilityByProvider: [UsageProvider: UsageLimitsAvailability] = [:]
     var lastSourceLabels: [UsageProvider: String] = [:]
@@ -1074,6 +1077,7 @@ extension UsageStore {
                 .clawrouter: "ClawRouter debug log not yet implemented",
                 .wayfinder: "Wayfinder debug log not yet implemented",
                 .sub2api: "sub2api debug log not yet implemented",
+                .zenmux: "ZenMux debug log not yet implemented",
             ]
             let buildText = {
                 switch provider {
@@ -1155,7 +1159,7 @@ extension UsageStore {
                      .sakana, .abacus, .mistral, .codebuff, .crof, .windsurf, .venice, .manus, .commandcode, .qoder,
                      .stepfun,
                      .bedrock, .grok, .groq, .t3chat, .llmproxy, .litellm, .zed, .deepgram, .poe, .chutes,
-                     .clawrouter, .wayfinder, .sub2api:
+                     .clawrouter, .wayfinder, .sub2api, .zenmux:
                     return unimplementedDebugLogMessages[provider] ?? "Debug log not yet implemented"
                 }
             }
@@ -1442,7 +1446,7 @@ extension UsageStore {
             return
         }
 
-        guard self.settings.costUsageEnabled else {
+        guard self.settings.isCostUsageEffectivelyEnabled(for: provider) else {
             self.tokenSnapshots.removeValue(forKey: provider)
             self.tokenErrors[provider] = nil
             self.tokenFailureGates[provider]?.reset()
@@ -1494,11 +1498,8 @@ extension UsageStore {
             .debug("cost usage start provider=\(providerText) force=\(force)")
 
         do {
-            // Codex cost usage scans local session logs from this machine. That data is
-            // intentionally presented as provider-level local telemetry rather than managed-account
-            // remote state, so managed Codex account selection does not retarget that fetch.
-            // If the UI later needs account-scoped token history, it should label and source that
-            // separately instead of silently changing the meaning of this section.
+            // Codex cost usage scans the explicit token-cost scope: selected managed account by
+            // default, or this Mac's ambient Codex home when the local ledger is enabled.
             let snapshot = try await self.loadTokenUsageSnapshot(
                 provider: provider,
                 force: force,
@@ -1590,7 +1591,7 @@ extension UsageStore {
         costScopeSignature: String) -> Bool
     {
         guard self.providerPublicationRevisionIsCurrent(publicationRevision, for: provider),
-              self.settings.costUsageEnabled,
+              self.settings.isCostUsageEffectivelyEnabled(for: provider),
               self.isEnabled(provider)
         else {
             return false

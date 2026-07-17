@@ -98,7 +98,9 @@ struct ProvidersPane: View {
                 isPresented: Binding(
                     get: { self.activeConfirmation != nil },
                     set: { isPresented in
-                        if !isPresented { self.activeConfirmation = nil }
+                        if !isPresented {
+                            self.activeConfirmation = nil
+                        }
                     }),
                 actions: {
                     if let active = self.activeConfirmation {
@@ -325,7 +327,9 @@ struct ProvidersPane: View {
     }
 
     func providerErrorDisplay(_ provider: UsageProvider) -> ProviderErrorDisplay? {
-        guard let full = self.store.error(for: provider), !full.isEmpty else { return nil }
+        guard let full = self.store.error(for: provider) ?? self.store.diagnostic(for: provider),
+              !full.isEmpty
+        else { return nil }
         let preview = self.store.userFacingError(for: provider) ?? full
         return ProviderErrorDisplay(
             preview: self.truncated(preview, prefix: ""),
@@ -684,6 +688,7 @@ struct ProvidersPane: View {
             usageBarsShowUsed: self.settings.usageBarsShowUsed,
             resetTimeDisplayStyle: self.settings.resetTimeDisplayStyle,
             tokenCostUsageEnabled: self.settings.isCostUsageEffectivelyEnabled(for: provider),
+            codexLocalSessionCostLedgerEnabled: self.settings.codexLocalSessionCostLedgerEnabled,
             tokenCostInlineDashboardEnabled: self.settings.costSummaryShowsInlineDashboard(for: provider),
             // Display style only controls the main menu. Provider details always expose
             // available cost data in their Usage section.
