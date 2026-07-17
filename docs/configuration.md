@@ -105,6 +105,9 @@ keys are emitted in sorted order. A `quota_reached` payload is exactly shaped li
 The v1 field names and meanings are compatibility-stable. Hook consumers should ignore unknown fields so CodexBar can
 add optional observability data without breaking existing commands.
 
+Safety limits: at most 32 rules, 32 arguments per rule, 4 KiB per executable or argument string, 32 KiB per command,
+and 4 KiB per event payload. Configurations beyond these limits fail closed and do not execute.
+
 ## Provider fields
 All provider fields are optional unless noted.
 

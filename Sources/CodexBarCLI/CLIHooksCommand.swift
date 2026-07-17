@@ -108,29 +108,53 @@ extension CodexBarCLI {
                 kind: .config)
         }
 
-        var failures = 0
+        var results: [HookTestResult] = []
         for rule in rules {
             do {
                 let result = try await HookRunner.run(rule: rule, event: event)
                 let stdout = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-                print("ran \(rule.executable): OK\(stdout.isEmpty ? "" : " — \(stdout)")")
+                results.append(HookTestResult(
+                    ruleID: rule.id,
+                    executable: rule.executable,
+                    event: eventType.rawValue,
+                    provider: provider.rawValue,
+                    success: true,
+                    stdout: stdout.isEmpty ? nil : stdout,
+                    error: nil))
+                if !output.usesJSONOutput {
+                    print("ran \(rule.executable): OK\(stdout.isEmpty ? "" : " — \(stdout)")")
+                }
             } catch {
-                failures += 1
-                Self.writeStderr("ran \(rule.executable): \(error.localizedDescription)\n")
+                let summary = HookRunner.failureSummary(error)
+                results.append(HookTestResult(
+                    ruleID: rule.id,
+                    executable: rule.executable,
+                    event: eventType.rawValue,
+                    provider: provider.rawValue,
+                    success: false,
+                    stdout: nil,
+                    error: summary))
+                if !output.usesJSONOutput {
+                    Self.writeStderr("ran \(rule.executable): \(summary)\n")
+                }
             }
         }
 
-        Self.exit(code: failures == 0 ? .success : .failure, output: output, kind: .runtime)
+        if output.usesJSONOutput {
+            Self.printJSON(results, pretty: output.pretty)
+        }
+        let succeeded = results.allSatisfy(\.success)
+        Self.exit(code: succeeded ? .success : .failure, output: output, kind: .runtime)
     }
 
     /// A representative event for `hooks test`: quota events report high usage so a
     /// thresholded `quota_low` rule fires; reset reports empty usage.
-    private static func sampleHookEvent(type: HookEventType, provider: String) -> HookEvent {
+    static func sampleHookEvent(type: HookEventType, provider: String) -> HookEvent {
         let usagePercent: Double?
         let status: String?
         switch type {
         case .quotaLow, .quotaReached:
-            usagePercent = 0.95
+            usagePercent = 1
             status = nil
         case .quotaReset:
             usagePercent = 0
@@ -153,6 +177,16 @@ extension CodexBarCLI {
             status: status,
             timestamp: Date())
     }
+}
+
+struct HookTestResult: Codable, Sendable, Equatable {
+    let ruleID: String
+    let executable: String
+    let event: String
+    let provider: String
+    let success: Bool
+    let stdout: String?
+    let error: String?
 }
 
 struct HooksOptions: CommanderParsable {

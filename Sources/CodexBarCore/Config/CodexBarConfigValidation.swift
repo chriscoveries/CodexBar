@@ -72,6 +72,13 @@ public enum CodexBarConfigValidator {
         guard let hooks else { return }
         var seenIDs: Set<String> = []
 
+        if hooks.events.count > HooksConfig.maximumRuleCount {
+            issues.append(self.hookIssue(
+                field: "hooks.events",
+                code: "too_many_hook_rules",
+                message: "Hooks support at most \(HooksConfig.maximumRuleCount) rules."))
+        }
+
         for (index, rule) in hooks.events.enumerated() {
             let field = "hooks.events[\(index)]"
             if !seenIDs.insert(rule.id).inserted {
@@ -103,6 +110,12 @@ public enum CodexBarConfigValidator {
                     field: "\(field).timeoutSeconds",
                     code: "invalid_hook_timeout",
                     message: "Hook timeouts must be between 0.1 and 300 seconds."))
+            }
+            if !rule.hasValidCommandShape {
+                issues.append(self.hookIssue(
+                    field: field,
+                    code: "invalid_hook_command_size",
+                    message: "Hook IDs, arguments, or aggregate command size exceed supported limits."))
             }
         }
     }

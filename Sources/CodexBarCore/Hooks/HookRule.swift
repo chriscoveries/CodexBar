@@ -5,6 +5,10 @@ import Foundation
 public struct HookRule: Codable, Sendable, Equatable, Identifiable {
     public static let minimumTimeoutSeconds: Double = 0.1
     public static let maximumTimeoutSeconds: Double = 300
+    public static let maximumIDBytes = 128
+    public static let maximumArgumentCount = 32
+    public static let maximumStringBytes = 4096
+    public static let maximumCommandBytes = 32 * 1024
 
     /// Stable identity for SwiftUI list editing; defaults to a fresh UUID string.
     public var id: String
@@ -60,7 +64,7 @@ public struct HookRule: Codable, Sendable, Equatable, Identifiable {
     public func matches(_ event: HookEvent) -> Bool {
         guard self.enabled else { return false }
         guard self.event == event.event else { return false }
-        guard self.hasValidExecutablePath, self.hasValidTimeout else { return false }
+        guard self.hasValidExecutablePath, self.hasValidTimeout, self.hasValidCommandShape else { return false }
         guard self.provider == nil || self.hasKnownProvider else { return false }
         guard self.hasValidThreshold else { return false }
         if let provider = self.provider, provider != event.provider {
@@ -73,7 +77,9 @@ public struct HookRule: Codable, Sendable, Equatable, Identifiable {
     }
 
     public var hasValidExecutablePath: Bool {
-        !self.executable.isEmpty && (self.executable as NSString).isAbsolutePath
+        !self.executable.isEmpty
+            && self.executable.utf8.count <= Self.maximumStringBytes
+            && (self.executable as NSString).isAbsolutePath
     }
 
     public var hasValidTimeout: Bool {
@@ -89,6 +95,14 @@ public struct HookRule: Codable, Sendable, Equatable, Identifiable {
     public var hasValidThreshold: Bool {
         guard let threshold = self.threshold else { return true }
         return threshold.isFinite && 0...1 ~= threshold
+    }
+
+    public var hasValidCommandShape: Bool {
+        guard !self.id.isEmpty, self.id.utf8.count <= Self.maximumIDBytes else { return false }
+        guard self.arguments.count <= Self.maximumArgumentCount else { return false }
+        guard self.arguments.allSatisfy({ $0.utf8.count <= Self.maximumStringBytes }) else { return false }
+        return self.executable.utf8.count + self.arguments.reduce(0) { $0 + $1.utf8.count }
+            <= Self.maximumCommandBytes
     }
 }
 
@@ -117,6 +131,8 @@ public enum QuotaLowHookThreshold {
 /// The top-level `hooks` section of the shared CodexBar config. Absent or
 /// `enabled == false` means hooks never run.
 public struct HooksConfig: Codable, Sendable, Equatable {
+    public static let maximumRuleCount = 32
+
     public var enabled: Bool
     public var events: [HookRule]
 
@@ -133,7 +149,7 @@ public struct HooksConfig: Codable, Sendable, Equatable {
 
     /// Enabled rules that match the event. Returns nothing when hooks are disabled.
     public func matchingRules(for event: HookEvent) -> [HookRule] {
-        guard self.enabled else { return [] }
+        guard self.enabled, self.events.count <= Self.maximumRuleCount else { return [] }
         return self.events.filter { $0.matches(event) }
     }
 }

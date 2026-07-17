@@ -26,6 +26,21 @@ struct ConfigValidationTests {
     }
 
     @Test
+    func `reports hook workload limits`() {
+        let oversized = HookRule(
+            id: String(repeating: "i", count: HookRule.maximumIDBytes + 1),
+            event: .quotaReached,
+            executable: "/bin/echo",
+            arguments: Array(repeating: "x", count: HookRule.maximumArgumentCount + 1))
+        let rules = Array(repeating: oversized, count: HooksConfig.maximumRuleCount + 1)
+        let config = CodexBarConfig(providers: [], hooks: HooksConfig(enabled: true, events: rules))
+        let codes = Set(CodexBarConfigValidator.validate(config).map(\.code))
+
+        #expect(codes.contains("too_many_hook_rules"))
+        #expect(codes.contains("invalid_hook_command_size"))
+    }
+
+    @Test
     func `fresh config defaults Alibaba Token Plan to International`() throws {
         let config = CodexBarConfig.makeDefault()
         let provider = try #require(config.providerConfig(for: .alibabatokenplan))

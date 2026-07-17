@@ -33,6 +33,16 @@ struct HookDispatchTests {
             event: .quotaLow,
             executable: "/bin/echo",
             timeoutSeconds: 0).matches(event))
+        #expect(!HookRule(
+            event: .quotaReached,
+            executable: "/bin/echo",
+            arguments: Array(repeating: "x", count: HookRule.maximumArgumentCount + 1)).matches(event))
+        let tooManyRules = HooksConfig(
+            enabled: true,
+            events: Array(
+                repeating: HookRule(event: .quotaReached, executable: "/bin/echo"),
+                count: HooksConfig.maximumRuleCount + 1))
+        #expect(tooManyRules.matchingRules(for: event).isEmpty)
     }
 
     @Test
@@ -49,6 +59,21 @@ struct HookDispatchTests {
         #expect(result.stdout ==
             "{\"event\":\"quota_reached\",\"provider\":\"claude\",\"resetAt\":\"2023-11-14T22:13:20Z\"," +
                 "\"timestamp\":\"2023-11-14T22:15:00Z\",\"usagePercent\":0.42,\"window\":\"session\"}")
+    }
+
+    @Test
+    func `runner rejects payloads above the pipe-safe limit`() async {
+        let oversized = HookEvent(
+            event: .quotaReached,
+            provider: "codex",
+            account: String(repeating: "x", count: HookRunner.maximumPayloadBytes),
+            timestamp: Date())
+
+        await #expect(throws: HookRunnerError.self) {
+            try await HookRunner.run(
+                rule: HookRule(event: .quotaReached, executable: "/bin/cat"),
+                event: oversized)
+        }
     }
 
     @Test

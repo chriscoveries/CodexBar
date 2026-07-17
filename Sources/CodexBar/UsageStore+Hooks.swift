@@ -170,6 +170,29 @@ extension UsageStore {
         }
     }
 
+    /// Drops baselines while no quota-low rule is active. A later re-enable must
+    /// establish a fresh sample instead of firing for a crossing that happened
+    /// while command execution was disabled.
+    func clearQuotaLowHookUsage(provider: UsageProvider) {
+        self.quotaLowHookUsage = self.quotaLowHookUsage.filter { $0.key.provider != provider }
+    }
+
+    /// Extra quota lanes can disappear between snapshots. Forget their baselines
+    /// so a later reappearance starts fresh rather than reporting a stale crossing.
+    func pruneQuotaLowHookUsage(
+        provider: UsageProvider,
+        accountDiscriminator: String?,
+        keepingExtraWindowIDs: Set<String>)
+    {
+        self.quotaLowHookUsage = self.quotaLowHookUsage.filter { key, _ in
+            guard key.provider == provider,
+                  key.accountDiscriminator == accountDiscriminator,
+                  let windowID = key.windowID
+            else { return true }
+            return keepingExtraWindowIDs.contains(windowID)
+        }
+    }
+
     /// True when the user has an enabled hook rule for this event and provider.
     ///
     /// Used to run quota transition detection even when the matching notification

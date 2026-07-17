@@ -51,6 +51,9 @@ extension UsageStore {
         // hooks run on a separate path that does not depend on the notification
         // preference or the notification thresholds.
         let hooksActive = self.hasQuotaHookRule(event: .quotaLow, provider: provider)
+        if !hooksActive {
+            self.clearQuotaLowHookUsage(provider: provider)
+        }
         guard notificationsEnabled || hooksActive else { return }
         if provider == .commandcode, snapshot.commandCodeSubscriptionEnrichmentUnavailable { return }
 
@@ -111,16 +114,21 @@ extension UsageStore {
                 rateWindow: secondaryWindow,
                 accountDiscriminator: accountContext.discriminator,
                 accountDisplayName: accountContext.displayName)
-            if provider == .claude {
-                for named in (snapshot.extraRateWindows ?? []).filter(Self.isClaudeNotifiableExtraWindow) {
-                    self.dispatchQuotaLowHooks(
-                        provider: provider,
-                        lane: QuotaLowHookLane(window: .weekly, windowID: named.id, label: named.title),
-                        rateWindow: named.window,
-                        accountDiscriminator: accountContext.discriminator,
-                        accountDisplayName: accountContext.displayName)
-                }
+            let extraWindows = provider == .claude
+                ? (snapshot.extraRateWindows ?? []).filter(Self.isClaudeNotifiableExtraWindow)
+                : []
+            for named in extraWindows {
+                self.dispatchQuotaLowHooks(
+                    provider: provider,
+                    lane: QuotaLowHookLane(window: .weekly, windowID: named.id, label: named.title),
+                    rateWindow: named.window,
+                    accountDiscriminator: accountContext.discriminator,
+                    accountDisplayName: accountContext.displayName)
             }
+            self.pruneQuotaLowHookUsage(
+                provider: provider,
+                accountDiscriminator: accountContext.discriminator,
+                keepingExtraWindowIDs: Set(extraWindows.map(\.id)))
         }
     }
 

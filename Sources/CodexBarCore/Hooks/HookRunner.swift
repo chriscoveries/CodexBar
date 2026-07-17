@@ -9,6 +9,7 @@ import Foundation
 /// environment variables and a JSON stdin payload.
 public enum HookRunner {
     private static let log = CodexBarLog.logger(LogCategories.hooks)
+    public static let maximumPayloadBytes = 4096
 
     /// Environment keys forwarded to a hook. Deliberately narrow: CodexBar's own
     /// process environment may hold provider API keys/tokens, and hooks must never
@@ -32,10 +33,13 @@ public enum HookRunner {
             environment[key] = value
         }
 
-        // Small payload (< 1KB) fits the OS pipe buffer (~64KB), so we can write it
-        // and close the write end before launch; the child reads buffered bytes then EOF.
         let stdin = Pipe()
         let payload = try event.jsonPayload()
+        guard payload.count <= Self.maximumPayloadBytes else {
+            throw HookRunnerError.payloadTooLarge
+        }
+        // The checked 4 KiB ceiling keeps this pre-launch write below the pipe
+        // capacity on supported macOS and Linux systems. The child receives EOF.
         stdin.fileHandleForWriting.write(payload)
         try? stdin.fileHandleForWriting.close()
 
@@ -84,13 +88,14 @@ public enum HookRunner {
                     metadata: [
                         "event": "\(event.event.rawValue)",
                         "provider": "\(event.provider)",
-                        "reason": "\(Self.redactedFailureReason(error))",
+                        "reason": "\(Self.failureSummary(error))",
                     ])
             }
         }
     }
 
-    private static func redactedFailureReason(_ error: Error) -> String {
+    public static func failureSummary(_ error: Error) -> String {
+        if error is HookRunnerError { return "payload too large" }
         guard let error = error as? SubprocessRunnerError else { return "error" }
         switch error {
         case .binaryNotFound: return "executable not found"
@@ -98,5 +103,13 @@ public enum HookRunner {
         case .timedOut: return "timed out"
         case let .nonZeroExit(code, _): return "exit \(code)"
         }
+    }
+}
+
+public enum HookRunnerError: LocalizedError, Sendable {
+    case payloadTooLarge
+
+    public var errorDescription: String? {
+        "Hook event payload exceeds \(HookRunner.maximumPayloadBytes) bytes."
     }
 }
