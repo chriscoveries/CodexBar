@@ -95,7 +95,7 @@ extension CodexBarCLI {
         let verbose = values.flags.contains("verbose")
 
         guard let window = Self.decodeGuardWindow(from: values) else {
-            Self.exitGuardArgumentError("--window must be session|weekly.")
+            Self.exitGuardArgumentError("--window must be session|weekly.", output: output)
         }
 
         let minimumRemainingPercent: Double
@@ -103,7 +103,9 @@ extension CodexBarCLI {
         case let .success(value):
             minimumRemainingPercent = value
         case .failure:
-            Self.exitGuardArgumentError("--min-remaining must be a finite percent between 0 and 100.")
+            Self.exitGuardArgumentError(
+                "--min-remaining must be a finite percent between 0 and 100.",
+                output: output)
         }
 
         let timeout: TimeInterval
@@ -111,7 +113,9 @@ extension CodexBarCLI {
         case let .success(value):
             timeout = value
         case .failure:
-            Self.exitGuardArgumentError("--timeout must be a finite number of seconds from 0 through 86400.")
+            Self.exitGuardArgumentError(
+                "--timeout must be a finite number of seconds from 0 through 86400.",
+                output: output)
         }
 
         let provider: UsageProvider
@@ -119,17 +123,19 @@ extension CodexBarCLI {
         case let .success(value):
             provider = value
         case let .failure(error):
-            Self.exitGuardArgumentError(error.localizedDescription)
+            Self.exitGuardArgumentError(error.localizedDescription, output: output)
         }
         let config = Self.loadConfig(output: output)
 
         let outcome = await Self.runGuardFetch(timeout: timeout) {
-            await Self.guardFetchOutcome(
-                provider: provider,
-                window: window,
-                config: config,
-                verbose: verbose,
-                webTimeout: timeout > 0 ? timeout : 60)
+            await ProviderInteractionContext.$current.withValue(.background) {
+                await Self.guardFetchOutcome(
+                    provider: provider,
+                    window: window,
+                    config: config,
+                    verbose: verbose,
+                    webTimeout: timeout > 0 ? timeout : 60)
+            }
         }
         if case .unavailable(.timeout) = outcome {
             TTYCommandRunner.terminateActiveProcessesForAppShutdown()
@@ -152,9 +158,8 @@ extension CodexBarCLI {
 
     // MARK: - Argument decoding
 
-    private static func exitGuardArgumentError(_ message: String) -> Never {
-        writeStderr("Error: \(message)\n")
-        platformExit(ExitCode.usage.rawValue)
+    private static func exitGuardArgumentError(_ message: String, output: CLIOutputPreferences) -> Never {
+        self.exit(code: .usage, message: "Error: \(message)", output: output, kind: .args)
     }
 
     static func decodeGuardWindow(from values: ParsedValues) -> GuardWindow? {
@@ -273,13 +278,10 @@ extension CodexBarCLI {
             fetcher: tokenContext.fetcher(base: fetcher, provider: provider, env: env),
             claudeFetcher: claudeFetcher,
             browserDetection: browserDetection,
-            selectedTokenAccountID: account?.id,
-            tokenAccountTokenUpdater: tokenContext.tokenUpdater(for: account),
-            providerManualTokenUpdater: tokenContext.manualTokenUpdater())
+            // Guard is read-only: omit updater callbacks so refresh-dependent credentials fail unavailable.
+            selectedTokenAccountID: account?.id)
 
-        let outcome = await ProviderInteractionContext.$current.withValue(.background) {
-            await Self.fetchProviderUsage(provider: provider, context: fetchContext)
-        }
+        let outcome = await Self.fetchProviderUsage(provider: provider, context: fetchContext)
         if verbose {
             Self.printFetchAttempts(provider: provider, attempts: outcome.attempts)
         }
