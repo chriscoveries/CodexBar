@@ -318,14 +318,24 @@ public struct DoubaoUsageFetcher: Sendable {
         var status: String?
 
         for item in response.items {
-            let isAgent = item.product == "agent-plan"
+            // Both personal and team Agent Plan ids map to the agent windows;
+            // comparing only `agent-plan` would mis-file `agent-plan-team`
+            // quotas under the Coding Plan primary/secondary/tertiary slots.
+            let isAgent = item.product == "agent-plan" || item.product == "agent-plan-team"
             if let updatedAt = item.updatedAt, updatedAt > 0 {
-                updateTime = updateTime ?? Date(timeIntervalSince1970: updatedAt)
+                // The arkcli usage-plan reference documents `updated_at` as epoch
+                // *milliseconds*; convert before constructing the Date so the
+                // timestamp stays in the present instead of thousands of years out.
+                updateTime = updateTime ?? Date(timeIntervalSince1970: updatedAt / 1000)
             }
             if item.subscribed == true {
                 status = status ?? "subscribed"
             }
-            for period in item.periods {
+            // A per-bucket failure is reported as an item with no `periods`
+            // (often an `error` field). Keep `periods` optional so one failed
+            // product bucket does not reject the entire stdout and hide the
+            // otherwise valid subscribed plan usage.
+            for period in item.periods ?? [] {
                 let level = isAgent ? "agent_" + period.label : period.label
                 let resetTime = period.resetAt.flatMap(Self.parseISO8601)
                 allQuotas.append(DoubaoCodingPlanUsage.Quota(
@@ -672,7 +682,7 @@ public struct DoubaoUsageFetcher: Sendable {
     private struct ArkcliUsageItem: Decodable {
         let product: String
         let subscribed: Bool?
-        let periods: [ArkcliPeriod]
+        let periods: [ArkcliPeriod]?
         let updatedAt: TimeInterval?
 
         enum CodingKeys: String, CodingKey {

@@ -124,7 +124,7 @@ struct DoubaoUsageFetcherTests {
                     {"label": "weekly", "percent": 2.71, "reset_at": "2026-07-20T00:00:00+08:00"},
                     {"label": "monthly", "percent": 1.36, "reset_at": "2026-08-15T23:59:59+08:00"}
                   ],
-                  "updated_at": 1784191193
+                  "updated_at": 1784191193000
                 }
               ]
             }
@@ -215,6 +215,75 @@ struct DoubaoUsageFetcherTests {
     }
 
     @Test
+    func `team agent plan product is classified as agent windows`() throws {
+        let data = Data(
+            """
+            {
+              "items": [
+                {
+                  "product": "agent-plan-team",
+                  "subscribed": true,
+                  "periods": [
+                    {"label": "5h", "percent": 5.0, "reset_at": "2026-07-16T19:12:07+08:00"},
+                    {"label": "weekly", "percent": 15.0, "reset_at": "2026-07-20T00:00:00+08:00"},
+                    {"label": "monthly", "percent": 25.0, "reset_at": "2026-08-15T23:59:59+08:00"}
+                  ]
+                },
+                {
+                  "product": "coding-plan-team",
+                  "subscribed": true,
+                  "periods": [
+                    {"label": "session", "percent": 7.48, "reset_at": "2026-07-16T19:12:07+08:00"}
+                  ]
+                }
+              ]
+            }
+            """.utf8)
+
+        let usage = try DoubaoUsageFetcher.decodeArkcliUsage(from: data).toUsageSnapshot(
+            updatedAt: Date(timeIntervalSince1970: 0))
+
+        // Team Agent Plan becomes primary/secondary/tertiary (no coding-plan windows).
+        #expect(usage.primary?.usedPercent == 5.0)
+        #expect(usage.primary?.windowMinutes == 300)
+        #expect(usage.secondary?.usedPercent == 15.0)
+        #expect(usage.tertiary?.usedPercent == 25.0)
+        // No extra windows when no personal coding-plan is present to pair with.
+        #expect(usage.extraRateWindows == nil || usage.extraRateWindows?.isEmpty == true)
+    }
+
+    @Test
+    func `arkcli response with an error-only item still decodes valid buckets`() throws {
+        let data = Data(
+            """
+            {
+              "items": [
+                {
+                  "product": "coding-plan",
+                  "error": "failed to query usage",
+                  "subscribed": false
+                },
+                {
+                  "product": "agent-plan",
+                  "subscribed": true,
+                  "periods": [
+                    {"label": "5h", "percent": 5.0, "reset_at": "2026-07-16T19:12:07+08:00"}
+                  ]
+                }
+              ]
+            }
+            """.utf8)
+
+        let usage = try DoubaoUsageFetcher.decodeArkcliUsage(from: data).toUsageSnapshot(
+            updatedAt: Date(timeIntervalSince1970: 0))
+
+        // The error-only coding item is skipped; the agent item still decodes.
+        #expect(usage.primary?.usedPercent == 5.0)
+        #expect(usage.primary?.windowMinutes == 300)
+        #expect(usage.identity?.loginMethod == "subscribed")
+    }
+
+    @Test
     func `arkcli fetch via injected runner returns parsed snapshot`() async throws {
         let jsonData = Data(
             """
@@ -226,7 +295,7 @@ struct DoubaoUsageFetcherTests {
                   "periods": [
                     {"label": "session", "percent": 42.0, "reset_at": "2026-07-16T19:12:07+08:00"}
                   ],
-                  "updated_at": 1784191193
+                  "updated_at": 1784191193000
                 }
               ]
             }
