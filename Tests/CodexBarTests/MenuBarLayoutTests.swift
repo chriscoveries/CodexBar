@@ -154,6 +154,21 @@ struct MenuBarLayoutTests {
 
     @Test
     @MainActor
+    func `global editing seeds the representative provider legacy layout`() throws {
+        let settings = testSettingsStore(suiteName: "MenuBarLayoutTests-global-editor-migration")
+        settings.setMenuBarMetricPreference(.primary, for: .kimi)
+        let expected = MenuBarLayout(lines: [[.icon, .percent(window: .weekly)]])
+
+        #expect(!settings.hasStoredMenuBarLayout)
+        #expect(settings.menuBarLayoutForGlobalEditing(representativeProvider: .kimi) == expected)
+
+        let stored = try #require(MenuBarLayoutPreset.iconOnly.layout)
+        settings.setMenuBarLayout(stored, for: nil)
+        #expect(settings.menuBarLayoutForGlobalEditing(representativeProvider: .kimi) == stored)
+    }
+
+    @Test
+    @MainActor
     func `provider override and display options persist across reload`() throws {
         let suite = "MenuBarLayoutTests-provider-override"
         let settings = testSettingsStore(suiteName: suite)

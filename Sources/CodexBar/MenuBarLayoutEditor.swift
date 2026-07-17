@@ -148,7 +148,7 @@ struct MenuBarLayoutEditor: View {
     private var layout: MenuBarLayout {
         switch self.scope {
         case .all:
-            self.settings.menuBarLayout
+            self.settings.menuBarLayoutForGlobalEditing(representativeProvider: self.scopedProvider)
         case let .provider(provider):
             self.settings.menuBarLayout(for: provider)
         }

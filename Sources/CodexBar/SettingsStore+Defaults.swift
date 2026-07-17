@@ -418,6 +418,14 @@ extension SettingsStore {
         self.menuBarLayoutResolution(for: provider).layout
     }
 
+    func menuBarLayoutForGlobalEditing(representativeProvider: UsageProvider?) -> MenuBarLayout {
+        if let stored = self.defaultsState.storedMenuBarLayout {
+            return stored
+        }
+        guard let representativeProvider else { return self.menuBarLayout }
+        return self.menuBarLayoutResolution(for: representativeProvider).layout
+    }
+
     func menuBarLayoutResolution(for provider: UsageProvider) -> MenuBarLayoutResolution {
         if let override = self.defaultsState.menuBarLayoutOverridesRaw[provider.rawValue] {
             return .stored(override)
