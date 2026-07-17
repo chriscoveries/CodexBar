@@ -425,8 +425,17 @@ public struct DoubaoUsageFetcher: Sendable {
         if authMethod?.lowercased() == "none" {
             throw DoubaoUsageError.arkcliAuthenticationRequired
         }
+        let supportedProducts = Set([
+            "agent-plan",
+            "coding-plan",
+            "agent-plan-team",
+            "coding-plan-team",
+        ])
         if let failedSubscription = response.items.first(where: {
-            $0.subscribed == true && $0.periods?.isEmpty != false && $0.error?.isEmpty == false
+            supportedProducts.contains($0.product.lowercased())
+                && $0.subscribed == true
+                && $0.periods?.isEmpty != false
+                && $0.error?.isEmpty == false
         }), let error = failedSubscription.error {
             throw DoubaoUsageError.incompletePlanUsage(Self.compactText(error))
         }
@@ -471,7 +480,10 @@ public struct DoubaoUsageFetcher: Sendable {
         }
 
         guard !allQuotas.isEmpty else {
-            let itemError = response.items.lazy.compactMap(\.error).first { !$0.isEmpty }
+            let itemError = response.items.lazy
+                .filter { supportedProducts.contains($0.product.lowercased()) }
+                .compactMap(\.error)
+                .first { !$0.isEmpty }
             throw DoubaoUsageError.noPlanUsage(itemError.map { Self.compactText($0) })
         }
 

@@ -595,6 +595,28 @@ struct DoubaoUsageFetcherTests {
     }
 
     @Test
+    func `arkcli unrelated product failure does not poison valid plan usage`() throws {
+        let data = Data(
+            """
+            {"items":[
+              {
+                "product":"future-plan", "subscribed":true,
+                "error":"future product unavailable"
+              },
+              {
+                "product":"coding-plan", "subscribed":true,
+                "periods":[{"label":"session","percent":7}]
+              }
+            ]}
+            """.utf8)
+
+        let usage = try DoubaoUsageFetcher.decodeArkcliUsage(from: data).toUsageSnapshot(
+            updatedAt: Date(timeIntervalSince1970: 0))
+
+        #expect(usage.primary?.usedPercent == 7)
+    }
+
+    @Test
     func `arkcli response accepts updated_at in seconds`() throws {
         // Real arkcli output (0.1.x) emits `updated_at` in epoch seconds, not
         // milliseconds. Verify the auto-detection picks the right unit so the
