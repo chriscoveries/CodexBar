@@ -135,7 +135,7 @@ struct ShareStatsTests {
     }
 
     @Test
-    func `invalid spend and partial model family metrics stay unavailable`() throws {
+    func `cost only models do not enter token usage rankings`() throws {
         let model = SpendDashboardModel(requestedDays: 7, groups: [
             SpendDashboardModel.CurrencyGroup(
                 currencyCode: "USD",
@@ -182,7 +182,9 @@ struct ShareStatsTests {
         let payload = try #require(ShareStatsBuilder.make(model: model))
 
         #expect(payload.providers.first?.estimatedCost == nil)
-        #expect(payload.topModels.isEmpty)
+        #expect(payload.topModels.first?.totalTokens == 10)
+        #expect(payload.topModels.first?.estimatedCost == nil)
+        #expect(payload.topModels.count == 1)
         #expect(payload.currencies.first?.estimatedCost == nil)
         #expect(!ShareStatsFormatting.text(payload).lowercased().contains("nan"))
         #expect(!ShareStatsFormatting.text(payload).lowercased().contains("inf"))

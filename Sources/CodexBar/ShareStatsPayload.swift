@@ -236,7 +236,7 @@ enum ShareStatsBuilder {
             group.models.compactMap { row -> ShareStatsModelPayload? in
                 let estimatedCost = self.finiteCost(row.totalCost)
                 guard let modelName = ShareStatsSanitizer.modelName(row.modelName),
-                      row.totalTokens != nil || estimatedCost != nil
+                      row.totalTokens != nil
                 else { return nil }
                 return ShareStatsModelPayload(
                     provider: row.provider,
