@@ -43,17 +43,18 @@ struct SessionEquivalentForecast: Equatable, Sendable {
         workDays: Int?,
         calendar: Calendar = .current) -> Self?
     {
-        guard sessionWindow.windowMinutes.map({ PlanUtilizationSeriesName.session.canonicalWindowMinutes($0) })
-            == self.sessionWindowMinutes,
-            weeklyWindow.windowMinutes.map({ PlanUtilizationSeriesName.weekly.canonicalWindowMinutes($0) })
-            == self.weeklyWindowMinutes,
-            let sessionResetsAt = sessionWindow.resetsAt,
-            let weeklyResetsAt = weeklyWindow.resetsAt,
-            weeklyWindow.usedPercent.isFinite,
-            (0...100).contains(weeklyWindow.usedPercent),
-            burnEstimate.medianWeeklyPercentPerWindow.isFinite,
-            burnEstimate.medianWeeklyPercentPerWindow > 0,
-            burnEstimate.sampleCount >= SessionEquivalentBurnEstimator.minimumSampleCount
+        guard !sessionWindow.isSyntheticPlaceholder,
+              sessionWindow.windowMinutes.map({ PlanUtilizationSeriesName.session.canonicalWindowMinutes($0) })
+              == self.sessionWindowMinutes,
+              weeklyWindow.windowMinutes.map({ PlanUtilizationSeriesName.weekly.canonicalWindowMinutes($0) })
+              == self.weeklyWindowMinutes,
+              let sessionResetsAt = sessionWindow.resetsAt,
+              let weeklyResetsAt = weeklyWindow.resetsAt,
+              weeklyWindow.usedPercent.isFinite,
+              (0...100).contains(weeklyWindow.usedPercent),
+              burnEstimate.medianWeeklyPercentPerWindow.isFinite,
+              burnEstimate.medianWeeklyPercentPerWindow > 0,
+              burnEstimate.sampleCount >= SessionEquivalentBurnEstimator.minimumSampleCount
         else {
             return nil
         }

@@ -45,7 +45,8 @@ extension UsageMenuCardView.Model {
                 paceOnTop: metric.paceOnTop,
                 warningMarkerPercents: metric.warningMarkerPercents,
                 workdayMarkerPercents: metric.workdayMarkerPercents,
-                cardStyle: metric.cardStyle)
+                cardStyle: metric.cardStyle,
+                sessionEquivalentDetail: metric.sessionEquivalentDetail)
         }
     }
 

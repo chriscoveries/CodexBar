@@ -64,6 +64,62 @@ struct SessionEquivalentForecastTests {
     }
 
     @Test
+    func `rejects synthetic Claude session placeholder with a future reset`() {
+        let now = Date(timeIntervalSince1970: 1_900_000_000)
+        let session = RateWindow(
+            usedPercent: 0,
+            windowMinutes: 300,
+            resetsAt: now.addingTimeInterval(3600),
+            resetDescription: nil,
+            isSyntheticPlaceholder: true)
+        let weekly = RateWindow(
+            usedPercent: 50,
+            windowMinutes: 10080,
+            resetsAt: now.addingTimeInterval(2 * 24 * 3600),
+            resetDescription: nil)
+
+        #expect(SessionEquivalentForecast.make(
+            sessionWindow: session,
+            weeklyWindow: weekly,
+            burnEstimate: SessionEquivalentBurnEstimate(
+                medianWeeklyPercentPerWindow: 10,
+                sampleCount: 3),
+            now: now,
+            workDays: nil) == nil)
+    }
+
+    @Test
+    func `privacy redaction preserves session equivalent detail`() throws {
+        let detail = UsagePaceText.sessionEquivalentDetail(forecast: SessionEquivalentForecast(
+            estimatedWindowsToExhaustWeekly: 4,
+            windowsUntilReset: 9,
+            sampleCount: 7,
+            weeklyResetsAt: Self.weeklyReset,
+            weeklyUsedPercent: 60))
+        let metric = UsageMenuCardView.Model.Metric(
+            id: "weekly",
+            title: "Weekly",
+            percent: 60,
+            percentStyle: .used,
+            resetText: nil,
+            detailText: nil,
+            detailLeftText: nil,
+            detailRightText: nil,
+            pacePercent: nil,
+            paceOnTop: false,
+            sessionEquivalentDetail: detail)
+
+        let redacted = UsageMenuCardView.Model.redactedMetrics(
+            [metric],
+            provider: .claude,
+            hidePersonalInfo: true)
+
+        let redactedDetail = try #require(redacted.first?.sessionEquivalentDetail)
+        #expect(redactedDetail.verdictText == detail.verdictText)
+        #expect(redactedDetail.numberText == detail.numberText)
+    }
+
+    @Test
     func `floors five hour windows at exact boundaries`() throws {
         let now = Date(timeIntervalSince1970: 1_900_000_000)
         let session = RateWindow(
