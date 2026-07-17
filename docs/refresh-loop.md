@@ -8,7 +8,8 @@ read_when:
 # Refresh loop
 
 ## Cadence
-- `RefreshFrequency`: Manual, 1m, 2m, 5m, 15m, 30m, Adaptive (fresh-install default).
+- `RefreshFrequency`: Manual, 1m, 2m, 5m, 15m, 30m, Adaptive (fresh-install default), and
+  Adaptive (agent-aware).
 - Stored in `UserDefaults` via `SettingsStore`. An unset cadence resolves to Adaptive only when no prior-launch marker
   or existing config is present, and the resolved value is persisted immediately. Existing installations without a
   stored cadence and unrecognized stored values resolve to the legacy 5-minute fallback. Every valid stored choice,
@@ -41,19 +42,22 @@ read_when:
 - Every decision falls in the 2–30 min range by construction. Deliberately excludes quota, latency, error,
   account, and time-of-day signals.
 - `UsageStore` tracks `lastMenuOpenAt` and `lastCodingActivityAt` in memory only (never persisted; both reset on
-  launch). A menu open or a newer local activity observation can bring a pending adaptive tick forward, but never
-  postpones an earlier tick or refreshes synchronously.
-- Adaptive reuses `LocalAgentSessionScanner` every 30 seconds only after the user allows local coding activity. The
+  launch). A menu open can bring either adaptive mode forward. A newer local activity observation can affect only
+  Adaptive (agent-aware); it never affects plain Adaptive, postpones an earlier tick, or refreshes synchronously.
+- Adaptive (agent-aware) reuses `LocalAgentSessionScanner` every 30 seconds only after the user allows local coding
+  activity. The
   persisted `adaptiveActivityScanConsent` value is `undecided`, `allowed`, or `declined`; missing or invalid values are
-  repaired to `undecided`, which never authorizes a scan. Both choices keep the Adaptive cadence: declining uses only
-  menu activity, while allowing adds the local coding-activity signal. The choice is also editable in General settings.
+  repaired to `undecided`, which never authorizes a scan. Declining selects plain Adaptive; explicitly selecting the
+  agent-aware option again asks again.
 - An allowed scan runs `ps -axo ... command=` to inspect the running-process list and identify Codex/Claude, then runs
-  `lsof` when needed and enumerates
+  `lsof` when needed and enumerates known session metadata only when an agent process is detected. It then reads
   recent Codex rollouts, reads rollout first-line metadata and mtimes, and inspects Claude transcript metadata. When
   the Agent Sessions UI is off, CodexBar discards the resulting session records and retains only the latest `Date`.
-  Each scan considers at most 64 agent processes, parses at most 128 Codex rollout metadata records, and keeps
-  at most 64 Claude transcript candidates per project.
-  Adaptive-only scans pause under Low Power Mode and serious/critical thermal pressure. Explicitly enabling Agent
+  Each scan considers at most 64 agent processes, parses at most 128 Codex rollout metadata records, keeps at most 64
+  Claude transcript candidates per project, and shares a 512-entry, depth-1, 250 ms directory metadata budget. Future
+  transcript mtimes are clamped to one scanner-lifetime timestamp. The clamp retains no file paths, and unchanged
+  future-dated files cannot manufacture newer activity every 30 seconds.
+  Agent-aware scans pause under Low Power Mode and serious/critical thermal pressure. Explicitly enabling Agent
   Sessions continues to authorize its local scan independently of the Adaptive consent choice. Tailscale discovery and
   SSH remain behind the Agent Sessions setting. The activity timestamp is not persisted, logged, or uploaded, and it is
   cleared when consent is revoked.

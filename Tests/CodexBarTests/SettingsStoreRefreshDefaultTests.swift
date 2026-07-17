@@ -34,7 +34,7 @@ struct SettingsStoreRefreshDefaultTests {
         #expect(defaults.string(forKey: "refreshFrequency") == RefreshFrequency.adaptive.rawValue)
         #expect(store.adaptiveActivityScanConsent == .undecided)
         #expect(defaults.string(forKey: "adaptiveActivityScanConsent") == "undecided")
-        #expect(store.shouldRequestAdaptiveActivityScanConsent)
+        #expect(!store.shouldRequestAdaptiveActivityScanConsent)
 
         defaults.set(true, forKey: "providerDetectionCompleted")
         let reloaded = self.makeStore(defaults: defaults, configStore: configStore)
@@ -120,6 +120,7 @@ struct SettingsStoreRefreshDefaultTests {
                 #expect(defaults.string(forKey: "refreshFrequency") == frequency.rawValue)
                 #expect(store.adaptiveActivityScanConsent == .undecided)
                 #expect(defaults.string(forKey: "adaptiveActivityScanConsent") == "undecided")
+                #expect(store.shouldRequestAdaptiveActivityScanConsent == (frequency == .adaptiveAgentAware))
             }
         }
     }
@@ -132,6 +133,7 @@ struct SettingsStoreRefreshDefaultTests {
         let configStore = testConfigStore(suiteName: suite)
         let store = self.makeStore(defaults: defaults, configStore: configStore)
 
+        store.refreshFrequency = .adaptiveAgentAware
         #expect(!store.adaptiveActivityScanningEnabled)
         #expect(store.shouldRequestAdaptiveActivityScanConsent)
 
@@ -154,7 +156,7 @@ struct SettingsStoreRefreshDefaultTests {
         let suite = "SettingsStoreRefreshDefaultTests-invalid-consent"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defaults.removePersistentDomain(forName: suite)
-        defaults.set(RefreshFrequency.adaptive.rawValue, forKey: "refreshFrequency")
+        defaults.set(RefreshFrequency.adaptiveAgentAware.rawValue, forKey: "refreshFrequency")
         defaults.set("legacy", forKey: "adaptiveActivityScanConsent")
 
         let store = self.makeStore(
@@ -168,7 +170,7 @@ struct SettingsStoreRefreshDefaultTests {
     }
 
     @Test
-    func `existing adaptive install requires explicit consent before scanning`() throws {
+    func `plain adaptive never requests consent or scans`() throws {
         let suite = "SettingsStoreRefreshDefaultTests-existing-adaptive-consent"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defaults.removePersistentDomain(forName: suite)
@@ -182,11 +184,14 @@ struct SettingsStoreRefreshDefaultTests {
         #expect(store.refreshFrequency == .adaptive)
         #expect(store.adaptiveActivityScanConsent == .undecided)
         #expect(!store.adaptiveActivityScanningEnabled)
-        #expect(store.shouldRequestAdaptiveActivityScanConsent)
+        #expect(!store.shouldRequestAdaptiveActivityScanConsent)
+
+        store.adaptiveActivityScanConsent = .allowed
+        #expect(!store.adaptiveActivityScanningEnabled)
     }
 
     @Test
-    func `consent prompt is limited to adaptive without Agent Sessions`() throws {
+    func `consent prompt is limited to agent aware adaptive`() throws {
         let suite = "SettingsStoreRefreshDefaultTests-consent-prompt"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defaults.removePersistentDomain(forName: suite)
@@ -194,16 +199,34 @@ struct SettingsStoreRefreshDefaultTests {
             defaults: defaults,
             configStore: testConfigStore(suiteName: suite))
 
+        #expect(!store.shouldRequestAdaptiveActivityScanConsent)
+
+        store.refreshFrequency = .adaptiveAgentAware
         #expect(store.shouldRequestAdaptiveActivityScanConsent)
 
-        store.refreshFrequency = .fiveMinutes
-        #expect(!store.shouldRequestAdaptiveActivityScanConsent)
-
-        store.refreshFrequency = .adaptive
         store.agentSessionsEnabled = true
-        #expect(!store.shouldRequestAdaptiveActivityScanConsent)
+        #expect(store.shouldRequestAdaptiveActivityScanConsent)
 
-        store.agentSessionsEnabled = false
+        store.adaptiveActivityScanConsent = .allowed
+        #expect(store.adaptiveActivityScanningEnabled)
+        store.refreshFrequency = .adaptive
+        #expect(!store.adaptiveActivityScanningEnabled)
+        #expect(!store.shouldRequestAdaptiveActivityScanConsent)
+    }
+
+    @Test
+    func `reselecting agent aware adaptive after decline requests consent again`() throws {
+        let suite = "SettingsStoreRefreshDefaultTests-consent-reselect"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        let store = self.makeStore(
+            defaults: defaults,
+            configStore: testConfigStore(suiteName: suite))
+
+        store.adaptiveActivityScanConsent = .declined
+        store.refreshFrequency = .adaptiveAgentAware
+
+        #expect(store.adaptiveActivityScanConsent == .undecided)
         #expect(store.shouldRequestAdaptiveActivityScanConsent)
     }
 

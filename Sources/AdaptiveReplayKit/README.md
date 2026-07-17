@@ -20,8 +20,8 @@ collects them. Old records without those fields continue to decode.
 - `AdaptiveRefreshTraceParser.swift` parses JSONL strictly by default. The tolerant entry point is
   available for exploratory work that explicitly accepts skipped malformed records.
 - `AdaptiveRefreshCore` owns the production decision table. `ReplayPolicy.swift`,
-  `BaselinePolicies.swift`, and `HistoricalPolicies.swift` provide the production adapter, fixed/manual
-  baselines, and the historical menu-only Adaptive baseline.
+  `BaselinePolicies.swift`, and `AgentAwarePolicies.swift` provide the plain and agent-aware production adapters plus
+  fixed/manual baselines.
 - `ReplayEngine.swift` and `ReplayMetrics.swift` calculate simulated refresh cadence, menu-open
   staleness, interaction advances, and constrained-state compliance.
 - `ReplayTraceSegmentation.swift` excludes legacy deadline-overrun gaps with an explicit heuristic

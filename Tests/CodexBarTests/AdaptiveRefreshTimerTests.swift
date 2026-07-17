@@ -77,7 +77,10 @@ struct AdaptiveRefreshTimerTests {
 
     @Test
     func `coding activity advances a long idle timer without postponing an earlier tick`() async throws {
-        let settings = Self.makeSettingsStore(suite: "AdaptiveRefreshTimerTests-activity-advance", frequency: .adaptive)
+        let settings = Self.makeSettingsStore(
+            suite: "AdaptiveRefreshTimerTests-activity-advance",
+            frequency: .adaptiveAgentAware)
+        settings.adaptiveActivityScanConsent = .allowed
         let store = Self.makeUsageStore(settings: settings, startupBehavior: .testing)
         store.restartTimerWithSleepOverrideForTesting(.seconds(10))
         try await Self.waitUntil { store.adaptiveRefreshScheduledAt != nil }
@@ -106,6 +109,23 @@ struct AdaptiveRefreshTimerTests {
     }
 
     @Test
+    func `plain adaptive ignores coding activity`() async throws {
+        let settings = Self.makeSettingsStore(
+            suite: "AdaptiveRefreshTimerTests-plain-adaptive-activity",
+            frequency: .adaptive)
+        settings.adaptiveActivityScanConsent = .allowed
+        let store = Self.makeUsageStore(settings: settings, startupBehavior: .testing)
+        store.restartTimerWithSleepOverrideForTesting(.seconds(10))
+        try await Self.waitUntil { store.adaptiveRefreshScheduledAt != nil }
+        let scheduledAt = try #require(store.adaptiveRefreshScheduledAt)
+
+        store.noteCodingActivityObserved(at: Date())
+
+        #expect(store.adaptiveRefreshScheduledAt == scheduledAt)
+        #expect(store.lastCodingActivityAt == nil)
+    }
+
+    @Test
     func `noting a menu open records the signal without starting a refresh`() {
         let settings = Self.makeSettingsStore(suite: "AdaptiveRefreshTimerTests-noteMenuOpened", frequency: .manual)
         let store = Self.makeUsageStore(settings: settings, startupBehavior: .testing)
@@ -121,7 +141,7 @@ struct AdaptiveRefreshTimerTests {
     }
 
     @Test
-    func `noting coding activity in fixed mode records only the in-memory signal`() {
+    func `noting coding activity outside agent aware mode is a no-op`() {
         let settings = Self.makeSettingsStore(
             suite: "AdaptiveRefreshTimerTests-noteCodingActivity",
             frequency: .fiveMinutes)
@@ -130,7 +150,7 @@ struct AdaptiveRefreshTimerTests {
 
         store.noteCodingActivityObserved(at: observedAt)
 
-        #expect(store.lastCodingActivityAt == observedAt)
+        #expect(store.lastCodingActivityAt == nil)
         #expect(store.adaptiveRefreshScheduledAt == nil)
         #expect(store.completedRefreshCountForTesting == 0)
     }
@@ -139,7 +159,8 @@ struct AdaptiveRefreshTimerTests {
     func `clearing coding activity removes the adaptive input`() {
         let settings = Self.makeSettingsStore(
             suite: "AdaptiveRefreshTimerTests-clearCodingActivity",
-            frequency: .adaptive)
+            frequency: .adaptiveAgentAware)
+        settings.adaptiveActivityScanConsent = .allowed
         let store = Self.makeUsageStore(settings: settings, startupBehavior: .testing)
         store.noteCodingActivityObserved(at: Date(timeIntervalSinceReferenceDate: 100))
         #expect(store.lastCodingActivityAt != nil)
@@ -390,7 +411,6 @@ struct AdaptiveRefreshTimerTests {
             minimaxCookieStore: InMemoryMiniMaxCookieStore(),
             minimaxAPITokenStore: InMemoryMiniMaxAPITokenStore(),
             kimiTokenStore: InMemoryKimiTokenStore(),
-            kimiK2TokenStore: InMemoryKimiK2TokenStore(),
             augmentCookieStore: InMemoryCookieHeaderStore(),
             ampCookieStore: InMemoryCookieHeaderStore(),
             copilotTokenStore: InMemoryCopilotTokenStore(),

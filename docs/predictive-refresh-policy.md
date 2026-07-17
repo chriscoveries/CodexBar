@@ -8,18 +8,18 @@ read_when:
 
 # Adaptive refresh decision record
 
-- **Status:** Opt-in policy accepted in [#1861](https://github.com/steipete/CodexBar/pull/1861); agent-aware fresh-install default extension implemented with the evidence below
+- **Status:** Opt-in policy accepted in [#1861](https://github.com/steipete/CodexBar/pull/1861); agent-aware extension shipped as a separate explicit mode
 - **Decision owner:** Maintainer
 - **Runtime impact:** Bounded fresh-install default of 2–30-minute provider-batch cadence; an explicitly allowed local activity scan runs every 30 seconds when unconstrained
 
 ## Decision
 
-CodexBar uses `Adaptive` for a missing refresh preference only when no prior-launch marker or existing config exists.
+CodexBar uses plain `Adaptive` for a missing refresh preference only when no prior-launch marker or existing config exists.
 The resolved value is persisted immediately, so later launches preserve that choice. Existing installations without a
 stored cadence, and unrecognized stored values, resolve to the legacy 5-minute fallback. Every valid stored choice,
-including Manual and each fixed interval, remains unchanged. Adaptive adjusts the existing provider-batch timer between
-2 and 30 minutes. Recent local Codex or Claude transcript activity caps otherwise slower unconstrained decisions at 5
-minutes.
+including Manual and each fixed interval, remains unchanged. Both adaptive modes adjust the existing provider-batch
+timer between 2 and 30 minutes. Only the separately selected `Adaptive (agent-aware)` mode may use recent local Codex
+or Claude transcript activity to cap otherwise slower unconstrained decisions at 5 minutes.
 
 The rollout boundary uses an existing config or launch markers that predate this change (`providerDetectionCompleted`
 and the app-group migration version), captured before startup migrations can create them. This covers installations from
@@ -37,7 +37,7 @@ learned ranking, or menu prewarming.
 | Option | Freshness | Complexity | Provider work | Decision |
 |---|---|---|---|---|
 | Keep fixed frequencies only | Predictable | Lowest | Predictable | Safe fallback |
-| Use bounded agent-aware adaptive batch cadence as the fresh-install default | Better while active; quieter while idle | Small | Bounded | Selected |
+| Keep plain Adaptive as the fresh-install default; add agent-aware as explicit opt-in | Better while active; quieter while idle | Small | Bounded | Selected |
 | Add per-provider/account prediction | Potentially best | High | Harder to reason about | Reject for now |
 | Add learned ranking or contextual bandits | Unproven | Very high | Harder to audit | Reject |
 
@@ -75,15 +75,16 @@ interaction context, or the promise that menu-open refresh does not reset the pe
 
 ## Accepted product contract
 
-- Keep `Adaptive` as a mutually exclusive `RefreshFrequency` choice and use it for an unset cadence only when no
+- Keep plain `Adaptive` as the default adaptive `RefreshFrequency` choice and use it for an unset cadence only when no
   prior-launch marker or existing config exists.
 - Preserve the old implicit 5-minute fallback for existing installations without a stored cadence and for unrecognized
   stored values. Persist either resolved fallback immediately.
 - Preserve every valid stored value exactly, including `Manual`, every fixed interval, and `Adaptive`.
-- Do not treat an Adaptive cadence as authorization to inspect local process or session metadata. Persist an explicit
-  `undecided`, `allowed`, or `declined` choice; only `allowed` enables Adaptive-only scans.
-- Present the choice once when Adaptive is effective and consent is undecided. Both answers keep Adaptive selected;
-  declining retains the menu-only policy. Existing Adaptive users remain unscanned until they explicitly allow it.
+- Do not treat plain Adaptive as authorization to inspect local process or session metadata. Add a distinct
+  `Adaptive (agent-aware)` choice and persist an explicit `undecided`, `allowed`, or `declined` decision. Both the
+  agent-aware selection and `allowed` consent are required before scanning.
+- Present the choice when the agent-aware option is selected and consent is undecided. Declining returns to plain
+  Adaptive. Selecting the agent-aware option again requests consent again.
 - Schedule the same enabled-provider batch as fixed refresh; do not select accounts, workspaces, or data lanes.
 - Keep manual refresh immediate and user-initiated.
 - When refresh-all-on-open is disabled, keep menu-open refresh missing/error-only and background/non-interactive.
@@ -179,14 +180,15 @@ Adaptive stores no persistent interaction history.
 - Keep `lastMenuOpenAt` and `lastCodingActivityAt` in memory; reset both on launch.
 - Read Low Power Mode and thermal state at decision time.
 - Log only the selected delay and stable `Reason` code through the existing local logger.
-- After explicit consent, reuse the existing local scanner every 30 seconds. It inspects the running-process list and
-  command lines via `ps`, runs `lsof` when needed, and enumerates recent Codex
+- After the agent-aware mode is selected and explicit consent is granted, reuse the existing local scanner every 30 seconds. It inspects the running-process list and
+  command lines via `ps`, runs `lsof` when needed, and, only after detecting an agent process, enumerates recent Codex
   rollouts; reads rollout first-line metadata and mtimes; and inspects Claude transcript metadata. This is a local
-  metadata scan, not a provider request. Pause Adaptive-only scans under Low Power Mode or serious/critical thermal
+  metadata scan, not a provider request. Pause agent-aware scans under Low Power Mode or serious/critical thermal
   pressure; keep scanning when the user explicitly enables Agent Sessions presentation.
 - Bound each scan to the newest 64 agent processes, 128 Codex rollout metadata records, and 64 Claude transcript
-  candidates per project. Directory metadata enumeration still scales with those known session directories, but file
-  content parsing and process/transcript correlation do not grow without limit.
+  candidates per project. Share a 512-entry, depth-1, 250 ms budget across Codex and Claude directory enumeration, and
+  clamp future transcript mtimes to the scan time. Keep the first clamped value for an unchanged future-dated file so
+  repeated scans cannot synthesize newer activity.
 - When Agent Sessions presentation is disabled, discard the full scan result after deriving the newest `Date`. Do not
   retain or publish its PID, CWD, project, transcript path, or session identity fields.
 - Do not log or persist provider identity, account identity, email, workspace, path, credentials, response data, menu
@@ -223,8 +225,9 @@ The work remained independently reviewable:
 4. Wire the in-memory menu-open signal without changing `scheduleOpenMenuRefresh(for:)`.
 5. Add local reason-code logging and documentation.
 6. Add offline replay tooling and evaluate the frozen trace in #2029.
-7. Add explicit persisted consent, then reuse the local Agent Sessions scanner only after approval, project its output
-   to one in-memory timestamp when presentation is off, and advance only an otherwise later Adaptive timer.
+7. Add a separate agent-aware Adaptive option and explicit persisted consent, then reuse the local Agent Sessions
+   scanner only after both gates pass, project its output to one in-memory timestamp when presentation is off, and
+   advance only an otherwise later agent-aware Adaptive timer.
 8. Make Adaptive the fresh-install default after policy, timer, projection, and scanner-cost verification, while
    preserving the legacy 5-minute fallback for existing unset or invalid state.
 
@@ -246,7 +249,7 @@ or menu prewarming as part of these steps.
 
 ### Timer integration
 
-- fixed and manual modes retain current behavior;
+- fixed and manual modes retain current behavior and ignore coding-activity observations;
 - adaptive mode sleeps for the policy result and recomputes after refresh;
 - changing frequency cancels the old timer without one extra refresh;
 - overlapping timer ticks do not overlap `UsageStore.refresh()`;
@@ -254,15 +257,15 @@ or menu prewarming as part of these steps.
 - menu-open signal changes the next decision but does not itself start a batch.
 - a newer coding-activity observation advances a 30-minute sleep to the 5-minute cap without starting a batch;
 - repeated, older, or later observations never postpone an earlier scheduled refresh;
-- fixed and manual modes may record the in-memory signal but never reschedule from it.
+- fixed, manual, and plain Adaptive modes ignore coding-activity observations.
 
 ### Agent Sessions and consent boundary
 
-- Adaptive without consent keeps the historical menu-only policy and performs no local session scan;
-- allowing local coding activity enables monitoring without enabling Agent Sessions presentation;
-- existing Adaptive users remain unscanned while consent is undecided or declined;
-- an Adaptive-only scan retains the newest attributable timestamp and discards complete session records;
-- Adaptive-only scans pause under Low Power Mode and serious/critical thermal pressure;
+- plain Adaptive always keeps the historical menu-only policy and performs no local session scan;
+- the agent-aware option without consent performs no local session scan;
+- allowing local coding activity enables monitoring only while the agent-aware option remains selected;
+- an agent-aware scan retains the newest attributable timestamp and discards complete session records;
+- agent-aware scans pause under Low Power Mode and serious/critical thermal pressure;
 - scanner limits cap agent processes, Codex rollout parsing, and Claude transcript candidates;
 - remote fetch remains guarded by the explicit Agent Sessions setting;
 - a refresh-frequency change does not invalidate or retry an in-flight remote refresh.
@@ -287,7 +290,7 @@ The 2026-07-12 extension requires evidence from separate seams rather than treat
   decision above 5 minutes, and unchanged 30-minute constrained decisions;
 - timer integration tests must show an activity callback advancing a pending long-idle sleep without starting a batch,
   postponing an earlier tick, or affecting fixed/manual scheduling;
-- the Adaptive-only scan projection must discard complete session records and retain one in-memory timestamp;
+- the agent-aware scan projection must discard complete session records and retain one in-memory timestamp;
 - remote discovery and SSH must remain guarded by the explicit Agent Sessions setting;
 - the local scanner's cost must be measured and disclosed separately from provider-batch savings.
 
@@ -339,25 +342,25 @@ Replay advances are counterfactual events on a zero-service-time policy clock. T
 count with live `timerAdvanced` events, whose schedule includes real refresh duration and in-flight coalescing. The
 offline audit reports recorded schedule events separately when the supplied trace contains them.
 
-## Agent-aware fresh-install default follow-up (2026-07-12)
+## Agent-aware opt-in follow-up (2026-07-12)
 
 This extension moves the previously replay-only activity cap into `AdaptiveRefreshPolicyCore`, retains the former
-menu-only policy as `adaptive-menu-only`, and uses Adaptive as the fresh-install default while preserving the legacy
-5-minute fallback for existing unset or invalid preferences. The existing local Agent Sessions scanner is wired into
-the live timer only after explicit consent; undecided or declined Adaptive users keep the menu-only policy. The
-`adaptive-activity` CLI spelling remains an alias for the production `adaptive` policy so scripts written against
-0.42.1 keep working.
+menu-only input projection as the plain `Adaptive` fresh-install default, and exposes local activity as a separate
+`Adaptive (agent-aware)` option. The legacy 5-minute fallback remains for existing unset or invalid preferences. The
+existing local Agent Sessions scanner is wired into the live timer only after the agent-aware mode is selected and
+explicit consent is granted; undecided or declined users perform no agent-aware scan. The
+`adaptive-activity` CLI spelling remains the distinct agent-aware replay mode shipped in 0.42.1.
 
 The same frozen 1,780-record trace and segmentation settings produce:
 
 | Policy | Simulated refreshes | Per observed 24h | Simulated advances | Unconstrained active over 5m | Menu staleness p50 / p95 |
 |---|---:|---:|---:|---:|---:|
-| Production adaptive | 696 | 143.88 | 53 | 0 / 145 | 139s / 1093s |
-| Historical menu-only adaptive | 694 | 143.47 | 53 | 4 / 145 | 142s / 1093s |
+| Agent-aware adaptive | 696 | 143.88 | 53 | 0 / 145 | 139s / 1093s |
+| Plain adaptive | 694 | 143.47 | 53 | 4 / 145 | 142s / 1093s |
 | Fixed 5m | 1383 | 285.90 | 0 | 0 / 99 | 150s / 281s |
 
-On this trace, production Adaptive schedules 49.7% fewer simulated refreshes than fixed 5 minutes. Compared with the
-historical menu-only policy, it adds 2 simulated refreshes (0.29%) and removes all 4 observed active-delay violations. It
+On this trace, agent-aware Adaptive schedules 49.7% fewer simulated refreshes than fixed 5 minutes. Compared with plain
+Adaptive, it adds 2 simulated refreshes (0.29%) and removes all 4 observed active-delay violations. It
 does not improve p95 menu staleness. Activity fields are present on 462 of 733 decision records (63%); 185 of those 462
 samples (40%) report activity under 5 minutes old. This is one machine's trace, not a population or energy study. The
 SHA-256 remains `b1e4aa33180b7c177293eb9ed16b45e24e026d259600fba2b1b67b931b904f0b`.
@@ -368,7 +371,7 @@ that a live activity observation can pull a pending 30-minute sleep forward and 
 
 A 20-run `hyperfine` sample of exact-head `.build/debug/CodexBarCLI sessions --json`, with one attributable Codex
 session, measured 153.0 ms ± 14.4 ms wall time and 134.3 ms combined user plus system CPU time per invocation. At the
-30-second unconstrained cadence, that CPU figure extrapolates to 6.5 CPU-minutes per day. Adaptive-only scans pause under
+30-second unconstrained cadence, that CPU figure extrapolates to 6.5 CPU-minutes per day. Agent-aware scans pause under
 Low Power Mode and serious/critical thermal pressure. The CLI process startup is included, so this is a conservative
 same-machine sample for in-process work, not a scanner upper bound or general energy claim. Simulated refresh counts and
 scanner CPU are reported separately; the replay does not claim net energy savings.
@@ -377,5 +380,4 @@ An exact-head synthetic stress fixture then exercised 12 agent-like processes an
 After bounding the scanner, 20 runs of `.build/debug/CodexBarCLI sessions --json` measured 231.4 ms ± 12.4 ms wall time
 and 209.3 ms combined user plus system CPU time. At a continuous 30-second cadence that CPU figure extrapolates to 10.1
 CPU-minutes per day. The CLI startup is included. This is a stress sample rather than a population or energy claim, and
-directory metadata enumeration still scales; the code-level limits bound process correlation and the number of rollout
-and transcript records parsed on every scan.
+directory metadata enumeration is additionally capped by the shared entry, depth, and time budget.

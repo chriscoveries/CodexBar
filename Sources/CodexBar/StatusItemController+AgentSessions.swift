@@ -28,6 +28,9 @@ extension StatusItemController {
         self.lastAgentSessionsManualHosts = self.settings.agentSessionsManualHosts
         self.lastAgentSessionsRefreshFrequency = self.settings.refreshFrequency
         self.lastAdaptiveActivityScanningEnabled = self.settings.adaptiveActivityScanningEnabled
+        if !self.settings.adaptiveActivityScanningEnabled {
+            self.store.clearCodingActivityObservation()
+        }
         self.agentSessions.settingsDidChange(remoteConfigurationChanged: remoteConfigurationChanged)
     }
 

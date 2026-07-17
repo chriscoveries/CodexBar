@@ -119,18 +119,6 @@ struct GeneralPane: View {
                     label: { Text(L("refresh_interval_title")) },
                     optionLabel: { option in Text(option.label) })
 
-                if self.settings.refreshFrequency == .adaptive, !self.settings.agentSessionsEnabled {
-                    Toggle(isOn: Binding(
-                        get: { self.settings.adaptiveActivityScanningEnabled },
-                        set: { enabled in
-                            self.settings.adaptiveActivityScanConsent = enabled ? .allowed : .declined
-                        })) {
-                            SettingsRowLabel(
-                                L("adaptive_activity_scan_title"),
-                                subtitle: L("adaptive_activity_scan_subtitle"))
-                        }
-                }
-
                 Toggle(L("refresh_on_open_title"), isOn: self.$settings.refreshAllProvidersOnMenuOpen)
 
                 Toggle(isOn: self.$settings.statusChecksEnabled) {

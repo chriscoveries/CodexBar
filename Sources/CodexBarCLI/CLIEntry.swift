@@ -1,5 +1,8 @@
 import CodexBarCore
 import Commander
+#if os(Linux)
+import CoreFoundation
+#endif
 #if canImport(Darwin)
 import Darwin
 #elseif canImport(Glibc)
@@ -15,6 +18,8 @@ import FoundationNetworking
 @main
 enum CodexBarCLI {
     static func main() async {
+        self.configureLinuxTimeZoneIfNeeded()
+
         let rawArgv = Array(CommandLine.arguments.dropFirst())
         let argv = Self.effectiveArgv(rawArgv)
         let outputPreferences = CLIOutputPreferences.from(argv: argv)
@@ -66,6 +71,8 @@ enum CodexBarCLI {
                 self.runConfigSetProviderEnabled(invocation.parsedValues, enabled: false)
             case ["config", "set-api-key"]:
                 self.runConfigSetAPIKey(invocation.parsedValues)
+            case let path where path.first == "hooks":
+                await self.runHooks(path: path, values: invocation.parsedValues)
             case ["cache", "clear"]:
                 self.runCacheClear(invocation.parsedValues)
             case ["diagnose"]:
@@ -100,6 +107,8 @@ enum CodexBarCLI {
         let configSetAPIKeySignature = CommandSignature.describe(ConfigSetAPIKeyOptions())
         let cacheSignature = CommandSignature.describe(CacheOptions())
         let diagnoseSignature = CommandSignature.describe(DiagnoseOptions())
+        let hooksSignature = CommandSignature.describe(HooksOptions())
+        let hooksTestSignature = CommandSignature.describe(HooksTestOptions())
 
         return [
             CommandDescriptor(
@@ -137,7 +146,7 @@ enum CodexBarCLI {
                 defaultSubcommandName: "list"),
             CommandDescriptor(
                 name: "serve",
-                abstract: "Serve usage and cost JSON over localhost HTTP",
+                abstract: "Serve usage, cost, and dashboard JSON over HTTP",
                 discussion: nil,
                 signature: serveSignature),
             CommandDescriptor(
@@ -179,6 +188,34 @@ enum CodexBarCLI {
                 ],
                 defaultSubcommandName: "validate"),
             CommandDescriptor(
+                name: "hooks",
+                abstract: "Run external commands on quota/provider events",
+                discussion: nil,
+                signature: CommandSignature(),
+                subcommands: [
+                    CommandDescriptor(
+                        name: "list",
+                        abstract: "List configured hooks",
+                        discussion: nil,
+                        signature: hooksSignature),
+                    CommandDescriptor(
+                        name: "enable",
+                        abstract: "Enable hooks",
+                        discussion: nil,
+                        signature: hooksSignature),
+                    CommandDescriptor(
+                        name: "disable",
+                        abstract: "Disable hooks",
+                        discussion: nil,
+                        signature: hooksSignature),
+                    CommandDescriptor(
+                        name: "test",
+                        abstract: "Fire matching hooks for an event",
+                        discussion: nil,
+                        signature: hooksTestSignature),
+                ],
+                defaultSubcommandName: "list"),
+            CommandDescriptor(
                 name: "cache",
                 abstract: "Cache management",
                 discussion: nil,
@@ -201,6 +238,80 @@ enum CodexBarCLI {
 
     // MARK: - Helpers
 
+    static func linuxTimeZoneBootstrapIdentifier(
+        currentValue: String?,
+        localTimeReadable: Bool,
+        resolvedLocalTimePath: String?) -> String?
+    {
+        guard currentValue == nil, localTimeReadable else { return nil }
+        return self.linuxTimeZoneIdentifier(from: resolvedLocalTimePath)
+    }
+
+    static func linuxTimeZoneIdentifier(from resolvedLocalTimePath: String?) -> String? {
+        guard let resolvedLocalTimePath,
+              let marker = resolvedLocalTimePath.range(of: "/zoneinfo/")
+        else { return nil }
+
+        var identifier = String(resolvedLocalTimePath[marker.upperBound...])
+        for prefix in ["posix/", "right/"] where identifier.hasPrefix(prefix) {
+            identifier.removeFirst(prefix.count)
+        }
+
+        let components = identifier.split(separator: "/", omittingEmptySubsequences: false)
+        guard !components.isEmpty,
+              components.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." })
+        else { return nil }
+        return identifier
+    }
+
+    private static func configureLinuxTimeZoneIfNeeded() {
+        #if os(Linux)
+        let currentValue = getenv("TZ").map { String(cString: $0) }
+        let localTimeReadable = access("/etc/localtime", R_OK) == 0
+        let resolvedLocalTimePath = self.resolvedLinuxLocalTimePath()
+        guard let identifier = self.linuxTimeZoneBootstrapIdentifier(
+            currentValue: currentValue,
+            localTimeReadable: localTimeReadable,
+            resolvedLocalTimePath: resolvedLocalTimePath)
+        else { return }
+
+        guard self.primeCoreFoundationTimeZone(identifier: identifier, filePath: "/etc/localtime") else { return }
+
+        // FoundationEssentials reads the IANA identifier while legacy formatters use the
+        // CoreFoundation cache primed above when /usr/share/zoneinfo is unavailable.
+        setenv("TZ", identifier, 0)
+        #endif
+    }
+
+    static func primeCoreFoundationTimeZone(identifier: String, filePath: String) -> Bool {
+        #if os(Linux)
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: filePath)), !data.isEmpty else { return false }
+        guard let name = identifier.withCString({
+            CFStringCreateWithCString(nil, $0, CFStringBuiltInEncodings.UTF8.rawValue)
+        }) else { return false }
+        guard let timeZoneData = data.withUnsafeBytes({ rawBuffer -> CFData? in
+            let bytes = rawBuffer.bindMemory(to: UInt8.self)
+            return CFDataCreate(nil, bytes.baseAddress, bytes.count)
+        }) else { return false }
+        return CFTimeZoneCreate(nil, name, timeZoneData) != nil
+        #else
+        return false
+        #endif
+    }
+
+    private static func resolvedLinuxLocalTimePath() -> String? {
+        #if os(Linux)
+        var buffer = [CChar](repeating: 0, count: Int(PATH_MAX))
+        guard realpath("/etc/localtime", &buffer) != nil else { return nil }
+        return buffer.withUnsafeBufferPointer { rawBuffer in
+            guard let baseAddress = rawBuffer.baseAddress else { return nil }
+            return String(cString: baseAddress)
+        }
+        #else
+        return nil
+        #endif
+    }
+
     private static func bootstrapLogging(path: [String], values: ParsedValues) {
         CodexBarLog.bootstrapIfNeeded(self.loggingConfiguration(path: path, values: values))
     }
@@ -220,7 +331,9 @@ enum CodexBarCLI {
 
     static func effectiveArgv(_ argv: [String]) -> [String] {
         guard let first = argv.first else { return ["usage"] }
-        if first.hasPrefix("-") { return ["usage"] + argv }
+        if first.hasPrefix("-") {
+            return ["usage"] + argv
+        }
         return argv
     }
 }

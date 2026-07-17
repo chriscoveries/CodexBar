@@ -82,7 +82,7 @@ struct CodexSessionRolloutTests {
 
         let fixtureURL = try AgentSessionParserTests.fixtureURL("agent-session-rollout", extension: "jsonl")
         let fixture = try String(contentsOf: fixtureURL, encoding: .utf8)
-        for (index, age) in [30.0, 20.0, 10.0].enumerated() {
+        for (index, age) in [30.0, 20.0, -3600.0].enumerated() {
             let id = "bounded-rollout-\(index)"
             let url = sessionDirectory.appendingPathComponent("rollout-bounded-\(index).jsonl")
             try fixture
@@ -105,5 +105,15 @@ struct CodexSessionRolloutTests {
         ])
 
         #expect(Set(sessions.map(\.id)) == ["bounded-rollout-1", "bounded-rollout-2"])
+        #expect(sessions.first(where: { $0.id == "bounded-rollout-2" })?.lastActivityAt == now)
+
+        let rescanned = await scanner.scan(
+            now: now.addingTimeInterval(30),
+            environment: [
+                "CODEX_HOME": codexHome.path,
+                "HOME": temporaryRoot.path,
+                "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+            ])
+        #expect(rescanned.first(where: { $0.id == "bounded-rollout-2" })?.lastActivityAt == now)
     }
 }

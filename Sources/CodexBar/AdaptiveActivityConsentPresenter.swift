@@ -23,7 +23,12 @@ enum AdaptiveActivityConsentPresenter {
         declineButton.keyEquivalent = "\u{1B}"
 
         NSApp.activate(ignoringOtherApps: true)
-        settings.adaptiveActivityScanConsent = alert.runModal() == .alertFirstButtonReturn ? .allowed : .declined
+        if alert.runModal() == .alertFirstButtonReturn {
+            settings.adaptiveActivityScanConsent = .allowed
+        } else {
+            settings.adaptiveActivityScanConsent = .declined
+            settings.refreshFrequency = .adaptive
+        }
         return true
     }
 }

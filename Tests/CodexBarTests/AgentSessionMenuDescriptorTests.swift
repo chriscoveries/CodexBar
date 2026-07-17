@@ -43,7 +43,7 @@ struct AgentSessionMenuDescriptorTests {
     func `adaptive refresh requires consent for local monitoring`() {
         let settings = testSettingsStore(suiteName: "AgentSessionMenuDescriptorTests-adaptive-monitoring")
         settings.agentSessionsEnabled = false
-        settings.refreshFrequency = .adaptive
+        settings.refreshFrequency = .adaptiveAgentAware
         let sessions = AgentSessionsStore(settings: settings)
 
         #expect(!sessions.localMonitoringEnabled)
@@ -54,7 +54,8 @@ struct AgentSessionMenuDescriptorTests {
         settings.adaptiveActivityScanConsent = .declined
         #expect(!sessions.localMonitoringEnabled)
 
-        settings.refreshFrequency = .fiveMinutes
+        settings.adaptiveActivityScanConsent = .allowed
+        settings.refreshFrequency = .adaptive
         #expect(!sessions.localMonitoringEnabled)
 
         settings.agentSessionsEnabled = true
@@ -65,7 +66,7 @@ struct AgentSessionMenuDescriptorTests {
     func `adaptive-only scan retains a timestamp but not session details`() {
         let settings = testSettingsStore(suiteName: "AgentSessionMenuDescriptorTests-adaptive-projection")
         settings.agentSessionsEnabled = false
-        settings.refreshFrequency = .adaptive
+        settings.refreshFrequency = .adaptiveAgentAware
         settings.adaptiveActivityScanConsent = .allowed
         let store = AgentSessionsStore(settings: settings)
         let older = Date(timeIntervalSinceReferenceDate: 100)
@@ -113,9 +114,22 @@ struct AgentSessionMenuDescriptorTests {
     }
 
     @Test
+    func `adaptive-only metadata reads require a detected agent process`() {
+        #expect(!LocalAgentSessionScanner.shouldScanSessionMetadata(
+            hasAgentProcesses: false,
+            includeFileOnlySessions: false))
+        #expect(LocalAgentSessionScanner.shouldScanSessionMetadata(
+            hasAgentProcesses: true,
+            includeFileOnlySessions: false))
+        #expect(LocalAgentSessionScanner.shouldScanSessionMetadata(
+            hasAgentProcesses: false,
+            includeFileOnlySessions: true))
+    }
+
+    @Test
     func `revoking adaptive consent clears retained activity`() {
         let settings = testSettingsStore(suiteName: "AgentSessionMenuDescriptorTests-consent-revoked")
-        settings.refreshFrequency = .adaptive
+        settings.refreshFrequency = .adaptiveAgentAware
         settings.adaptiveActivityScanConsent = .allowed
         let store = AgentSessionsStore(settings: settings)
         store.applyLocalScanResult(

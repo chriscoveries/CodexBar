@@ -37,16 +37,17 @@ extension UsageStore {
     }
 
     func noteCodingActivityObserved(at date: Date, now: Date = Date()) {
+        guard self.settings.adaptiveActivityScanningEnabled else { return }
         self.retainCodingActivityIfNewer(date)
         self.advanceAdaptiveTimerIfEarlier(at: now)
     }
 
     func advanceAdaptiveTimerIfEarlier(at date: Date) {
-        guard self.settings.refreshFrequency == .adaptive else { return }
+        guard self.settings.refreshFrequency.usesAdaptivePolicy else { return }
         let decision = Self.adaptiveRefreshDecision(
             now: date,
             lastMenuOpenAt: self.lastMenuOpenAt,
-            lastCodingActivityAt: self.lastCodingActivityAt,
+            lastCodingActivityAt: self.settings.adaptiveActivityScanningEnabled ? self.lastCodingActivityAt : nil,
             lowPowerModeEnabled: ProcessInfo.processInfo.isLowPowerModeEnabled,
             thermalState: ProcessInfo.processInfo.thermalState)
         let candidate = date.addingTimeInterval(TimeInterval(decision.delay.components.seconds))
@@ -117,7 +118,9 @@ extension UsageStore {
         let decision = Self.adaptiveRefreshDecision(
             now: now,
             lastMenuOpenAt: store.lastMenuOpenAt,
-            lastCodingActivityAt: store.lastCodingActivityAt,
+            lastCodingActivityAt: store.settings.adaptiveActivityScanningEnabled
+                ? store.lastCodingActivityAt
+                : nil,
             lowPowerModeEnabled: ProcessInfo.processInfo.isLowPowerModeEnabled,
             thermalState: ProcessInfo.processInfo.thermalState)
         store.adaptiveRefreshScheduledAt = now.addingTimeInterval(TimeInterval(decision.delay.components.seconds))
@@ -136,11 +139,13 @@ extension UsageStore {
         switch self.settings.refreshFrequency {
         case .manual:
             nil
-        case .adaptive:
+        case .adaptive, .adaptiveAgentAware:
             TimeInterval(Self.adaptiveRefreshDecision(
                 now: Date(),
                 lastMenuOpenAt: self.lastMenuOpenAt,
-                lastCodingActivityAt: self.lastCodingActivityAt,
+                lastCodingActivityAt: self.settings.adaptiveActivityScanningEnabled
+                    ? self.lastCodingActivityAt
+                    : nil,
                 lowPowerModeEnabled: ProcessInfo.processInfo.isLowPowerModeEnabled,
                 thermalState: ProcessInfo.processInfo.thermalState).delay.components.seconds)
         default:

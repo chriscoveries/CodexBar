@@ -16,22 +16,12 @@ public struct AdaptiveReplayPolicy: ReplayPolicy, Sendable {
         let decision = AdaptiveRefreshPolicyCore().nextDelay(for: AdaptiveRefreshPolicyCore.Input(
             now: input.now,
             lastMenuOpenAt: input.lastMenuOpenAt,
-            lastCodingActivityAt: input.lastCodingActivityAt,
+            lastCodingActivityAt: nil,
             lowPowerModeEnabled: input.lowPowerModeEnabled,
             thermalPressure: input.thermalState.isConstrained ? .constrained : .nominal))
         return ReplayPolicyDecision(
             delaySeconds: TimeInterval(decision.delay.components.seconds),
             reason: decision.reason.rawValue)
-    }
-
-    func decide(_ input: ReplayPolicyInput, lastCodingActivityAt: Date?) -> ReplayPolicyDecision {
-        let normalized = ReplayPolicyInput(
-            now: input.now,
-            lastMenuOpenAt: input.lastMenuOpenAt,
-            lastCodingActivityAt: lastCodingActivityAt,
-            lowPowerModeEnabled: input.lowPowerModeEnabled,
-            thermalState: input.thermalState)
-        return self.decide(normalized)
     }
 }
 

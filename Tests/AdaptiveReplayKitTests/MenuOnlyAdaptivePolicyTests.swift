@@ -2,7 +2,7 @@ import AdaptiveReplayKit
 import Foundation
 import Testing
 
-struct MenuOnlyAdaptivePolicyTests {
+struct AdaptiveReplayModeTests {
     private static let now = Date(timeIntervalSinceReferenceDate: 10000)
 
     private func input(
@@ -19,27 +19,27 @@ struct MenuOnlyAdaptivePolicyTests {
     }
 
     @Test
-    func `production adaptive caps idle and long-idle decisions during coding`() {
-        let policy = AdaptiveReplayPolicy()
+    func `agent aware adaptive caps idle and long-idle decisions during coding`() {
+        let policy = AgentAwareAdaptiveReplayPolicy()
 
-        #expect(policy.name == "adaptive")
+        #expect(policy.name == "adaptive-activity")
         #expect(policy.decide(self.input(menuAge: 2 * 3600, activityAge: 10)).delaySeconds == 300)
         #expect(policy.decide(self.input(menuAge: nil, activityAge: 10)).delaySeconds == 300)
         #expect(policy.decide(self.input(menuAge: nil, activityAge: 10)).reason == "codingActivity")
     }
 
     @Test
-    func `menu-only baseline preserves the pre-activity policy`() {
-        let policy = MenuOnlyAdaptivePolicy()
+    func `plain adaptive ignores coding activity`() {
+        let policy = AdaptiveReplayPolicy()
 
-        #expect(policy.name == "adaptive-menu-only")
+        #expect(policy.name == "adaptive")
         #expect(policy.decide(self.input(menuAge: nil, activityAge: 10)).delaySeconds == 1800)
         #expect(policy.decide(self.input(menuAge: nil, activityAge: 10)).reason == "longIdle")
     }
 
     @Test
-    func `production adaptive preserves recent warm constrained and boundary decisions`() {
-        let policy = AdaptiveReplayPolicy()
+    func `agent aware adaptive preserves recent warm constrained and boundary decisions`() {
+        let policy = AgentAwareAdaptiveReplayPolicy()
 
         #expect(policy.decide(self.input(menuAge: 60, activityAge: 10)).delaySeconds == 120)
         #expect(policy.decide(self.input(menuAge: 600, activityAge: 10)).delaySeconds == 300)
@@ -68,7 +68,7 @@ struct MenuOnlyAdaptivePolicyTests {
                 codexActivitySeconds: 0),
         ]
 
-        let metrics = ReplayEngine.run(trace: trace, policy: AdaptiveReplayPolicy())
+        let metrics = ReplayEngine.run(trace: trace, policy: AgentAwareAdaptiveReplayPolicy())
 
         #expect(metrics.codingActiveDecisionCount == 0)
         #expect(metrics.totalRefreshCount == 0)
@@ -96,7 +96,7 @@ struct MenuOnlyAdaptivePolicyTests {
             .refreshCompleted(timestamp: Self.now.addingTimeInterval(240)),
         ]
 
-        let metrics = ReplayEngine.run(trace: trace, policy: AdaptiveReplayPolicy())
+        let metrics = ReplayEngine.run(trace: trace, policy: AgentAwareAdaptiveReplayPolicy())
 
         #expect(metrics.totalRefreshCount == 2)
         #expect(metrics.codingActiveDecisionCount == 1)
@@ -116,7 +116,7 @@ struct MenuOnlyAdaptivePolicyTests {
             .refreshCompleted(timestamp: Self.now.addingTimeInterval(1800)),
         ]
 
-        let metrics = ReplayEngine.run(trace: trace, policy: AdaptiveReplayPolicy())
+        let metrics = ReplayEngine.run(trace: trace, policy: AgentAwareAdaptiveReplayPolicy())
 
         #expect(metrics.codingActiveDecisionCount == 0)
         #expect(metrics.codingActiveDelayViolationCount == 0)

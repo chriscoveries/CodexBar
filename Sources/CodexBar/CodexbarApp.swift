@@ -390,12 +390,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { @MainActor [weak self] in
             await Task.yield()
             guard let settings = self?.settings else { return }
-            let presentedAdaptiveConsent = AdaptiveActivityConsentPresenter.presentIfNeeded(settings: settings)
-            // Avoid stacking two permission prompts on first launch. Notification authorization
-            // remains startup-driven and is requested on the next launch after this one-time choice.
-            if !presentedAdaptiveConsent {
-                AppNotifications.shared.requestAuthorizationOnStartup()
-            }
+            AdaptiveActivityConsentPresenter.presentIfNeeded(settings: settings)
+            AppNotifications.shared.requestAuthorizationOnStartup()
         }
         KeyboardShortcuts.onKeyUp(for: .openMenu) { [weak self] in
             // KeyboardShortcuts dispatches both normal and menu-tracking hotkeys on the main event loop.
@@ -459,6 +455,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         resetKind: String)
     {
         let origin = self.statusController?.celebrationOriginPoint(for: provider)
+        let palette = ProviderDescriptorRegistry.descriptor(for: provider).branding.confettiPalette
         self.confettiLogger.info(
             "Triggering confetti",
             metadata: [
@@ -467,7 +464,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "resetKind": resetKind,
                 "originKnown": origin == nil ? "0" : "1",
             ])
-        self.confettiOverlayController.play(originInScreen: origin)
+        self.confettiOverlayController.play(originInScreen: origin, colors: palette)
     }
 
     /// Use the classic (non-Liquid Glass) app icon on macOS versions before 26.

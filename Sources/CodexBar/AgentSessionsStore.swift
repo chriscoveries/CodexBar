@@ -63,8 +63,7 @@ final class AgentSessionsStore {
     /// Adaptive refresh uses local metadata only after explicit consent. Remote sessions remain
     /// behind the Agent Sessions setting because they can involve Tailscale discovery and SSH.
     var localMonitoringEnabled: Bool {
-        self.settings.agentSessionsEnabled ||
-            (self.settings.refreshFrequency == .adaptive && self.settings.adaptiveActivityScanningEnabled)
+        self.settings.agentSessionsEnabled || self.settings.adaptiveActivityScanningEnabled
     }
 
     nonisolated static func latestActivityAt(in sessions: [AgentSession]) -> Date? {
@@ -156,13 +155,12 @@ final class AgentSessionsStore {
         let processInfo = ProcessInfo.processInfo
         guard Self.shouldScanLocally(
             agentSessionsEnabled: self.settings.agentSessionsEnabled,
-            adaptiveActivityScanningEnabled: self.settings.refreshFrequency == .adaptive &&
-                self.settings.adaptiveActivityScanningEnabled,
+            adaptiveActivityScanningEnabled: self.settings.adaptiveActivityScanningEnabled,
             lowPowerModeEnabled: processInfo.isLowPowerModeEnabled,
             thermalState: processInfo.thermalState)
         else { return }
         self.localRefreshInFlight = true
-        let sessions = await self.localScanner.scan()
+        let sessions = await self.localScanner.scan(includeFileOnlySessions: self.settings.agentSessionsEnabled)
         self.localRefreshInFlight = false
         guard !Task.isCancelled, self.localMonitoringEnabled else { return }
         self.applyLocalScanResult(sessions)

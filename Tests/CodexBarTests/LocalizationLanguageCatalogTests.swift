@@ -93,12 +93,11 @@ struct LocalizationLanguageCatalogTests {
             .deletingLastPathComponent()
         let resourcesURL = root.appendingPathComponent("Sources/CodexBar/Resources")
         let keys = [
+            "refresh_adaptive_agent_aware",
             "adaptive_activity_consent_title",
             "adaptive_activity_consent_message",
             "adaptive_activity_consent_allow",
             "adaptive_activity_consent_decline",
-            "adaptive_activity_scan_title",
-            "adaptive_activity_scan_subtitle",
         ]
 
         for language in AppLanguage.allCases where language != .system {
@@ -286,6 +285,31 @@ struct LocalizationLanguageCatalogTests {
         let galician = try #require(NSDictionary(contentsOf: galicianURL) as? [String: String])
 
         #expect(Set(galician.keys) == Set(english.keys))
+    }
+
+    @Test
+    func `model breakdown unavailable exists in every app catalog`() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let resourcesURL = root.appendingPathComponent("Sources/CodexBar/Resources")
+        let catalogs = try FileManager.default.contentsOfDirectory(
+            at: resourcesURL,
+            includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "lproj" }
+
+        #expect(catalogs.count == 23)
+        for catalogURL in catalogs {
+            let stringsURL = catalogURL.appendingPathComponent("Localizable.strings")
+            let catalog = try #require(NSDictionary(contentsOf: stringsURL) as? [String: String])
+            let value = try #require(catalog["Model breakdown unavailable"])
+            #expect(!value.isEmpty, "\(catalogURL.lastPathComponent)")
+            #expect(!value.contains("%"), "\(catalogURL.lastPathComponent)")
+            if catalogURL.lastPathComponent == "en.lproj" {
+                #expect(value == "Model breakdown unavailable")
+            }
+        }
     }
 
     @Test
@@ -499,6 +523,9 @@ struct LocalizationLanguageCatalogTests {
             "byte_unit_gigabyte",
             "byte_unit_kilobyte",
             "byte_unit_megabyte",
+            "hooks_executable_placeholder",
+            "hooks_provider",
+            "hooks_threshold_placeholder",
             "language_arabic",
             "language_galician",
             "language_italian",
