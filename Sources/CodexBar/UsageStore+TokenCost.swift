@@ -32,6 +32,7 @@ extension UsageStore {
 
         let fetcher = self.costUsageFetcher
         let timeoutSeconds = self.tokenFetchTimeout
+        let allowPricingRefresh = provider != .codex || !self.settings.codexLocalSessionCostLedgerEnabled
         let environment = provider == .bedrock
             ? ProviderRegistry.makeEnvironment(
                 base: self.environmentBase,
@@ -49,6 +50,7 @@ extension UsageStore {
                     allowVertexClaudeFallback: !self.isEnabled(.claude),
                     codexHomePath: codexHomePath,
                     historyDays: historyDays,
+                    allowPricingRefresh: allowPricingRefresh,
                     bypassScannerDebounce: true)
             }
             group.addTask {
@@ -174,7 +176,7 @@ extension UsageStore {
 
     @discardableResult
     func hydrateCachedTokenSnapshots(now: Date = Date()) -> Task<Void, Never>? {
-        guard self.settings.costUsageEnabled else { return nil }
+        guard self.settings.isCostUsageEffectivelyEnabled(for: .codex) else { return nil }
         guard self.settings.enabledProvidersOrdered(metadataByProvider: self.providerMetadata).contains(.codex) else {
             return nil
         }
@@ -207,7 +209,7 @@ extension UsageStore {
             guard self.providerPublicationRevisionIsCurrent(publicationRevision, for: .codex),
                   self.settings.providerConfigRevision(for: .codex) == providerConfigRevision,
                   self.settings.costUsageSettingsRevision == costUsageSettingsRevision,
-                  self.settings.costUsageEnabled,
+                  self.settings.isCostUsageEffectivelyEnabled(for: .codex),
                   self.isEnabled(.codex),
                   self.tokenCostScope(for: .codex).signature == scope.signature,
                   self.settings.costUsageHistoryDays == historyDays,
@@ -240,12 +242,35 @@ extension UsageStore {
         guard provider == .codex else {
             return (nil, provider.rawValue)
         }
-        let homePath = self.settings.activeManagedCodexRemoteHomePath?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let homePath, !homePath.isEmpty else {
+        if self.settings.codexLocalSessionCostLedgerEnabled {
             return (nil, "codex:ambient")
         }
-        return (homePath, "codex:managed:\(homePath)")
+        let activeSource = self.settings.codexActiveSource
+        switch activeSource {
+        case .liveSystem:
+            return (nil, "codex:ambient")
+        case let .managedAccount(id):
+            let homePath = self.settings.managedCodexRemoteHomePath(forActiveSource: activeSource)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if let homePath, !homePath.isEmpty {
+                return (homePath, "codex:managed:\(homePath)")
+            }
+            let unavailablePath = Self.costUsageCacheDirectory()
+                .appendingPathComponent("unavailable-managed", isDirectory: true)
+                .appendingPathComponent(id.uuidString, isDirectory: true)
+                .path
+            return (unavailablePath, "codex:managed:unavailable:\(id.uuidString)")
+        case .profileHome:
+            let homePath = self.settings.profileCodexHomePath(forActiveSource: activeSource)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if let homePath, !homePath.isEmpty {
+                return (homePath, "codex:profile:\(homePath)")
+            }
+            let unavailablePath = Self.costUsageCacheDirectory()
+                .appendingPathComponent("unavailable-profile", isDirectory: true)
+                .path
+            return (unavailablePath, "codex:profile-unavailable")
+        }
     }
 
     func tokenSnapshotScopeSignature(for provider: UsageProvider) -> String {
