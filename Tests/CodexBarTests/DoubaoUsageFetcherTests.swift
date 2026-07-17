@@ -468,6 +468,30 @@ struct DoubaoUsageFetcherTests {
     }
 
     @Test
+    func `arkcli explicitly unsubscribed bucket does not contribute stale periods`() throws {
+        let data = Data(
+            """
+            {"items":[
+              {
+                "product":"coding-plan", "subscribed":false, "updated_at":1784199993,
+                "periods":[{"label":"session","percent":99}]
+              },
+              {
+                "product":"agent-plan", "subscribed":true, "updated_at":1784191193,
+                "periods":[{"label":"5h","percent":5}]
+              }
+            ]}
+            """.utf8)
+
+        let usage = try DoubaoUsageFetcher.decodeArkcliUsage(from: data).toUsageSnapshot(
+            updatedAt: Date(timeIntervalSince1970: 0))
+
+        #expect(usage.primary == nil)
+        #expect(usage.extraRateWindows?.first?.window.usedPercent == 5)
+        #expect(usage.updatedAt == Date(timeIntervalSince1970: 1_784_191_193))
+    }
+
+    @Test
     func `arkcli subscribed bucket failure does not silently return partial usage`() {
         let data = Data(
             """

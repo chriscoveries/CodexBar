@@ -441,6 +441,7 @@ public struct DoubaoUsageFetcher: Sendable {
             default: nil
             }
             guard let levelPrefix else { continue }
+            guard item.subscribed != false else { continue }
             let periods = item.periods ?? []
             if !periods.isEmpty, let updatedAt = item.updatedAt, updatedAt > 0 {
                 // arkcli has shipped `updated_at` as both epoch milliseconds and
