@@ -955,13 +955,15 @@ extension StatusItemController {
         guard
             let detail = snapshot?.primary?.resetDescription?
                 .trimmingCharacters(in: .whitespacesAndNewlines),
-                detail.hasPrefix("$"),
-                let value = detail.split(separator: " ", maxSplits: 1).first
+                let balanceDetail = detail.components(separatedBy: " · ").dropLast().last?
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                    balanceDetail.hasPrefix("$"),
+                    let value = balanceDetail.split(separator: " ", maxSplits: 1).first
         else {
             return nil
         }
 
-        let prefix = detail.contains(" owed") ? "-" : ""
+        let prefix = balanceDetail.contains(" owed") ? "-" : ""
         return prefix + String(value)
     }
 

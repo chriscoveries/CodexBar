@@ -299,6 +299,22 @@ struct StatusItemBalanceDisplayTests {
     }
 
     @Test
+    func `menu bar display text keeps DeepInfra balance when suspended`() {
+        let snapshot = DeepInfraUsageSnapshot(
+            availableBalanceUSD: 4,
+            amountOwedUSD: 0,
+            currentMonthCostUSD: 3,
+            recentCostUSD: 3,
+            spendingLimitUSD: nil,
+            suspended: true,
+            suspendReason: "Payment review",
+            updatedAt: Date())
+            .toUsageSnapshot()
+
+        #expect(StatusItemController.deepInfraBalanceDisplayText(snapshot: snapshot) == "$4.00")
+    }
+
+    @Test
     func `menu bar display text uses mimo balance without token plan`() {
         let settings = self.makeSettings(
             suiteName: "StatusItemBalanceDisplayTests-mimo-balance",
