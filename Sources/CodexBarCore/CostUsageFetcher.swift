@@ -137,6 +137,22 @@ public struct CostUsageFetcher: Sendable {
         self.scannerOptions
     }
 
+    private static func resolvedScannerOptions(
+        _ override: CostUsageScanner.Options?,
+        provider: UsageProvider,
+        codexHomePath: String?) -> CostUsageScanner.Options
+    {
+        var options = override ?? CostUsageScanner.Options()
+        if provider == .codex,
+           let codexHomePath = codexHomePath?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !codexHomePath.isEmpty
+        {
+            options.codexSessionsRoot = URL(fileURLWithPath: codexHomePath, isDirectory: true)
+                .appendingPathComponent("sessions", isDirectory: true)
+        }
+        return options
+    }
+
     static func loadTokenSnapshot(
         provider: UsageProvider,
         environment: [String: String] = ProcessInfo.processInfo.environment,
@@ -175,14 +191,12 @@ public struct CostUsageFetcher: Sendable {
                 useCurrentLocalDayForSession: false)
         }
 
-        var options = overrideScannerOptions ?? CostUsageScanner.Options()
-        if provider == .codex,
-           let codexHomePath = codexHomePath?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !codexHomePath.isEmpty
-        {
-            options.codexSessionsRoot = URL(fileURLWithPath: codexHomePath, isDirectory: true)
-                .appendingPathComponent("sessions", isDirectory: true)
-        }
+        var options = Self.resolvedScannerOptions(
+            overrideScannerOptions,
+            provider: provider,
+            codexHomePath: codexHomePath)
+        let scopedCodexHomePath = codexHomePath?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let shouldMergePiUsage = provider != .codex || scopedCodexHomePath?.isEmpty != false
         await Self.refreshPricingIfAllowed(
             options: PricingRefreshOptions(
                 provider: provider,
@@ -262,7 +276,7 @@ public struct CostUsageFetcher: Sendable {
                     modelsDevCacheRoot: scanOptions.cacheRoot,
                     sessionRoots: roots)
             }
-            if provider == .codex || provider == .claude {
+            if provider == .claude || (provider == .codex && shouldMergePiUsage) {
                 let piReport = try PiSessionCostScanner.loadDailyReportCancellable(
                     provider: provider,
                     since: since,

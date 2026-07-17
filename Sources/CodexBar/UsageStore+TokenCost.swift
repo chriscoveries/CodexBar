@@ -131,7 +131,7 @@ extension UsageStore {
                 .appendingPathComponent("unavailable-managed", isDirectory: true)
                 .appendingPathComponent(id.uuidString, isDirectory: true)
                 .path
-            return (unavailablePath, "codex:managed-unavailable:\(id.uuidString)")
+            return (unavailablePath, "codex:managed:unavailable:\(id.uuidString)")
         case .profileHome:
             let homePath = self.settings.profileCodexHomePath(forActiveSource: activeSource)?
                 .trimmingCharacters(in: .whitespacesAndNewlines)

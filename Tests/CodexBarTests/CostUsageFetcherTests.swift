@@ -18,23 +18,44 @@ struct CostUsageFetcherTests {
             filename: "ambient.jsonl",
             tokens: 100)
         try Self.writeCodexSessionFile(homeRoot: otherHome, env: env, day: day, filename: "managed.jsonl", tokens: 10)
+        _ = try env.writePiSessionFile(
+            relativePath: "2026-04-08T10-00-00-000Z_ambient.jsonl",
+            contents: env.jsonl([[
+                "type": "message",
+                "timestamp": env.isoString(for: day),
+                "message": [
+                    "role": "assistant",
+                    "provider": "openai-codex",
+                    "model": "openai/gpt-5.4",
+                    "timestamp": Int(day.timeIntervalSince1970 * 1000),
+                    "usage": ["input": 50, "output": 5, "totalTokens": 55],
+                ],
+            ]]))
 
         let options = CostUsageScanner.Options(cacheRoot: env.cacheRoot)
+        let piOptions = PiSessionCostScanner.Options(
+            piSessionsRoot: env.piSessionsRoot,
+            cacheRoot: env.cacheRoot,
+            refreshMinIntervalSeconds: 0)
         let ambient = try await CostUsageFetcher.loadTokenSnapshot(
             provider: .codex,
             now: day,
             codexHomePath: env.codexHomeRoot.path,
-            scannerOptions: options)
+            scannerOptions: options,
+            piScannerOptions: piOptions)
         let managed = try await CostUsageFetcher.loadTokenSnapshot(
             provider: .codex,
             now: day,
             codexHomePath: otherHome.path,
-            scannerOptions: options)
+            scannerOptions: options,
+            piScannerOptions: piOptions)
 
         #expect(ambient.sessionTokens == 100)
         #expect(managed.sessionTokens == 10)
     }
+}
 
+extension CostUsageFetcherTests {
     @Test
     func `fetcher refreshes codex cache when legacy roots metadata is missing`() async throws {
         let env = try CostUsageTestEnvironment()
