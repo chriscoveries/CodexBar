@@ -59,18 +59,8 @@ enum CodexBarCLI {
                 await self.runSessionsFocus(invocation.parsedValues)
             case ["serve"]:
                 await self.runServe(invocation.parsedValues)
-            case ["config", "validate"]:
-                self.runConfigValidate(invocation.parsedValues)
-            case ["config", "dump"]:
-                self.runConfigDump(invocation.parsedValues)
-            case ["config", "providers"]:
-                self.runConfigProviders(invocation.parsedValues)
-            case ["config", "enable"]:
-                self.runConfigSetProviderEnabled(invocation.parsedValues, enabled: true)
-            case ["config", "disable"]:
-                self.runConfigSetProviderEnabled(invocation.parsedValues, enabled: false)
-            case ["config", "set-api-key"]:
-                self.runConfigSetAPIKey(invocation.parsedValues)
+            case let path where path.first == "config":
+                self.runConfig(path: path, values: invocation.parsedValues)
             case let path where path.first == "hooks":
                 await self.runHooks(path: path, values: invocation.parsedValues)
             case ["cache", "clear"]:
