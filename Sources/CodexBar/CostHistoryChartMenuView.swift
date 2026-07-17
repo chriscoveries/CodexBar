@@ -923,6 +923,9 @@ extension CostHistoryChartMenuView {
     struct VisibleSessionFingerprint: Equatable {
         let sessionID: String
         let lastActivityBitPattern: UInt64
+        let inputTokens: Int?
+        let cachedInputTokens: Int?
+        let outputTokens: Int?
         let totalTokens: Int?
         let costBitPattern: UInt64?
         let models: [VisibleModelBreakdownFingerprint]
@@ -964,6 +967,9 @@ extension CostHistoryChartMenuView {
                 VisibleSessionFingerprint(
                     sessionID: session.sessionID,
                     lastActivityBitPattern: session.lastActivity.timeIntervalSince1970.bitPattern,
+                    inputTokens: session.inputTokens,
+                    cachedInputTokens: session.cachedInputTokens,
+                    outputTokens: session.outputTokens,
                     totalTokens: session.totalTokens,
                     costBitPattern: session.costUSD.map(\.bitPattern),
                     models: session.modelBreakdowns.map { item in
