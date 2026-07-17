@@ -213,11 +213,11 @@ struct CLICookieRefreshTests {
     }
 
     @Test
-    func `commit detaches the gate before later writes`() async {
+    func `commit detaches the gate before later writes`() {
         let provider = UsageProvider.opencode
         let service = "com.steipete.codexbar.tests.cookie-refresh.\(UUID().uuidString)"
 
-        await KeychainCacheStore.withServiceOverrideForTesting(service) {
+        KeychainCacheStore.withServiceOverrideForTesting(service) {
             KeychainCacheStore.withImplicitTestStoreForTesting {
                 guard let gate = CookieHeaderCache.beginRefreshReadSuppression(provider: provider) else {
                     Issue.record("Expected refresh gate")
