@@ -2,7 +2,15 @@
 
 CodexBar can list live Codex and Claude Code sessions on this Mac and other Macs or Linux hosts reachable over SSH.
 
-Enable **Settings → General → Sessions**. Local sessions refresh every 30 seconds. Remote sessions refresh every 60 seconds and whenever the menu opens. Tailscale discovery includes online macOS and Linux peers; add extra SSH destinations as a comma-separated list, such as `user@host`.
+Enable **Settings → Menu → Agent sessions**. Local sessions refresh every 30 seconds. Remote sessions refresh every 60 seconds and whenever the menu opens. Tailscale discovery includes online macOS and Linux peers; add extra SSH destinations as a comma-separated list, such as `user@host`.
+
+Choose the row label format in the same settings section:
+
+- **Project** keeps the working-directory name used by earlier releases.
+- **Descriptive** uses the Codex thread title or named subagent task, with the project as a fallback.
+- **Descriptive + project** shows both when they differ.
+
+Claude Code sessions currently fall back to the project name because Claude does not expose equivalent session-title metadata.
 
 The menu groups local sessions first, followed by each remote host. A filled dot is active; an empty dot is idle. Select a local row to activate its terminal, editor, or desktop app. The first focus attempt can request macOS Accessibility permission so CodexBar can raise the matching window. Remote rows run the same focus command over SSH.
 

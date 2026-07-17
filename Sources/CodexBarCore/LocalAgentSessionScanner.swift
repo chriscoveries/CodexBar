@@ -60,6 +60,9 @@ public struct LocalAgentSessionScanner: Sendable {
         let codexAppServerPresent = AgentPSOutputParser.hasCodexAppServer(in: allProcesses)
         let cwdByPID = await self.cwdByPID(processes.map(\ .pid), environment: environment)
         let homeDirectory = URL(fileURLWithPath: environment["HOME"] ?? NSHomeDirectory(), isDirectory: true)
+        let codexHomeDirectory = URL(
+            fileURLWithPath: environment["CODEX_HOME"] ?? homeDirectory.appendingPathComponent(".codex").path,
+            isDirectory: true)
         let host = ProcessInfo.processInfo.hostName
         var directoryBudget = DirectoryMetadataScanBudget(
             maxEntryCount: self.config.maxDirectoryEntryCount,
@@ -67,13 +70,15 @@ public struct LocalAgentSessionScanner: Sendable {
             timeLimit: self.config.directoryScanBudget)
         let rollouts = self.codexRollouts(
             now: now,
-            environment: environment,
-            homeDirectory: homeDirectory,
+            codexHomeDirectory: codexHomeDirectory,
             directoryBudget: &directoryBudget)
+        let threadMetadata = CodexThreadMetadataReader(codexHomeDirectory: codexHomeDirectory)
+            .metadata(for: Set(rollouts.map(\.metadata.sessionID)))
         return self.sessions(
             processes: processes,
             cwdByPID: cwdByPID,
             rollouts: rollouts,
+            threadMetadata: threadMetadata,
             context: ScanContext(
                 homeDirectory: homeDirectory,
                 host: host,
@@ -94,6 +99,7 @@ public struct LocalAgentSessionScanner: Sendable {
         processes: [AgentProcessRecord],
         cwdByPID: [Int32: String],
         rollouts: [Rollout],
+        threadMetadata: [String: CodexThreadMetadata],
         context: ScanContext,
         directoryBudget: inout DirectoryMetadataScanBudget) -> [AgentSession]
     {
@@ -157,6 +163,8 @@ public struct LocalAgentSessionScanner: Sendable {
                     pid: process.pid,
                     cwd: cwd ?? rollout?.metadata.cwd,
                     projectName: Self.projectName(cwd ?? rollout?.metadata.cwd),
+                    sessionName: rollout?.metadata.descriptiveName(
+                        threadMetadata: rollout.flatMap { threadMetadata[$0.metadata.sessionID] }),
                     startedAt: process.startedAt,
                     lastActivityAt: rollout?.modifiedAt,
                     transcriptPath: rollout?.url.path,
@@ -175,6 +183,8 @@ public struct LocalAgentSessionScanner: Sendable {
                 config: self.config,
                 now: context.now)
             else { continue }
+            session.sessionName = rollout.metadata.descriptiveName(
+                threadMetadata: threadMetadata[rollout.metadata.sessionID])
             session.source = AgentSessionCorrelation.fileOnlyCodexSource(
                 metadataSource: session.source,
                 appServerPresent: context.codexAppServerPresent)
@@ -235,14 +245,10 @@ public struct LocalAgentSessionScanner: Sendable {
 
     private func codexRollouts(
         now: Date,
-        environment: [String: String],
-        homeDirectory: URL,
+        codexHomeDirectory: URL,
         directoryBudget: inout DirectoryMetadataScanBudget) -> [Rollout]
     {
-        let root = URL(
-            fileURLWithPath: environment["CODEX_HOME"] ?? homeDirectory.appendingPathComponent(".codex").path,
-            isDirectory: true)
-            .appendingPathComponent("sessions", isDirectory: true)
+        let root = codexHomeDirectory.appendingPathComponent("sessions", isDirectory: true)
         let calendar = Calendar(identifier: .gregorian)
         let days = [now, calendar.date(byAdding: .day, value: -1, to: now)].compactMap(\.self)
         let formatter = DateFormatter()

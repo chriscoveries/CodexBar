@@ -116,4 +116,36 @@ struct CodexSessionRolloutTests {
             ])
         #expect(rescanned.first(where: { $0.id == "bounded-rollout-2" })?.lastActivityAt == now)
     }
+
+    @Test
+    func `subagent and guardian rollout metadata produce descriptive names`() throws {
+        let subagentLine = #"{"type":"session_meta","payload":{"id":"subagent","cwd":"/repo","originator":"codex_vscode","source":{"subagent":{"thread_spawn":{"agent_path":"/root/neon_patch_review2"}}}}}"#
+        let guardianLine = #"{"type":"session_meta","payload":{"id":"guardian","cwd":"/repo","originator":"codex_vscode","source":{"subagent":{"other":"guardian"}}}}"#
+
+        let subagent = try #require(CodexRolloutFirstLineParser.parse(subagentLine))
+        let guardian = try #require(CodexRolloutFirstLineParser.parse(guardianLine))
+
+        #expect(subagent.agentPath == "/root/neon_patch_review2")
+        #expect(subagent.descriptiveName(threadMetadata: nil) == "Neon patch review 2")
+        #expect(guardian.isGuardian)
+        #expect(guardian.descriptiveName(threadMetadata: nil) == "Approval review")
+    }
+
+    @Test
+    func `thread titles skip command preambles and stay menu sized`() {
+        let metadata = CodexRolloutMetadata(
+            sessionID: "main",
+            cwd: "/repo",
+            originator: "codex_vscode",
+            source: "vscode")
+        let title = """
+        /brain-orient
+
+        Continue work on the Concrete Authority website and compare every current source before changing anything.
+        """
+
+        #expect(metadata.descriptiveName(threadMetadata: CodexThreadMetadata(
+            title: title,
+            agentPath: nil)) == "Continue work on the Concrete Authority website and compare eve…")
+    }
 }

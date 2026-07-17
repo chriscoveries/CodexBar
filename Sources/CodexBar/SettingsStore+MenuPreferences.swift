@@ -83,6 +83,45 @@ enum CostSummaryOption: String, CaseIterable {
     }
 }
 
+enum AgentSessionLabelStyle: String, CaseIterable {
+    case project
+    case descriptive
+    case descriptiveAndProject
+
+    var label: String {
+        switch self {
+        case .project: L("Project")
+        case .descriptive: L("Descriptive")
+        case .descriptiveAndProject: L("Descriptive + project")
+        }
+    }
+
+    func label(for session: AgentSession) -> String {
+        let project = session.projectName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let descriptive = session.sessionName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch self {
+        case .project:
+            return project?.nilIfEmpty ?? L("Unknown project")
+        case .descriptive:
+            return descriptive?.nilIfEmpty ?? project?.nilIfEmpty ?? L("Unknown project")
+        case .descriptiveAndProject:
+            guard let descriptive = descriptive?.nilIfEmpty else {
+                return project?.nilIfEmpty ?? L("Unknown project")
+            }
+            guard let project = project?.nilIfEmpty,
+                  descriptive.caseInsensitiveCompare(project) != .orderedSame
+            else { return descriptive }
+            return "\(descriptive) · \(project)"
+        }
+    }
+}
+
+extension String {
+    fileprivate var nilIfEmpty: String? {
+        self.isEmpty ? nil : self
+    }
+}
+
 extension SettingsStore {
     var menuBarIconStyle: MenuBarIconStyle {
         get {
