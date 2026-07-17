@@ -61,7 +61,7 @@ extension StatusItemController {
             .flatMap { self.store.weeklyPace(provider: provider, window: $0, now: now) }
             .flatMap { UsagePaceText.weeklyDetail(provider: provider, pace: $0, now: now).rightLabel }
         let costSnapshot = self.store.tokenSnapshotForCurrentProviderConfig(for: provider)?.snapshot
-        let providerName = self.store.metadata(for: provider).displayName
+        let providerName = L(self.store.metadata(for: provider).displayName)
         let rawAccountLabel = snapshot?.accountEmail(for: provider)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let accountLabel = self.settings.hidePersonalInfo || rawAccountLabel?.isEmpty != false
@@ -90,17 +90,18 @@ extension StatusItemController {
         now: Date)
         -> (session: RateWindow?, weekly: RateWindow?, automatic: RateWindow?)
     {
-        if provider == .codex {
-            let projection = self.store.codexConsumerProjectionIfNeeded(
-                for: provider,
-                surface: .menuBar,
-                snapshotOverride: snapshot,
-                now: now)
-            let session = projection?.menuBarSelectableRateWindow(for: .session)
-            let weekly = projection?.menuBarSelectableRateWindow(for: .weekly)
-            let automatic = projection?.visibleRateLanes
+        if provider == .codex,
+           let projection = self.store.codexConsumerProjectionIfNeeded(
+               for: provider,
+               surface: .menuBar,
+               snapshotOverride: snapshot,
+               now: now)
+        {
+            let session = projection.menuBarSelectableRateWindow(for: .session)
+            let weekly = projection.menuBarSelectableRateWindow(for: .weekly)
+            let automatic = projection.visibleRateLanes
                 .lazy
-                .compactMap { projection?.menuBarSelectableRateWindow(for: $0) }
+                .compactMap { projection.menuBarSelectableRateWindow(for: $0) }
                 .first
             return (session, weekly, automatic)
         }

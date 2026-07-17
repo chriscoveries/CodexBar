@@ -429,7 +429,8 @@ extension SettingsStore {
             iconStyle: self.menuBarIconStyle,
             displayMode: self.menuBarDisplayMode,
             metricPreference: self.menuBarMetricPreference(for: provider),
-            resetTimeDisplayStyle: self.resetTimeDisplayStyle)
+            resetTimeDisplayStyle: self.resetTimeDisplayStyle,
+            provider: provider)
     }
 
     func setMenuBarLayout(_ layout: MenuBarLayout, for provider: UsageProvider?) {

@@ -168,11 +168,14 @@ final class MenuBarLayoutRenderer {
 
         if options.isDebugApp {
             result.append(NSAttributedString(string: " D", attributes: attributes))
-            accessibilityLines[accessibilityLines.count - 1].append(", Debug")
+            accessibilityLines[accessibilityLines.count - 1].append(", \(L("Debug"))")
         }
+        let accessibilityLabel = accessibilityLines.enumerated().map { index, line in
+            index == 0 ? line : "\(L("menu_bar_layout_line", index + 1)), \(line)"
+        }.joined(separator: ", ")
         return MenuBarLayoutRenderedTitle(
             attributedTitle: result,
-            accessibilityLabel: accessibilityLines.joined(separator: ", next line, "))
+            accessibilityLabel: accessibilityLabel)
     }
 
     private static func renderItem(

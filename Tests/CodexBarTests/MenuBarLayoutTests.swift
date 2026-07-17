@@ -137,6 +137,22 @@ struct MenuBarLayoutTests {
     }
 
     @Test
+    func `migration preserves Kimi primary and secondary lane identity`() {
+        #expect(MenuBarLayout.migrated(
+            iconStyle: .iconAndPercent,
+            displayMode: .percent,
+            metricPreference: .primary,
+            resetTimeDisplayStyle: .countdown,
+            provider: .kimi) == MenuBarLayout(lines: [[.icon, .percent(window: .weekly)]]))
+        #expect(MenuBarLayout.migrated(
+            iconStyle: .iconAndPercent,
+            displayMode: .percent,
+            metricPreference: .secondary,
+            resetTimeDisplayStyle: .countdown,
+            provider: .kimi) == MenuBarLayout(lines: [[.icon, .percent(window: .session)]]))
+    }
+
+    @Test
     @MainActor
     func `provider override and display options persist across reload`() throws {
         let suite = "MenuBarLayoutTests-provider-override"

@@ -100,6 +100,7 @@ struct MenuBarLayoutRendererTests {
             options: [.usesLineFragmentOrigin, .usesFontLeading])
 
         #expect(output.attributedTitle.string == "5h 25%\nW 60%")
+        #expect(output.accessibilityLabel.contains(L("menu_bar_layout_line", 2)))
         #expect(bounds.height <= 22)
     }
 

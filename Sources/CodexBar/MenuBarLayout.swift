@@ -160,7 +160,8 @@ struct MenuBarLayoutResolution: Equatable {
         iconStyle: MenuBarIconStyle,
         displayMode: MenuBarDisplayMode,
         metricPreference: MenuBarMetricPreference,
-        resetTimeDisplayStyle: ResetTimeDisplayStyle)
+        resetTimeDisplayStyle: ResetTimeDisplayStyle,
+        provider: UsageProvider? = nil)
         -> Self
     {
         Self(
@@ -168,7 +169,8 @@ struct MenuBarLayoutResolution: Equatable {
                 iconStyle: iconStyle,
                 displayMode: displayMode,
                 metricPreference: metricPreference,
-                resetTimeDisplayStyle: resetTimeDisplayStyle),
+                resetTimeDisplayStyle: resetTimeDisplayStyle,
+                provider: provider),
             legacySettings: LegacySettings(
                 iconStyle: iconStyle,
                 displayMode: displayMode,
@@ -182,7 +184,8 @@ extension MenuBarLayout {
         iconStyle: MenuBarIconStyle,
         displayMode: MenuBarDisplayMode,
         metricPreference: MenuBarMetricPreference,
-        resetTimeDisplayStyle: ResetTimeDisplayStyle)
+        resetTimeDisplayStyle: ResetTimeDisplayStyle,
+        provider: UsageProvider? = nil)
         -> MenuBarLayout
     {
         _ = iconStyle // Critters and bars keep rendering through their unchanged legacy path.
@@ -192,18 +195,21 @@ extension MenuBarLayout {
             if metricPreference == .primaryAndSecondary {
                 return MenuBarLayout(lines: [[
                     icon,
-                    .percent(window: .session),
+                    .percent(window: Self.percentWindow(for: .primary, provider: provider)),
                     .separatorDot,
-                    .percent(window: .weekly),
+                    .percent(window: Self.percentWindow(for: .secondary, provider: provider)),
                 ]])
             }
-            return MenuBarLayout(lines: [[icon, .percent(window: Self.percentWindow(for: metricPreference))]])
+            return MenuBarLayout(lines: [[
+                icon,
+                .percent(window: Self.percentWindow(for: metricPreference, provider: provider)),
+            ]])
         case .pace:
             return MenuBarLayout(lines: [[icon, .runsOut]])
         case .both:
             return MenuBarLayout(lines: [[
                 icon,
-                .percent(window: Self.percentWindow(for: metricPreference)),
+                .percent(window: Self.percentWindow(for: metricPreference, provider: provider)),
                 .separatorDot,
                 .runsOut,
             ]])
@@ -215,12 +221,16 @@ extension MenuBarLayout {
         }
     }
 
-    private static func percentWindow(for preference: MenuBarMetricPreference) -> PercentWindow {
+    private static func percentWindow(
+        for preference: MenuBarMetricPreference,
+        provider: UsageProvider?)
+        -> PercentWindow
+    {
         switch preference {
         case .primary:
-            .session
+            provider == .kimi ? .weekly : .session
         case .secondary:
-            .weekly
+            provider == .kimi ? .session : .weekly
         case .automatic, .primaryAndSecondary, .tertiary, .extraUsage, .average, .monthlyPlan:
             .automatic
         }
