@@ -18,6 +18,57 @@ struct ShareStatsModelPayload: Sendable, Equatable {
     let estimatedCost: Double?
 }
 
+private struct ShareStatsModelFamilyKey: Hashable {
+    let providerName: String
+    let modelName: String
+    let currencyCode: String
+}
+
+private struct ShareStatsModelFamilyAccumulator {
+    let key: ShareStatsModelFamilyKey
+    private var totalTokens: Int?
+    private var estimatedCost: Double?
+    private var tokenOverflowed = false
+    private var costOverflowed = false
+
+    init(key: ShareStatsModelFamilyKey, row: ShareStatsModelPayload) {
+        self.key = key
+        self.totalTokens = row.totalTokens
+        self.estimatedCost = row.estimatedCost
+    }
+
+    mutating func add(_ row: ShareStatsModelPayload) {
+        if !self.tokenOverflowed, let value = row.totalTokens {
+            if let totalTokens {
+                let result = totalTokens.addingReportingOverflow(value)
+                self.totalTokens = result.overflow ? nil : result.partialValue
+                self.tokenOverflowed = result.overflow
+            } else {
+                self.totalTokens = value
+            }
+        }
+        if !self.costOverflowed, let value = row.estimatedCost {
+            if let estimatedCost {
+                let total = estimatedCost + value
+                self.estimatedCost = total.isFinite ? total : nil
+                self.costOverflowed = !total.isFinite
+            } else {
+                self.estimatedCost = value
+            }
+        }
+    }
+
+    var payload: ShareStatsModelPayload? {
+        guard self.totalTokens != nil || self.estimatedCost != nil else { return nil }
+        return ShareStatsModelPayload(
+            providerName: self.key.providerName,
+            modelName: self.key.modelName,
+            currencyCode: self.key.currencyCode,
+            totalTokens: self.totalTokens,
+            estimatedCost: self.estimatedCost)
+    }
+}
+
 struct ShareStatsCurrencyPayload: Sendable, Equatable, Identifiable {
     let currencyCode: String
     let estimatedCost: Double?
@@ -72,7 +123,51 @@ enum ShareStatsSanitizer {
     }
 
     static func modelName(_ rawValue: String) -> String? {
-        self.safeLabel(rawValue, maximumLength: 72, maximumWords: 3, requireModelShape: true)
+        guard let value = self.safeLabel(
+            rawValue,
+            maximumLength: 72,
+            maximumWords: 3,
+            requireModelShape: true)
+        else { return nil }
+
+        let normalized = value.lowercased()
+        let regionalPrefixes = ["us.", "eu.", "apac.", "global."]
+        let familyName = regionalPrefixes.first { normalized.hasPrefix($0) }.map {
+            String(normalized.dropFirst($0.count))
+        } ?? normalized
+        let publicModelFamilies: [(prefixes: [String], label: String)] = [
+            (["amazon.nova-", "nova-"], "Amazon Nova"),
+            (["anthropic.claude-", "claude-", "claude "], "Claude"),
+            (["chatgpt-", "gpt-"], "GPT"),
+            (["codex-"], "Codex"),
+            (["command-"], "Command"),
+            (["dall-e-"], "DALL-E"),
+            (["deepseek-"], "DeepSeek"),
+            (["codestral-", "devstral-", "magistral-", "mistral-", "mistral ", "mistral.", "mixtral-"], "Mistral"),
+            (["gemma-"], "Gemma"),
+            (["google.gemini-", "gemini-", "gemini "], "Gemini"),
+            (["glm-"], "GLM"),
+            (["grok-"], "Grok"),
+            (["kimi-", "moonshot-"], "Kimi"),
+            (["meta.llama", "llama-", "llama "], "Llama"),
+            (["minimax-"], "MiniMax"),
+            (["o1"], "o1"),
+            (["o3"], "o3"),
+            (["o4"], "o4"),
+            (["phi-"], "Phi"),
+            (["qwen"], "Qwen"),
+            (["sonar-"], "Sonar"),
+            (["text-embedding-"], "OpenAI Embeddings"),
+            (["tts-"], "OpenAI TTS"),
+            (["whisper-"], "Whisper"),
+        ]
+        guard !normalized.contains("://"),
+              !normalized.contains("/"),
+              !normalized.contains("\\")
+        else { return nil }
+        return publicModelFamilies.first { family in
+            family.prefixes.contains(where: familyName.hasPrefix)
+        }?.label
     }
 
     private static func safeLabel(
@@ -124,18 +219,34 @@ enum ShareStatsBuilder {
                     coveredDayCount: row.coveredDayCount)
             }
         }
-        let topModels = model.groups.flatMap { group in
+        let sanitizedModels = model.groups.flatMap { group in
             group.models.compactMap { row -> ShareStatsModelPayload? in
-                guard let modelName = ShareStatsSanitizer.modelName(row.modelName) else { return nil }
+                let estimatedCost = self.finiteCost(row.totalCost)
+                guard let modelName = ShareStatsSanitizer.modelName(row.modelName),
+                      row.totalTokens != nil || estimatedCost != nil
+                else { return nil }
                 return ShareStatsModelPayload(
                     providerName: row.providerName,
                     modelName: modelName,
                     currencyCode: group.currencyCode,
                     totalTokens: row.totalTokens,
-                    estimatedCost: self.finiteCost(row.totalCost))
+                    estimatedCost: estimatedCost)
             }
         }
-        .sorted { lhs, rhs in
+        var modelFamilies: [ShareStatsModelFamilyKey: ShareStatsModelFamilyAccumulator] = [:]
+        for row in sanitizedModels {
+            let key = ShareStatsModelFamilyKey(
+                providerName: row.providerName,
+                modelName: row.modelName,
+                currencyCode: row.currencyCode)
+            if var existing = modelFamilies[key] {
+                existing.add(row)
+                modelFamilies[key] = existing
+            } else {
+                modelFamilies[key] = ShareStatsModelFamilyAccumulator(key: key, row: row)
+            }
+        }
+        let topModels = modelFamilies.values.compactMap(\.payload).sorted { lhs, rhs in
             switch (lhs.totalTokens, rhs.totalTokens) {
             case let (left?, right?) where left != right: return left > right
             case (_?, nil): return true

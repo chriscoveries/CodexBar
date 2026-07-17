@@ -19,7 +19,7 @@ struct ShareStatsTests {
         #expect(payload.providers.map(\.providerName) == ["Claude", "Codex · #1", "Cursor"])
         #expect(payload.providers.map(\.subscriptionName) == ["Max", "Pro 20x", "Cursor Pro"])
         #expect(payload.providers.last?.estimatedCost == nil)
-        #expect(payload.topModels.map(\.modelName).prefix(2) == ["claude-sonnet-4", "gpt-5.4"])
+        #expect(payload.topModels.map(\.modelName).prefix(2) == ["Claude", "GPT"])
 
         let text = ShareStatsFormatting.text(payload)
         #expect(text.contains("GBP: £12.00 estimated · coverage 10/30 days"))
@@ -38,6 +38,10 @@ struct ShareStatsTests {
             "550e8400-e29b-41d4-a716-446655440000",
             "summarize my secret project",
             "abcdefabcdefabcdefabcdef",
+            "https://intranet.example/client-model-2",
+            "acme/private-model-v2",
+            "acme-private-model-v2",
+            "gpt-acme-private-model-v2",
         ])
         let payload = try #require(ShareStatsBuilder.make(
             model: model,
@@ -48,13 +52,17 @@ struct ShareStatsTests {
             ]))
         let text = ShareStatsFormatting.text(payload)
 
-        #expect(payload.topModels.map(\.modelName) == ["claude-sonnet-4", "gpt-5.4"])
+        #expect(payload.topModels.map(\.modelName) == ["Claude", "GPT"])
+        #expect(payload.topModels.last?.totalTokens == 400)
+        #expect(payload.topModels.last?.estimatedCost == 8)
         #expect(payload.providers.map(\.subscriptionName) == ["Max", nil, nil])
         #expect(!text.contains("person@example.com"))
         #expect(!text.contains("/Users/"))
         #expect(!text.contains("550e8400"))
         #expect(!text.contains("secret project"))
         #expect(!text.contains("abcdefabcdef"))
+        #expect(!text.contains("intranet"))
+        #expect(!text.contains("acme"))
     }
 
     @Test
@@ -66,12 +74,68 @@ struct ShareStatsTests {
     }
 
     @Test
+    func `bedrock regional model identifiers map to public families`() {
+        #expect(ShareStatsSanitizer.modelName("us.amazon.nova-2-lite-v1:0") == "Amazon Nova")
+        #expect(ShareStatsSanitizer.modelName("global.anthropic.claude-sonnet-4-v1:0") == "Claude")
+    }
+
+    @Test
+    func `overflowed model family totals stay unavailable`() throws {
+        let rows = [
+            SpendDashboardModel.ModelRow(
+                rank: 1,
+                provider: .codex,
+                providerName: "Codex",
+                modelName: "gpt-5.4",
+                totalTokens: Int.max,
+                totalCost: Double.greatestFiniteMagnitude),
+            SpendDashboardModel.ModelRow(
+                rank: 2,
+                provider: .codex,
+                providerName: "Codex",
+                modelName: "gpt-5.4-mini",
+                totalTokens: 1,
+                totalCost: Double.greatestFiniteMagnitude),
+            SpendDashboardModel.ModelRow(
+                rank: 3,
+                provider: .codex,
+                providerName: "Codex",
+                modelName: "gpt-5.4-nano",
+                totalTokens: 5,
+                totalCost: 5),
+        ]
+        let group = SpendDashboardModel.CurrencyGroup(
+            currencyCode: "USD",
+            providers: [
+                SpendDashboardModel.ProviderRow(
+                    id: "codex",
+                    rank: 1,
+                    provider: .codex,
+                    displayName: "Codex",
+                    totalTokens: 1,
+                    totalCost: nil,
+                    coveredDayCount: 7),
+            ],
+            models: rows,
+            dailyPoints: [],
+            totalTokens: 1,
+            totalCost: nil,
+            coveredDayCount: 0,
+            chartDomain: Self.date...Self.date,
+            modelHistoryCompleteness: .complete)
+        let payload = try #require(ShareStatsBuilder.make(
+            model: SpendDashboardModel(requestedDays: 7, groups: [group])))
+
+        #expect(payload.topModels.isEmpty)
+    }
+
+    @Test
     func `empty dashboard has no share payload`() {
         #expect(ShareStatsBuilder.make(model: SpendDashboardModel(requestedDays: 30, groups: [])) == nil)
     }
 
     @Test
-    func `non-finite spend becomes unavailable`() throws {
+    func `invalid spend is omitted and partial model family metrics combine`() throws {
         let model = SpendDashboardModel(requestedDays: 7, groups: [
             SpendDashboardModel.CurrencyGroup(
                 currencyCode: "USD",
@@ -93,6 +157,20 @@ struct ShareStatsTests {
                         modelName: "gpt-5.4",
                         totalTokens: 10,
                         totalCost: .infinity),
+                    SpendDashboardModel.ModelRow(
+                        rank: 2,
+                        provider: .codex,
+                        providerName: "Codex",
+                        modelName: "gpt-5.4-mini",
+                        totalTokens: nil,
+                        totalCost: 2),
+                    SpendDashboardModel.ModelRow(
+                        rank: 3,
+                        provider: .codex,
+                        providerName: "Codex",
+                        modelName: "gpt-5.4-nano",
+                        totalTokens: nil,
+                        totalCost: nil),
                 ],
                 dailyPoints: [],
                 totalTokens: 10,
@@ -104,7 +182,9 @@ struct ShareStatsTests {
         let payload = try #require(ShareStatsBuilder.make(model: model))
 
         #expect(payload.providers.first?.estimatedCost == nil)
-        #expect(payload.topModels.first?.estimatedCost == nil)
+        #expect(payload.topModels.first?.totalTokens == 10)
+        #expect(payload.topModels.first?.estimatedCost == 2)
+        #expect(payload.topModels.count == 1)
         #expect(payload.currencies.first?.estimatedCost == nil)
         #expect(!ShareStatsFormatting.text(payload).lowercased().contains("nan"))
         #expect(!ShareStatsFormatting.text(payload).lowercased().contains("inf"))
