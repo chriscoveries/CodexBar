@@ -24,7 +24,7 @@ struct ShareStatsTests {
         let text = ShareStatsFormatting.text(payload)
         #expect(text.contains("GBP: £12.00 estimated · coverage 10/30 days"))
         #expect(text.contains("Claude · Max: 300 tokens · ~£12.00 est · 10/30 days"))
-        #expect(text.contains("USD: Spend unavailable estimated · coverage 0/30 days"))
+        #expect(text.contains("USD: Spend unavailable · coverage 0/30 days"))
         #expect(text.contains("Cursor · Cursor Pro: Spend unavailable"))
         #expect(!text.contains("£12.00 +"))
     }
@@ -135,7 +135,7 @@ struct ShareStatsTests {
     }
 
     @Test
-    func `invalid spend is omitted and partial model family metrics combine`() throws {
+    func `invalid spend and partial model family metrics stay unavailable`() throws {
         let model = SpendDashboardModel(requestedDays: 7, groups: [
             SpendDashboardModel.CurrencyGroup(
                 currencyCode: "USD",
@@ -182,9 +182,7 @@ struct ShareStatsTests {
         let payload = try #require(ShareStatsBuilder.make(model: model))
 
         #expect(payload.providers.first?.estimatedCost == nil)
-        #expect(payload.topModels.first?.totalTokens == 10)
-        #expect(payload.topModels.first?.estimatedCost == 2)
-        #expect(payload.topModels.count == 1)
+        #expect(payload.topModels.isEmpty)
         #expect(payload.currencies.first?.estimatedCost == nil)
         #expect(!ShareStatsFormatting.text(payload).lowercased().contains("nan"))
         #expect(!ShareStatsFormatting.text(payload).lowercased().contains("inf"))

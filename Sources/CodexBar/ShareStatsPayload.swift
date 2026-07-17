@@ -33,14 +33,20 @@ private struct ShareStatsModelFamilyAccumulator {
     private var estimatedCost: Double?
     private var tokenOverflowed = false
     private var costOverflowed = false
+    private var tokenIncomplete: Bool
+    private var costIncomplete: Bool
 
     init(key: ShareStatsModelFamilyKey, row: ShareStatsModelPayload) {
         self.key = key
         self.totalTokens = row.totalTokens
         self.estimatedCost = row.estimatedCost
+        self.tokenIncomplete = row.totalTokens == nil
+        self.costIncomplete = row.estimatedCost == nil
     }
 
     mutating func add(_ row: ShareStatsModelPayload) {
+        self.tokenIncomplete = self.tokenIncomplete || row.totalTokens == nil
+        self.costIncomplete = self.costIncomplete || row.estimatedCost == nil
         if !self.tokenOverflowed, let value = row.totalTokens {
             if let totalTokens {
                 let result = totalTokens.addingReportingOverflow(value)
@@ -62,14 +68,16 @@ private struct ShareStatsModelFamilyAccumulator {
     }
 
     var payload: ShareStatsModelPayload? {
-        guard self.totalTokens != nil || self.estimatedCost != nil else { return nil }
+        let totalTokens = self.tokenIncomplete ? nil : self.totalTokens
+        let estimatedCost = self.costIncomplete ? nil : self.estimatedCost
+        guard totalTokens != nil || estimatedCost != nil else { return nil }
         return ShareStatsModelPayload(
             provider: self.key.provider,
             providerName: self.key.providerName,
             modelName: self.key.modelName,
             currencyCode: self.key.currencyCode,
-            totalTokens: self.totalTokens,
-            estimatedCost: self.estimatedCost)
+            totalTokens: totalTokens,
+            estimatedCost: estimatedCost)
     }
 }
 
@@ -335,9 +343,9 @@ enum ShareStatsFormatting {
             lines.append("\(self.compactCount(tokens)) tracked tokens")
         }
         lines.append(contentsOf: payload.currencies.map { currency in
-            let spend = currency.estimatedCost.map { self.currency($0, code: currency.currencyCode) }
+            let spend = currency.estimatedCost.map { "\(self.currency($0, code: currency.currencyCode)) estimated" }
                 ?? "Spend unavailable"
-            return "\(currency.currencyCode): \(spend) estimated · "
+            return "\(currency.currencyCode): \(spend) · "
                 + "coverage \(currency.coveredDayCount)/\(payload.days) days"
         })
         lines.append(contentsOf: payload.providers.map { provider in
