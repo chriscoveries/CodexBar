@@ -98,7 +98,9 @@ struct ProvidersPane: View {
                 isPresented: Binding(
                     get: { self.activeConfirmation != nil },
                     set: { isPresented in
-                        if !isPresented { self.activeConfirmation = nil }
+                        if !isPresented {
+                            self.activeConfirmation = nil
+                        }
                     }),
                 actions: {
                     if let active = self.activeConfirmation {
@@ -684,6 +686,7 @@ struct ProvidersPane: View {
             usageBarsShowUsed: self.settings.usageBarsShowUsed,
             resetTimeDisplayStyle: self.settings.resetTimeDisplayStyle,
             tokenCostUsageEnabled: self.settings.isCostUsageEffectivelyEnabled(for: provider),
+            codexLocalSessionCostLedgerEnabled: self.settings.codexLocalSessionCostLedgerEnabled,
             tokenCostInlineDashboardEnabled: self.settings.costSummaryShowsInlineDashboard(for: provider),
             // Display style only controls the main menu. Provider details always expose
             // available cost data in their Usage section.

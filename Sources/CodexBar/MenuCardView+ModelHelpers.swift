@@ -253,6 +253,7 @@ extension UsageMenuCardView.Model {
         case let (current?, candidate?):
             current.hintLine == candidate.hintLine &&
                 current.errorLine == candidate.errorLine &&
+                (current.meteredLine == nil) == (candidate.meteredLine == nil) &&
                 current.comparisonLines.count == candidate.comparisonLines.count
         default:
             false
@@ -341,6 +342,15 @@ extension UsageMenuCardView.Model {
         else {
             return nil
         }
+        // Local Codex session costs are independent from OAuth, CLI quota, and OpenAI web
+        // dashboard access. Do not present a failed account-level quota fetch as a failure of
+        // a valid local API-key ledger.
+        if input.codexLocalSessionCostLedgerEnabled,
+           self.hasLocalCodexTokenUsage(input),
+           self.isRemoteCodexQuotaFetchError(lastError)
+        {
+            return nil
+        }
         if self.shouldShowRateLimitsUnavailablePlaceholder(input: input, lastError: lastError) {
             return nil
         }
@@ -400,6 +410,10 @@ extension UsageMenuCardView.Model {
         input.provider == .codex &&
             input.tokenCostUsageEnabled &&
             self.tokenUsageSnapshot(input: input) != nil
+    }
+
+    private static func isRemoteCodexQuotaFetchError(_ error: String) -> Bool {
+        error.localizedCaseInsensitiveContains("Codex usage is temporarily unavailable")
     }
 
     private static func shouldShowRateLimitsUnavailablePlaceholder(input: Input, lastError: String? = nil) -> Bool {
