@@ -12,10 +12,37 @@ extension SettingsStore {
     var refreshFrequency: RefreshFrequency {
         get { self.defaultsState.refreshFrequency }
         set {
+            let previousValue = self.defaultsState.refreshFrequency
+            if newValue == .adaptiveAgentAware,
+               previousValue != .adaptiveAgentAware,
+               self.defaultsState.adaptiveActivityScanConsent == .declined
+            {
+                self.defaultsState.adaptiveActivityScanConsent = .undecided
+                self.userDefaults.set(
+                    AdaptiveActivityScanConsent.undecided.rawValue,
+                    forKey: "adaptiveActivityScanConsent")
+            }
             self.defaultsState.refreshFrequency = newValue
             self.userDefaults.set(newValue.rawValue, forKey: "refreshFrequency")
             self.noteBackgroundWorkSettingsChanged()
         }
+    }
+
+    var adaptiveActivityScanConsent: AdaptiveActivityScanConsent {
+        get { self.defaultsState.adaptiveActivityScanConsent }
+        set {
+            self.defaultsState.adaptiveActivityScanConsent = newValue
+            self.userDefaults.set(newValue.rawValue, forKey: "adaptiveActivityScanConsent")
+            self.noteBackgroundWorkSettingsChanged()
+        }
+    }
+
+    var adaptiveActivityScanningEnabled: Bool {
+        self.refreshFrequency == .adaptiveAgentAware && self.adaptiveActivityScanConsent == .allowed
+    }
+
+    var shouldRequestAdaptiveActivityScanConsent: Bool {
+        self.refreshFrequency == .adaptiveAgentAware && self.adaptiveActivityScanConsent == .undecided
     }
 
     /// When enabled, keeping the menu open through its short refresh delay fetches usage for every
@@ -374,8 +401,21 @@ extension SettingsStore {
     var costUsageEnabled: Bool {
         get { self.defaultsState.costUsageEnabled }
         set {
+            let changed = self.defaultsState.costUsageEnabled != newValue
             self.defaultsState.costUsageEnabled = newValue
             self.userDefaults.set(newValue, forKey: "tokenCostUsageEnabled")
+            if changed {
+                self.costUsageSettingsRevision &+= 1
+            }
+            self.noteBackgroundWorkSettingsChanged()
+        }
+    }
+
+    var codexLocalSessionCostLedgerEnabled: Bool {
+        get { self.defaultsState.codexLocalSessionCostLedgerEnabled }
+        set {
+            self.defaultsState.codexLocalSessionCostLedgerEnabled = newValue
+            self.userDefaults.set(newValue, forKey: "codexLocalSessionCostLedgerEnabled")
             self.noteBackgroundWorkSettingsChanged()
         }
     }
@@ -384,8 +424,12 @@ extension SettingsStore {
         get { self.defaultsState.costUsageHistoryDays }
         set {
             let clamped = max(1, min(365, newValue))
+            let changed = self.defaultsState.costUsageHistoryDays != clamped
             self.defaultsState.costUsageHistoryDays = clamped
             self.userDefaults.set(clamped, forKey: "tokenCostUsageHistoryDays")
+            if changed {
+                self.costUsageSettingsRevision &+= 1
+            }
             self.noteBackgroundWorkSettingsChanged()
         }
     }
@@ -853,7 +897,9 @@ extension SettingsStore {
         for provider in providers where !seen.contains(provider) {
             seen.insert(provider)
             normalized.append(provider)
-            if let maxCount, normalized.count >= maxCount { break }
+            if let maxCount, normalized.count >= maxCount {
+                break
+            }
         }
         return normalized
     }

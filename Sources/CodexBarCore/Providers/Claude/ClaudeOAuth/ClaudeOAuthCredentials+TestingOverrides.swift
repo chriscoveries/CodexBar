@@ -2,6 +2,21 @@ import Foundation
 
 #if DEBUG
 extension ClaudeOAuthCredentialsStore {
+    @TaskLocal static var taskBeforeClaudeKeychainPromptLockOverride: (@Sendable () -> Void)?
+    @TaskLocal static var taskInteractiveClaudeKeychainReadOverride: (@Sendable () throws -> Data)?
+
+    static func withInteractiveClaudeKeychainReadOverridesForTesting<T>(
+        beforePromptLock: (@Sendable () -> Void)? = nil,
+        read: (@Sendable () throws -> Data)? = nil,
+        operation: () async throws -> T) async rethrows -> T
+    {
+        try await self.$taskBeforeClaudeKeychainPromptLockOverride.withValue(beforePromptLock) {
+            try await self.$taskInteractiveClaudeKeychainReadOverride.withValue(read) {
+                try await operation()
+            }
+        }
+    }
+
     @TaskLocal static var taskClaudeKeychainDataOverride: Data?
     @TaskLocal static var taskClaudeKeychainFingerprintOverride: ClaudeKeychainFingerprint?
     @TaskLocal static var taskMemoryCacheStoreOverride: MemoryCacheStore?
@@ -140,7 +155,6 @@ extension ClaudeOAuthCredentialsStore {
     @TaskLocal static var taskCredentialsFileFingerprintStoreOverride: CredentialsFileFingerprintStore?
     @TaskLocal static var taskSecurityCLIReadOverride: SecurityCLIReadOverride?
     @TaskLocal static var taskSecurityCLIReadAccountOverride: String?
-    nonisolated(unsafe) static var securityCLIReadOverride: SecurityCLIReadOverride?
 
     public struct TestingOverridesSnapshot: Sendable {
         let keychainOverrideStore: ClaudeKeychainOverrideStore?
@@ -287,7 +301,7 @@ extension ClaudeOAuthCredentialsStore {
     }
 
     static func currentSecurityCLIReadOverrideForTesting() -> SecurityCLIReadOverride? {
-        self.taskSecurityCLIReadOverride ?? self.securityCLIReadOverride
+        self.taskSecurityCLIReadOverride
     }
 
     static func withSecurityCLIReadAccountOverrideForTesting<T>(
@@ -411,10 +425,6 @@ extension ClaudeOAuthCredentialsStore {
                 }
             }
         }
-    }
-
-    static func setSecurityCLIReadOverrideForTesting(_ readOverride: SecurityCLIReadOverride?) {
-        self.securityCLIReadOverride = readOverride
     }
 }
 #endif

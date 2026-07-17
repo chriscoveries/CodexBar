@@ -2,6 +2,7 @@ import Foundation
 
 struct SettingsDefaultsState {
     var refreshFrequency: RefreshFrequency
+    var adaptiveActivityScanConsent: AdaptiveActivityScanConsent
     var refreshAllProvidersOnMenuOpen: Bool
     var launchAtLogin: Bool
     var debugMenuEnabled: Bool
@@ -38,6 +39,7 @@ struct SettingsDefaultsState {
     var copilotBudgetExtrasEnabled: Bool
     var copilotIconSecondaryWindowIDRaw: String
     var costUsageEnabled: Bool
+    var codexLocalSessionCostLedgerEnabled: Bool
     var costUsageHistoryDays: Int
     var costComparisonPeriodsEnabled: Bool
     var costSummaryDisplayStyleRaw: String
