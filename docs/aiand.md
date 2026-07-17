@@ -40,7 +40,7 @@ organization's billing currency (`currency` per row: USD or JPY). Requests use `
 CodexBar does not read ai& browser cookies, console sessions, or inference prompts; only per-request cost/currency
 metadata from the log rows is used.
 
-Why the log endpoint: as of 2026-07-18 the documented `cost_usd` field is missing from live
+Why the log endpoint: as of 2026-07-17 the documented `cost_usd` field is missing from live
 `GET /analytics/summary` responses (the endpoint returns only request/token counts and a token timeseries), and
 `/analytics/metrics` has no cost series either. `/logs` matches its documentation exactly and is the only public
 endpoint that reports cost, so CodexBar sums spend from it.
@@ -60,7 +60,6 @@ Notes:
   the row is labeled "Last 30 days (partial)" and covers only the newest 1,000 requests — there is no silent
   truncation.
 - If log rows ever disagree on currency, only rows matching the newest row's currency are summed.
-- ai& caches analytics responses server-side for 120 seconds, so the number can lag up to two minutes.
 - API keys are organization-scoped: every key in the same organization reports the same org-wide spend.
 
 ## CLI Usage

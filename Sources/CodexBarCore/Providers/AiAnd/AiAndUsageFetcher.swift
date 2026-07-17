@@ -5,7 +5,7 @@ import FoundationNetworking
 
 public enum AiAndUsageError: LocalizedError, Sendable, Equatable {
     case notConfigured
-    case invalidAPIKey
+    case authenticationRejected
     case insufficientCredits
     case rateLimited
     case apiError(Int)
@@ -15,7 +15,7 @@ public enum AiAndUsageError: LocalizedError, Sendable, Equatable {
         switch self {
         case .notConfigured:
             "Missing ai& API key. Add one in Settings or set AIAND_API_KEY."
-        case .invalidAPIKey:
+        case .authenticationRejected:
             "ai& rejected the API key. Create a new key at console.aiand.com and update Settings."
         case .insufficientCredits:
             "ai& reports the organization is out of credits. Top up at console.aiand.com."
@@ -173,7 +173,7 @@ public enum AiAndUsageFetcher {
         var total = Decimal(0)
         for row in rows {
             guard let rawCost = row.cost,
-                  let cost = Decimal(string: rawCost),
+                  let cost = Decimal(string: rawCost, locale: Locale(identifier: "en_US_POSIX")),
                   let rowCurrency = row.currency?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
                   !rowCurrency.isEmpty
             else { continue }
@@ -194,7 +194,7 @@ public enum AiAndUsageFetcher {
     private static func error(statusCode: Int) -> AiAndUsageError {
         switch statusCode {
         case 401:
-            .invalidAPIKey
+            .authenticationRejected
         case 402:
             .insufficientCredits
         case 429:

@@ -10,7 +10,7 @@ struct AiAndProviderTests {
         let transport = ProviderHTTPTransportStub { request in
             let url = try #require(request.url)
             #expect(request.httpMethod == "GET")
-            #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer sk-test-fixture")
+            #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer fixture-key")
             #expect(request.value(forHTTPHeaderField: "Accept") == "application/json")
             #expect(url.absoluteString == "https://api.aiand.com/logs?range=30days&limit=100")
             #expect(url.scheme == "https")
@@ -22,7 +22,7 @@ struct AiAndProviderTests {
         }
 
         let usage = try await AiAndUsageFetcher.fetchUsage(
-            "sk-test-fixture",
+            "fixture-key",
             transport: transport,
             now: now)
         let snapshot = usage.toUsageSnapshot()
@@ -57,7 +57,7 @@ struct AiAndProviderTests {
             return Self.response(url: url, body: Self.firstPageFixture)
         }
 
-        let usage = try await AiAndUsageFetcher.fetchUsage("sk-test-fixture", transport: transport)
+        let usage = try await AiAndUsageFetcher.fetchUsage("fixture-key", transport: transport)
 
         let requests = await transport.requests()
         #expect(requests.count == 2)
@@ -79,7 +79,7 @@ struct AiAndProviderTests {
         }
 
         let usage = try await AiAndUsageFetcher.fetchUsage(
-            "sk-test-fixture",
+            "fixture-key",
             transport: transport,
             now: now)
         let snapshot = usage.toUsageSnapshot()
@@ -93,13 +93,36 @@ struct AiAndProviderTests {
     }
 
     @Test
+    func `missing pagination cursor marks the spend partial`() async throws {
+        let transport = ProviderHTTPTransportStub { request in
+            let url = try #require(request.url)
+            return Self.response(url: url, body: #"""
+            {
+              "data": [{"cost": "2.50000000", "currency": "jpy"}],
+              "has_more": true,
+              "next_after": null,
+              "next_after_id": null
+            }
+            """#)
+        }
+
+        let usage = try await AiAndUsageFetcher.fetchUsage("fixture-key", transport: transport)
+        let snapshot = usage.toUsageSnapshot()
+
+        #expect(await transport.requests().count == 1)
+        #expect(!usage.isComplete)
+        #expect(snapshot.providerCost?.period == "Last 30 days (partial)")
+        #expect(snapshot.dataConfidence == .estimated)
+    }
+
+    @Test
     func `mixed currencies keep the newest row's currency and skip the rest`() async throws {
         let transport = ProviderHTTPTransportStub { request in
             let url = try #require(request.url)
             return Self.response(url: url, body: Self.mixedCurrencyFixture)
         }
 
-        let usage = try await AiAndUsageFetcher.fetchUsage("sk-test-fixture", transport: transport)
+        let usage = try await AiAndUsageFetcher.fetchUsage("fixture-key", transport: transport)
 
         // The newest row is JPY, so the USD row is not added to the total.
         #expect(usage.last30DaysSpend?.currencyCode == "JPY")
@@ -113,7 +136,7 @@ struct AiAndProviderTests {
             return Self.response(url: url, body: #"{"data": [], "has_more": false}"#)
         }
 
-        let usage = try await AiAndUsageFetcher.fetchUsage("sk-test-fixture", transport: transport)
+        let usage = try await AiAndUsageFetcher.fetchUsage("fixture-key", transport: transport)
         let snapshot = usage.toUsageSnapshot()
 
         // The billing currency is only observable from log rows; with none, report
@@ -130,7 +153,7 @@ struct AiAndProviderTests {
             return Self.response(url: url, body: Self.missingCurrencyFixture)
         }
 
-        let usage = try await AiAndUsageFetcher.fetchUsage("sk-test-fixture", transport: transport)
+        let usage = try await AiAndUsageFetcher.fetchUsage("fixture-key", transport: transport)
 
         #expect(usage.last30DaysSpend == nil)
         #expect(usage.toUsageSnapshot().providerCost == nil)
@@ -143,7 +166,7 @@ struct AiAndProviderTests {
             return Self.response(url: url, body: Self.decimalFixture)
         }
 
-        let usage = try await AiAndUsageFetcher.fetchUsage("sk-test-fixture", transport: transport)
+        let usage = try await AiAndUsageFetcher.fetchUsage("fixture-key", transport: transport)
 
         // 0.1 + 0.1 + 0.1 must be exactly 0.3 — Double summation would drift.
         #expect(usage.last30DaysSpend?.amount == Decimal(string: "0.3"))
@@ -156,12 +179,12 @@ struct AiAndProviderTests {
             return Self.response(url: url, body: Self.finalPageFixture)
         }
 
-        _ = try await AiAndUsageFetcher.fetchUsage("sk-test-fixture", transport: transport)
+        _ = try await AiAndUsageFetcher.fetchUsage("fixture-key", transport: transport)
 
         let request = try #require(await transport.requests().first)
         let url = try #require(request.url)
-        #expect(!url.absoluteString.contains("sk-test-fixture"))
-        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer sk-test-fixture")
+        #expect(!url.absoluteString.contains("fixture-key"))
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer fixture-key")
     }
 
     @Test
@@ -169,11 +192,11 @@ struct AiAndProviderTests {
         let transport = Self.errorTransport(statusCode: 401, code: "invalid_api_key")
 
         await #expect {
-            _ = try await AiAndUsageFetcher.fetchUsage("sk-wrong", transport: transport)
+            _ = try await AiAndUsageFetcher.fetchUsage("wrong-key", transport: transport)
         } throws: { error in
-            error as? AiAndUsageError == .invalidAPIKey
+            error as? AiAndUsageError == .authenticationRejected
         }
-        #expect(AiAndUsageError.invalidAPIKey.errorDescription?.contains("console.aiand.com") == true)
+        #expect(AiAndUsageError.authenticationRejected.errorDescription?.contains("console.aiand.com") == true)
     }
 
     @Test
@@ -181,7 +204,7 @@ struct AiAndProviderTests {
         let transport = Self.errorTransport(statusCode: 402, code: "insufficient_credits")
 
         await #expect {
-            _ = try await AiAndUsageFetcher.fetchUsage("sk-test-fixture", transport: transport)
+            _ = try await AiAndUsageFetcher.fetchUsage("fixture-key", transport: transport)
         } throws: { error in
             error as? AiAndUsageError == .insufficientCredits
         }
@@ -193,7 +216,7 @@ struct AiAndProviderTests {
         let transport = Self.errorTransport(statusCode: 429, code: "rate_limit_exceeded")
 
         await #expect {
-            _ = try await AiAndUsageFetcher.fetchUsage("sk-test-fixture", transport: transport)
+            _ = try await AiAndUsageFetcher.fetchUsage("fixture-key", transport: transport)
         } throws: { error in
             error as? AiAndUsageError == .rateLimited
         }
@@ -204,7 +227,7 @@ struct AiAndProviderTests {
         let transport = Self.errorTransport(statusCode: 500, code: "internal_error")
 
         await #expect {
-            _ = try await AiAndUsageFetcher.fetchUsage("sk-test-fixture", transport: transport)
+            _ = try await AiAndUsageFetcher.fetchUsage("fixture-key", transport: transport)
         } throws: { error in
             error as? AiAndUsageError == .apiError(500)
         }
@@ -227,7 +250,7 @@ struct AiAndProviderTests {
         }
 
         await #expect {
-            _ = try await AiAndUsageFetcher.fetchUsage("sk-test-fixture", transport: transport)
+            _ = try await AiAndUsageFetcher.fetchUsage("fixture-key", transport: transport)
         } throws: { error in
             guard case .parseFailed = error as? AiAndUsageError else { return false }
             return true
@@ -237,12 +260,23 @@ struct AiAndProviderTests {
     @Test
     func `settings reader trims whitespace and quotes`() {
         #expect(AiAndSettingsReader.apiKey(environment: [
-            AiAndSettingsReader.apiKeyEnvironmentKey: "  'sk-test-fixture'  ",
-        ]) == "sk-test-fixture")
+            AiAndSettingsReader.apiKeyEnvironmentKey: "  'fixture-key'  ",
+        ]) == "fixture-key")
         #expect(AiAndSettingsReader.apiKey(environment: [:]) == nil)
         #expect(AiAndSettingsReader.apiKey(environment: [
             AiAndSettingsReader.apiKeyEnvironmentKey: "   ",
         ]) == nil)
+    }
+
+    @Test
+    func `config API key projects into the fetch environment`() {
+        let env = ProviderConfigEnvironment.applyAPIKeyOverride(
+            base: [AiAndSettingsReader.apiKeyEnvironmentKey: "environment-key"],
+            provider: .aiand,
+            config: ProviderConfig(id: .aiand, apiKey: "test"))
+
+        #expect(AiAndSettingsReader.apiKey(environment: env) == "test")
+        #expect(ProviderConfigEnvironment.supportsAPIKeyOverride(for: .aiand))
     }
 
     @Test @MainActor
@@ -268,7 +302,7 @@ struct AiAndProviderTests {
             return Self.response(url: url, body: Self.finalPageFixture)
         }
         let usage = try await AiAndUsageFetcher.fetchUsage(
-            "sk-test-fixture",
+            "fixture-key",
             transport: transport,
             now: now)
         let model = UsageMenuCardView.Model.make(.init(
@@ -299,14 +333,14 @@ struct AiAndProviderTests {
         #expect(model.providerCost?.percentLine == nil)
     }
 
-    /// Sanitized from a live `/logs` response (2026-07-18); `api_key` arrives pre-masked by the server.
+    /// Sanitized from a live `/logs` response (2026-07-17); `api_key` arrives pre-masked by the server.
     private static let finalPageFixture = #"""
     {
       "data": [
         {
           "id": "cdd2b25d-0000-4000-8000-000000000001",
           "model": "zai-org/glm-5.2",
-          "api_key": "sk-43fd...cc4b",
+          "api_key": "masked",
           "status_code": 200,
           "ttft_ms": 1449,
           "latency_ms": 3163,
@@ -320,7 +354,7 @@ struct AiAndProviderTests {
         {
           "id": "cdd2b25d-0000-4000-8000-000000000002",
           "model": "zai-org/glm-5.2",
-          "api_key": "sk-43fd...cc4b",
+          "api_key": "masked",
           "status_code": 200,
           "ttft_ms": 512,
           "latency_ms": 1201,
@@ -334,7 +368,7 @@ struct AiAndProviderTests {
         {
           "id": "cdd2b25d-0000-4000-8000-000000000003",
           "model": "zai-org/glm-5.2",
-          "api_key": "sk-43fd...cc4b",
+          "api_key": "masked",
           "status_code": 500,
           "ttft_ms": 0,
           "latency_ms": 42,
@@ -358,7 +392,7 @@ struct AiAndProviderTests {
         {
           "id": "912bf992-0000-4000-8000-000000000001",
           "model": "zai-org/glm-5.2",
-          "api_key": "sk-43fd...cc4b",
+          "api_key": "masked",
           "status_code": 200,
           "ttft_ms": 800,
           "latency_ms": 2400,
@@ -372,7 +406,7 @@ struct AiAndProviderTests {
         {
           "id": "912bf992-0000-4000-8000-000000000002",
           "model": "zai-org/glm-5.2",
-          "api_key": "sk-43fd...cc4b",
+          "api_key": "masked",
           "status_code": 200,
           "ttft_ms": 300,
           "latency_ms": 900,

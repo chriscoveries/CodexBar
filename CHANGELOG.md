@@ -2,8 +2,7 @@
 
 ## 0.44.1 — Unreleased
 
-### Added
-- ai&: add 30-day organization spend summed from the documented request logs API in the org's billing currency, using org-scoped API keys.
+### Fixed
 
 ## 0.44.0 — 2026-07-17
 
