@@ -66,7 +66,7 @@ enum CodexBarCLI {
             case ["cache", "clear"]:
                 self.runCacheClear(invocation.parsedValues)
             case ["cookie", "refresh"]:
-                await self.runCookieRefresh(invocation.parsedValues)
+                await self.runCookieRefreshWithTermination(invocation.parsedValues)
             case ["diagnose"]:
                 let signalMonitor = CLITerminationSignalMonitor { signalNumber in
                     CLITerminationSignalMonitor.terminateActiveHelpersAndReraise(signalNumber)
@@ -98,6 +98,14 @@ enum CodexBarCLI {
         default:
             await self.runUsage(values)
         }
+    }
+
+    private static func runCookieRefreshWithTermination(_ values: ParsedValues) async {
+        let signalMonitor = CLITerminationSignalMonitor { signalNumber in
+            CLITerminationSignalMonitor.terminateActiveHelpersAndReraise(signalNumber)
+        }
+        defer { signalMonitor.cancel() }
+        await self.runCookieRefresh(values)
     }
 
     private static func commandDescriptors() -> [CommandDescriptor] {
