@@ -92,6 +92,62 @@ struct PiSessionCostScannerTests {
     }
 
     @Test
+    func `scanner merges omp sessions with pi sessions`() throws {
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+
+        let day = try env.makeLocalNoon(year: 2026, month: 7, day: 17)
+        func assistant(input: Int, output: Int) -> [String: Any] {
+            [
+                "type": "message",
+                "timestamp": env.isoString(for: day),
+                "message": [
+                    "role": "assistant",
+                    "api": "openai-codex-responses",
+                    "provider": "openai-codex",
+                    "model": "gpt-5.4",
+                    "usage": [
+                        "input": input,
+                        "output": output,
+                        "cacheRead": 0,
+                        "cacheWrite": 0,
+                        "totalTokens": input + output,
+                    ],
+                ],
+            ]
+        }
+
+        _ = try env.writePiSessionFile(
+            relativePath: "2026-07-17T10-00-00-000Z_pi.jsonl",
+            contents: env.jsonl([assistant(input: 10, output: 5)]))
+        let ompSessionsRoot = env.root.appendingPathComponent("omp-sessions", isDirectory: true)
+        let ompSession = ompSessionsRoot.appendingPathComponent(
+            "nested/2026-07-17T11-00-00-000Z_omp.jsonl",
+            isDirectory: false)
+        try FileManager.default.createDirectory(
+            at: ompSession.deletingLastPathComponent(),
+            withIntermediateDirectories: true)
+        try env.jsonl([assistant(input: 20, output: 10)])
+            .write(to: ompSession, atomically: true, encoding: .utf8)
+
+        let report = PiSessionCostScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day,
+            options: PiSessionCostScanner.Options(
+                piSessionsRoot: env.piSessionsRoot,
+                ompSessionsRoot: ompSessionsRoot,
+                cacheRoot: env.cacheRoot,
+                refreshMinIntervalSeconds: 0))
+
+        #expect(report.data.count == 1)
+        #expect(report.data.first?.totalTokens == 45)
+        #expect(report.data.first?.inputTokens == 30)
+        #expect(report.data.first?.outputTokens == 15)
+    }
+
+    @Test
     func `pi codex cache reads are billed once and use the true context size`() throws {
         let env = try CostUsageTestEnvironment()
         defer { env.cleanup() }

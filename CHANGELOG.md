@@ -2,6 +2,9 @@
 
 ## 0.44.1 — Unreleased
 
+### Added
+- Cost usage: include OMP session logs from `~/.omp/agent/sessions` alongside compatible pi sessions.
+
 ### Fixed
 
 ## 0.44.0 — 2026-07-17

@@ -18,17 +18,20 @@ private final class PiSessionISO8601FormatterBox: @unchecked Sendable {
 enum PiSessionCostScanner {
     struct Options {
         var piSessionsRoot: URL?
+        var ompSessionsRoot: URL?
         var cacheRoot: URL?
         var refreshMinIntervalSeconds: TimeInterval = 60
         var forceRescan: Bool = false
 
         init(
             piSessionsRoot: URL? = nil,
+            ompSessionsRoot: URL? = nil,
             cacheRoot: URL? = nil,
             refreshMinIntervalSeconds: TimeInterval = 60,
             forceRescan: Bool = false)
         {
             self.piSessionsRoot = piSessionsRoot
+            self.ompSessionsRoot = ompSessionsRoot
             self.cacheRoot = cacheRoot
             self.refreshMinIntervalSeconds = refreshMinIntervalSeconds
             self.forceRescan = forceRescan
@@ -113,9 +116,11 @@ enum PiSessionCostScanner {
 
         if shouldRefresh {
             try checkCancellation?()
-            let root = self.defaultPiSessionsRoot(options: options)
+            let roots = self.defaultSessionRoots(options: options)
             let startCutoff = self.dateFromDayKey(range.scanSinceKey) ?? since
-            let files = self.listPiSessionFiles(root: root, startCutoffLocal: startCutoff)
+            let files = roots
+                .flatMap { self.listPiSessionFiles(root: $0, startCutoffLocal: startCutoff) }
+                .sorted(by: { $0.path < $1.path })
             let filePathsInScan = Set(files.map(\.path))
 
             for fileURL in files {
@@ -234,12 +239,18 @@ enum PiSessionCostScanner {
         return false
     }
 
-    private static func defaultPiSessionsRoot(options: Options) -> URL {
-        if let override = options.piSessionsRoot { return override }
-        return FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".pi", isDirectory: true)
-            .appendingPathComponent("agent", isDirectory: true)
-            .appendingPathComponent("sessions", isDirectory: true)
+    private static func defaultSessionRoots(options: Options) -> [URL] {
+        if options.piSessionsRoot != nil || options.ompSessionsRoot != nil {
+            return [options.piSessionsRoot, options.ompSessionsRoot].compactMap(\.self)
+        }
+
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        return [".pi", ".omp"].map { directory in
+            home
+                .appendingPathComponent(directory, isDirectory: true)
+                .appendingPathComponent("agent", isDirectory: true)
+                .appendingPathComponent("sessions", isDirectory: true)
+        }
     }
 
     private static func listPiSessionFiles(root: URL, startCutoffLocal: Date) -> [URL] {
@@ -630,7 +641,7 @@ enum PiSessionCostScanner {
             cacheWriteTokens: cacheWrite,
             outputTokens: output,
             totalTokens: totalTokens)
-        // Pi JSONL does not record Anthropic cache retention, so use Pi's persisted default tariff.
+        // Pi-compatible JSONL does not record Anthropic cache retention, so use Pi's persisted default tariff.
         let costUSD = self.computedCostUSD(
             provider: provider,
             modelName: modelName,
