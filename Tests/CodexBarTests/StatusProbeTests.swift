@@ -866,3 +866,22 @@ struct StatusProbeTests {
         }
     }
 }
+
+struct ClaudeUsageErrorClassificationTests {
+    @Test
+    func `ignores authentication words outside the usage error`() {
+        let sample = """
+        Hook warning: forbidden command skipped
+        Error: Failed to load usage data: Session quota fields were unavailable
+        """
+
+        do {
+            _ = try ClaudeStatusProbe.parse(text: sample)
+            Issue.record("Expected parser failure")
+        } catch ClaudeStatusProbeError.parseFailed {
+            // Expected: unrelated hook output must not turn a transient parse failure into auth loss.
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+    }
+}

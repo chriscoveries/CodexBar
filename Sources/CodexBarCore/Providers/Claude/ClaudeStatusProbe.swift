@@ -201,7 +201,7 @@ extension ClaudeStatusProbe {
                 reason: "usageError: \(usageError)",
                 usage: clean,
                 status: statusText)
-            throw self.usageProbeError(message: usageError, rawText: clean)
+            throw self.usageProbeError(message: usageError)
         }
 
         let latestUsagePanel = self.trimToLatestUsagePanel(clean)
@@ -383,7 +383,7 @@ extension ClaudeStatusProbe {
     private static func validateUsageBeforeStatusProbe(_ text: String) throws {
         let clean = TextParsing.stripANSICodes(text)
         if let usageError = self.extractUsageError(text: clean) {
-            throw self.usageProbeError(message: usageError, rawText: clean)
+            throw self.usageProbeError(message: usageError)
         }
 
         let latestUsagePanel = self.trimToLatestUsagePanel(clean)
@@ -613,15 +613,17 @@ extension ClaudeStatusProbe {
             appearing open `claude` once, choose “Yes, proceed”, then retry.
             """
         }
-        if lower.contains("token_expired") || lower.contains("token has expired") {
+        let failureLine = self.usageFailureLine(text: text)?.lowercased() ?? ""
+        if failureLine.contains("token_expired") || failureLine.contains("token has expired") {
             return "Claude CLI token expired. Run `claude login` to refresh."
         }
-        if lower.contains("authentication_error") {
+        if failureLine.contains("authentication_error") {
             return "Claude CLI authentication error. Run `claude login`."
         }
-        if lower.contains("rate_limit_error")
-            || lower.contains("rate limited")
-            || compact.contains("ratelimited")
+        let compactFailureLine = failureLine.filter { !$0.isWhitespace }
+        if failureLine.contains("rate_limit_error")
+            || failureLine.contains("rate limited")
+            || compactFailureLine.contains("ratelimited")
         {
             return "Claude CLI usage endpoint is rate limited right now. Please try again later."
         }
@@ -637,8 +639,18 @@ extension ClaudeStatusProbe {
         return nil
     }
 
-    private static func usageProbeError(message: String, rawText: String) -> ClaudeStatusProbeError {
-        let lower = rawText.lowercased()
+    private static func usageFailureLine(text: String) -> String? {
+        let pattern = #"failed\s*to\s*load\s*usage\s*data[^\r\n]*"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return nil }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        guard let match = regex.matches(in: text, range: range).last,
+              let matchRange = Range(match.range, in: text)
+        else { return nil }
+        return String(text[matchRange])
+    }
+
+    private static func usageProbeError(message: String) -> ClaudeStatusProbeError {
+        let lower = message.lowercased()
         let authenticationMarkers = [
             "authentication_error",
             "permission_error",
@@ -1257,6 +1269,9 @@ extension ClaudeStatusProbe {
 
         if let code, code.lowercased().contains("token") {
             return "\(hint). Run `claude login` to refresh."
+        }
+        if type == "authentication_error" || type == "permission_error" {
+            return "Claude CLI authentication error: \(hint). Run `claude login`."
         }
         return "Claude CLI error: \(hint)"
     }
