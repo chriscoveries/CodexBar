@@ -191,6 +191,21 @@ struct DashboardSnapshotBuilderTests {
     }
 
     @Test
+    func `dashboard redaction keeps only the final email domain`() throws {
+        let snapshot = DashboardSnapshotBuilder.makeSnapshot(
+            usagePayloads: [self.identityPayload(email: #""foo@bar"@example.com"#)],
+            costPayloads: [],
+            config: CodexBarConfig(providers: [ProviderConfig(id: .claude, enabled: true)]),
+            identityMode: .redacted,
+            generatedAt: Date(timeIntervalSince1970: 0),
+            refreshInterval: 60,
+            codexBarVersion: nil)
+
+        let identity = try #require(self.firstIdentity(snapshot))
+        #expect(identity["accountEmail"] as? String == "redacted@example.com")
+    }
+
+    @Test
     func `dashboard provider errors are projected without raw usage internals`() throws {
         let payload = ProviderPayload(
             provider: .codex,

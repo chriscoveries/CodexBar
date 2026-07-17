@@ -117,6 +117,10 @@ struct CLIServeRouterTests {
 
         let wildcard = try CLILocalHTTPRequest.parse(Data(raw.utf8), allowedHosts: .any).get()
         #expect(wildcard.host == "192.168.1.10:8080")
+        let alternateLoopback = try CLILocalHTTPRequest.parse(
+            Data("GET /usage HTTP/1.1\r\nHost: 127.0.0.2\r\n\r\n".utf8),
+            allowedHosts: CLIServeSecurity.allowedHosts(forBindHost: "127.0.0.2")).get()
+        #expect(alternateLoopback.host == "127.0.0.2")
         Self.expectParseFailure(
             raw: "GET /usage HTTP/1.1\r\nHost: 192.168.1.10, evil.test\r\n\r\n",
             .disallowedHost,

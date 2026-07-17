@@ -210,6 +210,19 @@ struct CLIServeRawHTTPTests {
                     + "Authorization: Bearer secret\r\nContent-Length: 0\r\n\r\n")
 
             #expect(response.statusLine == "HTTP/1.1 405 Method Not Allowed")
+            #expect(response.headerValue("Cache-Control") == "no-store")
+        })
+    }
+
+    @Test
+    func `dashboard missing routes return no-store`() async throws {
+        try await Self.withServeRuntime(token: "secret", body: { port in
+            let response = try await Self.rawExchange(
+                port: port,
+                request: "GET /dashboard/v1/missing HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
+
+            #expect(response.statusLine == "HTTP/1.1 404 Not Found")
+            #expect(response.headerValue("Cache-Control") == "no-store")
         })
     }
 

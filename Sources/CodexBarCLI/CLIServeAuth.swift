@@ -91,13 +91,16 @@ enum CLIServeSecurity {
     /// loopback binds, any host for wildcard binds (clients reach those through any of
     /// the machine's addresses), and loopback plus the configured name otherwise.
     static func allowedHosts(forBindHost bindHost: String) -> CLILocalHTTPAllowedHosts {
-        if self.isLoopbackHost(bindHost) {
+        let normalized = bindHost.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if normalized == "127.0.0.1" || normalized == "localhost" || normalized == "::1"
+            || normalized == "[::1]" || normalized == "0:0:0:0:0:0:0:1"
+        {
             return .loopbackOnly
         }
         if self.isWildcardHost(bindHost) {
             return .any
         }
-        return .loopbackAnd([bindHost.lowercased()])
+        return .loopbackAnd([normalized])
     }
 }
 

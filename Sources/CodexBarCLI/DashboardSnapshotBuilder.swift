@@ -133,7 +133,7 @@ enum DashboardSnapshotBuilder {
             return nil
         }
         guard mode == .redacted else { return email }
-        guard let at = email.firstIndex(of: "@") else { return "redacted" }
+        guard let at = email.lastIndex(of: "@") else { return "redacted" }
         return "redacted\(email[at...])"
     }
 

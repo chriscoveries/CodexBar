@@ -67,6 +67,7 @@ struct CLIServeAuthTests {
         #expect(!CLIServeSecurity.isLoopbackHost("192.168.1.10"))
 
         #expect(CLIServeSecurity.allowedHosts(forBindHost: "127.0.0.1") == .loopbackOnly)
+        #expect(CLIServeSecurity.allowedHosts(forBindHost: "127.0.0.2") == .loopbackAnd(["127.0.0.2"]))
         #expect(CLIServeSecurity.allowedHosts(forBindHost: "0.0.0.0") == .any)
         #expect(CLIServeSecurity.allowedHosts(forBindHost: "192.168.1.10")
             == .loopbackAnd(["192.168.1.10"]))

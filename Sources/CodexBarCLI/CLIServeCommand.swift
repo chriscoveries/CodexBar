@@ -811,9 +811,11 @@ extension CodexBarCLI {
                 path: request.path,
                 queryItems: request.queryItems)
         } catch CLIServeRouteError.methodNotAllowed {
-            return Self.serveError(status: .methodNotAllowed, message: "method not allowed")
+            let response = Self.serveError(status: .methodNotAllowed, message: "method not allowed")
+            return request.path.hasPrefix("/dashboard/v1/") ? Self.addingNoStore(response) : response
         } catch {
-            return Self.serveError(status: .notFound, message: "not found")
+            let response = Self.serveError(status: .notFound, message: "not found")
+            return request.path.hasPrefix("/dashboard/v1/") ? Self.addingNoStore(response) : response
         }
 
         switch route {
