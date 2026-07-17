@@ -326,7 +326,8 @@ struct CodexOAuthFetchStrategy: ProviderFetchStrategy {
             dashboard: oauthResult.dashboard,
             sourceLabel: oauthResult.sourceLabel,
             strategyID: oauthResult.strategyID,
-            strategyKind: oauthResult.strategyKind)
+            strategyKind: oauthResult.strategyKind,
+            diagnostic: oauthResult.diagnostic)
     }
 
     private static func fetchResetCreditsIfRequested(
