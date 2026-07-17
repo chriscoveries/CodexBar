@@ -87,9 +87,21 @@ struct KeepaliveWindowConfigurator: NSViewRepresentable {
 
 @MainActor
 final class KeepaliveWindowConfiguratorView: NSView {
+    private let windowProvider: (NSView) -> NSWindow?
+
+    init(windowProvider: @escaping (NSView) -> NSWindow? = { $0.window }) {
+        self.windowProvider = windowProvider
+        super.init(frame: .zero)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is unavailable")
+    }
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        guard let window else { return }
+        guard let window = self.windowProvider(self) else { return }
 
         window.identifier = NSUserInterfaceItemIdentifier("CodexBarLifecycleKeepalive")
         // Make the keepalive window truly invisible and non-interactive.
