@@ -271,6 +271,8 @@ struct ProvidersPaneCoverageTests {
             let picker = pane._test_menuBarMetricPicker(for: .neuralwatt)
             #expect(picker?.options.map(\.id) == [
                 MenuBarMetricPreference.automatic.rawValue,
+                MenuBarMetricPreference.primary.rawValue,
+                MenuBarMetricPreference.secondary.rawValue,
             ])
         }
     }
