@@ -77,7 +77,7 @@ struct CLICookieRefreshTests {
         let service = "com.steipete.codexbar.tests.cookie-refresh.\(UUID().uuidString)"
 
         await KeychainCacheStore.withServiceOverrideForTesting(service) {
-            KeychainCacheStore.withImplicitTestStoreForTesting {
+            await KeychainCacheStore.withImplicitTestStoreForTesting {
                 CookieHeaderCache.store(
                     provider: provider,
                     cookieHeader: "default-test-cookie",
