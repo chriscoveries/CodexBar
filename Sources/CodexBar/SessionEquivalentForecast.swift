@@ -311,7 +311,7 @@ enum SessionEquivalentBurnEstimator {
 
 private struct SessionEquivalentBurnCacheKey: Equatable {
     let historyRevision: Int
-    let accountKey: String?
+    let historySelectionIdentity: String
     let currentSessionResetsAt: Date
     let weeklyWindowID: String?
 }
@@ -329,6 +329,7 @@ extension UsageStore {
         weeklyWindow: RateWindow,
         weeklyWindowID: String? = nil,
         historyIdentity: String? = nil,
+        historySelection: PlanUtilizationHistorySelection? = nil,
         now: Date = .init()) -> SessionEquivalentForecast?
     {
         guard sessionWindow.windowMinutes.map({ PlanUtilizationSeriesName.session.canonicalWindowMinutes($0) })
@@ -339,7 +340,7 @@ extension UsageStore {
             return nil
         }
 
-        let selection = self.planUtilizationHistorySelection(for: provider)
+        let selection = historySelection ?? self.planUtilizationHistorySelection(for: provider)
         guard self.sessionEquivalentHistoryIdentityMatches(
             provider: provider,
             accountKey: selection.accountKey,
@@ -349,7 +350,7 @@ extension UsageStore {
         }
         let cacheKey = SessionEquivalentBurnCacheKey(
             historyRevision: self.planUtilizationHistoryRevision,
-            accountKey: selection.accountKey,
+            historySelectionIdentity: selection.cacheIdentity,
             currentSessionResetsAt: currentSessionResetsAt,
             weeklyWindowID: weeklyWindowID)
         let burnEstimate: SessionEquivalentBurnEstimate?

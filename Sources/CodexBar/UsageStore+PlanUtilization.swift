@@ -50,7 +50,7 @@ extension UsageStore {
     }
 
     func planUtilizationHistorySelection(for provider: UsageProvider)
-        -> (accountKey: String?, histories: [PlanUtilizationSeriesHistory])
+        -> PlanUtilizationHistorySelection
     {
         // The persisted history has not been read yet. Return the in-memory
         // stub (empty) without performing account migration or enqueueing an
@@ -59,7 +59,7 @@ extension UsageStore {
         // overwrite real disk history.
         if !self.planUtilizationHistoryLoaded {
             let providerBuckets = self.planUtilizationHistory[provider] ?? PlanUtilizationHistoryBuckets()
-            return (nil, providerBuckets.histories(for: nil))
+            return PlanUtilizationHistorySelection(accountKey: nil, histories: providerBuckets.histories(for: nil))
         }
         var providerBuckets = self.planUtilizationHistory[provider] ?? PlanUtilizationHistoryBuckets()
         if provider == .claude,
@@ -69,7 +69,9 @@ extension UsageStore {
             // Persisted OAuth provenance outranks an unrelated configured token account. The unscoped
             // sentinel intentionally resolves to nil, including after the history store is reloaded.
             let accountKey = self.stickyPlanUtilizationAccountKey(providerBuckets: providerBuckets)
-            return (accountKey, providerBuckets.histories(for: accountKey))
+            return PlanUtilizationHistorySelection(
+                accountKey: accountKey,
+                histories: providerBuckets.histories(for: accountKey))
         }
         let originalProviderBuckets = providerBuckets
         let accountKey = self.resolvePlanUtilizationAccountKey(
@@ -79,31 +81,88 @@ extension UsageStore {
             providerBuckets: &providerBuckets)
         self.planUtilizationHistory[provider] = providerBuckets
         if providerBuckets != originalProviderBuckets {
+            self.planUtilizationHistoryRevision &+= 1
+            self.sessionEquivalentBurnCache.removeValue(forKey: provider)
             let snapshotToPersist = self.planUtilizationHistory
             Task {
                 await self.planUtilizationPersistenceCoordinator.enqueue(snapshotToPersist)
             }
         }
-        return (accountKey, providerBuckets.histories(for: accountKey))
+        return PlanUtilizationHistorySelection(
+            accountKey: accountKey,
+            histories: providerBuckets.histories(for: accountKey))
+    }
+
+    func planUtilizationHistorySelection(
+        for provider: UsageProvider,
+        account: ProviderTokenAccount) -> PlanUtilizationHistorySelection
+    {
+        guard self.planUtilizationHistoryLoaded,
+              let accountKey = Self.planUtilizationAccountKey(provider: provider, account: account)
+        else {
+            return .unavailable
+        }
+        if self.settings.effectiveSelectedTokenAccount(for: provider)?.id == account.id {
+            let currentSelection = self.planUtilizationHistorySelection(for: provider)
+            if currentSelection.accountKey == accountKey {
+                return currentSelection
+            }
+        }
+        let providerBuckets = self.planUtilizationHistory[provider] ?? PlanUtilizationHistoryBuckets()
+        return PlanUtilizationHistorySelection(
+            accountKey: accountKey,
+            histories: providerBuckets.histories(for: accountKey))
+    }
+
+    func planUtilizationHistorySelection(
+        for provider: UsageProvider,
+        snapshotOverride snapshot: UsageSnapshot) -> PlanUtilizationHistorySelection
+    {
+        guard self.planUtilizationHistoryLoaded,
+              let accountKey = Self.planUtilizationIdentityAccountKey(provider: provider, snapshot: snapshot)
+        else {
+            return .unavailable
+        }
+        if self.settings.effectiveSelectedTokenAccount(for: provider) == nil,
+           let currentSnapshot = self.snapshots[provider],
+           Self.planUtilizationIdentityAccountKey(provider: provider, snapshot: currentSnapshot) == accountKey
+        {
+            let currentSelection = self.planUtilizationHistorySelection(for: provider)
+            if currentSelection.accountKey == accountKey {
+                return currentSelection
+            }
+        }
+        let providerBuckets = self.planUtilizationHistory[provider] ?? PlanUtilizationHistoryBuckets()
+        return PlanUtilizationHistorySelection(
+            accountKey: accountKey,
+            histories: providerBuckets.histories(for: accountKey))
     }
 
     func codexPlanUtilizationHistories(forVisibleAccount account: CodexVisibleAccount)
         -> [PlanUtilizationSeriesHistory]
     {
+        self.codexPlanUtilizationHistorySelection(forVisibleAccount: account).histories
+    }
+
+    func codexPlanUtilizationHistorySelection(forVisibleAccount account: CodexVisibleAccount)
+        -> PlanUtilizationHistorySelection
+    {
         // Same gate as `planUtilizationHistorySelection`: defer ownership
-        // migration until the persisted history has been read.
+        // migration until the persisted history has been read. Unlike the live
+        // selection, an explicit account must never borrow unscoped startup data.
         if !self.planUtilizationHistoryLoaded {
-            let providerBuckets = self.planUtilizationHistory[.codex] ?? PlanUtilizationHistoryBuckets()
-            return providerBuckets.histories(for: nil)
+            return .unavailable
         }
         var providerBuckets = self.planUtilizationHistory[.codex] ?? PlanUtilizationHistoryBuckets()
         let originalProviderBuckets = providerBuckets
         let ownership = self.codexOwnershipContext(forVisibleAccount: account)
-        guard let canonicalKey = ownership.canonicalKey else { return [] }
+        guard let canonicalKey = ownership.canonicalKey else { return .unavailable }
 
         if ownership.hasAdjacentEmailScopeAmbiguity {
-            guard canonicalKey != ownership.canonicalEmailHashKey else { return [] }
-            return providerBuckets.histories(for: canonicalKey)
+            guard canonicalKey != ownership.canonicalEmailHashKey else { return .unavailable }
+            return PlanUtilizationHistorySelection(
+                accountKey: canonicalKey,
+                histories: providerBuckets.histories(for: canonicalKey))
         }
 
         let accountKey = self.materializeCodexPlanUtilizationHistoryIfNeeded(
@@ -113,12 +172,16 @@ extension UsageStore {
             providerBuckets: &providerBuckets)
         self.planUtilizationHistory[.codex] = providerBuckets
         if providerBuckets != originalProviderBuckets {
+            self.planUtilizationHistoryRevision &+= 1
+            self.sessionEquivalentBurnCache.removeValue(forKey: .codex)
             let snapshotToPersist = self.planUtilizationHistory
             Task {
                 await self.planUtilizationPersistenceCoordinator.enqueue(snapshotToPersist)
             }
         }
-        return providerBuckets.histories(for: accountKey)
+        return PlanUtilizationHistorySelection(
+            accountKey: accountKey,
+            histories: providerBuckets.histories(for: accountKey))
     }
 
     func shouldShowRefreshingMenuCard(for provider: UsageProvider) -> Bool {

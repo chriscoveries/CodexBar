@@ -60,6 +60,26 @@ struct PlanUtilizationSeriesHistory: Codable, Equatable, Sendable {
     }
 }
 
+struct PlanUtilizationHistorySelection {
+    let accountKey: String?
+    let histories: [PlanUtilizationSeriesHistory]
+    let cacheIdentity: String
+
+    init(accountKey: String?, histories: [PlanUtilizationSeriesHistory]) {
+        self.accountKey = accountKey
+        self.histories = histories
+        self.cacheIdentity = "account:\(accountKey ?? UsageStore.planUtilizationUnscopedPreferredKey)"
+    }
+
+    private init(accountKey: String?, histories: [PlanUtilizationSeriesHistory], cacheIdentity: String) {
+        self.accountKey = accountKey
+        self.histories = histories
+        self.cacheIdentity = cacheIdentity
+    }
+
+    static let unavailable = Self(accountKey: nil, histories: [], cacheIdentity: "unavailable")
+}
+
 struct PlanUtilizationHistoryBuckets: Equatable, Sendable {
     var preferredAccountKey: String?
     var unscoped: [PlanUtilizationSeriesHistory] = []
