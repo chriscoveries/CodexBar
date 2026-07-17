@@ -66,6 +66,7 @@ public struct SessionScanConfig: Equatable, Sendable {
     public var maxDirectoryEntryCount: Int
     public var maxDirectoryDepth: Int
     public var directoryScanBudget: TimeInterval
+    public var adaptiveDirectoryScanBudget: TimeInterval
 
     public init(
         activeWindow: TimeInterval = 120,
@@ -75,7 +76,8 @@ public struct SessionScanConfig: Equatable, Sendable {
         maxClaudeTranscriptCountPerProject: Int = 64,
         maxDirectoryEntryCount: Int = 512,
         maxDirectoryDepth: Int = 1,
-        directoryScanBudget: TimeInterval = 0.25)
+        directoryScanBudget: TimeInterval = 0.25,
+        adaptiveDirectoryScanBudget: TimeInterval = 0.15)
     {
         self.activeWindow = activeWindow
         self.fileOnlyWindow = fileOnlyWindow
@@ -85,6 +87,7 @@ public struct SessionScanConfig: Equatable, Sendable {
         self.maxDirectoryEntryCount = maxDirectoryEntryCount
         self.maxDirectoryDepth = maxDirectoryDepth
         self.directoryScanBudget = directoryScanBudget
+        self.adaptiveDirectoryScanBudget = adaptiveDirectoryScanBudget
     }
 
     public func state(lastActivityAt: Date?, now: Date, hasLiveProcess: Bool) -> AgentSession.State {
@@ -97,16 +100,19 @@ struct DirectoryMetadataScanBudget {
     private var remainingEntryCount: Int
     let maxDepth: Int
     private let deadline: Date
+    private let didVisitEntry: (@Sendable () -> Void)?
 
     init(
         maxEntryCount: Int,
         maxDepth: Int,
         timeLimit: TimeInterval,
-        startedAt: Date = Date())
+        startedAt: Date = Date(),
+        didVisitEntry: (@Sendable () -> Void)? = nil)
     {
         self.remainingEntryCount = max(0, maxEntryCount)
         self.maxDepth = max(0, maxDepth)
         self.deadline = startedAt.addingTimeInterval(max(0, timeLimit))
+        self.didVisitEntry = didVisitEntry
     }
 
     mutating func files(
@@ -127,6 +133,10 @@ struct DirectoryMetadataScanBudget {
             .compactMap { entry in entry.isDirectory ? entry.url : nil }
     }
 
+    func hasTimeRemaining(clock: () -> Date = Date.init) -> Bool {
+        clock() < self.deadline
+    }
+
     private mutating func entries(
         in directory: URL,
         fileManager: FileManager,
@@ -145,6 +155,7 @@ struct DirectoryMetadataScanBudget {
         while self.remainingEntryCount > 0, clock() < self.deadline {
             guard let url = enumerator.nextObject() as? URL else { break }
             self.remainingEntryCount -= 1
+            self.didVisitEntry?()
             let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
             entries.append((url, isDirectory))
         }
@@ -384,7 +395,8 @@ public enum ClaudeSessionProjectMapper {
             budget: &budget)
             .flatMap { directory in budget.files(in: directory, fileManager: fileManager) }
             .compactMap { file -> (URL, Date)? in
-                guard file.pathExtension == "jsonl",
+                guard budget.hasTimeRemaining(),
+                      file.pathExtension == "jsonl",
                       let modifiedAt = try? file.resourceValues(
                           forKeys: [.contentModificationDateKey]).contentModificationDate
                 else { return nil }
