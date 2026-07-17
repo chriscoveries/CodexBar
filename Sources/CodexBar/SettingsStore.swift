@@ -215,7 +215,9 @@ final class SettingsStore {
     @ObservationIgnored var selectedMenuProviderRawStorage: String?
     var defaultsState: SettingsDefaultsState
     var configRevision: Int = 0
+    var providerDetailSettingsRevision: Int = 0
     var backgroundWorkSettingsRevision: Int = 0
+    var costUsageSettingsRevision: UInt64 = 0
     var providerOrder: [UsageProvider] = []
     var providerEnablement: [UsageProvider: Bool] = [:]
     @ObservationIgnored var providerEnablementRevisions: [UsageProvider: UInt64] = [:]
@@ -258,7 +260,6 @@ final class SettingsStore {
         minimaxCookieStore: any MiniMaxCookieStoring = KeychainMiniMaxCookieStore(),
         minimaxAPITokenStore: any MiniMaxAPITokenStoring = KeychainMiniMaxAPITokenStore(),
         kimiTokenStore: any KimiTokenStoring = KeychainKimiTokenStore(),
-        kimiK2TokenStore: any KimiK2TokenStoring = KeychainKimiK2TokenStore(),
         augmentCookieStore: any CookieHeaderStoring = KeychainCookieHeaderStore(
             account: "augment-cookie",
             promptKind: .augmentCookie),
@@ -309,7 +310,6 @@ final class SettingsStore {
             minimaxCookieStore: minimaxCookieStore,
             minimaxAPITokenStore: minimaxAPITokenStore,
             kimiTokenStore: kimiTokenStore,
-            kimiK2TokenStore: kimiK2TokenStore,
             augmentCookieStore: augmentCookieStore,
             ampCookieStore: ampCookieStore,
             copilotTokenStore: copilotTokenStore,
@@ -430,6 +430,8 @@ extension SettingsStore {
         let menuBarShowsBrandIconWithPercent = userDefaults.object(
             forKey: "menuBarShowsBrandIconWithPercent") as? Bool ?? false
         let menuBarHidesCritters = userDefaults.object(forKey: "menuBarHidesCritters") as? Bool ?? false
+        let menuBarHighContrastOnInactiveDisplays = userDefaults.object(
+            forKey: "menuBarHighContrastOnInactiveDisplays") as? Bool ?? false
         let menuBarDisplayModeRaw = userDefaults.string(forKey: "menuBarDisplayMode")
             ?? MenuBarDisplayMode.percent.rawValue
         let menuBarShowsResetTimeWhenExhausted = userDefaults.object(
@@ -523,6 +525,7 @@ extension SettingsStore {
             providerChangelogLinksEnabled: providerChangelogLinksEnabled,
             menuBarShowsBrandIconWithPercent: menuBarShowsBrandIconWithPercent,
             menuBarHidesCritters: menuBarHidesCritters,
+            menuBarHighContrastOnInactiveDisplays: menuBarHighContrastOnInactiveDisplays,
             menuBarDisplayModeRaw: menuBarDisplayModeRaw,
             menuBarShowsResetTimeWhenExhausted: menuBarShowsResetTimeWhenExhausted,
             kiroMenuBarDisplayModeRaw: kiroMenuBarDisplayModeRaw,

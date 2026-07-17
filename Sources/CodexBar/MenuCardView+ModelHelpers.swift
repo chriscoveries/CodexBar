@@ -82,10 +82,6 @@ extension UsageMenuCardView.Model {
             return notes + subscriptionNotes
         }
 
-        if input.provider == .crossmodel, let crossModel = input.snapshot?.crossModelUsage {
-            return Self.crossModelSpendNotes(crossModel) + subscriptionNotes
-        }
-
         guard input.provider == .openrouter,
               let openRouter = input.snapshot?.openRouterUsage
         else {
@@ -283,7 +279,7 @@ extension UsageMenuCardView.Model {
         let primaryLabel = if input.provider == .cursor, snapshot.cursorRequests != nil {
             "Requests"
         } else if input.provider == .grok {
-            GrokProviderDescriptor.primaryLabel(window: snapshot.primary) ?? input.metadata.sessionLabel
+            GrokProviderDescriptor.primaryLabel(window: snapshot.primary, now: input.now) ?? input.metadata.sessionLabel
         } else if input.provider == .doubao {
             DoubaoProviderDescriptor.primaryLabel(window: snapshot.primary) ?? input.metadata.sessionLabel
         } else if input.provider == .sub2api {
@@ -464,7 +460,7 @@ extension UsageMenuCardView.Model {
         pace: UsagePace?,
         showUsed: Bool) -> PaceDetail?
     {
-        guard let pace else { return nil }
+        guard let pace, window.remainingPercent > 0 else { return nil }
         let detail = UsagePaceText.weeklyDetail(provider: provider, pace: pace, now: now)
         let expectedUsed = detail.expectedUsedPercent
         let actualUsed = window.usedPercent
@@ -507,7 +503,7 @@ extension UsageMenuCardView.Model {
         input: Input,
         pace: UsagePace? = nil) -> PaceDetail?
     {
-        guard self.supportsResetWindowPace(provider: input.provider, window: window),
+        guard self.supportsResetWindowPace(provider: input.provider, window: window, now: input.now),
               window.remainingPercent > 0
         else { return nil }
         let paceWindow = Self.resetWindowForPace(provider: input.provider, window: window)
@@ -525,16 +521,28 @@ extension UsageMenuCardView.Model {
             showUsed: input.usageBarsShowUsed)
     }
 
+    private static let weeklyWindowMinutes = 7 * 24 * 60
     private static let monthlyWindowSentinelMinutes = 30 * 24 * 60
 
-    private static func supportsResetWindowPace(provider: UsageProvider, window: RateWindow) -> Bool {
+    private static func supportsResetWindowPace(provider: UsageProvider, window: RateWindow, now: Date) -> Bool {
         switch provider {
+        case .copilot:
+            return window.resetsAt != nil
         case .cursor:
-            window.windowMinutes != nil
+            return window.windowMinutes != nil
+        case .grok:
+            guard GrokProviderDescriptor.primaryLabel(window: window, now: now) == "Weekly",
+                  let resetsAt = window.resetsAt
+            else { return false }
+            let windowMinutes = window.windowMinutes ?? self.weeklyWindowMinutes
+            let timeUntilReset = resetsAt.timeIntervalSince(now)
+            return windowMinutes > 0
+                && timeUntilReset > 0
+                && timeUntilReset <= TimeInterval(windowMinutes) * 60
         case .alibaba, .alibabatokenplan, .doubao, .opencodego:
-            window.windowMinutes == self.monthlyWindowSentinelMinutes
+            return window.windowMinutes == self.monthlyWindowSentinelMinutes
         default:
-            false
+            return false
         }
     }
 
@@ -554,12 +562,13 @@ extension UsageMenuCardView.Model {
     }
 
     private static func usesInferredMonthlyDuration(provider: UsageProvider, window: RateWindow) -> Bool {
-        guard window.windowMinutes == self.monthlyWindowSentinelMinutes else { return false }
         switch provider {
+        case .copilot:
+            window.windowMinutes == nil
         case .alibaba, .alibabatokenplan, .doubao, .opencodego:
-            return true
+            window.windowMinutes == self.monthlyWindowSentinelMinutes
         default:
-            return false
+            false
         }
     }
 
@@ -837,20 +846,6 @@ extension UsageMenuCardView.Model {
         }
 
         return nil
-    }
-
-    static func crossModelSpendNotes(_ usage: CrossModelUsageSnapshot) -> [String] {
-        let candidates: [(String, Double?)] = [
-            (L("Today"), usage.daily?.cost),
-            (L("This week"), usage.weekly?.cost),
-            (L("This month"), usage.monthly?.cost),
-        ]
-        let rendered = candidates.compactMap { candidate -> String? in
-            guard let value = candidate.1 else { return nil }
-            return "\(candidate.0): \(usage.currencyString(value))"
-        }
-        guard !rendered.isEmpty else { return [] }
-        return [rendered.joined(separator: " · ")]
     }
 
     static func openRouterQuotaDetail(provider: UsageProvider, snapshot: UsageSnapshot) -> String? {

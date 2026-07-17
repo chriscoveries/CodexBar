@@ -27,6 +27,7 @@ extension SettingsStore {
         _ = self.providerChangelogLinksEnabled
         _ = self.menuBarShowsBrandIconWithPercent
         _ = self.menuBarHidesCritters
+        _ = self.menuBarHighContrastOnInactiveDisplays
         _ = self.menuBarShowsHighestUsage
         _ = self.menuBarDisplayMode
         _ = self.menuBarShowsResetTimeWhenExhausted
@@ -89,7 +90,6 @@ extension SettingsStore {
         _ = self.minimaxCookieHeader
         _ = self.minimaxAPIToken
         _ = self.kimiManualCookieHeader
-        _ = self.kimiK2APIToken
         _ = self.kiloAPIToken
         _ = self.augmentCookieHeader
         _ = self.ampCookieHeader

@@ -72,6 +72,7 @@ Each run returns a `ProviderFetchOutcome` with **attempts + errors** for debug U
 Expose a narrow set of protocols/structs that provider implementations can use:
 - `KeychainAPI`: read-only, allowlisted service/account pairs
 - `BrowserCookieAPI`: import cookies by domain list; returns cookie header + diagnostics
+- `BrowserLocalStorageAPI`: read origin-scoped key/value snapshots across browser profiles
 - `PTYAPI`: run CLI interactions with timeouts + “send on substring” + stop rules
 - `HTTPAPI`: URLSession wrapper with domain allowlist + standard headers + tracing
 - `WebViewScrapeAPI`: WKWebView lease + `evaluateJavaScript` + snapshot dumping
@@ -158,6 +159,18 @@ struct ExampleFetchStrategy: ProviderFetchStrategy {
 - Privacy: default to on-device parsing; browser cookies are opt-in and never persisted by us beyond WebKit stores.
 - Reliability: providers must be timeout-bounded; no unbounded waits on network/PTY/UI.
 - Degradation: prefer cached data over flapping; show clear errors when stale.
+
+## Hosted relay eligibility
+
+Hosted relays and upstream aggregators need enough public evidence for maintainers and users to evaluate the trust
+boundary:
+
+- An identifiable legal operator and jurisdiction.
+- Verifiable authorization to resell or provide the advertised upstream access; operator self-assertion alone is not
+  sufficient.
+- A public operating track record that supports ongoing reliability, security, and maintenance review.
+
+An integration can be restored when missing operator or authorization evidence becomes available.
 
 ## Adding a new provider (current flow)
 
