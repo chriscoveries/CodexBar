@@ -18,7 +18,7 @@ Doubao reads Coding Plan and Agent Plan quota windows from the official `arkcli`
 To keep using API credentials instead, paste an API key or AK/SK pair in provider settings. Environment variables `ARK_API_KEY`, `VOLCENGINE_API_KEY`, and `DOUBAO_API_KEY` remain supported.
 
 ## Behavior
-- Auto mode honors configured API credentials first so an ambient arkcli SSO session cannot silently switch accounts. Without configured credentials, it uses `arkcli usage plan`.
+- Auto mode honors configured API credentials first so an ambient arkcli SSO session cannot silently switch accounts. Without configured credentials, it uses `arkcli usage plan --format json`.
 - CLI mode uses only `arkcli`; API mode uses only configured AK/SK or Ark API-key credentials.
 - `arkcli` output provides distinct personal and team Coding Plan and Agent Plan 5-hour, weekly, and monthly windows when those subscriptions are present.
 - Ark API-key endpoint: `POST https://ark.cn-beijing.volces.com/api/coding/v3/chat/completions`

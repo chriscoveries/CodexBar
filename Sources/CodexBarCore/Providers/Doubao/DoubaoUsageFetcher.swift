@@ -448,7 +448,7 @@ public struct DoubaoUsageFetcher: Sendable {
             // otherwise valid subscribed plan usage.
             for period in item.periods ?? [] {
                 let level = levelPrefix + period.label
-                let resetTime = period.resetAt.flatMap(Self.parseISO8601)
+                let resetTime = period.resetAt?.date
                 allQuotas.append(DoubaoCodingPlanUsage.Quota(
                     level: level,
                     percent: period.percent,
@@ -472,7 +472,7 @@ public struct DoubaoUsageFetcher: Sendable {
         do {
             let result = try await SubprocessRunner.run(
                 binary: arkcliPath,
-                arguments: ["usage", "plan"],
+                arguments: ["usage", "plan", "--format", "json"],
                 environment: environment,
                 timeout: 15,
                 label: "doubao arkcli usage plan")
@@ -810,12 +810,37 @@ public struct DoubaoUsageFetcher: Sendable {
     private struct ArkcliPeriod: Decodable {
         let label: String
         let percent: Double
-        let resetAt: String?
+        let resetAt: ArkcliResetAt?
 
         enum CodingKeys: String, CodingKey {
             case label
             case percent
             case resetAt = "reset_at"
+        }
+    }
+
+    private enum ArkcliResetAt: Decodable {
+        case string(String)
+        case number(TimeInterval)
+
+        init(from decoder: any Decoder) throws {
+            let container = try decoder.singleValueContainer()
+            if let number = try? container.decode(TimeInterval.self) {
+                self = .number(number)
+            } else {
+                self = try .string(container.decode(String.self))
+            }
+        }
+
+        var date: Date? {
+            switch self {
+            case let .string(value):
+                return DoubaoUsageFetcher.parseISO8601(value)
+            case let .number(value):
+                guard value > 0 else { return nil }
+                let seconds = value >= 1e11 ? value / 1000 : value
+                return Date(timeIntervalSince1970: seconds)
+            }
         }
     }
 

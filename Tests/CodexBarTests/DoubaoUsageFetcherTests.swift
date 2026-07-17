@@ -550,6 +550,32 @@ struct DoubaoUsageFetcherTests {
     }
 
     @Test
+    func `arkcli response accepts numeric reset timestamps and sentinels`() throws {
+        let data = Data(
+            """
+            {
+              "items": [
+                {
+                  "product": "coding-plan",
+                  "periods": [
+                    {"label": "session", "percent": 10, "reset_at": 1784192000},
+                    {"label": "weekly", "percent": 20, "reset_at": 1784534400000},
+                    {"label": "monthly", "percent": 30, "reset_at": -1}
+                  ]
+                }
+              ]
+            }
+            """.utf8)
+
+        let usage = try DoubaoUsageFetcher.decodeArkcliUsage(from: data).toUsageSnapshot(
+            updatedAt: Date(timeIntervalSince1970: 0))
+
+        #expect(usage.primary?.resetsAt == Date(timeIntervalSince1970: 1_784_192_000))
+        #expect(usage.secondary?.resetsAt == Date(timeIntervalSince1970: 1_784_534_400))
+        #expect(usage.tertiary?.resetsAt == nil)
+    }
+
+    @Test
     func `arkcli fetch via injected runner returns parsed snapshot`() async throws {
         let jsonData = Data(
             """
@@ -575,6 +601,29 @@ struct DoubaoUsageFetcherTests {
         #expect(usage.primary?.usedPercent == 42.0)
         #expect(usage.primary?.windowMinutes == 300)
         #expect(usage.updatedAt == Date(timeIntervalSince1970: 1_784_191_193))
+    }
+
+    @Test
+    func `arkcli subprocess explicitly requests JSON output`() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codexbar-arkcli-arguments-\(UUID().uuidString)", isDirectory: true)
+        let executable = root.appendingPathComponent("arkcli")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try """
+        #!/bin/sh
+        if [ "$*" != "usage plan --format json" ]; then
+          printf '%s\n' "unexpected arguments: $*" >&2
+          exit 2
+        fi
+        printf '%s\n' '{"items":[{"product":"coding-plan","periods":[{"label":"session","percent":42}]}]}'
+        """.write(to: executable, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+
+        let snapshot = try await DoubaoUsageFetcher.fetchCodingPlanUsage(
+            environment: ["ARKCLI_PATH": executable.path])
+
+        #expect(snapshot.codingPlanUsage?.quotas.first?.percent == 42)
     }
 
     @Test
