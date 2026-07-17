@@ -12,6 +12,7 @@ struct ClaudeOAuthPromptCoalescingTests {
 
     private enum LoadOutcome: Equatable {
         case keychainError(Int)
+        case notFound
         case unexpected(String)
     }
 
@@ -90,6 +91,78 @@ struct ClaudeOAuthPromptCoalescingTests {
         #expect(outcomes.1 == expected)
         #expect(outcomes.2 == expected)
         #expect(outcomes.3 == expected)
+        #expect(state.readCount == 2)
+    }
+
+    @Test
+    func `prompt failure is not replayed after policy changes`() async throws {
+        let state = ConcurrentPromptReadState()
+        let deniedStore = ClaudeOAuthKeychainAccessGate.DeniedUntilStore()
+        let status = Int(errSecUserCanceled)
+
+        let outcomes = try await self.withPromptEnvironment(
+            state: state,
+            deniedStore: deniedStore,
+            read: {
+                try state.beginRead()
+                ClaudeOAuthKeychainAccessGate.recordDenied()
+                throw ClaudeOAuthCredentialsError.keychainError(status)
+            },
+            operation: {
+                await ProviderRefreshRequestContext.$id.withValue(UUID()) {
+                    async let first = self.loadOutcome()
+                    async let second = self.loadOutcome()
+                    let concurrent = await (first, second)
+                    #expect(ClaudeOAuthKeychainAccessGate.clearDenied())
+                    let afterPolicyChange = ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.never) {
+                        self.loadOutcome()
+                    }
+                    return (concurrent.0, concurrent.1, afterPolicyChange)
+                }
+            })
+
+        let expected = LoadOutcome.keychainError(status)
+        #expect(outcomes.0 == expected)
+        #expect(outcomes.1 == expected)
+        #expect(outcomes.2 == .notFound)
+        #expect(state.readCount == 1)
+    }
+
+    @Test
+    func `credential invalidation starts a fresh prompt outcome generation`() async throws {
+        let state = ConcurrentPromptReadState()
+        let deniedStore = ClaudeOAuthKeychainAccessGate.DeniedUntilStore()
+        let status = Int(errSecUserCanceled)
+        let credentialsData = self.makeCredentialsData(expiresIn: 3600)
+
+        let outcomes = try await self.withPromptEnvironment(
+            state: state,
+            deniedStore: deniedStore,
+            read: {
+                try state.beginRead()
+                if state.readCount == 1 {
+                    ClaudeOAuthKeychainAccessGate.recordDenied()
+                    throw ClaudeOAuthCredentialsError.keychainError(status)
+                }
+                return credentialsData
+            },
+            operation: {
+                try await ProviderRefreshRequestContext.$id.withValue(UUID()) {
+                    async let first = self.loadOutcome()
+                    async let second = self.loadOutcome()
+                    let concurrent = await (first, second)
+                    #expect(ClaudeOAuthKeychainAccessGate.clearDenied())
+                    ClaudeOAuthCredentialsStore.invalidateCache()
+                    let afterInvalidation = try self.loadRecord()
+                    return (concurrent.0, concurrent.1, afterInvalidation)
+                }
+            })
+
+        let expected = LoadOutcome.keychainError(status)
+        #expect(outcomes.0 == expected)
+        #expect(outcomes.1 == expected)
+        #expect(outcomes.2.credentials.accessToken == "shared-interactive-read")
+        #expect(outcomes.2.source == .claudeKeychain)
         #expect(state.readCount == 2)
     }
 
@@ -192,6 +265,9 @@ struct ClaudeOAuthPromptCoalescingTests {
         } catch let error as ClaudeOAuthCredentialsError {
             if case let .keychainError(status) = error {
                 return .keychainError(status)
+            }
+            if case .notFound = error {
+                return .notFound
             }
             return .unexpected(String(describing: error))
         } catch {

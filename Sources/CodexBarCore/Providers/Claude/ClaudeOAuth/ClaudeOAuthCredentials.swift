@@ -40,9 +40,21 @@ public enum ClaudeOAuthCredentialsStore {
         case failure(Error)
     }
 
+    private struct PromptAttemptPolicy: Equatable {
+        let promptMode: String
+        let readStrategy: String
+
+        static var current: PromptAttemptPolicy {
+            PromptAttemptPolicy(
+                promptMode: ClaudeOAuthKeychainPromptPreference.current().rawValue,
+                readStrategy: ClaudeOAuthKeychainReadStrategyPreference.current().rawValue)
+        }
+    }
+
     private struct PromptAttemptOutcome {
         let generation: UInt64
         let requestID: UUID?
+        let policy: PromptAttemptPolicy
         let result: PromptAttemptResult
     }
 
@@ -53,8 +65,15 @@ public enum ClaudeOAuthCredentialsStore {
         self.promptAttemptOutcomeLock.withLock { self.lastPromptAttemptOutcome }
     }
 
-    private static func writePromptAttemptOutcome(_ outcome: PromptAttemptOutcome) {
+    private static func writePromptAttemptOutcome(_ outcome: PromptAttemptOutcome?) {
         self.promptAttemptOutcomeLock.withLock { self.lastPromptAttemptOutcome = outcome }
+    }
+
+    private static func invalidatePromptAttemptOutcome() {
+        self.claudeKeychainPromptLock.withLock {
+            _ = ClaudeOAuthKeychainAccessGate.recordPromptAttemptCompleted()
+            self.writePromptAttemptOutcome(nil)
+        }
     }
 
     private static let claudeKeychainFingerprintKey = "ClaudeOAuthClaudeKeychainFingerprintV2"
@@ -213,8 +232,6 @@ public enum ClaudeOAuthCredentialsStore {
                     return immediateRecord
                 }
 
-                _ = self.invalidateCacheIfCredentialsFileChanged()
-
                 let recovery = Recovery(context: self.context)
                 let memory = ClaudeOAuthCredentialsStore.readMemoryCache()
                 if ClaudeOAuthCredentialsStore.shouldUseCodexBarOAuthKeychainCache,
@@ -349,14 +366,12 @@ public enum ClaudeOAuthCredentialsStore {
                     owner: .environment,
                     source: .environment)
             }
-            return try self.replayedPromptRecordForCurrentRefreshRequest()
-        }
-
-        private func replayedPromptRecordForCurrentRefreshRequest() throws -> ClaudeOAuthCredentialRecord? {
+            _ = self.invalidateCacheIfCredentialsFileChanged()
             guard let requestID = ProviderRefreshRequestContext.id,
                   let outcome = ClaudeOAuthCredentialsStore.readPromptAttemptOutcome(),
                   outcome.requestID == requestID,
-                  outcome.generation == ClaudeOAuthKeychainAccessGate.promptAttemptGeneration()
+                  outcome.generation == ClaudeOAuthKeychainAccessGate.promptAttemptGeneration(),
+                  outcome.policy == PromptAttemptPolicy.current
             else {
                 return nil
             }
@@ -388,8 +403,10 @@ public enum ClaudeOAuthCredentialsStore {
                 // Reuse its result so an expired Keychain record cannot fan out into a queue of native dialogs.
                 let currentPromptGeneration = ClaudeOAuthKeychainAccessGate.promptAttemptGeneration()
                 let outcome = ClaudeOAuthCredentialsStore.readPromptAttemptOutcome()
+                let policy = PromptAttemptPolicy.current
                 if currentPromptGeneration != promptGeneration ||
-                    (refreshRequestID != nil && outcome?.requestID == refreshRequestID)
+                    (refreshRequestID != nil && outcome?.requestID == refreshRequestID),
+                    outcome?.policy == policy
                 {
                     guard outcome?.generation == currentPromptGeneration else { return nil }
                     switch outcome?.result {
@@ -420,6 +437,7 @@ public enum ClaudeOAuthCredentialsStore {
                     ClaudeOAuthCredentialsStore.writePromptAttemptOutcome(PromptAttemptOutcome(
                         generation: generation,
                         requestID: refreshRequestID,
+                        policy: policy,
                         result: promptAttemptResult))
                 }
 
@@ -584,6 +602,7 @@ public enum ClaudeOAuthCredentialsStore {
                 let stored = ClaudeOAuthCredentialsStore.loadFileFingerprint()
                 guard current != stored else { return false }
                 ClaudeOAuthCredentialsStore.log.info("Claude OAuth credentials file changed; invalidating cache")
+                ClaudeOAuthCredentialsStore.invalidatePromptAttemptOutcome()
 
                 ClaudeOAuthCredentialsStore.writeMemoryCache(record: nil, timestamp: nil)
 
@@ -631,6 +650,7 @@ public enum ClaudeOAuthCredentialsStore {
 
         func invalidateCache() {
             self.context.run {
+                ClaudeOAuthCredentialsStore.invalidatePromptAttemptOutcome()
                 ClaudeOAuthCredentialsStore.writeMemoryCache(record: nil, timestamp: nil)
                 ClaudeOAuthCredentialsStore.clearCacheKeychain()
             }
