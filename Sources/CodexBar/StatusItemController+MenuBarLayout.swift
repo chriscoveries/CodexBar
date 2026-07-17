@@ -105,16 +105,9 @@ extension StatusItemController {
             return (session, weekly, automatic)
         }
 
-        let session: RateWindow?
-        let weekly: RateWindow?
-        if provider == .claude {
-            session = Self.layoutWindow(in: snapshot, matchingCadenceMinutes: 5 * 60)
-                .flatMap { $0.isSyntheticPlaceholder ? nil : $0 }
-            weekly = Self.layoutWindow(in: snapshot, matchingCadenceMinutes: 7 * 24 * 60)
-        } else {
-            session = snapshot?.primary.flatMap { $0.isSyntheticPlaceholder ? nil : $0 }
-            weekly = snapshot?.secondary.flatMap { $0.isSyntheticPlaceholder ? nil : $0 }
-        }
+        let semanticWindows = MenuBarLayoutSemanticWindowResolver.windows(
+            provider: provider,
+            snapshot: snapshot)
         let automatic = MenuBarMetricWindowResolver.rateWindow(
             preference: .automatic,
             provider: provider,
@@ -122,17 +115,7 @@ extension StatusItemController {
             supportsAverage: self.settings.menuBarMetricSupportsAverage(for: provider),
             antigravityPrioritizeExhaustedQuotas: self.settings.antigravityPrioritizeExhaustedQuotas,
             now: now)
-        return (session, weekly, automatic)
-    }
-
-    private static func layoutWindow(
-        in snapshot: UsageSnapshot?,
-        matchingCadenceMinutes minutes: Int)
-        -> RateWindow?
-    {
-        [snapshot?.primary, snapshot?.secondary]
-            .compactMap(\.self)
-            .first { $0.windowMinutes == minutes }
+        return (semanticWindows.session, semanticWindows.weekly, automatic)
     }
 
     private func setButtonLayoutContent(

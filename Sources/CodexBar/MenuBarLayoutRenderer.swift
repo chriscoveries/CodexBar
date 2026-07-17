@@ -91,6 +91,12 @@ final class MenuBarLayoutTitleCache {
 @MainActor
 final class MenuBarLayoutRenderer {
     private static let missingValue = "–"
+
+    private struct TokenStyle {
+        let font: NSFont
+        let attributes: [NSAttributedString.Key: Any]
+    }
+
     private let cache: MenuBarLayoutTitleCache
 
     init(cache: MenuBarLayoutTitleCache = MenuBarLayoutTitleCache()) {
@@ -150,8 +156,7 @@ final class MenuBarLayoutRenderer {
                     token,
                     data: data,
                     icon: icon,
-                    font: font,
-                    attributes: attributes,
+                    style: TokenStyle(font: font, attributes: attributes),
                     options: options)
                 result.append(renderedItem.value)
                 if let accessibilityText = renderedItem.accessibilityText {
@@ -174,8 +179,7 @@ final class MenuBarLayoutRenderer {
         _ item: MenuBarLayoutToken,
         data: MenuBarLayoutRenderData,
         icon: NSImage?,
-        font: NSFont,
-        attributes: [NSAttributedString.Key: Any],
+        style: TokenStyle,
         options: MenuBarLayoutRenderOptions)
         -> (value: NSAttributedString, accessibilityText: String?)
     {
@@ -185,30 +189,32 @@ final class MenuBarLayoutRenderer {
                 return self.textToken(
                     self.missingValue,
                     accessibilityText: L("Icon unavailable"),
-                    attributes: attributes)
+                    attributes: style.attributes)
             }
             let attachment = NSTextAttachment()
             attachment.image = icon
-            let height = options.size == .small ? min(font.capHeight + 2, 12) : min(font.capHeight + 3, 15)
+            let height = options.size == .small
+                ? min(style.font.capHeight + 2, 12)
+                : min(style.font.capHeight + 3, 15)
             let width = icon.size.height > 0 ? icon.size.width * height / icon.size.height : height
             attachment.bounds = NSRect(
                 x: 0,
-                y: ((font.capHeight - height) / 2).rounded(),
+                y: ((style.font.capHeight - height) / 2).rounded(),
                 width: width,
                 height: height)
             let value = NSMutableAttributedString(attachment: attachment)
-            value.addAttributes(attributes, range: NSRange(location: 0, length: value.length))
+            value.addAttributes(style.attributes, range: NSRange(location: 0, length: value.length))
             return (value, L("%@ icon", data.providerName ?? L("Provider")))
         case .providerName:
             return self.optionalTextToken(
                 data.providerName,
                 unavailableLabel: L("Provider name unavailable"),
-                attributes: attributes)
+                attributes: style.attributes)
         case .accountLabel:
             return self.optionalTextToken(
                 data.accountLabel,
                 unavailableLabel: L("Account unavailable"),
-                attributes: attributes)
+                attributes: style.attributes)
         case let .percent(window):
             let rateWindow = Self.window(window, data: data)
             let percent = rateWindow.map { options.showUsed ? $0.usedPercent : $0.remainingPercent }
@@ -230,13 +236,13 @@ final class MenuBarLayoutRenderer {
             let accessibility = percent == nil
                 ? L("%@ unavailable", accessibilityPrefix)
                 : L("%@ %@", accessibilityPrefix, value)
-            return self.textToken(display, accessibilityText: accessibility, attributes: attributes)
+            return self.textToken(display, accessibilityText: accessibility, attributes: style.attributes)
         case .usageBar:
             guard let window = data.automatic else {
                 return self.textToken(
                     self.missingValue,
                     accessibilityText: L("Usage bar unavailable"),
-                    attributes: attributes)
+                    attributes: style.attributes)
             }
             let displayedPercent = options.showUsed ? window.usedPercent : window.remainingPercent
             let filled = Int((displayedPercent.clamped(to: 0...100) / 100 * 3).rounded())
@@ -244,38 +250,38 @@ final class MenuBarLayoutRenderer {
             return self.textToken(
                 value,
                 accessibilityText: L("Usage bar, %d of 3 filled", filled),
-                attributes: attributes)
+                attributes: style.attributes)
         case .resetCountdown:
             return self.resetToken(
                 data.automatic?.resetsAt.map { UsageFormatter.resetCountdownDescription(from: $0, now: options.now) }
                     ?? data.automatic?.resetDescription,
                 unavailableLabel: L("Reset countdown unavailable"),
-                attributes: attributes)
+                attributes: style.attributes)
         case .resetAbsolute:
             return self.resetToken(
                 data.automatic?.resetsAt.map { UsageFormatter.resetDescription(from: $0, now: options.now) }
                     ?? data.automatic?.resetDescription,
                 unavailableLabel: L("Reset time unavailable"),
-                attributes: attributes)
+                attributes: style.attributes)
         case .runsOut:
             return self.optionalTextToken(
                 data.runsOut,
                 unavailableLabel: L("Run-out estimate unavailable"),
-                attributes: attributes)
+                attributes: style.attributes)
         case .costToday:
             return self.optionalTextToken(
                 data.costToday,
                 unavailableLabel: L("Cost today unavailable"),
-                attributes: attributes)
+                attributes: style.attributes)
         case .cost30d:
             return self.optionalTextToken(
                 data.cost30d,
                 unavailableLabel: L("30-day cost unavailable"),
-                attributes: attributes)
+                attributes: style.attributes)
         case .separatorDot:
-            return self.textToken("·", accessibilityText: nil, attributes: attributes)
+            return self.textToken("·", accessibilityText: nil, attributes: style.attributes)
         case .space:
-            return self.textToken(" ", accessibilityText: nil, attributes: attributes)
+            return self.textToken(" ", accessibilityText: nil, attributes: style.attributes)
         }
     }
 

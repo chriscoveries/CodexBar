@@ -22,6 +22,33 @@ enum MenuBarLayoutToken: Codable, Hashable, Sendable {
     case space
 }
 
+enum MenuBarLayoutSemanticWindowResolver {
+    static func windows(
+        provider: UsageProvider,
+        snapshot: UsageSnapshot?)
+        -> (session: RateWindow?, weekly: RateWindow?)
+    {
+        guard let snapshot else { return (nil, nil) }
+        let candidates = [
+            snapshot.primary,
+            snapshot.secondary,
+            snapshot.tertiary,
+        ] + (snapshot.extraRateWindows ?? []).map(\.window)
+        let usable = candidates.compactMap { window -> RateWindow? in
+            guard let window, !window.isSyntheticPlaceholder else { return nil }
+            return window
+        }
+        let session = usable.first { window in
+            guard let minutes = window.windowMinutes else { return false }
+            return (60...(12 * 60)).contains(minutes)
+        }
+        let cadenceWeekly = usable.first { $0.windowMinutes == 7 * 24 * 60 }
+        let kimiWeekly = snapshot.primary.flatMap { $0.isSyntheticPlaceholder ? nil : $0 }
+        let weekly = provider == .kimi ? kimiWeekly ?? cadenceWeekly : cadenceWeekly
+        return (session, weekly)
+    }
+}
+
 struct MenuBarLayout: Codable, Hashable, Sendable {
     static let defaultLayout = MenuBarLayout(lines: [[.icon, .percent(window: .automatic)]])
 
@@ -46,8 +73,10 @@ struct MenuBarLayout: Codable, Hashable, Sendable {
     }
 
     private static func normalizedLines(_ lines: [[MenuBarLayoutToken]]) -> [[MenuBarLayoutToken]] {
-        let nonemptyLines = lines.filter { !$0.isEmpty }.prefix(2)
-        return nonemptyLines.isEmpty ? Self.defaultLayout.lines : Array(nonemptyLines)
+        guard let firstContentLine = lines.firstIndex(where: { !$0.isEmpty }) else {
+            return self.defaultLayout.lines
+        }
+        return Array(lines[firstContentLine...].prefix(2))
     }
 }
 

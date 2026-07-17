@@ -243,24 +243,17 @@ extension StatusItemController {
         let style = self.store.iconStyle
         let showUsed = self.settings.usageBarsShowUsed
         let showBrandPercent = self.settings.menuBarShowsBrandIconWithPercent
-        if !showBrandPercent {
-            self.statusItem.length = NSStatusItem.variableLength
-        }
         let primaryProvider = self.primaryProviderForUnifiedIcon()
         let resolverStyle = self.store.style(for: primaryProvider)
         let snapshot = self.store.snapshot(for: primaryProvider)
         let warningFlash = self.quotaWarningFlashActive(provider: primaryProvider)
 
-        if showBrandPercent,
-           let wasCached = self.applyStoredMenuBarLayoutIfNeeded(
-               provider: primaryProvider,
-               snapshot: snapshot,
-               icon: ProviderBrandIcon.image(for: primaryProvider),
-               warningFlash: warningFlash,
-               statusItem: self.statusItem)
+        if let layoutResult = self.applyStoredUnifiedMenuBarLayoutIfNeeded(
+            provider: primaryProvider,
+            snapshot: snapshot,
+            warningFlash: warningFlash)
         {
-            self.noteIconPerfRender(skipped: wasCached)
-            return wasCached
+            return layoutResult
         }
 
         // IconRenderer treats these values as a left-to-right "progress fill" percentage; depending on the
@@ -405,6 +398,27 @@ extension StatusItemController {
         }
         self.noteIconPerfRender(skipped: false)
         return false
+    }
+
+    private func applyStoredUnifiedMenuBarLayoutIfNeeded(
+        provider: UsageProvider,
+        snapshot: UsageSnapshot?,
+        warningFlash: Bool)
+        -> Bool?
+    {
+        guard self.settings.menuBarShowsBrandIconWithPercent else {
+            self.statusItem.length = NSStatusItem.variableLength
+            return nil
+        }
+        guard let wasCached = self.applyStoredMenuBarLayoutIfNeeded(
+            provider: provider,
+            snapshot: snapshot,
+            icon: ProviderBrandIcon.image(for: provider),
+            warningFlash: warningFlash,
+            statusItem: self.statusItem)
+        else { return nil }
+        self.noteIconPerfRender(skipped: wasCached)
+        return wasCached
     }
 
     private func deferMergedIconRenderDuringMenuTrackingIfNeeded() -> Bool {

@@ -52,6 +52,35 @@ struct MenuBarLayoutTests {
             [.icon],
             [.providerName],
         ]))
+
+        let trailingEmptyData = try JSONEncoder().encode(UnnormalizedLayout(lines: [[.icon], []]))
+        #expect(try JSONDecoder().decode(MenuBarLayout.self, from: trailingEmptyData).lines == [[.icon], []])
+    }
+
+    @Test
+    func `semantic windows map Kimi weekly and short cadence lanes`() {
+        let primary = RateWindow(usedPercent: 25, windowMinutes: nil, resetsAt: nil, resetDescription: nil)
+        let secondary = RateWindow(usedPercent: 50, windowMinutes: 300, resetsAt: nil, resetDescription: nil)
+        let windows = MenuBarLayoutSemanticWindowResolver.windows(
+            provider: .kimi,
+            snapshot: UsageSnapshot(primary: primary, secondary: secondary, updatedAt: Date()))
+
+        #expect(windows.session == secondary)
+        #expect(windows.weekly == primary)
+    }
+
+    @Test
+    func `semantic windows leave unsupported lanes missing`() {
+        let snapshot = UsageSnapshot(
+            primary: RateWindow(usedPercent: 25, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
+            secondary: RateWindow(usedPercent: 50, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
+            updatedAt: Date())
+        let windows = MenuBarLayoutSemanticWindowResolver.windows(
+            provider: .zai,
+            snapshot: snapshot)
+
+        #expect(windows.session == nil)
+        #expect(windows.weekly == nil)
     }
 
     @Test
@@ -87,16 +116,19 @@ struct MenuBarLayoutTests {
 
     @Test
     func `migration preserves combined and reset intent`() {
+        let combinedLayout = MenuBarLayout(lines: [
+            [
+                .icon,
+                .percent(window: .session),
+                .separatorDot,
+                .percent(window: .weekly),
+            ],
+        ])
         #expect(MenuBarLayout.migrated(
             iconStyle: .iconAndPercent,
             displayMode: .percent,
             metricPreference: .primaryAndSecondary,
-            resetTimeDisplayStyle: .countdown) == MenuBarLayout(lines: [[
-            .icon,
-            .percent(window: .session),
-            .separatorDot,
-            .percent(window: .weekly),
-        ]]))
+            resetTimeDisplayStyle: .countdown) == combinedLayout)
         #expect(MenuBarLayout.migrated(
             iconStyle: .iconAndPercent,
             displayMode: .resetTime,

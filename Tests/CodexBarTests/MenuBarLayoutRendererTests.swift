@@ -83,7 +83,7 @@ struct MenuBarLayoutRendererTests {
 
         let output = renderer.render(layout: layout, data: missingData, icon: nil, options: self.options())
 
-        #expect(output.attributedTitle.string.filter { $0 == "–" }.count == 12)
+        #expect(output.attributedTitle.string.count(where: { $0 == "–" }) == 12)
         #expect(output.accessibilityLabel.contains("unavailable"))
     }
 
