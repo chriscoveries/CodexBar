@@ -29,8 +29,7 @@ struct CursorUsageEventsPage: Decodable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.totalUsageEventsCount = CursorEventNumber.int64(container, .totalUsageEventsCount)
             .flatMap(Int.init(exactly:))
-        self.usageEventsDisplay =
-            (try? container.decode([CursorUsageEvent].self, forKey: .usageEventsDisplay)) ?? []
+        self.usageEventsDisplay = try container.decode([CursorUsageEvent].self, forKey: .usageEventsDisplay)
     }
 }
 
@@ -445,6 +444,7 @@ struct CursorUsageEventsFetcher: Sendable {
         var totalCents = 0.0
         var sawCharged = false
         for event in events {
+            guard event.isChargeable != false else { continue }
             guard event.validTimestampMS != nil, let cents = event.chargedCents else { continue }
             guard cents >= 0 else { return nil }
             let nextTotal = totalCents + cents

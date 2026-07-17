@@ -39,6 +39,7 @@ struct CursorUsageEventsFetcherTests {
         cacheWrite: Int = 0,
         cacheRead: Int = 0,
         totalCents: Double?,
+        isChargeable: Bool? = nil,
         chargedCents: Double? = nil) -> CursorUsageEvent
     {
         CursorUsageEvent(
@@ -50,6 +51,7 @@ struct CursorUsageEventsFetcherTests {
                 cacheWriteTokens: cacheWrite,
                 cacheReadTokens: cacheRead,
                 totalCents: totalCents),
+            isChargeable: isChargeable,
             chargedCents: chargedCents)
     }
 
@@ -143,6 +145,34 @@ struct CursorUsageEventsFetcherTests {
         #expect(CursorUsageEventsFetcher.meteredCostUSD(from: events) == nil)
     }
 
+    @Test
+    func `meteredCostUSD excludes events explicitly marked non chargeable`() {
+        let events = [
+            Self.event(
+                timestampMS: 1_700_000_000_000,
+                model: "claude",
+                input: 5,
+                totalCents: 994,
+                isChargeable: false,
+                chargedCents: 40),
+            Self.event(
+                timestampMS: 1_700_000_001_000,
+                model: "gpt-5",
+                input: 5,
+                totalCents: 500,
+                isChargeable: true,
+                chargedCents: 8),
+            Self.event(
+                timestampMS: 1_700_000_002_000,
+                model: "legacy",
+                input: 5,
+                totalCents: 100,
+                chargedCents: 4),
+        ]
+
+        #expect(Self.approxEqual(CursorUsageEventsFetcher.meteredCostUSD(from: events), 0.12))
+    }
+
     // MARK: - Snapshot
 
     @Test
@@ -198,6 +228,17 @@ struct CursorUsageEventsFetcherTests {
         #expect(event.tokenUsage?.inputTokens == 100)
         #expect(event.tokenUsage?.cacheWriteTokens == 10)
         #expect(Self.approxEqual(event.tokenUsage?.totalCents, 12.5))
+    }
+
+    @Test(arguments: [
+        #"{"totalUsageEventsCount":0}"#,
+        #"{"totalUsageEventsCount":0,"usageEventsDisplay":{}}"#,
+        #"{"error":"temporarily unavailable"}"#,
+    ])
+    func `page decoding rejects missing or malformed event arrays`(json: String) {
+        #expect(throws: DecodingError.self) {
+            _ = try JSONDecoder().decode(CursorUsageEventsPage.self, from: Data(json.utf8))
+        }
     }
 
     @Test
