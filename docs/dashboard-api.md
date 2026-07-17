@@ -15,7 +15,7 @@ GET /dashboard/v1/snapshot
 Authorization: Bearer YOUR_TOKEN
 ```
 
-The route is gated by a static bearer token and **fails closed**: without a configured token every request answers `401`. The token is only ever read from the `Authorization` header — a `?token=` query string is never accepted. Every response on the dashboard route — including all `401`s and error responses — carries `Cache-Control: no-store`.
+The route is gated by a static bearer token and **fails closed**: without a configured token every request answers `401`. The token is only ever read from the `Authorization` header — a query-string parameter named `token` is never accepted. Every response on the dashboard route — including all `401`s and error responses — carries `Cache-Control: no-store`.
 
 On the default loopback bind, `/usage` and `/cost` are unchanged and unauthenticated. On a **non-loopback** bind the same token gates **all data routes**: `/usage`, `/cost`, and `/dashboard/v1/snapshot` each require `Authorization: Bearer YOUR_TOKEN`, so account data never leaves the machine unauthenticated. `/health` is always open (it carries only a status and version string, useful for liveness probes).
 

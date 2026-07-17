@@ -10,8 +10,8 @@ import Foundation
 struct CLIServeDashboardAuth: Sendable {
     private let expectedTokenDigest: [UInt8]?
 
-    init(token: String?) {
-        self.expectedTokenDigest = token.map { Array(SHA256.hash(data: Data($0.utf8))) }
+    init(bearer: String?) {
+        self.expectedTokenDigest = bearer.map { Array(SHA256.hash(data: Data($0.utf8))) }
     }
 
     var isConfigured: Bool {
@@ -109,11 +109,11 @@ extension CodexBarCLI {
     /// | non-loopback | present | present            | serve; all data routes gated; log warning  |
     static func validateServeStartup(
         host: String,
-        hasDashboardToken: Bool,
+        hasConfiguredBearer: Bool,
         allowPlainHTTP: Bool) -> CLIServeStartupError?
     {
         guard !CLIServeSecurity.isLoopbackHost(host) else { return nil }
-        guard hasDashboardToken else { return .missingDashboardToken(host: host) }
+        guard hasConfiguredBearer else { return .missingDashboardToken(host: host) }
         guard allowPlainHTTP else { return .plainHTTPNotAccepted(host: host) }
         return nil
     }

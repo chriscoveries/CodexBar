@@ -93,7 +93,7 @@ struct CLIServeAuthTests {
             environment: [:]) == .token("flag-token"))
         #expect(CodexBarCLI.resolveDashboardToken(
             from: flagValues,
-            environment: ["CODEXBAR_DASHBOARD_TOKEN": "env-token"]) == .token("env-token"))
+            environment: ["CODEXBAR_DASHBOARD_TOKEN": "ENV_VALUE"]) == .token("ENV_VALUE"))
         #expect(CodexBarCLI.resolveDashboardToken(
             from: emptyValues,
             environment: ["CODEXBAR_DASHBOARD_TOKEN": "  "])
@@ -108,38 +108,38 @@ struct CLIServeAuthTests {
         // Loopback binds serve regardless of token or acceptance flag.
         #expect(CodexBarCLI.validateServeStartup(
             host: "127.0.0.1",
-            hasDashboardToken: false,
+            hasConfiguredBearer: false,
             allowPlainHTTP: false) == nil)
         #expect(CodexBarCLI.validateServeStartup(
             host: "127.0.0.1",
-            hasDashboardToken: true,
+            hasConfiguredBearer: true,
             allowPlainHTTP: false) == nil)
 
         // Non-loopback without a token always errors.
         #expect(CodexBarCLI.validateServeStartup(
             host: "0.0.0.0",
-            hasDashboardToken: false,
+            hasConfiguredBearer: false,
             allowPlainHTTP: false) == .missingDashboardToken(host: "0.0.0.0"))
         #expect(CodexBarCLI.validateServeStartup(
             host: "192.168.1.10",
-            hasDashboardToken: false,
+            hasConfiguredBearer: false,
             allowPlainHTTP: true) == .missingDashboardToken(host: "192.168.1.10"))
 
         // Non-loopback with a token requires the explicit plain-HTTP acceptance.
         #expect(CodexBarCLI.validateServeStartup(
             host: "0.0.0.0",
-            hasDashboardToken: true,
+            hasConfiguredBearer: true,
             allowPlainHTTP: false) == .plainHTTPNotAccepted(host: "0.0.0.0"))
         #expect(CodexBarCLI.validateServeStartup(
             host: "0.0.0.0",
-            hasDashboardToken: true,
+            hasConfiguredBearer: true,
             allowPlainHTTP: true) == nil)
     }
 
     @Test
     func `dashboard auth compares constant-time digests and fails closed`() {
-        let auth = CLIServeDashboardAuth(token: "secret")
-        let unconfigured = CLIServeDashboardAuth(token: nil)
+        let auth = CLIServeDashboardAuth(bearer: "secret")
+        let unconfigured = CLIServeDashboardAuth(bearer: nil)
 
         #expect(auth.isConfigured)
         #expect(!unconfigured.isConfigured)

@@ -632,12 +632,12 @@ extension CodexBarCLI {
                 kind: .args)
         }
 
-        let dashboardToken: String?
+        let dashboardBearer: String?
         switch tokenResolution {
         case .absent:
-            dashboardToken = nil
-        case let .token(token):
-            dashboardToken = token
+            dashboardBearer = nil
+        case let .token(bearer):
+            dashboardBearer = bearer
         case let .empty(source):
             Self.exit(
                 code: .failure,
@@ -650,7 +650,7 @@ extension CodexBarCLI {
         let allowPlainHTTP = Self.decodeServeAllowPlainHTTP(from: values)
         if let startupError = Self.validateServeStartup(
             host: bindHost,
-            hasDashboardToken: dashboardToken != nil,
+            hasConfiguredBearer: dashboardBearer != nil,
             allowPlainHTTP: allowPlainHTTP)
         {
             Self.exit(
@@ -672,7 +672,7 @@ extension CodexBarCLI {
             refreshInterval: refreshInterval,
             requestTimeout: requestTimeout,
             healthVersion: Self.currentVersion(),
-            dashboardAuth: CLIServeDashboardAuth(token: dashboardToken),
+            dashboardAuth: CLIServeDashboardAuth(bearer: dashboardBearer),
             bindHost: bindHost)
         let server = CLILocalHTTPServer(
             host: bindHost,
@@ -729,14 +729,14 @@ extension CodexBarCLI {
         environment: [String: String]) -> CLIServeDashboardTokenResolution
     {
         if let raw = environment[dashboardTokenEnvironmentVariable] {
-            let token = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-            return token.isEmpty
+            let bearer = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            return bearer.isEmpty
                 ? .empty(source: Self.dashboardTokenEnvironmentVariable)
-                : .token(token)
+                : .token(bearer)
         }
         guard let raw = values.options["dashboardToken"]?.last else { return .absent }
-        let token = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        return token.isEmpty ? .empty(source: "--dashboard-token") : .token(token)
+        let bearer = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return bearer.isEmpty ? .empty(source: "--dashboard-token") : .token(bearer)
     }
 
     static func decodeServeHost(from values: ParsedValues) -> String? {

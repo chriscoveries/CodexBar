@@ -336,7 +336,7 @@ struct CLIServeRawHTTPTests {
             refreshInterval: 60,
             requestTimeout: 5,
             healthVersion: "0.0.0-test",
-            dashboardAuth: CLIServeDashboardAuth(token: token),
+            dashboardAuth: CLIServeDashboardAuth(bearer: token),
             bindHost: bindHost)
         try await Self.withServer(
             handler: { request in
