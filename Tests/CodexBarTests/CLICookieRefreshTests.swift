@@ -82,23 +82,25 @@ struct CLICookieRefreshTests {
         var observedInteraction: ProviderInteraction?
         var explicitRetryAllowed = false
         await KeychainAccessGate.withTaskOverrideForTesting(false) {
-            _ = await CodexBarCLI.performCookieRefreshes(
-                targets: [descriptor],
-                allowKeychainPrompt: false)
-            { _ in
-                unacknowledgedOperationCalled = true
-                return CookieRefreshResult(provider: "opencode", status: .refreshed, message: "unexpected")
-            }
+            await KeychainAccessPreflight.withCheckGenericPasswordOverrideForTesting { _, _ in .allowed } operation: {
+                _ = await CodexBarCLI.performCookieRefreshes(
+                    targets: [descriptor],
+                    allowKeychainPrompt: false)
+                { _ in
+                    unacknowledgedOperationCalled = true
+                    return CookieRefreshResult(provider: "opencode", status: .refreshed, message: "unexpected")
+                }
 
-            _ = await CodexBarCLI.performCookieRefreshes(
-                targets: [descriptor],
-                allowKeychainPrompt: true)
-            { _ in
-                observedInteraction = ProviderInteractionContext.current
-                explicitRetryAllowed = BrowserCookieAccessGate.shouldAttempt(
-                    .chrome,
-                    now: start.addingTimeInterval(1))
-                return CookieRefreshResult(provider: "opencode", status: .refreshed, message: "ok")
+                _ = await CodexBarCLI.performCookieRefreshes(
+                    targets: [descriptor],
+                    allowKeychainPrompt: true)
+                { _ in
+                    observedInteraction = ProviderInteractionContext.current
+                    explicitRetryAllowed = BrowserCookieAccessGate.shouldAttempt(
+                        .chrome,
+                        now: start.addingTimeInterval(1))
+                    return CookieRefreshResult(provider: "opencode", status: .refreshed, message: "ok")
+                }
             }
         }
 
