@@ -8,7 +8,7 @@ read_when:
 
 # Providers
 
-CodexBar currently registers 60 provider IDs. Some companies expose multiple surfaces, such as Codex vs OpenAI API or
+CodexBar currently registers 61 provider IDs. Some companies expose multiple surfaces, such as Codex vs OpenAI API or
 OpenCode vs OpenCode Go, because the auth source and quota shape differ.
 
 ## Fetch strategies (current)
@@ -18,6 +18,19 @@ Source labels (CLI/header): `openai-web`, `web`, `oauth`, `api`, `local`, `cli`,
 Cookie-based providers expose a Cookie source picker (Automatic or Manual) in Settings → Providers.
 Some browser cookie imports are cached in Keychain and reused until the session is invalid. API keys, manual cookie
 headers, source selection, provider ordering, and token accounts are stored in `~/.codexbar/config.json`.
+
+## Usage & Spend settings
+
+Settings → Usage & Spend combines local 7- or 30-day estimated history only for enabled descriptors that advertise
+token-cost support: Codex, Claude, Vertex AI, OpenAI, Mistral, and AWS Bedrock. Providers without a cost-history
+contract are omitted instead of appearing as empty subscriptions.
+
+Each native currency has its own total, subscription/model ranking, and daily chart. CodexBar never adds or ranks
+amounts across currencies. Coverage text reports how many days of the selected local calendar window are covered by
+the scan window; a 30-day selection is not labeled as complete when the available scan window covers fewer days.
+
+The view stays local and does not upload usage history. Refreshes retain the last successful model if a replacement
+scan fails, while provider/account configuration changes replace obsolete results.
 
 | Provider | Strategies (ordered for auto) |
 | --- | --- |
@@ -75,6 +88,7 @@ headers, source selection, provider ordering, and token accounts are stored in `
 | LiteLLM | API key + base URL → `/key/info`, then `/user/info` or `/team/info` budget usage (`api`). |
 | Deepgram | API key → project discovery and usage breakdown API (`api`). |
 | Chutes | API key from config/env → subscription usage and quota API (`api`). |
+| Neuralwatt | API key from config/env → `/v1/quota` subscription kWh usage and prepaid balance (`api`). |
 | ZenMux | Management API key from config/env → five-hour and seven-day quota windows plus PAYG balance (`api`). |
 | Zed | Zed editor Keychain session → `cloud.zed.dev/client/users/me` for plan and quota data (`local`). |
 
@@ -492,6 +506,13 @@ headers, source selection, provider ordering, and token accounts are stored in `
 - Reads subscription usage first, then fills missing rolling, monthly, or pay-as-you-go quota data from the quota APIs.
 - Uses Chutes' management API at `https://api.chutes.ai`; `CHUTES_API_URL` can override it with an HTTPS endpoint.
 - Details: `docs/chutes.md`.
+
+## Neuralwatt
+- API key from config or `NEURALWATT_API_KEY`.
+- Reads `GET /v1/quota` from `api.neuralwatt.com`; `NEURALWATT_API_URL` can override it with an HTTPS endpoint.
+- Shows active subscription kWh usage as the quota window and the separate prepaid USD balance as PAYG credit.
+- Shows an optional per-key spending allowance when configured.
+- Details: `docs/neuralwatt.md`.
 
 ## StepFun
 - Username/password login or manual Oasis-Token.

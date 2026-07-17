@@ -37,6 +37,7 @@ extension SettingsStore {
         _ = self.menuBarMetricPreferencesRaw
         _ = self.copilotIconSecondaryWindowIDRaw
         _ = self.costUsageEnabled
+        _ = self.codexLocalSessionCostLedgerEnabled
         _ = self.costUsageHistoryDays
         _ = self.costComparisonPeriodsEnabled
         _ = self.costSummaryDisplayStyle
