@@ -192,7 +192,7 @@ extension CodexBarCLI {
             return result
         }
 
-        let clearSummary = CookieHeaderCache.clearAllScopesDetailed(provider: provider)
+        let clearSummary = Self.clearCookieRefreshScope(provider: provider)
         guard clearSummary.failedCount == 0 else {
             return CookieRefreshResult(
                 provider: descriptor.cli.name,
@@ -227,6 +227,10 @@ extension CodexBarCLI {
         case let .failure(error):
             return Self.cookieRefreshFailure(provider: provider, error: error)
         }
+    }
+
+    static func clearCookieRefreshScope(provider: UsageProvider) -> CookieHeaderCache.ClearSummary {
+        CookieHeaderCache.clearDetailed(provider: provider)
     }
 
     private static func cookieRefreshSkipResult(

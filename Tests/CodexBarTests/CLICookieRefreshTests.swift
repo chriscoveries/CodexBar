@@ -71,6 +71,33 @@ struct CLICookieRefreshTests {
     }
 
     @Test
+    func `refresh cleanup preserves unrelated account scopes`() {
+        let provider = UsageProvider.opencode
+        let accountScope = CookieHeaderCache.Scope.managedAccount(UUID())
+        let service = "com.steipete.codexbar.tests.cookie-refresh.\(UUID().uuidString)"
+
+        KeychainCacheStore.withServiceOverrideForTesting(service) {
+            KeychainCacheStore.withImplicitTestStoreForTesting {
+                CookieHeaderCache.store(
+                    provider: provider,
+                    cookieHeader: "default-test-cookie",
+                    sourceLabel: "Test default")
+                CookieHeaderCache.store(
+                    provider: provider,
+                    scope: accountScope,
+                    cookieHeader: "account-test-cookie",
+                    sourceLabel: "Test account")
+
+                let summary = CodexBarCLI.clearCookieRefreshScope(provider: provider)
+
+                #expect(summary.failedCount == 0)
+                #expect(CookieHeaderCache.load(provider: provider) == nil)
+                #expect(CookieHeaderCache.load(provider: provider, scope: accountScope)?.sourceLabel == "Test account")
+            }
+        }
+    }
+
+    @Test
     func `explicit acknowledgement is user initiated and is the only cooldown bypass`() async {
         BrowserCookieAccessGate.resetForTesting()
         defer { BrowserCookieAccessGate.resetForTesting() }
