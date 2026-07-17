@@ -1,0 +1,717 @@
+import CodexBarCore
+import Foundation
+import Testing
+@testable import CodexBar
+
+struct SessionEquivalentForecastTests {
+    private static let weeklyReset = Date(timeIntervalSince1970: 2_000_000_000)
+
+    @Test
+    func `uses the median of the latest seven completed active session windows`() throws {
+        let fixture = Self.historyFixture(burns: [5, 4, 8, 6, 10, 12, 14, 16])
+
+        let estimate = try #require(SessionEquivalentBurnEstimator.estimate(
+            histories: fixture.histories,
+            currentSessionResetsAt: fixture.currentSessionReset,
+            now: fixture.currentSessionReset.addingTimeInterval(-3600)))
+
+        #expect(estimate.sampleCount == 7)
+        #expect(estimate.medianWeeklyPercentPerWindow == 10)
+    }
+
+    @Test
+    func `requires three completed windows with measurable burn`() {
+        let fixture = Self.historyFixture(burns: [8, 12])
+
+        let estimate = SessionEquivalentBurnEstimator.estimate(
+            histories: fixture.histories,
+            currentSessionResetsAt: fixture.currentSessionReset,
+            now: fixture.currentSessionReset.addingTimeInterval(-3600))
+
+        #expect(estimate == nil)
+    }
+
+    @Test
+    func `rejects zero burn and non finite division inputs`() {
+        let now = Date(timeIntervalSince1970: 1_900_000_000)
+        let session = RateWindow(
+            usedPercent: 20,
+            windowMinutes: 300,
+            resetsAt: now.addingTimeInterval(3600),
+            resetDescription: nil)
+        let weekly = RateWindow(
+            usedPercent: 50,
+            windowMinutes: 10080,
+            resetsAt: now.addingTimeInterval(2 * 24 * 3600),
+            resetDescription: nil)
+
+        #expect(SessionEquivalentForecast.make(
+            sessionWindow: session,
+            weeklyWindow: weekly,
+            burnEstimate: SessionEquivalentBurnEstimate(
+                medianWeeklyPercentPerWindow: 0,
+                sampleCount: 3),
+            now: now,
+            workDays: nil) == nil)
+        #expect(SessionEquivalentForecast.make(
+            sessionWindow: session,
+            weeklyWindow: weekly,
+            burnEstimate: SessionEquivalentBurnEstimate(
+                medianWeeklyPercentPerWindow: .infinity,
+                sampleCount: 3),
+            now: now,
+            workDays: nil) == nil)
+    }
+
+    @Test
+    func `floors five hour windows at exact boundaries`() throws {
+        let now = Date(timeIntervalSince1970: 1_900_000_000)
+        let session = RateWindow(
+            usedPercent: 20,
+            windowMinutes: 300,
+            resetsAt: now.addingTimeInterval(3600),
+            resetDescription: nil)
+        let burn = SessionEquivalentBurnEstimate(medianWeeklyPercentPerWindow: 10, sampleCount: 3)
+
+        let below = try #require(SessionEquivalentForecast.make(
+            sessionWindow: session,
+            weeklyWindow: RateWindow(
+                usedPercent: 60,
+                windowMinutes: 10080,
+                resetsAt: now.addingTimeInterval(10 * 5 * 3600 - 1),
+                resetDescription: nil),
+            burnEstimate: burn,
+            now: now,
+            workDays: nil))
+        let exact = try #require(SessionEquivalentForecast.make(
+            sessionWindow: session,
+            weeklyWindow: RateWindow(
+                usedPercent: 60,
+                windowMinutes: 10080,
+                resetsAt: now.addingTimeInterval(10 * 5 * 3600),
+                resetDescription: nil),
+            burnEstimate: burn,
+            now: now,
+            workDays: nil))
+
+        #expect(below.windowsUntilReset == 9)
+        #expect(exact.windowsUntilReset == 10)
+    }
+
+    @Test
+    func `work day setting excludes weekend capacity`() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(secondsFromGMT: 0))
+        let now = try #require(calendar.date(from: DateComponents(
+            calendar: calendar,
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 7,
+            day: 17,
+            hour: 12)))
+        let reset = try #require(calendar.date(from: DateComponents(
+            calendar: calendar,
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 7,
+            day: 20,
+            hour: 12)))
+        let session = RateWindow(
+            usedPercent: 20,
+            windowMinutes: 300,
+            resetsAt: now.addingTimeInterval(3600),
+            resetDescription: nil)
+        let weekly = RateWindow(
+            usedPercent: 60,
+            windowMinutes: 10080,
+            resetsAt: reset,
+            resetDescription: nil)
+        let burn = SessionEquivalentBurnEstimate(medianWeeklyPercentPerWindow: 10, sampleCount: 3)
+
+        let everyDay = try #require(SessionEquivalentForecast.make(
+            sessionWindow: session,
+            weeklyWindow: weekly,
+            burnEstimate: burn,
+            now: now,
+            workDays: nil,
+            calendar: calendar))
+        let weekdays = try #require(SessionEquivalentForecast.make(
+            sessionWindow: session,
+            weeklyWindow: weekly,
+            burnEstimate: burn,
+            now: now,
+            workDays: 5,
+            calendar: calendar))
+
+        #expect(everyDay.windowsUntilReset == 14)
+        #expect(weekdays.windowsUntilReset == 4)
+    }
+
+    @Test
+    func `formats verdict first and number second`() {
+        let early = SessionEquivalentForecast(
+            estimatedWindowsToExhaustWeekly: 4,
+            windowsUntilReset: 9,
+            sampleCount: 7,
+            weeklyResetsAt: Self.weeklyReset,
+            weeklyUsedPercent: 60)
+        let stranded = SessionEquivalentForecast(
+            estimatedWindowsToExhaustWeekly: 10,
+            windowsUntilReset: 9,
+            sampleCount: 7,
+            weeklyResetsAt: Self.weeklyReset,
+            weeklyUsedPercent: 20)
+
+        let earlyText = UsagePaceText.sessionEquivalentDetail(forecast: early)
+        let strandedText = UsagePaceText.sessionEquivalentDetail(forecast: stranded)
+
+        #expect(earlyText.verdictText == "Weekly can run out ≈5 windows early")
+        #expect(earlyText.numberText == "≈4 full 5h windows of weekly left · 9 windows until reset")
+        #expect(earlyText.verdictAccessibilityLabel == "Estimated: Weekly can run out ≈5 windows early")
+        #expect(strandedText.verdictText == "Weekly cannot run out before reset at this pace")
+    }
+
+    @Test
+    func `formats equality as lasting to reset and pluralizes singular windows`() {
+        let equal = UsagePaceText.sessionEquivalentDetail(forecast: SessionEquivalentForecast(
+            estimatedWindowsToExhaustWeekly: 2,
+            windowsUntilReset: 2,
+            sampleCount: 7,
+            weeklyResetsAt: Self.weeklyReset,
+            weeklyUsedPercent: 80))
+        let singular = UsagePaceText.sessionEquivalentDetail(forecast: SessionEquivalentForecast(
+            estimatedWindowsToExhaustWeekly: 1,
+            windowsUntilReset: 2,
+            sampleCount: 7,
+            weeklyResetsAt: Self.weeklyReset,
+            weeklyUsedPercent: 90))
+        let close = UsagePaceText.sessionEquivalentDetail(forecast: SessionEquivalentForecast(
+            estimatedWindowsToExhaustWeekly: 8.6,
+            windowsUntilReset: 9,
+            sampleCount: 7,
+            weeklyResetsAt: Self.weeklyReset,
+            weeklyUsedPercent: 14))
+
+        #expect(equal.verdictText == "Weekly cannot run out before reset at this pace")
+        #expect(singular.numberText == "≈1 full 5h window of weekly left · 2 windows until reset")
+        #expect(singular.verdictText == "Weekly can run out ≈1 window early")
+        #expect(close.verdictText == "Weekly can run out ≈1 window early")
+    }
+
+    @Test
+    func `reset tolerance compares actual distance across bucket boundaries`() throws {
+        let fixture = Self.historyFixture(burns: [4, 6, 8])
+        let session = PlanUtilizationSeriesHistory(
+            name: .session,
+            windowMinutes: 300,
+            entries: fixture.histories[0].entries.enumerated().map { index, entry in
+                planEntry(
+                    at: entry.capturedAt,
+                    usedPercent: entry.usedPercent,
+                    resetsAt: entry.resetsAt?.addingTimeInterval(index.isMultiple(of: 2) ? 59 : 61))
+            })
+        let weekly = PlanUtilizationSeriesHistory(
+            name: .weekly,
+            windowMinutes: 10080,
+            entries: fixture.histories[1].entries.enumerated().map { index, entry in
+                planEntry(
+                    at: entry.capturedAt,
+                    usedPercent: entry.usedPercent,
+                    resetsAt: entry.resetsAt?.addingTimeInterval(index.isMultiple(of: 2) ? 59 : 61))
+            })
+
+        let estimate = try #require(SessionEquivalentBurnEstimator.estimate(
+            histories: [session, weekly],
+            currentSessionResetsAt: fixture.currentSessionReset,
+            now: fixture.currentSessionReset.addingTimeInterval(-3600)))
+
+        #expect(estimate.sampleCount == 3)
+        #expect(estimate.medianWeeklyPercentPerWindow == 6)
+    }
+
+    @Test
+    func `rejects hostile dates percentages and unsorted history`() throws {
+        let now = Date(timeIntervalSince1970: 1_900_000_000)
+        let session = RateWindow(
+            usedPercent: 20,
+            windowMinutes: 300,
+            resetsAt: now.addingTimeInterval(3600),
+            resetDescription: nil)
+        let burn = SessionEquivalentBurnEstimate(medianWeeklyPercentPerWindow: 10, sampleCount: 3)
+        let extremeDate = Date(timeIntervalSinceReferenceDate: 1e30)
+
+        #expect(SessionEquivalentForecast.make(
+            sessionWindow: RateWindow(
+                usedPercent: 20,
+                windowMinutes: 300,
+                resetsAt: extremeDate,
+                resetDescription: nil),
+            weeklyWindow: RateWindow(
+                usedPercent: 50,
+                windowMinutes: 10080,
+                resetsAt: now.addingTimeInterval(24 * 3600),
+                resetDescription: nil),
+            burnEstimate: burn,
+            now: now,
+            workDays: nil) == nil)
+        #expect(SessionEquivalentForecast.make(
+            sessionWindow: session,
+            weeklyWindow: RateWindow(
+                usedPercent: -1,
+                windowMinutes: 10080,
+                resetsAt: now.addingTimeInterval(24 * 3600),
+                resetDescription: nil),
+            burnEstimate: burn,
+            now: now,
+            workDays: nil) == nil)
+
+        let fixture = Self.historyFixture(burns: [4, 6, 8])
+        let encodedSession = try JSONEncoder().encode(fixture.histories[0])
+        var sessionJSON = try #require(JSONSerialization.jsonObject(with: encodedSession) as? [String: Any])
+        let entriesJSON = try #require(sessionJSON["entries"] as? [[String: Any]])
+        sessionJSON["entries"] = Array(entriesJSON.reversed())
+        let shuffledData = try JSONSerialization.data(withJSONObject: sessionJSON)
+        let shuffledSession = try JSONDecoder().decode(PlanUtilizationSeriesHistory.self, from: shuffledData)
+        #expect((shuffledSession.entries.first?.capturedAt ?? .distantPast)
+            > (shuffledSession.entries.last?.capturedAt ?? .distantFuture))
+        #expect(SessionEquivalentBurnEstimator.estimate(
+            histories: [shuffledSession, fixture.histories[1]],
+            currentSessionResetsAt: fixture.currentSessionReset,
+            now: fixture.currentSessionReset.addingTimeInterval(-3600)) == nil)
+
+        let huge = UsagePaceText.sessionEquivalentDetail(forecast: SessionEquivalentForecast(
+            estimatedWindowsToExhaustWeekly: .greatestFiniteMagnitude,
+            windowsUntilReset: 2,
+            sampleCount: 7,
+            weeklyResetsAt: Self.weeklyReset,
+            weeklyUsedPercent: 1))
+        #expect(huge.numberText.contains("full 5h windows"))
+    }
+
+    @Test
+    func `does not replace unusable recent windows with older samples`() throws {
+        let fixture = Self.historyFixture(burns: [20, 2, 4, 6, 8, 10, 12, 14])
+        let lastReset = fixture.currentSessionReset.addingTimeInterval(-5 * 3600)
+        let lastStart = lastReset.addingTimeInterval(-5 * 3600)
+        let weekly = fixture.histories[1]
+        let missingLatestBoundaries = PlanUtilizationSeriesHistory(
+            name: weekly.name,
+            windowMinutes: weekly.windowMinutes,
+            entries: weekly.entries.filter { $0.capturedAt != lastStart && $0.capturedAt != lastReset })
+
+        let estimate = try #require(SessionEquivalentBurnEstimator.estimate(
+            histories: [fixture.histories[0], missingLatestBoundaries],
+            currentSessionResetsAt: fixture.currentSessionReset,
+            now: fixture.currentSessionReset.addingTimeInterval(-3600)))
+
+        #expect(estimate.sampleCount == 5)
+        #expect(estimate.medianWeeklyPercentPerWindow == 6)
+    }
+
+    @Test
+    func `does not count a session whose reset is still in the future`() {
+        let fixture = Self.historyFixture(burns: [5, 5])
+        let now = fixture.currentSessionReset.addingTimeInterval(-3600)
+        let futureReset = now.addingTimeInterval(30 * 60)
+        let futureStart = futureReset.addingTimeInterval(-5 * 3600)
+        let session = fixture.histories[0]
+        let weekly = fixture.histories[1]
+        let sessionEntries = (session.entries + [
+            planEntry(at: futureStart.addingTimeInterval(3600), usedPercent: 80, resetsAt: futureReset),
+        ]).sorted { $0.capturedAt < $1.capturedAt }
+        let weeklyEntries = (weekly.entries + [
+            planEntry(at: futureStart, usedPercent: 10, resetsAt: weekly.entries[0].resetsAt),
+            planEntry(at: futureReset, usedPercent: 15, resetsAt: weekly.entries[0].resetsAt),
+        ]).sorted { $0.capturedAt < $1.capturedAt }
+
+        #expect(SessionEquivalentBurnEstimator.estimate(
+            histories: [
+                planSeries(name: .session, windowMinutes: 300, entries: sessionEntries),
+                planSeries(name: .weekly, windowMinutes: 10080, entries: weeklyEntries),
+            ],
+            currentSessionResetsAt: fixture.currentSessionReset,
+            now: now) == nil)
+    }
+
+    @Test
+    func `provider metric shows estimate only on its matching weekly window`() throws {
+        let now = Date(timeIntervalSince1970: 1_900_000_000)
+        let weeklyReset = now.addingTimeInterval(2 * 24 * 3600)
+        let snapshot = UsageSnapshot(
+            primary: RateWindow(
+                usedPercent: 20,
+                windowMinutes: 300,
+                resetsAt: now.addingTimeInterval(3600),
+                resetDescription: nil),
+            secondary: RateWindow(
+                usedPercent: 60,
+                windowMinutes: 10080,
+                resetsAt: weeklyReset,
+                resetDescription: nil),
+            updatedAt: now)
+        let metadata = try #require(ProviderDefaults.metadata[.claude])
+        let forecast = SessionEquivalentForecast(
+            estimatedWindowsToExhaustWeekly: 4,
+            windowsUntilReset: 9,
+            sampleCount: 7,
+            weeklyResetsAt: weeklyReset,
+            weeklyUsedPercent: 60)
+
+        let model = UsageMenuCardView.Model.make(.init(
+            provider: .claude,
+            metadata: metadata,
+            snapshot: snapshot,
+            credits: nil,
+            creditsError: nil,
+            dashboard: nil,
+            dashboardError: nil,
+            tokenSnapshot: nil,
+            tokenError: nil,
+            account: AccountInfo(email: nil, plan: nil),
+            isRefreshing: false,
+            lastError: nil,
+            usageBarsShowUsed: false,
+            resetTimeDisplayStyle: .countdown,
+            tokenCostUsageEnabled: false,
+            showOptionalCreditsAndExtraUsage: true,
+            hidePersonalInfo: false,
+            sessionEquivalentForecast: forecast,
+            now: now))
+
+        let sessionMetric = try #require(model.metrics.first { $0.id == "primary" })
+        let weeklyMetric = try #require(model.metrics.first { $0.id == "secondary" })
+        #expect(sessionMetric.sessionEquivalentDetail == nil)
+        #expect(weeklyMetric.sessionEquivalentDetail?.verdictText == "Weekly can run out ≈5 windows early")
+    }
+
+    @Test
+    func `named provider metric requires the selected weekly window identity`() {
+        let weekly = RateWindow(
+            usedPercent: 60,
+            windowMinutes: 10080,
+            resetsAt: Self.weeklyReset,
+            resetDescription: nil)
+        let forecast = SessionEquivalentForecast(
+            estimatedWindowsToExhaustWeekly: 4,
+            windowsUntilReset: 9,
+            sampleCount: 7,
+            weeklyResetsAt: Self.weeklyReset,
+            weeklyUsedPercent: 60,
+            weeklyWindowID: "antigravity-quota-summary-gemini-weekly")
+
+        #expect(forecast.applies(
+            to: weekly,
+            windowID: "antigravity-quota-summary-gemini-weekly"))
+        #expect(!forecast.applies(
+            to: weekly,
+            windowID: "antigravity-quota-summary-3p-weekly"))
+    }
+
+    @MainActor
+    @Test
+    func `usage store memoizes the history scan until revision changes`() {
+        let store = UsageStorePlanUtilizationTests.makeStore()
+        let fixture = Self.historyFixture(burns: [4, 8, 6, 10])
+        store.planUtilizationHistory[.claude] = PlanUtilizationHistoryBuckets(unscoped: fixture.histories)
+        store.planUtilizationHistoryRevision = 1
+        let now = fixture.currentSessionReset.addingTimeInterval(-3600)
+        let session = RateWindow(
+            usedPercent: 20,
+            windowMinutes: 300,
+            resetsAt: fixture.currentSessionReset,
+            resetDescription: nil)
+        let weekly = RateWindow(
+            usedPercent: 60,
+            windowMinutes: 10080,
+            resetsAt: now.addingTimeInterval(2 * 24 * 3600),
+            resetDescription: nil)
+
+        #expect(store.sessionEquivalentForecast(
+            provider: .claude,
+            sessionWindow: session,
+            weeklyWindow: weekly,
+            now: now) != nil)
+        #expect(store.sessionEquivalentForecast(
+            provider: .claude,
+            sessionWindow: session,
+            weeklyWindow: weekly,
+            now: now) != nil)
+        #expect(store._sessionEquivalentHistoryScanCountForTesting == 1)
+
+        store.planUtilizationHistoryRevision = 2
+        #expect(store.sessionEquivalentForecast(
+            provider: .claude,
+            sessionWindow: session,
+            weeklyWindow: weekly,
+            now: now) != nil)
+        #expect(store._sessionEquivalentHistoryScanCountForTesting == 2)
+    }
+
+    @MainActor
+    @Test
+    func `antigravity records session and weekly history without generic history opt in`() async {
+        let store = UsageStorePlanUtilizationTests.makeStore()
+        let now = Date(timeIntervalSince1970: 1_900_000_000)
+        let snapshot = UsageSnapshot(
+            primary: nil,
+            secondary: nil,
+            extraRateWindows: [
+                NamedRateWindow(
+                    id: "antigravity-quota-summary-gemini-session",
+                    title: "Gemini session",
+                    window: RateWindow(
+                        usedPercent: 20,
+                        windowMinutes: 300,
+                        resetsAt: now.addingTimeInterval(3600),
+                        resetDescription: nil)),
+                NamedRateWindow(
+                    id: "antigravity-quota-summary-gemini-weekly",
+                    title: "Gemini weekly",
+                    window: RateWindow(
+                        usedPercent: 40,
+                        windowMinutes: 10080,
+                        resetsAt: now.addingTimeInterval(3 * 24 * 3600),
+                        resetDescription: nil)),
+            ],
+            updatedAt: now)
+
+        #expect(store.settings.historicalTrackingEnabled == false)
+        await store.recordPlanUtilizationHistorySample(provider: .antigravity, snapshot: snapshot, now: now)
+
+        let histories = store.planUtilizationHistory(for: .antigravity)
+        #expect(findSeries(histories, name: .session, windowMinutes: 300)?.entries.last?.usedPercent == 20)
+        #expect(findSeries(histories, name: .weekly, windowMinutes: 10080)?.entries.last?.usedPercent == 40)
+    }
+
+    @MainActor
+    @Test
+    func `antigravity forecast keeps a stable Gemini quota family`() {
+        let store = UsageStorePlanUtilizationTests.makeStore()
+        let now = Date(timeIntervalSince1970: 1_900_000_000)
+        let before = Self.antigravitySnapshot(
+            now: now,
+            geminiSession: 20,
+            geminiWeekly: 60,
+            thirdPartySession: 30,
+            thirdPartyWeekly: 50)
+        let after = Self.antigravitySnapshot(
+            now: now.addingTimeInterval(3600),
+            geminiSession: 25,
+            geminiWeekly: 61,
+            thirdPartySession: 35,
+            thirdPartyWeekly: 70)
+
+        #expect(store.sessionEquivalentWindows(provider: .antigravity, snapshot: before)?.weekly.usedPercent == 60)
+        #expect(store.sessionEquivalentWindows(provider: .antigravity, snapshot: after)?.weekly.usedPercent == 61)
+        #expect(store.sessionEquivalentWindows(provider: .antigravity, snapshot: after)?.weeklyWindowID
+            == "antigravity-quota-summary-gemini-weekly")
+        #expect(store.sessionEquivalentWindows(
+            provider: .antigravity,
+            snapshot: Self.antigravitySnapshot(
+                now: now,
+                geminiSession: 20,
+                geminiWeekly: 60,
+                thirdPartySession: 30,
+                thirdPartyWeekly: 50,
+                geminiFamily: "gemini-pro")) == nil)
+    }
+
+    @MainActor
+    @Test
+    func `generic named weekly window preserves its rendering identity`() throws {
+        let store = UsageStorePlanUtilizationTests.makeStore()
+        let now = Date(timeIntervalSince1970: 1_900_000_000)
+        let snapshot = UsageSnapshot(
+            primary: RateWindow(
+                usedPercent: 20,
+                windowMinutes: 300,
+                resetsAt: now.addingTimeInterval(3600),
+                resetDescription: nil),
+            secondary: nil,
+            extraRateWindows: [
+                NamedRateWindow(
+                    id: "zai-named-weekly",
+                    title: "Weekly",
+                    window: RateWindow(
+                        usedPercent: 40,
+                        windowMinutes: 10080,
+                        resetsAt: now.addingTimeInterval(3 * 24 * 3600),
+                        resetDescription: nil)),
+            ],
+            updatedAt: now)
+
+        let windows = try #require(store.sessionEquivalentWindows(provider: .zai, snapshot: snapshot))
+        #expect(windows.weeklyWindowID == "zai-named-weekly")
+    }
+
+    @MainActor
+    @Test
+    func `generic named history resets when weekly window identity changes`() async {
+        let store = UsageStorePlanUtilizationTests.makeStore()
+        store.settings.historicalTrackingEnabled = true
+        let now = Date(timeIntervalSince1970: 1_900_000_000)
+
+        func snapshot(id: String, sessionUsed: Double, weeklyUsed: Double, at date: Date) -> UsageSnapshot {
+            UsageSnapshot(
+                primary: RateWindow(
+                    usedPercent: sessionUsed,
+                    windowMinutes: 300,
+                    resetsAt: date.addingTimeInterval(3600),
+                    resetDescription: nil),
+                secondary: nil,
+                extraRateWindows: [
+                    NamedRateWindow(
+                        id: id,
+                        title: "Weekly",
+                        window: RateWindow(
+                            usedPercent: weeklyUsed,
+                            windowMinutes: 10080,
+                            resetsAt: date.addingTimeInterval(3 * 24 * 3600),
+                            resetDescription: nil)),
+                ],
+                updatedAt: date)
+        }
+
+        let first = snapshot(id: "zai-weekly-a", sessionUsed: 20, weeklyUsed: 40, at: now)
+        let second = snapshot(
+            id: "zai-weekly-b",
+            sessionUsed: 30,
+            weeklyUsed: 50,
+            at: now.addingTimeInterval(3600))
+        #expect(!store.sessionEquivalentHistoryIdentityMatches(
+            provider: .zai,
+            accountKey: nil,
+            weeklyWindowID: "zai-weekly-a"))
+
+        await store.recordPlanUtilizationHistorySample(provider: .zai, snapshot: first, now: first.updatedAt)
+        #expect(store.sessionEquivalentHistoryIdentityMatches(
+            provider: .zai,
+            accountKey: nil,
+            weeklyWindowID: "zai-weekly-a"))
+        await store.recordPlanUtilizationHistorySample(provider: .zai, snapshot: second, now: second.updatedAt)
+
+        let histories = store.planUtilizationHistory(for: .zai)
+        #expect(findSeries(histories, name: .session, windowMinutes: 300)?.entries.map(\.usedPercent) == [30])
+        #expect(findSeries(histories, name: .weekly, windowMinutes: 10080)?.entries.map(\.usedPercent) == [50])
+        #expect(store.sessionEquivalentHistoryIdentityMatches(
+            provider: .zai,
+            accountKey: nil,
+            weeklyWindowID: "zai-weekly-b"))
+    }
+
+    @MainActor
+    @Test
+    func `antigravity history skips refreshes without the pinned Gemini family`() async {
+        let store = UsageStorePlanUtilizationTests.makeStore()
+        let now = Date(timeIntervalSince1970: 1_900_000_000)
+        store.planUtilizationHistory[.antigravity] = PlanUtilizationHistoryBuckets(unscoped: [
+            planSeries(
+                name: .weekly,
+                windowMinutes: 10080,
+                entries: [planEntry(at: now.addingTimeInterval(-3600), usedPercent: 99)]),
+        ])
+        let complete = Self.antigravitySnapshot(
+            now: now,
+            geminiSession: 20,
+            geminiWeekly: 60,
+            thirdPartySession: 30,
+            thirdPartyWeekly: 50)
+        let thirdPartyOnly = UsageSnapshot(
+            primary: nil,
+            secondary: nil,
+            extraRateWindows: complete.extraRateWindows?.filter { $0.id.contains("3p") },
+            updatedAt: now.addingTimeInterval(3600))
+
+        await store.recordPlanUtilizationHistorySample(provider: .antigravity, snapshot: complete, now: now)
+        await store.recordPlanUtilizationHistorySample(
+            provider: .antigravity,
+            snapshot: thirdPartyOnly,
+            now: thirdPartyOnly.updatedAt)
+
+        let histories = store.planUtilizationHistory(for: .antigravity)
+        #expect(findSeries(histories, name: .session, windowMinutes: 300)?.entries.map(\.usedPercent) == [20])
+        #expect(findSeries(histories, name: .weekly, windowMinutes: 10080)?.entries.map(\.usedPercent) == [60])
+    }
+
+    private static func antigravitySnapshot(
+        now: Date,
+        geminiSession: Double,
+        geminiWeekly: Double,
+        thirdPartySession: Double,
+        thirdPartyWeekly: Double,
+        geminiFamily: String = "gemini") -> UsageSnapshot
+    {
+        UsageSnapshot(
+            primary: nil,
+            secondary: nil,
+            extraRateWindows: [
+                NamedRateWindow(
+                    id: "antigravity-quota-summary-\(geminiFamily)-5h",
+                    title: "Gemini 5-hour",
+                    window: RateWindow(
+                        usedPercent: geminiSession,
+                        windowMinutes: 300,
+                        resetsAt: now.addingTimeInterval(3600),
+                        resetDescription: nil)),
+                NamedRateWindow(
+                    id: "antigravity-quota-summary-\(geminiFamily)-weekly",
+                    title: "Gemini weekly",
+                    window: RateWindow(
+                        usedPercent: geminiWeekly,
+                        windowMinutes: 10080,
+                        resetsAt: now.addingTimeInterval(3 * 24 * 3600),
+                        resetDescription: nil)),
+                NamedRateWindow(
+                    id: "antigravity-quota-summary-3p-5h",
+                    title: "Third party 5-hour",
+                    window: RateWindow(
+                        usedPercent: thirdPartySession,
+                        windowMinutes: 300,
+                        resetsAt: now.addingTimeInterval(3600),
+                        resetDescription: nil)),
+                NamedRateWindow(
+                    id: "antigravity-quota-summary-3p-weekly",
+                    title: "Third party weekly",
+                    window: RateWindow(
+                        usedPercent: thirdPartyWeekly,
+                        windowMinutes: 10080,
+                        resetsAt: now.addingTimeInterval(3 * 24 * 3600),
+                        resetDescription: nil)),
+            ],
+            updatedAt: now)
+    }
+
+    private static func historyFixture(burns: [Double])
+        -> (histories: [PlanUtilizationSeriesHistory], currentSessionReset: Date)
+    {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let duration: TimeInterval = 5 * 3600
+        let weeklyReset = start.addingTimeInterval(7 * 24 * 3600)
+        var sessionEntries: [PlanUtilizationHistoryEntry] = []
+        var weeklyEntries: [PlanUtilizationHistoryEntry] = []
+        var weeklyUsed = 0.0
+
+        for (index, burn) in burns.enumerated() {
+            let windowStart = start.addingTimeInterval(Double(index) * duration)
+            let reset = windowStart.addingTimeInterval(duration)
+            sessionEntries.append(planEntry(
+                at: windowStart.addingTimeInterval(30 * 60),
+                usedPercent: 20,
+                resetsAt: reset))
+            sessionEntries.append(planEntry(
+                at: reset.addingTimeInterval(-30 * 60),
+                usedPercent: 100,
+                resetsAt: reset))
+            weeklyEntries.append(planEntry(at: windowStart, usedPercent: weeklyUsed, resetsAt: weeklyReset))
+            weeklyUsed += burn
+            weeklyEntries.append(planEntry(at: reset, usedPercent: weeklyUsed, resetsAt: weeklyReset))
+        }
+
+        return (
+            histories: [
+                planSeries(name: .session, windowMinutes: 300, entries: sessionEntries),
+                planSeries(name: .weekly, windowMinutes: 10080, entries: weeklyEntries),
+            ],
+            currentSessionReset: start.addingTimeInterval(Double(burns.count + 1) * duration))
+    }
+}

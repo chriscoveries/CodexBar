@@ -39,6 +39,7 @@ struct UsageMenuCardView: View {
             let warningMarkerPercents: [Double]
             let workdayMarkerPercents: [Double]
             let cardStyle: Bool
+            let sessionEquivalentDetail: UsagePaceText.SessionEquivalentDetail?
 
             init(
                 id: String,
@@ -54,7 +55,8 @@ struct UsageMenuCardView: View {
                 paceOnTop: Bool,
                 warningMarkerPercents: [Double] = [],
                 workdayMarkerPercents: [Double] = [],
-                cardStyle: Bool = false)
+                cardStyle: Bool = false,
+                sessionEquivalentDetail: UsagePaceText.SessionEquivalentDetail? = nil)
             {
                 self.id = id
                 self.title = title
@@ -70,6 +72,7 @@ struct UsageMenuCardView: View {
                 self.warningMarkerPercents = warningMarkerPercents
                 self.workdayMarkerPercents = workdayMarkerPercents
                 self.cardStyle = cardStyle
+                self.sessionEquivalentDetail = sessionEquivalentDetail
             }
 
             var percentLabel: String {
@@ -542,6 +545,18 @@ private struct MetricRow: View {
                                     .lineLimit(1)
                             }
                         }
+                    }
+                    if let sessionEquivalentDetail = self.metric.sessionEquivalentDetail {
+                        Text(sessionEquivalentDetail.verdictText)
+                            .font(.footnote)
+                            .foregroundStyle(MenuHighlightStyle.primary(self.isHighlighted))
+                            .lineLimit(1)
+                            .accessibilityLabel(sessionEquivalentDetail.verdictAccessibilityLabel)
+                        Text(sessionEquivalentDetail.numberText)
+                            .font(.footnote)
+                            .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
+                            .lineLimit(1)
+                            .accessibilityLabel(sessionEquivalentDetail.numberAccessibilityLabel)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -1394,7 +1409,11 @@ extension UsageMenuCardView.Model {
             paceOnTop: primaryPaceOnTop,
             warningMarkerPercents: Self.warningMarkerPercents(
                 thresholds: input.quotaWarningThresholds[.session],
-                showUsed: input.usageBarsShowUsed))
+                showUsed: input.usageBarsShowUsed),
+            sessionEquivalentDetail: Self.sessionEquivalentDetail(
+                input: input,
+                weeklyWindow: primary,
+                weeklyWindowID: nil))
     }
 
     private static func secondaryMetric(
@@ -1512,7 +1531,11 @@ extension UsageMenuCardView.Model {
                 showUsed: input.usageBarsShowUsed),
             workdayMarkerPercents: workDayMarkerPercents(
                 workDays: input.workDaysPerWeek,
-                windowMinutes: weekly.windowMinutes))
+                windowMinutes: weekly.windowMinutes),
+            sessionEquivalentDetail: Self.sessionEquivalentDetail(
+                input: input,
+                weeklyWindow: weekly,
+                weeklyWindowID: nil))
     }
 
     private static func codexRateMetrics(
@@ -1564,7 +1587,10 @@ extension UsageMenuCardView.Model {
                     ? workDayMarkerPercents(
                         workDays: input.workDaysPerWeek,
                         windowMinutes: window.windowMinutes)
-                    : [])
+                    : [],
+                sessionEquivalentDetail: lane == .weekly
+                    ? Self.sessionEquivalentDetail(input: input, weeklyWindow: window, weeklyWindowID: nil)
+                    : nil)
         }
     }
 }

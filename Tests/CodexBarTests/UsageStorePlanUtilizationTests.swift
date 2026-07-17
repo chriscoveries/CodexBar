@@ -803,7 +803,7 @@ struct UsageStorePlanUtilizationTests {
 
         let histories = store.planUtilizationHistory(for: .zai)
         #expect(findSeries(histories, name: .weekly, windowMinutes: 10080)?.entries.map(\.usedPercent) == [42, 58])
-        #expect(findSeries(histories, name: .session, windowMinutes: 300) == nil)
+        #expect(findSeries(histories, name: .session, windowMinutes: 300)?.entries.map(\.usedPercent) == [15, 25])
 
         let providerURL = try #require(store.planUtilizationHistoryStore.directoryURL?
             .appendingPathComponent("zai.json", isDirectory: false))

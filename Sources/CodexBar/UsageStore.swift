@@ -347,6 +347,8 @@ final class UsageStore {
     @ObservationIgnored var lastTokenFetchAt: [UsageProvider: Date] = [:]
     @ObservationIgnored var lastTokenFetchScope: [UsageProvider: String] = [:]
     @ObservationIgnored var planUtilizationHistory: [UsageProvider: PlanUtilizationHistoryBuckets] = [:]
+    @ObservationIgnored var sessionEquivalentBurnCache: [UsageProvider: SessionEquivalentBurnCacheEntry] = [:]
+    @ObservationIgnored var sessionEquivalentHistoryScanCount: Int = 0
 
     /// Background load task; cleared on deinit and on the cancel test seam.
     @ObservationIgnored var planUtilizationHistoryLoadTask: Task<Void, Never>?

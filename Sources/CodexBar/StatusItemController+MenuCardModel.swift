@@ -98,6 +98,29 @@ extension StatusItemController {
                 self.store.weeklyPace(provider: target, window: window, now: now)
             }
         }
+        let sessionEquivalentForecast: SessionEquivalentForecast? = if let codexProjection,
+                                                                       let session = codexProjection
+                                                                           .rateWindow(for: .session),
+                                                                           let weekly = codexProjection
+                                                                               .rateWindow(for: .weekly)
+        {
+            self.store.sessionEquivalentForecast(
+                provider: target,
+                sessionWindow: session,
+                weeklyWindow: weekly,
+                now: now)
+        } else if let snapshot,
+                  let windows = self.store.sessionEquivalentWindows(provider: target, snapshot: snapshot)
+        {
+            self.store.sessionEquivalentForecast(
+                provider: target,
+                sessionWindow: windows.session,
+                weeklyWindow: windows.weekly,
+                weeklyWindowID: windows.weeklyWindowID,
+                now: now)
+        } else {
+            nil
+        }
         let fallbackAccount = accountOverride
             ?? (metadata.usesAccountFallback
                 ? self.store.accountInfo(for: target)
@@ -139,6 +162,7 @@ extension StatusItemController {
             kiloAutoMode: kiloAutoMode,
             hidePersonalInfo: self.settings.hidePersonalInfo,
             weeklyPace: weeklyPace,
+            sessionEquivalentForecast: sessionEquivalentForecast,
             quotaWarningThresholds: [
                 .session: self.quotaWarningMarkerThresholds(provider: target, window: .session),
                 .weekly: self.quotaWarningMarkerThresholds(provider: target, window: .weekly),

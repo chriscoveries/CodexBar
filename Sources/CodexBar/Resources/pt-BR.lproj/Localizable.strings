@@ -1259,3 +1259,7 @@
 "By subscription" = "Por assinatura";
 "No model-level history" = "Sem histórico por modelo";
 "Daily estimated spend" = "Gasto diário estimado";
+"≈%d full 5h windows of weekly left · %d windows until reset" = "≈%d janelas completas de 5 h da cota semanal · %d janelas até a renovação";
+"Weekly cannot run out before reset at this pace" = "A cota semanal não pode acabar antes da renovação nesse ritmo";
+"Weekly can run out ≈%d windows early" = "A cota semanal pode acabar ≈%d janelas antes";
+"Estimated: %@" = "Estimativa: %@";

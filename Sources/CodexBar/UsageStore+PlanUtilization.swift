@@ -7,13 +7,14 @@ extension UsageStore {
     private nonisolated static let claudeOAuthAccountUuidMapDefaultsKey = "ClaudeOAuthHistoryOwnerAccountUuidMapV1"
     private nonisolated static let claudeOAuthAccountCandidateMapDefaultsKey =
         "ClaudeOAuthHistoryOwnerAccountCandidateMapV1"
-    private nonisolated static let weeklyWindowMinutes = 7 * 24 * 60
-    private nonisolated static let planUtilizationUnscopedPreferredKey = "__unscoped__"
+    nonisolated static let sessionWindowMinutes = 5 * 60
+    nonisolated static let weeklyWindowMinutes = 7 * 24 * 60
+    nonisolated static let planUtilizationUnscopedPreferredKey = "__unscoped__"
     private nonisolated static let claudeOAuthPlanUtilizationAccountKeyPrefix = "__claude_oauth__:"
 
     func supportsPlanUtilizationHistory(for provider: UsageProvider) -> Bool {
         switch provider {
-        case .codex, .claude:
+        case .codex, .claude, .antigravity:
             true
         default:
             if self.planUtilizationHistory[provider]?.isEmpty == false {
@@ -152,7 +153,17 @@ extension UsageStore {
         now: Date = Date())
         async
     {
-        let samples = self.planUtilizationSeriesSamples(provider: provider, snapshot: snapshot, capturedAt: now)
+        let detectorSamples = self.planUtilizationSeriesSamples(
+            provider: provider,
+            snapshot: snapshot,
+            capturedAt: now)
+        let samples = provider == .antigravity
+            ? self.planUtilizationSeriesSamples(
+                provider: provider,
+                snapshot: snapshot,
+                capturedAt: now,
+                forSessionEquivalents: true)
+            : detectorSamples
         var effectiveOwner = claudeOAuthHistoryOwnerIdentifier
         if provider == .claude, isClaudeOAuthSample, let owner = claudeOAuthHistoryOwnerIdentifier {
             effectiveOwner = self.resolvedClaudeOAuthHistoryOwner(evidence: ClaudeOAuthHistoryEvidence(
@@ -188,7 +199,7 @@ extension UsageStore {
         await MainActor.run {
             self.postLimitResetCelebrationsIfNeeded(
                 context: detectorContext,
-                samples: samples)
+                samples: detectorSamples)
         }
 
         guard !samples.isEmpty else { return }
@@ -224,7 +235,35 @@ extension UsageStore {
                 shouldUpdatePreferredAccountKey: shouldUpdatePreferredAccountKey,
                 shouldAdoptUnscopedHistory: shouldAdoptUnscopedHistory,
                 providerBuckets: &providerBuckets)
-            let histories = providerBuckets.histories(for: accountKey)
+            var histories = providerBuckets.histories(for: accountKey)
+            if provider == .antigravity,
+               samples.contains(where: { $0.name == .session }),
+               !histories.contains(where: { $0.name == .session })
+            {
+                // Pre-feature Antigravity history could contain a provider-wide weekly maximum.
+                // Drop it before starting the Gemini-pinned session/weekly pair.
+                histories.removeAll { $0.name == .weekly }
+            }
+            if ![UsageProvider.codex, .claude, .antigravity].contains(provider),
+               samples.contains(where: { $0.name == .session }),
+               samples.contains(where: { $0.name == .weekly }),
+               let windows = self.sessionEquivalentWindows(provider: provider, snapshot: snapshot)
+            {
+                let identity = windows.weeklyWindowID ?? Self.sessionEquivalentStandardWindowIdentity
+                let identityKey = Self.sessionEquivalentHistoryIdentityKey(
+                    provider: provider,
+                    accountKey: accountKey)
+                var identities = self.settings.userDefaults.dictionary(
+                    forKey: Self.sessionEquivalentHistoryIdentityDefaultsKey) as? [String: String] ?? [:]
+                if identities[identityKey] != identity {
+                    histories.removeAll { $0.name == .session || $0.name == .weekly }
+                    identities[identityKey] = identity
+                    self.settings.userDefaults.set(
+                        identities,
+                        forKey: Self.sessionEquivalentHistoryIdentityDefaultsKey)
+                    self.sessionEquivalentBurnCache.removeValue(forKey: provider)
+                }
+            }
 
             if let updatedHistories = Self.updatedPlanUtilizationHistories(
                 existingHistories: histories,
@@ -245,7 +284,7 @@ extension UsageStore {
 
     private func shouldRecordPlanUtilizationHistory(for provider: UsageProvider) -> Bool {
         switch provider {
-        case .codex, .claude:
+        case .codex, .claude, .antigravity:
             true
         default:
             self.settings.historicalTrackingEnabled
@@ -445,7 +484,8 @@ extension UsageStore {
     private func planUtilizationSeriesSamples(
         provider: UsageProvider,
         snapshot: UsageSnapshot,
-        capturedAt: Date) -> [PlanUtilizationSeriesSample]
+        capturedAt: Date,
+        forSessionEquivalents: Bool = false) -> [PlanUtilizationSeriesSample]
     {
         var samplesByKey: [PlanUtilizationSeriesKey: PlanUtilizationSeriesSample] = [:]
 
@@ -485,32 +525,31 @@ extension UsageStore {
             appendWindow(snapshot.secondary, name: .weekly)
             appendWindow(snapshot.tertiary, name: .opus)
         case .antigravity:
-            let namedWeeklyWindows = snapshot.extraRateWindows?
-                .filter {
-                    $0.usageKnown
-                        && $0.id.hasPrefix("antigravity-quota-summary-")
-                        && $0.window.windowMinutes == Self.weeklyWindowMinutes
+            if forSessionEquivalents {
+                guard let windows = self.sessionEquivalentWindows(provider: provider, snapshot: snapshot) else {
+                    return []
                 }
-                .map(\.window) ?? []
-            if let mostUsedWeeklyWindow = namedWeeklyWindows.max(by: { $0.usedPercent < $1.usedPercent }) {
-                appendWindow(mostUsedWeeklyWindow, name: .weekly)
+                appendWindow(windows.session, name: .session)
+                appendWindow(windows.weekly, name: .weekly)
             } else {
-                for window in [snapshot.primary, snapshot.secondary, snapshot.tertiary] {
-                    guard let window, window.windowMinutes == Self.weeklyWindowMinutes else { continue }
-                    appendWindow(window, name: .weekly)
+                let namedWeeklyWindows = snapshot.extraRateWindows?
+                    .filter {
+                        $0.usageKnown
+                            && $0.id.hasPrefix("antigravity-quota-summary-")
+                            && $0.window.windowMinutes == Self.weeklyWindowMinutes
+                    }
+                    .map(\.window) ?? []
+                if let mostUsedWeeklyWindow = namedWeeklyWindows.max(by: { $0.usedPercent < $1.usedPercent }) {
+                    appendWindow(mostUsedWeeklyWindow, name: .weekly)
+                } else {
+                    appendWindow(
+                        self.planUtilizationWeeklyWindow(provider: provider, snapshot: snapshot),
+                        name: .weekly)
                 }
             }
         default:
-            let standardWeeklyWindow = [snapshot.primary, snapshot.secondary, snapshot.tertiary]
-                .compactMap(\.self)
-                .first { $0.windowMinutes == Self.weeklyWindowMinutes }
-            let extraWeeklyWindow = snapshot.extraRateWindows?
-                .lazy
-                .first { $0.usageKnown && $0.window.windowMinutes == Self.weeklyWindowMinutes }?
-                .window
-            if let weeklyWindow = standardWeeklyWindow ?? extraWeeklyWindow {
-                appendWindow(weeklyWindow, name: .weekly)
-            }
+            appendWindow(self.planUtilizationSessionWindow(provider: provider, snapshot: snapshot), name: .session)
+            appendWindow(self.planUtilizationWeeklyWindow(provider: provider, snapshot: snapshot), name: .weekly)
         }
 
         return samplesByKey.values.sorted { lhs, rhs in
