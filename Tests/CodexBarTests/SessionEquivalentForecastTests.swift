@@ -515,7 +515,9 @@ struct SessionEquivalentForecastTests {
                 thirdPartyWeekly: 50,
                 geminiFamily: "gemini-pro")) == nil)
     }
+}
 
+extension SessionEquivalentForecastTests {
     @MainActor
     @Test
     func `generic named weekly window preserves its rendering identity`() throws {
@@ -794,7 +796,9 @@ struct SessionEquivalentForecastTests {
         #expect(findSeries(histories, name: .session, windowMinutes: 300)?.entries.map(\.usedPercent) == [20])
         #expect(findSeries(histories, name: .weekly, windowMinutes: 10080)?.entries.map(\.usedPercent) == [40])
     }
+}
 
+extension SessionEquivalentForecastTests {
     @MainActor
     @Test
     func `antigravity history skips refreshes without the pinned Gemini family`() async {
