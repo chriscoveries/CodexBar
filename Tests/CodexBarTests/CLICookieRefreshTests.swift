@@ -71,13 +71,13 @@ struct CLICookieRefreshTests {
     }
 
     @Test
-    func `refresh cleanup preserves unrelated account scopes`() {
+    func `failed refresh restores default cookie and preserves unrelated account scopes`() async {
         let provider = UsageProvider.opencode
         let accountScope = CookieHeaderCache.Scope.managedAccount(UUID())
         let service = "com.steipete.codexbar.tests.cookie-refresh.\(UUID().uuidString)"
 
-        KeychainCacheStore.withServiceOverrideForTesting(service) {
-            KeychainCacheStore.withImplicitTestStoreForTesting {
+        await KeychainCacheStore.withServiceOverrideForTesting(service) {
+            await KeychainCacheStore.withImplicitTestStoreForTesting {
                 CookieHeaderCache.store(
                     provider: provider,
                     cookieHeader: "default-test-cookie",
@@ -88,11 +88,46 @@ struct CLICookieRefreshTests {
                     cookieHeader: "account-test-cookie",
                     sourceLabel: "Test account")
 
-                let summary = CodexBarCLI.clearCookieRefreshScope(provider: provider)
+                let result = await CodexBarCLI.withCookieRefreshRollback(
+                    provider: provider,
+                    providerName: "opencode")
+                {
+                    #expect(CookieHeaderCache.load(provider: provider) == nil)
+                    return CookieRefreshResult(provider: "opencode", status: .failed, message: "test failure")
+                }
 
-                #expect(summary.failedCount == 0)
-                #expect(CookieHeaderCache.load(provider: provider) == nil)
+                #expect(result.status == .failed)
+                #expect(CookieHeaderCache.load(provider: provider)?.cookieHeader == "default-test-cookie")
                 #expect(CookieHeaderCache.load(provider: provider, scope: accountScope)?.sourceLabel == "Test account")
+            }
+        }
+    }
+
+    @Test
+    func `successful refresh keeps replacement cookie`() async {
+        let provider = UsageProvider.opencode
+        let service = "com.steipete.codexbar.tests.cookie-refresh.\(UUID().uuidString)"
+
+        await KeychainCacheStore.withServiceOverrideForTesting(service) {
+            await KeychainCacheStore.withImplicitTestStoreForTesting {
+                CookieHeaderCache.store(
+                    provider: provider,
+                    cookieHeader: "old-test-cookie",
+                    sourceLabel: "Test old")
+
+                let result = await CodexBarCLI.withCookieRefreshRollback(
+                    provider: provider,
+                    providerName: "opencode")
+                {
+                    CookieHeaderCache.store(
+                        provider: provider,
+                        cookieHeader: "new-test-cookie",
+                        sourceLabel: "Test new")
+                    return CookieRefreshResult(provider: "opencode", status: .refreshed, message: "ok")
+                }
+
+                #expect(result.status == .refreshed)
+                #expect(CookieHeaderCache.load(provider: provider)?.cookieHeader == "new-test-cookie")
             }
         }
     }

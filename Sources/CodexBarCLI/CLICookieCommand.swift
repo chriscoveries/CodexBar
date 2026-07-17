@@ -192,45 +192,70 @@ extension CodexBarCLI {
             return result
         }
 
-        let clearSummary = Self.clearCookieRefreshScope(provider: provider)
+        return await Self.withCookieRefreshRollback(provider: provider, providerName: descriptor.cli.name) {
+            let environment = tokenContext.environment(
+                base: ProcessInfo.processInfo.environment,
+                provider: provider,
+                account: nil)
+            let context = ProviderFetchContext(
+                runtime: .cli,
+                sourceMode: .web,
+                includeCredits: false,
+                includeOptionalUsage: false,
+                webTimeout: 60,
+                webDebugDumpHTML: false,
+                verbose: false,
+                env: environment,
+                settings: tokenContext.settingsSnapshot(for: provider, account: nil),
+                fetcher: tokenContext.fetcher(base: UsageFetcher(), provider: provider, env: environment),
+                claudeFetcher: ClaudeUsageFetcher(browserDetection: browserDetection),
+                browserDetection: browserDetection)
+            let outcome = await descriptor.fetchOutcome(context: context)
+            return switch outcome.result {
+            case .success:
+                CookieRefreshResult(
+                    provider: descriptor.cli.name,
+                    status: .refreshed,
+                    message: "Browser cookie refreshed.")
+            case let .failure(error):
+                Self.cookieRefreshFailure(provider: provider, error: error)
+            }
+        }
+    }
+
+    static func withCookieRefreshRollback(
+        provider: UsageProvider,
+        providerName: String,
+        operation: () async -> CookieRefreshResult) async -> CookieRefreshResult
+    {
+        let previousEntry = CookieHeaderCache.load(provider: provider)
+        let clearSummary = CookieHeaderCache.clearDetailed(provider: provider)
         guard clearSummary.failedCount == 0 else {
             return CookieRefreshResult(
-                provider: descriptor.cli.name,
+                provider: providerName,
                 status: .failed,
                 message: "Cookie cache cleanup failed; no browser import was attempted.")
         }
 
-        let environment = tokenContext.environment(
-            base: ProcessInfo.processInfo.environment,
-            provider: provider,
-            account: nil)
-        let context = ProviderFetchContext(
-            runtime: .cli,
-            sourceMode: .web,
-            includeCredits: false,
-            includeOptionalUsage: false,
-            webTimeout: 60,
-            webDebugDumpHTML: false,
-            verbose: false,
-            env: environment,
-            settings: tokenContext.settingsSnapshot(for: provider, account: nil),
-            fetcher: tokenContext.fetcher(base: UsageFetcher(), provider: provider, env: environment),
-            claudeFetcher: ClaudeUsageFetcher(browserDetection: browserDetection),
-            browserDetection: browserDetection)
-        let outcome = await descriptor.fetchOutcome(context: context)
-        switch outcome.result {
-        case .success:
-            return CookieRefreshResult(
-                provider: descriptor.cli.name,
-                status: .refreshed,
-                message: "Browser cookie refreshed.")
-        case let .failure(error):
-            return Self.cookieRefreshFailure(provider: provider, error: error)
-        }
-    }
+        let result = await operation()
+        guard result.isFailure,
+              let previousEntry,
+              CookieHeaderCache.load(provider: provider) == nil
+        else { return result }
 
-    static func clearCookieRefreshScope(provider: UsageProvider) -> CookieHeaderCache.ClearSummary {
-        CookieHeaderCache.clearDetailed(provider: provider)
+        let restored = CookieHeaderCache.storeResult(
+            provider: provider,
+            cookieHeader: previousEntry.cookieHeader,
+            sourceLabel: previousEntry.sourceLabel,
+            authenticationFailurePolicy: previousEntry.authenticationFailurePolicy,
+            now: previousEntry.storedAt)
+        guard restored else {
+            return CookieRefreshResult(
+                provider: providerName,
+                status: .failed,
+                message: "Browser refresh failed and the previous cached session could not be restored.")
+        }
+        return result
     }
 
     private static func cookieRefreshSkipResult(
