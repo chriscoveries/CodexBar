@@ -176,27 +176,27 @@ struct SpendDashboardPane: View {
             subscriptionNames: self.subscriptionNames)
     }
 
-    private var subscriptionNames: [String: String] {
-        var names: [String: String] = [:]
+    private var subscriptionNames: [String: ShareStatsSubscriptionName] {
+        var names: [String: ShareStatsSubscriptionName] = [:]
         let codexRowCount = self.controller.model.groups
             .flatMap(\.providers)
             .count { $0.provider == .codex }
         for group in self.controller.model.groups {
             for row in group.providers {
-                let rawName: String? = if row.provider == .codex,
-                                          row.id.hasPrefix("codex:")
+                let snapshots: [UsageSnapshot?] = if row.provider == .codex,
+                                                     row.id.hasPrefix("codex:")
                 {
-                    self.store.codexAccountSnapshots.first {
-                        row.id == "codex:\($0.id)"
-                    }?.snapshot?.loginMethod(for: .codex)
-                        ?? (codexRowCount == 1
-                            ? self.store.snapshot(for: .codex)?.loginMethod(for: .codex)
-                            : nil)
+                    [
+                        self.store.codexAccountSnapshots.first {
+                            row.id == "codex:\($0.id)"
+                        }?.snapshot,
+                        codexRowCount == 1 ? self.store.snapshot(for: .codex) : nil,
+                    ]
                 } else {
-                    self.store.snapshot(for: row.provider)?.loginMethod(for: row.provider)
+                    [self.store.snapshot(for: row.provider)]
                 }
-                if let rawName {
-                    names[row.id] = rawName
+                if let name = ShareStatsSubscriptionName.first(from: snapshots, provider: row.provider) {
+                    names[row.id] = name
                 }
             }
         }

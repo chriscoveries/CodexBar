@@ -6,9 +6,14 @@ import Testing
 struct ShareStatsTests {
     @Test
     func `builder preserves native currencies and unavailable spend`() throws {
+        let subscriptionNames = try [
+            "codex:one": #require(Self.subscriptionName(provider: .codex, rawName: "pro")),
+            "cursor": #require(Self.subscriptionName(provider: .cursor, rawName: "Cursor Pro")),
+            "claude": #require(Self.subscriptionName(provider: .claude, rawName: "Claude Max")),
+        ]
         let payload = try #require(ShareStatsBuilder.make(
             model: Self.dashboard,
-            subscriptionNames: ["codex:one": "pro", "cursor": "Cursor Pro", "claude": "Max"]))
+            subscriptionNames: subscriptionNames))
 
         #expect(payload.days == 30)
         #expect(payload.totalTokens == nil)
@@ -43,13 +48,18 @@ struct ShareStatsTests {
             "acme-private-model-v2",
             "gpt-acme-private-model-v2",
         ])
+        var subscriptionNames = try [
+            "claude": #require(Self.subscriptionName(provider: .claude, rawName: "Claude Max")),
+        ]
+        if let unsafeCodexName = Self.subscriptionName(provider: .codex, rawName: "person@example.com") {
+            subscriptionNames["codex:one"] = unsafeCodexName
+        }
+        if let unsafeCursorName = Self.subscriptionName(provider: .cursor, rawName: "/Users/peter/plan") {
+            subscriptionNames["cursor"] = unsafeCursorName
+        }
         let payload = try #require(ShareStatsBuilder.make(
             model: model,
-            subscriptionNames: [
-                "codex:one": "person@example.com",
-                "cursor": "/Users/peter/plan",
-                "claude": "Max",
-            ]))
+            subscriptionNames: subscriptionNames))
         let text = ShareStatsFormatting.text(payload)
 
         #expect(payload.topModels.map(\.modelName) == ["Claude", "GPT"])
@@ -67,10 +77,34 @@ struct ShareStatsTests {
 
     @Test
     func `subscription labels require a plan tier provider contract`() {
-        #expect(ShareStatsSubscriptionName.sanitized(provider: .codex, rawName: "pro") == "Pro 20x")
-        #expect(ShareStatsSubscriptionName.sanitized(provider: .cursor, rawName: "Cursor Pro") == "Cursor Pro")
-        #expect(ShareStatsSubscriptionName.sanitized(provider: .openrouter, rawName: "Team") == nil)
-        #expect(ShareStatsSubscriptionName.sanitized(provider: .claude, rawName: "name@example.com") == nil)
+        #expect(Self.subscriptionName(provider: .codex, rawName: "pro")?.displayName == "Pro 20x")
+        #expect(Self.subscriptionName(provider: .codex, rawName: "Plus Plan")?.displayName == "Plus")
+        #expect(Self.subscriptionName(provider: .cursor, rawName: "Cursor Pro")?.displayName == "Cursor Pro")
+        #expect(Self.subscriptionName(provider: .gemini, rawName: "Paid")?.displayName == "Paid")
+        #expect(Self.subscriptionName(provider: .copilot, rawName: "Business")?.displayName == "Business")
+        #expect(Self.subscriptionName(provider: .perplexity, rawName: "Max")?.displayName == "Max")
+        #expect(Self.subscriptionName(provider: .windsurf, rawName: "Teams")?.displayName == "Teams")
+        #expect(Self.subscriptionName(provider: .zed, rawName: "Zed Pro")?.displayName == "Zed Pro")
+        #expect(Self.subscriptionName(provider: .minimax, rawName: "MiniMax Star")?.displayName == "MiniMax Star")
+        #expect(Self.subscriptionName(provider: .synthetic, rawName: "Starter")?.displayName == "Starter")
+        #expect(Self.subscriptionName(provider: .openrouter, rawName: "Team") == nil)
+        #expect(Self.subscriptionName(provider: .claude, rawName: "name@example.com") == nil)
+        #expect(Self.subscriptionName(provider: .claude, rawName: "Alice Smith") == nil)
+        #expect(Self.subscriptionName(provider: .codex, rawName: "123456789") == nil)
+        #expect(Self.subscriptionName(provider: .cursor, rawName: "sk-live-example") == nil)
+        #expect(Self.subscriptionName(provider: .claude, rawName: "internal.example") == nil)
+        #expect(Self.subscriptionName(provider: .claude, rawName: "Max", accountOrganization: "Max") == nil)
+    }
+
+    @Test
+    func `subscription label uses first plan bearing snapshot`() {
+        let unidentified = UsageSnapshot(primary: nil, secondary: nil, updatedAt: Self.date)
+        let fallback = Self.snapshot(provider: .codex, rawName: "pro")
+
+        let name = ShareStatsSubscriptionName.first(
+            from: [unidentified, fallback],
+            provider: .codex)
+        #expect(name?.displayName == "Pro 20x")
     }
 
     @Test
@@ -222,6 +256,32 @@ struct ShareStatsTests {
     }
 
     private static let date = Date(timeIntervalSince1970: 1_783_382_400)
+
+    private static func subscriptionName(
+        provider: UsageProvider,
+        rawName: String,
+        accountOrganization: String? = nil) -> ShareStatsSubscriptionName?
+    {
+        ShareStatsSubscriptionName.from(
+            snapshot: self.snapshot(
+                provider: provider,
+                rawName: rawName,
+                accountOrganization: accountOrganization),
+            provider: provider)
+    }
+
+    private static func snapshot(
+        provider: UsageProvider,
+        rawName: String,
+        accountOrganization: String? = nil) -> UsageSnapshot
+    {
+        let identity = ProviderIdentitySnapshot(
+            providerID: provider,
+            accountEmail: nil,
+            accountOrganization: accountOrganization,
+            loginMethod: rawName)
+        return UsageSnapshot(primary: nil, secondary: nil, updatedAt: self.date, identity: identity)
+    }
 
     private static var dashboard: SpendDashboardModel {
         self.dashboard(models: ["gpt-5.4"])
