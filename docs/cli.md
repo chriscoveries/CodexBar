@@ -112,6 +112,11 @@ See `docs/configuration.md` for the schema.
   - `--format text|json`, `--pretty`, and `--json-only` are supported.
   - Warnings keep exit code 0; errors exit non-zero.
 - `codexbar config dump` prints the normalized config JSON.
+- `codexbar hooks list` shows the local hook configuration; `--format json` and `--pretty` are supported.
+- `codexbar hooks enable|disable` changes the explicit top-level opt-in switch in the local config file.
+- `codexbar hooks test <event> --provider <id>` invokes matching enabled rules with a representative event. Hook
+  commands run directly without a shell and receive `CODEXBAR_*` variables plus JSON on stdin. See
+  `docs/configuration.md#external-event-hooks` for the event, payload, timeout, and security contract.
 
 ### Token accounts
 The CLI reads multi-account tokens from the same resolved config file as the app.

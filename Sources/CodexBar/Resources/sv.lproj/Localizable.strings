@@ -1,5 +1,25 @@
 /* Swedish localization for CodexBar */
 
+"tab_hooks" = "Hooks";
+"hooks_enable_title" = "Aktivera hooks";
+"hooks_enable_subtitle" = "Kör externa kommandon vid kvot- eller leverantörshändelser.";
+"hooks_trust_warning" = "Hooks kan köra lokala kommandon på din Mac. Konfigurera endast kommandon du litar på.";
+"hooks_rules_header" = "Regler";
+"hooks_empty" = "Inga hooks har konfigurerats.";
+"hooks_add_rule" = "Lägg till regel";
+"hooks_delete_rule" = "Ta bort regel";
+"hooks_rule_enabled" = "Aktiverad";
+"hooks_event" = "Händelse";
+"hooks_provider" = "Leverantör";
+"hooks_any_provider" = "Valfri leverantör";
+"hooks_threshold" = "Kör vid användning ≥";
+"hooks_threshold_placeholder" = "90";
+"hooks_executable_placeholder" = "/usr/local/bin/my-command";
+"hooks_arguments_placeholder" = "Argument";
+"hooks_argument_placeholder" = "Argument";
+"hooks_add_argument" = "Lägg till argument";
+"hooks_delete_argument" = "Ta bort argument";
+
 " providers" = " leverantörer";
 "(System)" = "(System)";
 "30d" = "30 d";

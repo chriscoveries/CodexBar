@@ -1,5 +1,25 @@
 /* Japanese localization for CodexBar */
 
+"tab_hooks" = "フック";
+"hooks_enable_title" = "フックを有効にする";
+"hooks_enable_subtitle" = "クォータまたはプロバイダーのイベント発生時に外部コマンドを実行します。";
+"hooks_trust_warning" = "フックはMac上でローカルコマンドを実行できます。信頼できるコマンドのみ設定してください。";
+"hooks_rules_header" = "ルール";
+"hooks_empty" = "フックは設定されていません。";
+"hooks_add_rule" = "ルールを追加";
+"hooks_delete_rule" = "ルールを削除";
+"hooks_rule_enabled" = "有効";
+"hooks_event" = "イベント";
+"hooks_provider" = "プロバイダー";
+"hooks_any_provider" = "すべてのプロバイダー";
+"hooks_threshold" = "使用率 ≥ で実行";
+"hooks_threshold_placeholder" = "90";
+"hooks_executable_placeholder" = "/usr/local/bin/my-command";
+"hooks_arguments_placeholder" = "引数";
+"hooks_argument_placeholder" = "引数";
+"hooks_add_argument" = "引数を追加";
+"hooks_delete_argument" = "引数を削除";
+
 " providers" = " 件のプロバイダ";
 "(System)" = "（システム）";
 "30d" = "30日";

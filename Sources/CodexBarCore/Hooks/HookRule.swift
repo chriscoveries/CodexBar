@@ -3,6 +3,9 @@ import Foundation
 /// A user-configured hook: when `event` fires (optionally scoped to `provider`
 /// and, for `quotaLow`, gated by `threshold`), run `executable` with `arguments`.
 public struct HookRule: Codable, Sendable, Equatable, Identifiable {
+    public static let minimumTimeoutSeconds: Double = 0.1
+    public static let maximumTimeoutSeconds: Double = 300
+
     /// Stable identity for SwiftUI list editing; defaults to a fresh UUID string.
     public var id: String
     public var enabled: Bool
@@ -57,12 +60,35 @@ public struct HookRule: Codable, Sendable, Equatable, Identifiable {
     public func matches(_ event: HookEvent) -> Bool {
         guard self.enabled else { return false }
         guard self.event == event.event else { return false }
-        guard (self.executable as NSString).isAbsolutePath else { return false }
-        if let provider = self.provider, provider != event.provider { return false }
+        guard self.hasValidExecutablePath, self.hasValidTimeout else { return false }
+        guard self.provider == nil || self.hasKnownProvider else { return false }
+        guard self.hasValidThreshold else { return false }
+        if let provider = self.provider, provider != event.provider {
+            return false
+        }
         if self.event == .quotaLow, let threshold = self.threshold {
             guard let usage = event.usagePercent, usage >= threshold else { return false }
         }
         return true
+    }
+
+    public var hasValidExecutablePath: Bool {
+        !self.executable.isEmpty && (self.executable as NSString).isAbsolutePath
+    }
+
+    public var hasValidTimeout: Bool {
+        self.timeoutSeconds.isFinite
+            && Self.minimumTimeoutSeconds...Self.maximumTimeoutSeconds ~= self.timeoutSeconds
+    }
+
+    public var hasKnownProvider: Bool {
+        guard let provider = self.provider else { return true }
+        return UsageProvider(rawValue: provider) != nil
+    }
+
+    public var hasValidThreshold: Bool {
+        guard let threshold = self.threshold else { return true }
+        return threshold.isFinite && 0...1 ~= threshold
     }
 }
 

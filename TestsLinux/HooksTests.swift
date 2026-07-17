@@ -176,10 +176,10 @@ struct HooksTests {
     @Test
     func `runner does not forward secrets from the base environment`() async throws {
         let rule = HookRule(event: .quotaReached, executable: "/usr/bin/env")
-        let base = ["PATH": "/usr/bin:/bin", "ANTHROPIC_API_KEY": "sk-should-not-leak"]
+        let base = ["PATH": "/usr/bin:/bin", "ANTHROPIC_API_KEY": "fixture-should-not-leak"]
         let result = try await HookRunner.run(rule: rule, event: self.event(), baseEnvironment: base)
         #expect(result.stdout.contains("PATH=/usr/bin:/bin"))     // safe var forwarded
-        #expect(!result.stdout.contains("sk-should-not-leak"))     // secret dropped
+        #expect(!result.stdout.contains("fixture-should-not-leak")) // secret dropped
         #expect(!result.stdout.contains("ANTHROPIC_API_KEY"))
     }
 

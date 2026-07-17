@@ -1,5 +1,25 @@
 /* English localization for CodexBar (base/fallback) */
 
+"tab_hooks" = "Hooks";
+"hooks_enable_title" = "Hooks aktivieren";
+"hooks_enable_subtitle" = "Externe Befehle bei Kontingent- oder Anbieterereignissen ausführen.";
+"hooks_trust_warning" = "Hooks können lokale Befehle auf deinem Mac ausführen. Konfiguriere nur vertrauenswürdige Befehle.";
+"hooks_rules_header" = "Regeln";
+"hooks_empty" = "Keine Hooks konfiguriert.";
+"hooks_add_rule" = "Regel hinzufügen";
+"hooks_delete_rule" = "Regel löschen";
+"hooks_rule_enabled" = "Aktiviert";
+"hooks_event" = "Ereignis";
+"hooks_provider" = "Anbieter";
+"hooks_any_provider" = "Beliebiger Anbieter";
+"hooks_threshold" = "Auslösen bei Nutzung ≥";
+"hooks_threshold_placeholder" = "90";
+"hooks_executable_placeholder" = "/usr/local/bin/my-command";
+"hooks_arguments_placeholder" = "Argumente";
+"hooks_argument_placeholder" = "Argument";
+"hooks_add_argument" = "Argument hinzufügen";
+"hooks_delete_argument" = "Argument löschen";
+
 " providers" = "Anbieter";
 "(System)" = "(System)";
 "30d" = "30d";

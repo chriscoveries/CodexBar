@@ -1,5 +1,25 @@
 /* Dutch localization for CodexBar */
 
+"tab_hooks" = "Hooks";
+"hooks_enable_title" = "Hooks inschakelen";
+"hooks_enable_subtitle" = "Voer externe opdrachten uit bij quota- of providergebeurtenissen.";
+"hooks_trust_warning" = "Hooks kunnen lokale opdrachten op je Mac uitvoeren. Configureer alleen opdrachten die je vertrouwt.";
+"hooks_rules_header" = "Regels";
+"hooks_empty" = "Geen hooks geconfigureerd.";
+"hooks_add_rule" = "Regel toevoegen";
+"hooks_delete_rule" = "Regel verwijderen";
+"hooks_rule_enabled" = "Ingeschakeld";
+"hooks_event" = "Gebeurtenis";
+"hooks_provider" = "Provider";
+"hooks_any_provider" = "Elke provider";
+"hooks_threshold" = "Uitvoeren bij gebruik ≥";
+"hooks_threshold_placeholder" = "90";
+"hooks_executable_placeholder" = "/usr/local/bin/my-command";
+"hooks_arguments_placeholder" = "Argumenten";
+"hooks_argument_placeholder" = "Argument";
+"hooks_add_argument" = "Argument toevoegen";
+"hooks_delete_argument" = "Argument verwijderen";
+
 " providers" = " providers";
 "(System)" = "(Systeem)";
 "30d" = "30d";

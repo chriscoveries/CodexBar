@@ -1,5 +1,25 @@
 /* Chinese (Simplified) localization for CodexBar */
 
+"tab_hooks" = "钩子";
+"hooks_enable_title" = "启用钩子";
+"hooks_enable_subtitle" = "在配额或提供商事件发生时运行外部命令。";
+"hooks_trust_warning" = "钩子可以在 Mac 上执行本地命令。请仅配置你信任的命令。";
+"hooks_rules_header" = "规则";
+"hooks_empty" = "未配置钩子。";
+"hooks_add_rule" = "添加规则";
+"hooks_delete_rule" = "删除规则";
+"hooks_rule_enabled" = "已启用";
+"hooks_event" = "事件";
+"hooks_provider" = "提供商";
+"hooks_any_provider" = "任意提供商";
+"hooks_threshold" = "使用率 ≥ 时运行";
+"hooks_threshold_placeholder" = "90";
+"hooks_executable_placeholder" = "/usr/local/bin/my-command";
+"hooks_arguments_placeholder" = "参数";
+"hooks_argument_placeholder" = "参数";
+"hooks_add_argument" = "添加参数";
+"hooks_delete_argument" = "删除参数";
+
 " providers" = " 提供商";
 "(System)" = "（System）";
 "30d" = "30 天";

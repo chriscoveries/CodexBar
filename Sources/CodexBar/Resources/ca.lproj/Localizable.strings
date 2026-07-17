@@ -504,7 +504,10 @@
 "hooks_threshold" = "Activa amb ús ≥";
 "hooks_threshold_placeholder" = "90";
 "hooks_executable_placeholder" = "/usr/local/bin/my-command";
-"hooks_arguments_placeholder" = "Arguments (separats per espais)";
+"hooks_arguments_placeholder" = "Arguments";
+"hooks_argument_placeholder" = "Argument";
+"hooks_add_argument" = "Afegeix un argument";
+"hooks_delete_argument" = "Elimina l'argument";
 "tab_debug" = "Depuració";
 
 /* Providers Pane */

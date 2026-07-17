@@ -1,5 +1,25 @@
 /* Russian localization for CodexBar */
 
+"tab_hooks" = "Хуки";
+"hooks_enable_title" = "Включить хуки";
+"hooks_enable_subtitle" = "Запускать внешние команды при событиях квоты или провайдера.";
+"hooks_trust_warning" = "Хуки могут выполнять локальные команды на вашем Mac. Настраивайте только доверенные команды.";
+"hooks_rules_header" = "Правила";
+"hooks_empty" = "Хуки не настроены.";
+"hooks_add_rule" = "Добавить правило";
+"hooks_delete_rule" = "Удалить правило";
+"hooks_rule_enabled" = "Включено";
+"hooks_event" = "Событие";
+"hooks_provider" = "Провайдер";
+"hooks_any_provider" = "Любой провайдер";
+"hooks_threshold" = "Запускать при использовании ≥";
+"hooks_threshold_placeholder" = "90";
+"hooks_executable_placeholder" = "/usr/local/bin/my-command";
+"hooks_arguments_placeholder" = "Аргументы";
+"hooks_argument_placeholder" = "Аргумент";
+"hooks_add_argument" = "Добавить аргумент";
+"hooks_delete_argument" = "Удалить аргумент";
+
 " providers" = " провайдеров";
 "(System)" = "(Система)";
 "30d" = "30 дн.";

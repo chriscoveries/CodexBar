@@ -1,5 +1,25 @@
 /* Spanish localization for CodexBar */
 
+"tab_hooks" = "Hooks";
+"hooks_enable_title" = "Activar hooks";
+"hooks_enable_subtitle" = "Ejecuta comandos externos cuando ocurran eventos de cuota o proveedor.";
+"hooks_trust_warning" = "Los hooks pueden ejecutar comandos locales en tu Mac. Configura solo comandos de confianza.";
+"hooks_rules_header" = "Reglas";
+"hooks_empty" = "No hay hooks configurados.";
+"hooks_add_rule" = "Añadir regla";
+"hooks_delete_rule" = "Eliminar regla";
+"hooks_rule_enabled" = "Activado";
+"hooks_event" = "Evento";
+"hooks_provider" = "Proveedor";
+"hooks_any_provider" = "Cualquier proveedor";
+"hooks_threshold" = "Ejecutar con uso ≥";
+"hooks_threshold_placeholder" = "90";
+"hooks_executable_placeholder" = "/usr/local/bin/my-command";
+"hooks_arguments_placeholder" = "Argumentos";
+"hooks_argument_placeholder" = "Argumento";
+"hooks_add_argument" = "Añadir argumento";
+"hooks_delete_argument" = "Eliminar argumento";
+
 " providers" = " proveedores";
 "(System)" = "(Sistema)";
 "30d" = "30 d";

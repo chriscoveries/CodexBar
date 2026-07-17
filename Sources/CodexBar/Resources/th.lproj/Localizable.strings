@@ -524,7 +524,10 @@
 "hooks_threshold" = "เรียกใช้เมื่อการใช้งาน ≥";
 "hooks_threshold_placeholder" = "90";
 "hooks_executable_placeholder" = "/usr/local/bin/my-command";
-"hooks_arguments_placeholder" = "อาร์กิวเมนต์ (คั่นด้วยช่องว่าง)";
+"hooks_arguments_placeholder" = "อาร์กิวเมนต์";
+"hooks_argument_placeholder" = "อาร์กิวเมนต์";
+"hooks_add_argument" = "เพิ่มอาร์กิวเมนต์";
+"hooks_delete_argument" = "ลบอาร์กิวเมนต์";
 "tab_debug" = "แก้ไขข้อบกพร่อง";
 
 /* Providers Pane */

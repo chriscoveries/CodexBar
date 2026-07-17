@@ -1,5 +1,25 @@
 /* Korean (한국어) localization for CodexBar */
 
+"tab_hooks" = "훅";
+"hooks_enable_title" = "훅 활성화";
+"hooks_enable_subtitle" = "할당량 또는 공급자 이벤트가 발생하면 외부 명령을 실행합니다.";
+"hooks_trust_warning" = "훅은 Mac에서 로컬 명령을 실행할 수 있습니다. 신뢰하는 명령만 구성하세요.";
+"hooks_rules_header" = "규칙";
+"hooks_empty" = "구성된 훅이 없습니다.";
+"hooks_add_rule" = "규칙 추가";
+"hooks_delete_rule" = "규칙 삭제";
+"hooks_rule_enabled" = "활성화됨";
+"hooks_event" = "이벤트";
+"hooks_provider" = "공급자";
+"hooks_any_provider" = "모든 공급자";
+"hooks_threshold" = "사용량 ≥ 에서 실행";
+"hooks_threshold_placeholder" = "90";
+"hooks_executable_placeholder" = "/usr/local/bin/my-command";
+"hooks_arguments_placeholder" = "인수";
+"hooks_argument_placeholder" = "인수";
+"hooks_add_argument" = "인수 추가";
+"hooks_delete_argument" = "인수 삭제";
+
 " providers" = " 공급자";
 "(System)" = "(시스템)";
 "30d" = "30일";

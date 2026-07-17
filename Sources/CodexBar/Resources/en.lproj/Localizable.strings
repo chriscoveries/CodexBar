@@ -525,7 +525,10 @@
 "hooks_threshold" = "Fire at usage ≥";
 "hooks_threshold_placeholder" = "90";
 "hooks_executable_placeholder" = "/usr/local/bin/my-command";
-"hooks_arguments_placeholder" = "Arguments (space-separated)";
+"hooks_arguments_placeholder" = "Arguments";
+"hooks_argument_placeholder" = "Argument";
+"hooks_add_argument" = "Add argument";
+"hooks_delete_argument" = "Delete argument";
 
 /* Providers Pane */
 "select_a_provider" = "Select a provider";

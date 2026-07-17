@@ -524,7 +524,10 @@
 "hooks_threshold" = "اجرا در مصرف ≥";
 "hooks_threshold_placeholder" = "90";
 "hooks_executable_placeholder" = "/usr/local/bin/my-command";
-"hooks_arguments_placeholder" = "آرگومان‌ها (جدا شده با فاصله)";
+"hooks_arguments_placeholder" = "آرگومان‌ها";
+"hooks_argument_placeholder" = "آرگومان";
+"hooks_add_argument" = "افزودن آرگومان";
+"hooks_delete_argument" = "حذف آرگومان";
 "tab_debug" = "اشکال زدایی";
 
 /* Providers Pane */

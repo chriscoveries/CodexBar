@@ -1,5 +1,25 @@
 /* English localization for CodexBar (base/fallback) */
 
+"tab_hooks" = "Hook";
+"hooks_enable_title" = "Bật hook";
+"hooks_enable_subtitle" = "Chạy lệnh bên ngoài khi có sự kiện hạn mức hoặc nhà cung cấp.";
+"hooks_trust_warning" = "Hook có thể chạy lệnh cục bộ trên máy Mac. Chỉ cấu hình các lệnh bạn tin cậy.";
+"hooks_rules_header" = "Quy tắc";
+"hooks_empty" = "Chưa cấu hình hook.";
+"hooks_add_rule" = "Thêm quy tắc";
+"hooks_delete_rule" = "Xóa quy tắc";
+"hooks_rule_enabled" = "Đã bật";
+"hooks_event" = "Sự kiện";
+"hooks_provider" = "Nhà cung cấp";
+"hooks_any_provider" = "Nhà cung cấp bất kỳ";
+"hooks_threshold" = "Chạy khi mức sử dụng ≥";
+"hooks_threshold_placeholder" = "90";
+"hooks_executable_placeholder" = "/usr/local/bin/my-command";
+"hooks_arguments_placeholder" = "Đối số";
+"hooks_argument_placeholder" = "Đối số";
+"hooks_add_argument" = "Thêm đối số";
+"hooks_delete_argument" = "Xóa đối số";
+
 " providers" = "nhà cung cấp";
 "(System)" = "(Hệ thống)";
 "30d" = "30d";

@@ -523,7 +523,10 @@
 "hooks_threshold" = "Şu kullanımda tetikle ≥";
 "hooks_threshold_placeholder" = "90";
 "hooks_executable_placeholder" = "/usr/local/bin/my-command";
-"hooks_arguments_placeholder" = "Argümanlar (boşlukla ayrılmış)";
+"hooks_arguments_placeholder" = "Argümanlar";
+"hooks_argument_placeholder" = "Argüman";
+"hooks_add_argument" = "Argüman ekle";
+"hooks_delete_argument" = "Argümanı sil";
 "tab_about" = "Hakkında";
 "tab_debug" = "Hata Ayıklama";
 

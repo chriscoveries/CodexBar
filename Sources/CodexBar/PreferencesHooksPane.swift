@@ -61,6 +61,13 @@ struct HooksPane: View {
 private struct HookRuleRow: View {
     @Binding var rule: HookRule
     let onDelete: () -> Void
+    @State private var argumentRows: [ArgumentRow]
+
+    init(rule: Binding<HookRule>, onDelete: @escaping () -> Void) {
+        self._rule = rule
+        self.onDelete = onDelete
+        self._argumentRows = State(initialValue: rule.wrappedValue.arguments.map(ArgumentRow.init(value:)))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -111,11 +118,48 @@ private struct HookRuleRow: View {
                 .textFieldStyle(.roundedBorder)
                 .font(.system(.caption, design: .monospaced))
 
-            TextField(L("hooks_arguments_placeholder"), text: self.argumentsBinding)
-                .textFieldStyle(.roundedBorder)
-                .font(.system(.caption, design: .monospaced))
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(L("hooks_arguments_placeholder"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button {
+                        self.argumentRows.append(ArgumentRow(value: ""))
+                    } label: {
+                        Label(L("hooks_add_argument"), systemImage: "plus")
+                    }
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+                }
+
+                ForEach(self.$argumentRows) { $argument in
+                    HStack {
+                        TextField(L("hooks_argument_placeholder"), text: $argument.value)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(.caption, design: .monospaced))
+                        Button {
+                            self.argumentRows.removeAll(where: { $0.id == argument.id })
+                        } label: {
+                            Image(systemName: "minus.circle")
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel(L("hooks_delete_argument"))
+                    }
+                }
+            }
         }
         .padding(.vertical, 4)
+        .onChange(of: self.argumentRows.map(\.value)) { _, arguments in
+            if self.rule.arguments != arguments {
+                self.rule.arguments = arguments
+            }
+        }
+        .onChange(of: self.rule.arguments) { _, arguments in
+            if self.argumentRows.map(\.value) != arguments {
+                self.argumentRows = arguments.map(ArgumentRow.init(value:))
+            }
+        }
     }
 
     private var providerBinding: Binding<String?> {
@@ -129,10 +173,8 @@ private struct HookRuleRow: View {
             set: { self.rule.threshold = $0.map { min(max($0, 0), 100) / 100 } })
     }
 
-    /// Whitespace-joined arguments. Simple split by spaces; adequate for v1.
-    private var argumentsBinding: Binding<String> {
-        Binding(
-            get: { self.rule.arguments.joined(separator: " ") },
-            set: { self.rule.arguments = $0.split(separator: " ").map(String.init) })
+    private struct ArgumentRow: Identifiable {
+        let id = UUID()
+        var value: String
     }
 }
