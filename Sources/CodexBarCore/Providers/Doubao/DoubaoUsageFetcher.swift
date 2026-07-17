@@ -417,7 +417,11 @@ public struct DoubaoUsageFetcher: Sendable {
 
         var allQuotas: [DoubaoCodingPlanUsage.Quota] = []
         var updateTime: Date?
-        var status: String?
+        let authMethod = response.viewer?.authMethod?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if authMethod?.lowercased() == "none" {
+            throw DoubaoUsageError.arkcliAuthenticationRequired
+        }
 
         for item in response.items {
             let product = item.product.lowercased()
@@ -439,9 +443,6 @@ public struct DoubaoUsageFetcher: Sendable {
                 let seconds = updatedAt >= 1e11 ? updatedAt / 1000 : updatedAt
                 updateTime = updateTime ?? Date(timeIntervalSince1970: seconds)
             }
-            if item.subscribed == true {
-                status = status ?? "subscribed"
-            }
             // A per-bucket failure is reported as an item with no `periods`
             // (often an `error` field). Keep `periods` optional so one failed
             // product bucket does not reject the entire stdout and hide the
@@ -461,19 +462,28 @@ public struct DoubaoUsageFetcher: Sendable {
             throw DoubaoUsageError.noPlanUsage(itemError.map { Self.compactText($0) })
         }
 
-        return DoubaoCodingPlanUsage(status: status, updateTime: updateTime, quotas: allQuotas)
+        return DoubaoCodingPlanUsage(status: authMethod, updateTime: updateTime, quotas: allQuotas)
     }
 
-    private static func runArkcliUsagePlan(environment: [String: String]) async throws -> Data {
-        guard let arkcliPath = BinaryLocator.resolveArkcliBinary(env: environment) else {
+    static func runArkcliUsagePlan(
+        environment: [String: String],
+        loginPATH: [String]? = LoginShellPathCache.shared.current) async throws -> Data
+    {
+        guard let arkcliPath = BinaryLocator.resolveArkcliBinary(env: environment, loginPATH: loginPATH) else {
             throw DoubaoUsageError.arkcliNotFound
         }
+
+        var commandEnvironment = environment
+        commandEnvironment["PATH"] = PathBuilder.effectivePATH(
+            purposes: [.tty, .nodeTooling],
+            env: environment,
+            loginPATH: loginPATH)
 
         do {
             let result = try await SubprocessRunner.run(
                 binary: arkcliPath,
                 arguments: ["usage", "plan", "--format", "json"],
-                environment: environment,
+                environment: commandEnvironment,
                 timeout: 15,
                 label: "doubao arkcli usage plan")
             var output = BoundedOutputBuffer(maxBytes: 256 * 1024)
@@ -788,7 +798,16 @@ public struct DoubaoUsageFetcher: Sendable {
     // MARK: - arkcli JSON response
 
     private struct ArkcliUsageResponse: Decodable {
+        let viewer: ArkcliViewer?
         let items: [ArkcliUsageItem]
+    }
+
+    private struct ArkcliViewer: Decodable {
+        let authMethod: String?
+
+        enum CodingKeys: String, CodingKey {
+            case authMethod = "auth_method"
+        }
     }
 
     private struct ArkcliUsageItem: Decodable {

@@ -306,7 +306,7 @@ struct DoubaoUsageFetcherTests {
         // Update time from coding-plan's updated_at
         #expect(usage.updatedAt == Date(timeIntervalSince1970: 1_784_191_193))
         #expect(usage.identity?.providerID == .doubao)
-        #expect(usage.identity?.loginMethod == "subscribed")
+        #expect(usage.identity?.loginMethod == "sso")
     }
 
     @Test
@@ -464,7 +464,27 @@ struct DoubaoUsageFetcherTests {
         // The error-only coding item is skipped; the agent item still decodes.
         #expect(usage.primary == nil)
         #expect(usage.extraRateWindows?.first?.window.usedPercent == 5.0)
-        #expect(usage.identity?.loginMethod == "subscribed")
+        #expect(usage.identity?.loginMethod == nil)
+    }
+
+    @Test
+    func `arkcli viewer with no authentication requires login`() {
+        let data = Data(
+            """
+            {
+              "viewer": {"auth_method": "none"},
+              "items": [
+                {"product": "coding-plan", "periods": [{"label": "session", "percent": 5}]}
+              ]
+            }
+            """.utf8)
+
+        #expect {
+            _ = try DoubaoUsageFetcher.decodeArkcliUsage(from: data)
+        } throws: { error in
+            guard case DoubaoUsageError.arkcliAuthenticationRequired = error else { return false }
+            return true
+        }
     }
 
     @Test
@@ -624,6 +644,31 @@ struct DoubaoUsageFetcherTests {
             environment: ["ARKCLI_PATH": executable.path])
 
         #expect(snapshot.codingPlanUsage?.quotas.first?.percent == 42)
+    }
+
+    @Test
+    func `arkcli subprocess uses discovery path for node interpreter`() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codexbar-arkcli-node-path-\(UUID().uuidString)", isDirectory: true)
+        let executable = root.appendingPathComponent("arkcli")
+        let node = root.appendingPathComponent("node")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try "#!/usr/bin/env node\n".write(to: executable, atomically: true, encoding: .utf8)
+        try """
+        #!/bin/sh
+        printf '%s\n' '{"items":[{"product":"coding-plan","periods":[{"label":"session","percent":42}]}]}'
+        """.write(to: node, atomically: true, encoding: .utf8)
+        for path in [executable.path, node.path] {
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
+        }
+
+        let data = try await DoubaoUsageFetcher.runArkcliUsagePlan(
+            environment: ["PATH": "/usr/bin:/bin"],
+            loginPATH: [root.path])
+        let usage = try DoubaoUsageFetcher.decodeArkcliUsage(from: data)
+
+        #expect(usage.quotas.first?.percent == 42)
     }
 
     @Test
