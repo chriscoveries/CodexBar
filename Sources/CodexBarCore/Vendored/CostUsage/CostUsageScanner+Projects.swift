@@ -1,6 +1,18 @@
 import Foundation
 
 extension CostUsageScanner {
+    static func codexCache(_ cache: CostUsageCache, scopedTo roots: [URL]) -> CostUsageCache {
+        var scoped = cache
+        scoped.files = cache.files.filter { filePath, _ in
+            Self.isWithinCodexRoots(fileURL: URL(fileURLWithPath: filePath), roots: roots)
+        }
+        scoped.days = [:]
+        for usage in scoped.files.values {
+            Self.applyFileDays(cache: &scoped, fileDays: usage.days, sign: 1)
+        }
+        return scoped
+    }
+
     static func buildCodexSessionBreakdownsFromCache(
         cache: CostUsageCache,
         range: CostUsageDayRange,

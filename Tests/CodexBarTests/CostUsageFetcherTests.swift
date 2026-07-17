@@ -970,5 +970,8 @@ extension CostUsageFetcherTests {
             modelsDevCacheRoot: env.cacheRoot,
             sessionRoots: [unrelatedRoot])
         #expect(filtered.isEmpty)
+        let scopedCache = CostUsageScanner.codexCache(cache, scopedTo: [unrelatedRoot])
+        #expect(scopedCache.files.isEmpty)
+        #expect(scopedCache.days.isEmpty)
     }
 }

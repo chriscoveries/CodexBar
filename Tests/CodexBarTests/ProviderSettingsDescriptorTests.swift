@@ -104,6 +104,19 @@ struct ProviderSettingsDescriptorTests {
     }
 
     @Test
+    func `unresolved managed cost scope never falls back to ambient sessions`() throws {
+        let fixture = try self.makeSettingsFixture(suite: "ProviderSettingsDescriptorTests-codex-managed-unresolved")
+        let accountID = UUID()
+        fixture.settings.codexActiveSource = .managedAccount(id: accountID)
+
+        let scope = fixture.store.tokenCostScope(for: .codex)
+
+        #expect(scope.codexHomePath != nil)
+        #expect(scope.signature != "codex:ambient")
+        #expect(scope.signature.hasPrefix("codex:managed:"))
+    }
+
+    @Test
     func `antigravity usage source picker clarifies local ide and agy`() throws {
         let fixture = try self.makeSettingsFixture(suite: "ProviderSettingsDescriptorTests-antigravity-source")
         let context = fixture.settingsContext(provider: .antigravity)

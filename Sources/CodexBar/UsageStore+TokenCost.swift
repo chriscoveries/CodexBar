@@ -117,12 +117,32 @@ extension UsageStore {
         if self.settings.codexLocalSessionCostLedgerEnabled {
             return (nil, "codex:ambient")
         }
-        let homePath = self.settings.activeManagedCodexRemoteHomePath?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let homePath, !homePath.isEmpty else {
+        let activeSource = self.settings.codexActiveSource
+        switch activeSource {
+        case .liveSystem:
             return (nil, "codex:ambient")
+        case let .managedAccount(id):
+            let homePath = self.settings.managedCodexRemoteHomePath(forActiveSource: activeSource)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if let homePath, !homePath.isEmpty {
+                return (homePath, "codex:managed:\(homePath)")
+            }
+            let unavailablePath = Self.costUsageCacheDirectory()
+                .appendingPathComponent("unavailable-managed", isDirectory: true)
+                .appendingPathComponent(id.uuidString, isDirectory: true)
+                .path
+            return (unavailablePath, "codex:managed-unavailable:\(id.uuidString)")
+        case .profileHome:
+            let homePath = self.settings.profileCodexHomePath(forActiveSource: activeSource)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if let homePath, !homePath.isEmpty {
+                return (homePath, "codex:profile:\(homePath)")
+            }
+            let unavailablePath = Self.costUsageCacheDirectory()
+                .appendingPathComponent("unavailable-profile", isDirectory: true)
+                .path
+            return (unavailablePath, "codex:profile-unavailable")
         }
-        return (homePath, "codex:managed:\(homePath)")
     }
 
     func tokenSnapshot(

@@ -247,7 +247,10 @@ public struct CostUsageFetcher: Sendable {
             var sessions: [CostUsageSessionBreakdown] = []
             var piDaily: CostUsageDailyReport?
             if provider == .codex {
-                let cache = CostUsageCacheIO.load(provider: .codex, cacheRoot: scanOptions.cacheRoot)
+                let roots = CostUsageScanner.codexSessionsRoots(options: scanOptions)
+                let cache = CostUsageScanner.codexCache(
+                    CostUsageCacheIO.load(provider: .codex, cacheRoot: scanOptions.cacheRoot),
+                    scopedTo: roots)
                 let range = CostUsageScanner.CostUsageDayRange(since: since, until: until)
                 projects = CostUsageScanner.buildCodexProjectBreakdownsFromCache(
                     cache: cache,
@@ -257,7 +260,7 @@ public struct CostUsageFetcher: Sendable {
                     cache: cache,
                     range: range,
                     modelsDevCacheRoot: scanOptions.cacheRoot,
-                    sessionRoots: CostUsageScanner.codexSessionsRoots(options: scanOptions))
+                    sessionRoots: roots)
             }
             if provider == .codex || provider == .claude {
                 let piReport = try PiSessionCostScanner.loadDailyReportCancellable(
@@ -438,7 +441,10 @@ public struct CostUsageFetcher: Sendable {
             let since = Calendar.current.date(byAdding: .day, value: -(clampedHistoryDays - 1), to: now) ?? now
             let range = CostUsageScanner.CostUsageDayRange(since: since, until: until)
             let options = overrideScannerOptions ?? CostUsageScanner.Options()
-            let cache = CostUsageCacheIO.load(provider: .codex, cacheRoot: options.cacheRoot)
+            let roots = CostUsageScanner.codexSessionsRoots(options: options)
+            let cache = CostUsageScanner.codexCache(
+                CostUsageCacheIO.load(provider: .codex, cacheRoot: options.cacheRoot),
+                scopedTo: roots)
             var reports: [CostUsageDailyReport] = []
             var projects: [CostUsageProjectBreakdown] = []
             var sessions: [CostUsageSessionBreakdown] = []
@@ -467,7 +473,7 @@ public struct CostUsageFetcher: Sendable {
                         cache: cache,
                         range: range,
                         modelsDevCacheRoot: options.cacheRoot,
-                        sessionRoots: CostUsageScanner.codexSessionsRoots(options: options))
+                        sessionRoots: roots)
                     if cache.codexProjectMetadataVersion == CostUsageScanner.codexProjectMetadataVersion {
                         projects.append(contentsOf: CostUsageScanner.buildCodexProjectBreakdownsFromCache(
                             cache: cache,
