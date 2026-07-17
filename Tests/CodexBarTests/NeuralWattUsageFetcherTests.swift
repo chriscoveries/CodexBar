@@ -67,20 +67,18 @@ struct NeuralWattUsageFetcherTests {
         #expect(snapshot.creditsUsedUSD == 19.6626)
         let expectedCreditPercent = 19.6626 / 52.34 * 100
         #expect(abs(snapshot.creditUsedPercent - expectedCreditPercent) < 1e-6)
-        // Credits exhaust (DeepSeek-style); no kWh window surfaced.
         #expect(snapshot.keyAllowanceUsedPercent == 25.0)
         #expect(snapshot.currentMonthCostUSD == 160.1463)
+        let expectedSubscriptionPercent = 13.9023 / 20 * 100
         let primaryPercent = usage.primary?.usedPercent
-        #expect(primaryPercent.map { abs($0 - expectedCreditPercent) < 1e-6 } == true)
-        // No reset cycle — credits deplete, they don't renew.
-        #expect(usage.primary?.resetsAt == nil)
-        #expect(usage.subscriptionRenewsAt == nil)
-        // loginMethod now reflects accounting method when present.
-        #expect(usage.loginMethod(for: .neuralwatt) == "Energy")
-        // Only key allowance is surfaced as an extra quota window. Current-month spend is telemetry,
-        // not a resettable rate window.
+        #expect(primaryPercent.map { abs($0 - expectedSubscriptionPercent) < 1e-6 } == true)
+        #expect(usage.primary?.resetDescription == "13.90 / 20 kWh")
+        #expect(usage.primary?.resetsAt == snapshot.subscription?.currentPeriodEnd)
+        #expect(usage.subscriptionRenewsAt == snapshot.subscription?.currentPeriodEnd)
+        #expect(usage.providerCost?.used == 32.6774)
+        #expect(usage.providerCost?.period == "Neuralwatt prepaid balance")
+        #expect(usage.loginMethod(for: .neuralwatt) == "Standard plan")
         #expect(usage.extraRateWindows?.count == 1)
-        #expect(usage.extraRateWindows?.contains { $0.id == "subscription-kwh" } == false)
         #expect(usage.extraRateWindows?.contains { $0.id == "current-month-spend" } == false)
         let allowanceWindow = usage.extraRateWindows?.first { $0.id == "key-allowance" }
         #expect(allowanceWindow?.title == "Key Monthly")
@@ -115,7 +113,8 @@ struct NeuralWattUsageFetcherTests {
         #expect(snapshot.creditUsedPercent == 10)
         #expect(snapshot.subscription == nil)
         #expect(snapshot.keyAllowanceUsedPercent == nil)
-        #expect(usage.primary?.usedPercent == 10)
+        #expect(usage.primary == nil)
+        #expect(usage.providerCost?.used == 4.5)
         #expect(usage.subscriptionRenewsAt == nil)
         #expect(usage.loginMethod(for: .neuralwatt) == "Energy")
         // No resettable extra quota windows when there is no per-key allowance.
@@ -147,7 +146,7 @@ struct NeuralWattUsageFetcherTests {
     }
 
     @Test
-    func `marks known zero credit balance as exhausted`() throws {
+    func `keeps known zero prepaid balance separate from subscription quota`() throws {
         let body = #"""
         {
           "balance": {
@@ -170,9 +169,89 @@ struct NeuralWattUsageFetcherTests {
         #expect(snapshot.effectiveRemainingCredits == 0)
         #expect(snapshot.effectiveTotalCredits == nil)
         #expect(snapshot.creditUsedPercent == 100)
-        #expect(usage.primary?.usedPercent == 100)
-        let resetDescription = usage.primary?.resetDescription?.replacingOccurrences(of: "\u{00A0}", with: "")
-        #expect(resetDescription == "$0.00 remaining")
+        #expect(usage.primary == nil)
+        #expect(usage.providerCost?.used == 0)
+        #expect(usage.providerCost?.period == "Neuralwatt prepaid balance")
+    }
+
+    @Test
+    func `zero prepaid balance does not exhaust active subscription`() throws {
+        let body = #"""
+        {
+          "balance": {
+            "credits_remaining_usd": 0.0,
+            "total_credits_usd": 0.0,
+            "accounting_method": "energy"
+          },
+          "usage": {"lifetime": {}, "current_month": {}},
+          "limits": {},
+          "subscription": {
+            "plan": "pro_energy",
+            "status": "active",
+            "current_period_start": "2026-04-01T00:00:00Z",
+            "current_period_end": "2026-05-01T00:00:00Z",
+            "kwh_included": 10.0,
+            "kwh_used": 2.5,
+            "kwh_remaining": 7.5
+          },
+          "key": {"name": "subscriber", "allowance": null}
+        }
+        """#
+
+        let usage = try NeuralWattUsageFetcher._parseSnapshotForTesting(
+            Data(body.utf8),
+            updatedAt: Date(timeIntervalSince1970: 4))
+            .toUsageSnapshot()
+
+        #expect(usage.primary?.usedPercent == 25)
+        #expect(usage.primary?.resetDescription == "2.50 / 10 kWh")
+        #expect(usage.providerCost?.used == 0)
+        #expect(usage.loginMethod(for: .neuralwatt) == "Pro Energy plan")
+    }
+
+    @Test
+    func `non renewing subscription keeps period end without renewal date`() throws {
+        let body = #"""
+        {
+          "balance": {"credits_remaining_usd": 1.0},
+          "subscription": {
+            "plan": "standard",
+            "status": "active",
+            "current_period_end": "2026-05-01T00:00:00Z",
+            "auto_renew": false,
+            "kwh_included": 10.0,
+            "kwh_used": 4.0,
+            "kwh_remaining": 6.0
+          },
+          "key": {"name": "subscriber", "allowance": null}
+        }
+        """#
+
+        let usage = try NeuralWattUsageFetcher._parseSnapshotForTesting(
+            Data(body.utf8),
+            updatedAt: Date(timeIntervalSince1970: 6))
+            .toUsageSnapshot()
+
+        #expect(usage.primary?.resetsAt != nil)
+        #expect(usage.subscriptionRenewsAt == nil)
+    }
+
+    @Test
+    func `blocked key allowance is exhausted without numeric limit`() throws {
+        let body = #"""
+        {
+          "balance": {"credits_remaining_usd": 3.0},
+          "subscription": null,
+          "key": {"name": "blocked", "allowance": {"blocked": true, "period": "monthly"}}
+        }
+        """#
+
+        let usage = try NeuralWattUsageFetcher._parseSnapshotForTesting(
+            Data(body.utf8),
+            updatedAt: Date(timeIntervalSince1970: 5))
+            .toUsageSnapshot()
+
+        #expect(usage.extraRateWindows?.first?.window.usedPercent == 100)
     }
 
     @Test
@@ -292,7 +371,8 @@ struct NeuralWattUsageFetcherTests {
         do {
             _ = try await NeuralWattUsageFetcher.fetchUsage(
                 apiKey: "sk-test",
-                environment: [NeuralWattSettingsReader.apiURLEnvironmentKey: "https://api.neuralwatt.test"])
+                environment: [NeuralWattSettingsReader.apiURLEnvironmentKey: "https://api.neuralwatt.test"],
+                retryPolicy: .disabled)
             Issue.record("Expected NeuralWattUsageError.missingCredentials")
         } catch let error as NeuralWattUsageError {
             guard case .missingCredentials = error else {
@@ -354,7 +434,8 @@ struct NeuralWattUsageFetcherTests {
         do {
             _ = try await NeuralWattUsageFetcher.fetchUsage(
                 apiKey: "sk-test",
-                environment: [NeuralWattSettingsReader.apiURLEnvironmentKey: "https://api.neuralwatt.test"])
+                environment: [NeuralWattSettingsReader.apiURLEnvironmentKey: "https://api.neuralwatt.test"],
+                retryPolicy: .disabled)
             Issue.record("Expected NeuralWattUsageError.apiError")
         } catch let error as NeuralWattUsageError {
             guard case let .apiError(message) = error else {
@@ -363,6 +444,28 @@ struct NeuralWattUsageFetcherTests {
             }
             #expect(message == "HTTP 500")
         }
+    }
+
+    @Test
+    func `fetch retries transient quota failure`() async throws {
+        let body = #"""
+        {
+          "balance": {"credits_remaining_usd": 5.0},
+          "subscription": null,
+          "key": {"name": "retry", "allowance": null}
+        }
+        """#
+        let transport = NeuralWattSequenceTransport(statusCodes: [503, 200], body: Data(body.utf8))
+        let retryPolicy = ProviderHTTPRetryPolicy(maxRetries: 1, baseDelaySeconds: 0, maxDelaySeconds: 0)
+
+        let usage = try await NeuralWattUsageFetcher.fetchUsage(
+            apiKey: "sk-test",
+            environment: [NeuralWattSettingsReader.apiURLEnvironmentKey: "https://api.neuralwatt.test"],
+            transport: transport,
+            retryPolicy: retryPolicy)
+
+        #expect(usage.effectiveRemainingCredits == 5)
+        #expect(await transport.requestCount == 2)
     }
 
     private static func makeResponse(
@@ -376,6 +479,28 @@ struct NeuralWattUsageFetcherTests {
             httpVersion: "HTTP/1.1",
             headerFields: ["Content-Type": "application/json"])!
         return (response, Data(body.utf8))
+    }
+}
+
+private actor NeuralWattSequenceTransport: ProviderHTTPTransport {
+    private var statusCodes: [Int]
+    private let body: Data
+    private(set) var requestCount = 0
+
+    init(statusCodes: [Int], body: Data) {
+        self.statusCodes = statusCodes
+        self.body = body
+    }
+
+    func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+        self.requestCount += 1
+        let statusCode = self.statusCodes.isEmpty ? 200 : self.statusCodes.removeFirst()
+        let response = HTTPURLResponse(
+            url: request.url!,
+            statusCode: statusCode,
+            httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Type": "application/json"])!
+        return (self.body, response)
     }
 }
 

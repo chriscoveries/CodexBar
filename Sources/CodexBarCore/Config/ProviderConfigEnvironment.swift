@@ -51,7 +51,9 @@ public enum ProviderConfigEnvironment {
     }
 
     public static func supportsAPIKeyOverride(for provider: UsageProvider) -> Bool {
-        if self.directAPIKeyEnvironmentKey(for: provider) != nil { return true }
+        if self.directAPIKeyEnvironmentKey(for: provider) != nil {
+            return true
+        }
         switch provider {
         case .copilot, .kimik2, .warp, .codebuff, .crof, .doubao:
             return true
@@ -105,6 +107,8 @@ public enum ProviderConfigEnvironment {
             self.applyDoubaoOverrides(base: base, config: config)
         case .sakana:
             self.applySakanaOverrides(base: base, config: config)
+        case .longcat:
+            self.applyLongCatOverrides(base: base, config: config)
         default:
             nil
         }
@@ -125,6 +129,7 @@ public enum ProviderConfigEnvironment {
         }
     }
 
+    // swiftlint:disable:next cyclomatic_complexity
     private static func directAPIKeyEnvironmentKey(for provider: UsageProvider) -> String? {
         switch provider {
         case .amp:
@@ -135,6 +140,8 @@ public enum ProviderConfigEnvironment {
             AzureOpenAISettingsReader.apiKeyEnvironmentKey
         case .claude:
             ClaudeAdminAPISettingsReader.adminAPIKeyEnvironmentKey
+        case .clinepass:
+            ClinePassSettingsReader.apiKeyEnvironmentKey
         case .zai:
             ZaiSettingsReader.apiTokenKey
         case .minimax:
@@ -366,6 +373,20 @@ public enum ProviderConfigEnvironment {
         var env = base
         if let cookieHeader = config.sanitizedCookieHeader {
             env[SakanaSettingsReader.cookieHeaderKey] = cookieHeader
+        }
+        return env
+    }
+
+    private static func applyLongCatOverrides(
+        base: [String: String],
+        config: ProviderConfig?) -> [String: String]
+    {
+        guard let config else { return base }
+        var env = base
+        if config.cookieSource == .manual,
+           let cookieHeader = config.sanitizedCookieHeader
+        {
+            env[LongCatSettingsReader.cookieHeaderKey] = cookieHeader
         }
         return env
     }

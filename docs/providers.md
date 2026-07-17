@@ -8,7 +8,7 @@ read_when:
 
 # Providers
 
-CodexBar currently registers 61 provider IDs. Some companies expose multiple surfaces, such as Codex vs OpenAI API or
+CodexBar currently registers 63 provider IDs. Some companies expose multiple surfaces, such as Codex vs OpenAI API or
 OpenCode vs OpenCode Go, because the auth source and quota shape differ.
 
 ## Fetch strategies (current)
@@ -66,6 +66,7 @@ headers, source selection, provider ordering, and token accounts are stored in `
 | Crof | API key from config/env → credit balance + requests quota API (`api`). |
 | Venice | API key from config/env → DIEM/USD balance API (`api`). |
 | Command Code | Web billing API via Command Code session cookies (`web`). |
+| ClinePass | API key from config/env → 5-hour, weekly, and monthly subscription usage limits (`api`). |
 | StepFun | Username/password login or manual Oasis token (`web`). |
 | AWS Bedrock | AWS credentials → Cost Explorer spend/budgets and optional CloudWatch Claude activity (`api`). |
 | Grok | `grok agent stdio` JSON-RPC `x.ai/billing` (`cli`) → grok.com billing gRPC-web via Chrome session cookies (`web`); local `~/.grok/sessions` signals as fallback. |
@@ -76,7 +77,7 @@ headers, source selection, provider ordering, and token accounts are stored in `
 | LiteLLM | API key + base URL → `/key/info`, then `/user/info` or `/team/info` budget usage (`api`). |
 | Deepgram | API key → project discovery and usage breakdown API (`api`). |
 | Chutes | API key from config/env → subscription usage and quota API (`api`). |
-| Neuralwatt | API key from config/env → `/v1/quota` credit balance and per-key allowance (`api`). |
+| Neuralwatt | API key from config/env → `/v1/quota` subscription kWh usage and prepaid balance (`api`). |
 | ZenMux | Management API key from config/env → five-hour and seven-day quota windows plus PAYG balance (`api`). |
 | Zed | Zed editor Keychain session → `cloud.zed.dev/client/users/me` for plan and quota data (`local`). |
 
@@ -416,6 +417,12 @@ headers, source selection, provider ordering, and token accounts are stored in `
 - Status: none yet.
 - Details: `docs/command-code.md`.
 
+## ClinePass
+- API key from `~/.codexbar/config.json`, `CLINE_API_KEY`, or `CLINEPASS_API_KEY`.
+- Reads 5-hour, weekly, and monthly usage limits from `GET https://api.cline.bot/api/v1/users/me/plan/usage-limits`.
+- ClinePass subscription limits are distinct from Cline pay-as-you-go balance and usage.
+- Status: none yet.
+
 ## Qoder
 - Chrome session cookies from automatic import, or a manual `Cookie:` header/cURL capture on macOS or Linux.
 - Reads big model credit usage from the Qoder account dashboard on `qoder.com` or `qoder.com.cn`.
@@ -505,8 +512,8 @@ headers, source selection, provider ordering, and token accounts are stored in `
 ## Neuralwatt
 - API key from config or `NEURALWATT_API_KEY`.
 - Reads `GET /v1/quota` from `api.neuralwatt.com`; `NEURALWATT_API_URL` can override it with an HTTPS endpoint.
-- Shows the USD prepaid-credit balance and an optional per-key spending allowance.
-- Active subscription kWh allowance is returned separately by Neuralwatt and is not yet surfaced pending a product decision.
+- Shows active subscription kWh usage as the quota window and the separate prepaid USD balance as PAYG credit.
+- Shows an optional per-key spending allowance when configured.
 - Details: `docs/neuralwatt.md`.
 
 ## StepFun

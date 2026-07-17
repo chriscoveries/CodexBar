@@ -12,6 +12,7 @@ struct NeuralWattProviderImplementation: ProviderImplementation {
     @MainActor
     func observeSettings(_ settings: SettingsStore) {
         _ = settings.neuralWattAPIKey
+        _ = settings.tokenAccountsData(for: .neuralwatt)
     }
 
     @MainActor

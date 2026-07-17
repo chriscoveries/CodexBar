@@ -38,10 +38,23 @@ extension UsageStore {
         self.errors[provider]
     }
 
+    func diagnostic(for provider: UsageProvider) -> String? {
+        self.diagnostics[provider]
+    }
+
     func userFacingError(for provider: UsageProvider) -> String? {
         if let raw = self.errors[provider] {
-            guard provider == .codex else { return raw }
-            return CodexUIErrorMapper.userFacingMessage(raw)
+            switch provider {
+            case .codex:
+                return CodexUIErrorMapper.userFacingMessage(raw)
+            case .ollama:
+                return OllamaUIErrorMapper.userFacingMessage(raw)
+            default:
+                return raw
+            }
+        }
+        if let diagnostic = self.diagnostics[provider] {
+            return diagnostic
         }
         return self.unavailableMessage(for: provider)
     }

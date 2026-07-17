@@ -221,6 +221,7 @@ public struct NeuralWattUsageSnapshot: Codable, Sendable, Equatable {
     }
 
     public var keyAllowanceUsedPercent: Double? {
+        if self.keyAllowance?.blocked == true { return 100 }
         guard let spent = self.keyAllowance?.spentUSD, let limit = self.keyAllowance?.limitUSD, limit > 0 else {
             return nil
         }
@@ -228,15 +229,7 @@ public struct NeuralWattUsageSnapshot: Codable, Sendable, Equatable {
     }
 
     public func toUsageSnapshot() -> UsageSnapshot {
-        // Neuralwatt is a credit-exhaustion model (like DeepSeek): USD credits deplete
-        // as you use the API and do not reset on a billing cycle. There is no renewal
-        // date to surface, so the primary window carries only the balance summary.
-        let primary = RateWindow(
-            usedPercent: self.creditUsedPercent,
-            windowMinutes: nil,
-            resetsAt: nil,
-            resetDescription: self.creditSummary)
-
+        let subscriptionWindow = self.subscriptionRateWindow
         var extras: [NamedRateWindow] = []
         if let percent = self.keyAllowanceUsedPercent, let allowance = self.keyAllowance {
             let periodTitle = (allowance.period ?? "allowance").capitalized
@@ -257,30 +250,71 @@ public struct NeuralWattUsageSnapshot: Codable, Sendable, Equatable {
             loginMethod: self.displayLoginMethod)
 
         return UsageSnapshot(
-            primary: primary,
+            primary: subscriptionWindow,
             secondary: nil,
             tertiary: nil,
             extraRateWindows: extras.isEmpty ? nil : extras,
-            subscriptionRenewsAt: nil,
+            providerCost: self.prepaidBalance,
+            subscriptionRenewsAt: self.subscription?.autoRenew == false ? nil : subscriptionWindow?.resetsAt,
             updatedAt: self.updatedAt,
-            identity: identity)
+            identity: identity,
+            dataConfidence: .exact)
     }
 
-    private var creditSummary: String {
-        guard let remaining = self.effectiveRemainingCredits else { return "Balance unavailable" }
-        guard let total = self.effectiveTotalCredits else {
-            return "\(Self.formatUSD(remaining)) remaining"
+    private var subscriptionRateWindow: RateWindow? {
+        guard let total = self.effectiveSubscriptionTotalKWh,
+              let used = self.effectiveSubscriptionUsedKWh
+        else { return nil }
+        let minutes: Int? = if let start = self.subscription?.currentPeriodStart,
+                               let end = self.subscription?.currentPeriodEnd,
+                               end > start
+        {
+            max(1, Int(end.timeIntervalSince(start) / 60))
+        } else {
+            nil
         }
-        return "\(Self.formatUSD(remaining)) remaining of \(Self.formatUSD(total))"
+        return RateWindow(
+            usedPercent: min(100, max(0, used / total * 100)),
+            windowMinutes: minutes,
+            resetsAt: self.subscription?.currentPeriodEnd,
+            resetDescription: "\(Self.formatKWh(used)) / \(Self.formatKWh(total)) kWh")
+    }
+
+    private var effectiveSubscriptionTotalKWh: Double? {
+        if let included = Self.validPositive(self.subscription?.kwhIncluded) { return included }
+        guard let used = Self.validNonNegative(self.subscription?.kwhUsed),
+              let remaining = Self.validNonNegative(self.subscription?.kwhRemaining)
+        else { return nil }
+        let total = used + remaining
+        return total > 0 ? total : nil
+    }
+
+    private var effectiveSubscriptionUsedKWh: Double? {
+        if let used = Self.validNonNegative(self.subscription?.kwhUsed) { return used }
+        guard let total = self.effectiveSubscriptionTotalKWh,
+              let remaining = Self.validNonNegative(self.subscription?.kwhRemaining)
+        else { return nil }
+        return max(0, total - remaining)
+    }
+
+    private var prepaidBalance: ProviderCostSnapshot? {
+        guard let remaining = self.effectiveRemainingCredits else { return nil }
+        return ProviderCostSnapshot(
+            used: remaining,
+            limit: 0,
+            currencyCode: "USD",
+            period: "Neuralwatt prepaid balance",
+            updatedAt: self.updatedAt)
     }
 
     private var displayLoginMethod: String? {
-        // Credits are account-wide; surface the accounting method (Token vs Energy)
-        // when present. Subscription plan is shown only as supplementary identity.
+        if let plan = self.subscription?.plan?.trimmingCharacters(in: .whitespacesAndNewlines), !plan.isEmpty {
+            return "\(plan.replacingOccurrences(of: "_", with: " ").capitalized) plan"
+        }
         if let method = self.accountingMethod, !method.isEmpty {
             return method.capitalized
         }
-        return self.subscription?.plan?.replacingOccurrences(of: "_", with: " ").capitalized
+        return nil
     }
 
     fileprivate static func validNonNegative(_ value: Double?) -> Double? {
@@ -293,14 +327,9 @@ public struct NeuralWattUsageSnapshot: Codable, Sendable, Equatable {
         return value
     }
 
-    private static func formatUSD(_ value: Double) -> String {
-        let formatter = NumberFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.numberStyle = .currency
-        formatter.currencyCode = "USD"
-        formatter.maximumFractionDigits = 2
-        formatter.minimumFractionDigits = 2
-        return formatter.string(from: NSNumber(value: value)) ?? String(format: "$%.2f", value)
+    private static func formatKWh(_ value: Double) -> String {
+        let digits = value.rounded() == value ? 0 : 2
+        return String(format: "%.*f", digits, value)
     }
 }
 
@@ -335,7 +364,8 @@ public struct NeuralWattUsageFetcher: Sendable {
     public static func fetchUsage(
         apiKey: String,
         environment: [String: String] = ProcessInfo.processInfo.environment,
-        transport: any ProviderHTTPTransport = ProviderHTTPClient.shared) async throws -> NeuralWattUsageSnapshot
+        transport: any ProviderHTTPTransport = ProviderHTTPClient.shared,
+        retryPolicy: ProviderHTTPRetryPolicy = .transientIdempotent) async throws -> NeuralWattUsageSnapshot
     {
         let trimmed = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
@@ -352,7 +382,7 @@ public struct NeuralWattUsageFetcher: Sendable {
 
         let response: ProviderHTTPResponse
         do {
-            response = try await transport.response(for: request)
+            response = try await transport.response(for: request, retryPolicy: retryPolicy)
         } catch is CancellationError {
             throw CancellationError()
         } catch let error as URLError where error.code == .cancelled {

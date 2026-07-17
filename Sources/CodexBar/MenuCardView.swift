@@ -213,7 +213,7 @@ struct UsageMenuCardView: View {
                     }
                     if let tokenUsage = liveModel.tokenUsage {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text(L("cost_header_estimated"))
+                            Text(UsageMenuCardView.Model.tokenUsageHeader(provider: liveModel.provider))
                                 .font(.body)
                                 .fontWeight(.medium)
                             Text(tokenUsage.sessionLine)
@@ -758,7 +758,7 @@ struct UsageMenuCardCostSectionView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     if let tokenUsage = liveModel.tokenUsage {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text(L("cost_header_estimated"))
+                            Text(UsageMenuCardView.Model.tokenUsageHeader(provider: liveModel.provider))
                                 .font(.body)
                                 .fontWeight(.medium)
                             Text(tokenUsage.sessionLine)
@@ -1377,7 +1377,7 @@ extension UsageMenuCardView.Model {
             primaryPacePercent = regen.pace.pacePercent
             primaryPaceOnTop = regen.pace.paceOnTop
         }
-        let usesBalanceStatusText = input.provider == .deepseek || input.provider == .neuralwatt
+        let usesBalanceStatusText = input.provider == .deepseek
         let primaryStatusText = usesBalanceStatusText ? primaryDetailText : nil
         if usesBalanceStatusText {
             primaryDetailText = nil

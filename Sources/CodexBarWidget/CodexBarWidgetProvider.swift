@@ -70,6 +70,7 @@ enum ProviderChoice: String, AppEnum {
         case .openai: return nil // OpenAI not yet supported in widgets
         case .azureopenai: return nil // Azure OpenAI not yet supported in widgets
         case .claude: self = .claude
+        case .clinepass: return nil // ClinePass not yet supported in widgets
         case .gemini: self = .gemini
         case .alibaba: self = .alibaba
         case .alibabatokenplan: self = .alibabatokenplan
@@ -124,6 +125,7 @@ enum ProviderChoice: String, AppEnum {
         case .deepgram: return nil // Deepgram not yet supported in widgets
         case .poe: return nil // Poe not yet supported in widgets
         case .chutes: return nil // Chutes not yet supported in widgets
+        case .longcat: return nil // LongCat not yet supported in widgets
         case .zed: return nil // Zed not yet supported in widgets
         case .neuralwatt: return nil // Neuralwatt not yet supported in widgets
         case .zenmux: return nil // ZenMux not yet supported in widgets

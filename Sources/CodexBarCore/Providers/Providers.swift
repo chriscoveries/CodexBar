@@ -7,6 +7,7 @@ public enum UsageProvider: String, CaseIterable, Sendable, Codable {
     case openai
     case azureopenai
     case claude
+    case clinepass
     case cursor
     case opencode
     case opencodego
@@ -61,6 +62,7 @@ public enum UsageProvider: String, CaseIterable, Sendable, Codable {
     case neuralwatt
     case crossmodel
     case clawrouter
+    case longcat
     case sub2api
     case wayfinder
     case zenmux
@@ -72,6 +74,7 @@ public enum IconStyle: String, Sendable, CaseIterable {
     case codex
     case openai
     case claude
+    case clinepass
     case zai
     case minimax
     case manus
@@ -125,6 +128,7 @@ public enum IconStyle: String, Sendable, CaseIterable {
     case neuralwatt
     case crossmodel
     case clawrouter
+    case longcat
     case sub2api
     case wayfinder
     case zenmux
@@ -280,6 +284,15 @@ public enum ProviderBrowserCookieDefaults {
 
     /// Copilot budget imports should stay Chrome-only by default to avoid prompting unrelated browsers.
     public static var copilotCookieImportOrder: BrowserCookieImportOrder? {
+        #if os(macOS)
+        [.chrome]
+        #else
+        nil
+        #endif
+    }
+
+    /// LongCat Auto imports only from Chrome by default to avoid prompting unrelated browser keychains.
+    public static var longcatCookieImportOrder: BrowserCookieImportOrder? {
         #if os(macOS)
         [.chrome]
         #else

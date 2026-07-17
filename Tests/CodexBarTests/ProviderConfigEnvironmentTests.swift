@@ -267,6 +267,34 @@ struct ProviderConfigEnvironmentTests {
     }
 
     @Test
+    func `applies cookie header override for longcat`() {
+        let config = ProviderConfig(
+            id: .longcat,
+            cookieHeader: "Cookie: passport_token=abc; uid=42",
+            cookieSource: .manual)
+        let env = ProviderConfigEnvironment.applyProviderConfigOverrides(
+            base: [:],
+            provider: .longcat,
+            config: config)
+
+        #expect(env[LongCatSettingsReader.cookieHeaderKey] == "Cookie: passport_token=abc; uid=42")
+        #expect(LongCatSettingsReader.cookieHeader(environment: env) == "Cookie: passport_token=abc; uid=42")
+    }
+
+    @Test
+    func `does not expose stored longcat cookie outside manual mode`() {
+        for source in [ProviderCookieSource.auto, .off] {
+            let config = ProviderConfig(id: .longcat, cookieHeader: "stale=1", cookieSource: source)
+            let env = ProviderConfigEnvironment.applyProviderConfigOverrides(
+                base: [:],
+                provider: .longcat,
+                config: config)
+
+            #expect(env[LongCatSettingsReader.cookieHeaderKey] == nil)
+        }
+    }
+
+    @Test
     func `applies API key override for moonshot`() {
         let config = ProviderConfig(id: .moonshot, apiKey: "moon-token")
         let env = ProviderConfigEnvironment.applyAPIKeyOverride(

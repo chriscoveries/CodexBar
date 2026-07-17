@@ -16,10 +16,12 @@ endpoint exposes both surfaces plus current-month spend and optional per-key spe
 
 ## Features
 
-- USD credit balance as the primary usage window (`credits_remaining_usd` / `total_credits_usd`).
-  The bar fills as credits are consumed; there is **no reset date** since credits deplete, not renew.
+- Active subscription kWh usage (`kwh_used` / `kwh_included`) as the primary quota window, with the
+  subscription period end as its reset date.
+- The separate prepaid USD credit balance as a pay-as-you-go balance. It does not reset and may be
+  zero while subscription kWh remains available.
 - Per-key spending allowance (`spent_usd` / `limit_usd`) as an extra rate window when configured.
-- Accounting method (`Token` vs `Energy`) shown as the provider identity label.
+- Subscription plan shown as the provider identity label, falling back to accounting method (`Token` vs `Energy`).
 - Current calendar-month spend is parsed for future/reporting use, but is not shown as a resettable quota window.
 
 ## Setup
@@ -59,10 +61,12 @@ For tests or self-hosted/proxy setups, override the API base URL with `NEURALWAT
 - Fields used: `balance.credits_remaining_usd`, `balance.total_credits_usd`,
   `balance.credits_used_usd`, `balance.accounting_method`,
   `usage.current_month.cost_usd`,
+  `subscription.plan`, `subscription.current_period_end`, `subscription.kwh_included`,
+  `subscription.kwh_used`, `subscription.kwh_remaining`,
   `key.allowance.limit_usd`, `key.allowance.spent_usd`, `key.allowance.period`
 - `credits_used_usd` is derived as `total_credits_usd − credits_remaining_usd` when the API omits it.
-- `subscription` may be `null`. Its separate kWh allowance is not rendered yet; landing that display
-  requires an explicit product decision because it changes the provider from balance-only to mixed quota semantics.
+- `subscription` may be `null`; prepaid balance remains visible without a subscription window.
+- Transient quota failures are retried once, including `Retry-After` handling for rate limits.
 
 ## Troubleshooting
 

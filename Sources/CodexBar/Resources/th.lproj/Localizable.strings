@@ -1,5 +1,9 @@
 /* Thai localization for CodexBar */
 
+"ollama_safari_cookie_access_hint" = "คุกกี้ Safari ต้องใช้สิทธิ์เข้าถึงดิสก์แบบเต็มสำหรับ CodexBar (การตั้งค่าระบบ > ความเป็นส่วนตัวและความปลอดภัย)";
+"ollama_browser_cookie_decryption_denied" = "การถอดรหัสคุกกี้ %@ ถูกปฏิเสธในพวงกุญแจ โปรดลองอีกครั้งด้วยการรีเฟรชด้วยตนเอง";
+"ollama_browser_cookie_decryption_disabled" = "การถอดรหัสคุกกี้ %@ ถูกปิดใช้งานใน CodexBar ให้เปิดการเข้าถึงพวงกุญแจแล้วรีเฟรช";
+
 " providers" = "ผู้ให้บริการ  ";
 "(System)" = "(ระบบ)";
 "30d" = "30 วัน";
@@ -537,6 +541,8 @@
 /* Display Pane */
 "menu_bar_style_title" = "รูปแบบแถบเมนู";
 "menu_bar_style_subtitle" = "รูปแบบการแสดงรายการในแถบเมนู";
+"menu_bar_inactive_display_contrast_title" = "เพิ่มการมองเห็นบนจอแสดงผลที่ไม่ได้ใช้งาน";
+"menu_bar_inactive_display_contrast_subtitle" = "ใช้การแสดงผลแบบคอนทราสต์สูงเพื่อให้ไอคอนและค่าชี้วัดอ่านได้บนจออื่น";
 "menu_bar_style_critters" = "ตัวการ์ตูน";
 "menu_bar_style_bars" = "แถบวัด";
 "menu_bar_style_icon_percent" = "ไอคอนและเปอร์เซ็นต์";
@@ -717,6 +723,9 @@
 /* Cost estimation */
 "cost_header_estimated" = "ต้นทุน (โดยประมาณ)";
 "cost_estimate_hint" = "ประมาณการจากบันทึกท้องถิ่น · อาจแตกต่างจากใบเรียกเก็บเงินของคุณ";
+"codex_api_estimate_header" = "ค่าประมาณเทียบเท่า API";
+"codex_api_estimate_hint" = "การใช้งานในเครื่อง × ราคา API สาธารณะ · ไม่ใช่ใบเรียกเก็บเงินค่าสมาชิกหรือมูลค่าแพ็กเกจ";
+"codex_api_estimate_not_billed" = "ไม่ใช่ใบเรียกเก็บเงินค่าสมาชิกหรือมูลค่าแพ็กเกจ";
 "No JetBrains IDE with AI Assistant detected. Install a JetBrains IDE and enable AI Assistant." = "ตรวจไม่พบ JetBrains IDE ที่มี AI Assistant ติดตั้ง JetBrains IDE และเปิดใช้งาน AI Assistant";
 "OpenRouter API token not configured. Set OPENROUTER_API_KEY environment variable or configure in Settings." = "โทเค็น OpenRouter API ไม่ได้กําหนดค่า ตั้งค่าตัวแปรสภาพแวดล้อม OPENROUTER_API_KEY หรือกําหนดค่าในการตั้งค่า";
 "z.ai API token not found. Set apiKey in ~/.codexbar/config.json or Z_AI_API_KEY." = "ไม่พบโทเค็น z.ai API ตั้งค่า apiKey เป็น ~/.codexbar/config.json หรือ Z_AI_API_KEY";
