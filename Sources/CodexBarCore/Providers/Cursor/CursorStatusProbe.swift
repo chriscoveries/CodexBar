@@ -1249,6 +1249,14 @@ public struct CursorStatusProbe: Sendable {
         case exhausted
     }
 
+    struct ResolvedSessionReconciliationContext<Value: Sendable> {
+        let cookieHeader: String
+        let sourceLabel: String
+        let cacheObservation: CookieHeaderCache.ConditionalMutationObservation
+        let perform: @Sendable (String, String?) async throws -> Value
+        let log: (String) -> Void
+    }
+
     func scanResolvedBrowsers<Value>(
         _ browsers: [Browser],
         importSessions: (Browser) -> [CursorCookieImporter.SessionInfo],
@@ -1279,18 +1287,9 @@ public struct CursorStatusProbe: Sendable {
         -> ResolvedSessionFetchOutcome<Value>
     {
         log("Trying Cursor session from \(session.sourceLabel)")
+        let value: Value
         do {
-            let value = try await perform(session.cookieHeader, nil)
-            let stored = CookieHeaderCache.storeIfObservationCurrent(
-                provider: .cursor,
-                expected: cacheObservation,
-                cookieHeader: session.cookieHeader,
-                sourceLabel: session.sourceLabel)
-            guard stored else {
-                log("Cursor session from \(session.sourceLabel) lost cache ownership; discarding result")
-                return .tryNextBrowser
-            }
-            return .succeeded(value)
+            value = try await perform(session.cookieHeader, nil)
         } catch let error as CursorStatusProbeError {
             if case .notLoggedIn = error {
                 log("Cursor API rejected cookies from \(session.sourceLabel); trying next browser if any")
@@ -1302,6 +1301,38 @@ public struct CursorStatusProbe: Sendable {
             log("Cursor fetch failed using \(session.sourceLabel): \(error.localizedDescription)")
             throw error
         }
+        let context = ResolvedSessionReconciliationContext(
+            cookieHeader: session.cookieHeader,
+            sourceLabel: session.sourceLabel,
+            cacheObservation: cacheObservation,
+            perform: perform,
+            log: log)
+        let reconciled = try await self.reconcileResolvedSession(value: value, context: context)
+        return .succeeded(reconciled)
+    }
+
+    func reconcileResolvedSession<Value: Sendable>(
+        value: Value,
+        context: ResolvedSessionReconciliationContext<Value>) async throws -> Value
+    {
+        let stored = CookieHeaderCache.storeIfObservationCurrent(
+            provider: .cursor,
+            expected: context.cacheObservation,
+            cookieHeader: context.cookieHeader,
+            sourceLabel: context.sourceLabel)
+        guard !stored else { return value }
+        guard let replacement = CookieHeaderCache.load(provider: .cursor) else {
+            context.log("Cursor session from \(context.sourceLabel) lost cache ownership without a replacement")
+            throw CursorStatusProbeError.networkError("Cursor session changed during refresh")
+        }
+        let fetchedFingerprint = CookieHeaderCache.credentialFingerprint(context.cookieHeader)
+        let replacementFingerprint = CookieHeaderCache.credentialFingerprint(replacement.cookieHeader)
+        guard replacementFingerprint != fetchedFingerprint else {
+            context.log("Cursor session from \(context.sourceLabel) was cached concurrently; accepting its result")
+            return value
+        }
+        context.log("Cursor session changed while \(context.sourceLabel) was in flight; retrying current cache")
+        return try await context.perform(replacement.cookieHeader, nil)
     }
 
     func fetchIfSessionAccepted(

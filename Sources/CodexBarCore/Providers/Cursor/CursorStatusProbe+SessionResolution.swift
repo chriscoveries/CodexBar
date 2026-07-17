@@ -34,10 +34,8 @@ extension CursorStatusProbe {
             return try await perform(override, nil)
         }
 
-        #if os(macOS)
         // A browser fallback started by this refresh must not overwrite a concurrently committed login.
         var cacheObservation = CookieHeaderCache.observeForConditionalMutation(provider: .cursor)
-        #endif
 
         if allowCachedSessions,
            let cached = CookieHeaderCache.load(provider: .cursor),
@@ -106,34 +104,13 @@ extension CursorStatusProbe {
         }
         #endif
 
-        if allowCachedSessions {
-            let storedCookies = await CursorSessionStore.shared.getCookies()
-            if !storedCookies.isEmpty {
-                log("Using stored session cookies")
-                let cookieHeader = storedCookies.map { "\($0.name)=\($0.value)" }.joined(separator: "; ")
-                do {
-                    let value = try await perform(cookieHeader, nil)
-                    #if os(macOS)
-                    try self.cacheResolvedFallbackSession(
-                        cookieHeader: cookieHeader,
-                        sourceLabel: "Stored Cursor session",
-                        cacheObservation: cacheObservation,
-                        log: log)
-                    #endif
-                    return value
-                } catch let error as CursorStatusProbeError {
-                    if case .notLoggedIn = error {
-                        await CursorSessionStore.shared.clearCookies()
-                        log("Stored session invalid, cleared")
-                    } else {
-                        log("Stored session failed: \(error.localizedDescription)")
-                        firstRecoverableError = firstRecoverableError ?? error
-                    }
-                } catch {
-                    log("Stored session failed: \(error.localizedDescription)")
-                    firstRecoverableError = firstRecoverableError ?? .networkError(error.localizedDescription)
-                }
-            }
+        if allowCachedSessions,
+           let value = try await self.fetchStoredSession(
+               perform: perform,
+               log: log,
+               cacheObservation: cacheObservation)
+        {
+            return value
         }
 
         // Transient errors for an explicit session must not silently switch accounts.
@@ -146,25 +123,33 @@ extension CursorStatusProbe {
            appSession.isUsable
         {
             log("Using Cursor.app local auth fallback")
+            let cookieHeader = try appSession.cookieHeader()
+            let fetchedValue: Value?
             do {
-                let cookieHeader = try appSession.cookieHeader()
-                let value = try await perform(cookieHeader, appSession.userID())
-                #if os(macOS)
-                try self.cacheResolvedFallbackSession(
-                    cookieHeader: cookieHeader,
-                    sourceLabel: "Cursor.app local auth",
-                    cacheObservation: cacheObservation,
-                    log: log)
-                #endif
-                return value
+                fetchedValue = try await perform(cookieHeader, appSession.userID())
             } catch let error as CursorStatusProbeError {
+                fetchedValue = nil
                 if case .notLoggedIn = error {
                     log("Cursor.app local auth was rejected")
                 } else {
                     firstRecoverableError = firstRecoverableError ?? error
                 }
             } catch {
+                fetchedValue = nil
                 firstRecoverableError = firstRecoverableError ?? .networkError(error.localizedDescription)
+            }
+            if let fetchedValue {
+                #if os(macOS)
+                let context = ResolvedSessionReconciliationContext(
+                    cookieHeader: cookieHeader,
+                    sourceLabel: "Cursor.app local auth",
+                    cacheObservation: cacheObservation,
+                    perform: perform,
+                    log: log)
+                return try await self.reconcileResolvedSession(value: fetchedValue, context: context)
+                #else
+                return fetchedValue
+                #endif
             }
         }
 
@@ -174,24 +159,44 @@ extension CursorStatusProbe {
         throw CursorStatusProbeError.noSessionCookie
     }
 
-    #if os(macOS)
-    private func cacheResolvedFallbackSession(
-        cookieHeader: String,
-        sourceLabel: String,
-        cacheObservation: CookieHeaderCache.ConditionalMutationObservation,
-        log: (String) -> Void) throws
+    private func fetchStoredSession<Value: Sendable>(
+        perform: @escaping @Sendable (String, String?) async throws -> Value,
+        log: @escaping (String) -> Void,
+        cacheObservation: CookieHeaderCache.ConditionalMutationObservation) async throws -> Value?
     {
-        let stored = CookieHeaderCache.storeIfObservationCurrent(
-            provider: .cursor,
-            expected: cacheObservation,
-            cookieHeader: cookieHeader,
-            sourceLabel: sourceLabel)
-        guard stored else {
-            log("\(sourceLabel) lost cache ownership; discarding result")
-            throw CursorStatusProbeError.networkError("Cursor session changed during refresh")
+        let storedCookies = await CursorSessionStore.shared.getCookies()
+        guard !storedCookies.isEmpty else { return nil }
+
+        log("Using stored session cookies")
+        let cookieHeader = storedCookies.map { "\($0.name)=\($0.value)" }.joined(separator: "; ")
+        let value: Value
+        do {
+            value = try await perform(cookieHeader, nil)
+        } catch let error as CursorStatusProbeError {
+            if case .notLoggedIn = error {
+                await CursorSessionStore.shared.clearCookies()
+                log("Stored session invalid, cleared")
+                return nil
+            }
+            log("Stored session failed: \(error.localizedDescription)")
+            throw error
+        } catch {
+            log("Stored session failed: \(error.localizedDescription)")
+            throw CursorStatusProbeError.networkError(error.localizedDescription)
         }
+
+        #if os(macOS)
+        let context = ResolvedSessionReconciliationContext(
+            cookieHeader: cookieHeader,
+            sourceLabel: "Stored Cursor session",
+            cacheObservation: cacheObservation,
+            perform: perform,
+            log: log)
+        return try await self.reconcileResolvedSession(value: value, context: context)
+        #else
+        return value
+        #endif
     }
-    #endif
 
     private func fetchCachedSession<Value: Sendable>(
         _ cached: CookieHeaderCache.Entry,

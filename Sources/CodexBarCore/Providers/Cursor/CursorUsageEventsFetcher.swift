@@ -27,7 +27,8 @@ struct CursorUsageEventsPage: Decodable, Sendable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.totalUsageEventsCount = CursorEventNumber.int64(container, .totalUsageEventsCount).map { Int($0) }
+        self.totalUsageEventsCount = CursorEventNumber.int64(container, .totalUsageEventsCount)
+            .flatMap(Int.init(exactly:))
         self.usageEventsDisplay =
             (try? container.decode([CursorUsageEvent].self, forKey: .usageEventsDisplay)) ?? []
     }
@@ -113,6 +114,11 @@ struct CursorUsageEvent: Decodable, Sendable, Hashable {
         self.isHeadless = try? container.decode(Bool.self, forKey: .isHeadless)
         self.chargedCents = CursorEventNumber.double(container, .chargedCents)
     }
+
+    var validTimestampMS: Int64? {
+        guard let timestampMS = self.timestampMS, timestampMS > 0 else { return nil }
+        return timestampMS
+    }
 }
 
 /// Token counts and the authoritative token-cost carried by each usage event.
@@ -153,7 +159,14 @@ struct CursorEventTokenUsage: Decodable, Sendable, Hashable {
     }
 
     var totalTokens: Int {
-        self.inputTokens + self.outputTokens + self.cacheWriteTokens + self.cacheReadTokens
+        var total = 0
+        for value in [self.inputTokens, self.outputTokens, self.cacheWriteTokens, self.cacheReadTokens] {
+            guard value >= 0 else { return 0 }
+            let (sum, overflow) = total.addingReportingOverflow(value)
+            guard !overflow else { return 0 }
+            total = sum
+        }
+        return total
     }
 
     var hasTokens: Bool {
@@ -189,23 +202,24 @@ private enum CursorEventNumber {
             return value
         }
         if let value = try? container.decode(Double.self, forKey: key) {
-            return Int(value)
+            return Int(exactly: value) ?? 0
         }
         if let value = try? container.decode(String.self, forKey: key) {
-            return Int(value) ?? Int(Double(value) ?? 0)
+            return Int(value) ?? Double(value).flatMap(Int.init(exactly:)) ?? 0
         }
         return 0
     }
 
     static func double<K: CodingKey>(_ container: KeyedDecodingContainer<K>, _ key: K) -> Double? {
         if let value = try? container.decode(Double.self, forKey: key) {
-            return value
+            return value.isFinite ? value : nil
         }
         if let value = try? container.decode(Int.self, forKey: key) {
             return Double(value)
         }
         if let value = try? container.decode(String.self, forKey: key) {
-            return Double(value)
+            guard let decoded = Double(value), decoded.isFinite else { return nil }
+            return decoded
         }
         return nil
     }
@@ -215,10 +229,10 @@ private enum CursorEventNumber {
             return value
         }
         if let value = try? container.decode(Double.self, forKey: key) {
-            return Int64(value)
+            return Int64(exactly: value)
         }
         if let value = try? container.decode(String.self, forKey: key) {
-            return Int64(value) ?? Int64(Double(value) ?? 0)
+            return Int64(value) ?? Double(value).flatMap(Int64.init(exactly:))
         }
         return nil
     }
@@ -292,7 +306,12 @@ struct CursorUsageEventsFetcher: Sendable {
                 until: until)
             let pageEvents = response.usageEventsDisplay
             if let total = response.totalUsageEventsCount {
-                expectedTotal = max(expectedTotal ?? 0, total)
+                if let expectedTotal, expectedTotal != total {
+                    throw CostUsageError.cursorPaginationInconsistent(
+                        expected: expectedTotal,
+                        received: total)
+                }
+                expectedTotal = total
             }
             if pageEvents.isEmpty {
                 completed = true
@@ -426,8 +445,11 @@ struct CursorUsageEventsFetcher: Sendable {
         var totalCents = 0.0
         var sawCharged = false
         for event in events {
-            guard let cents = event.chargedCents else { continue }
-            totalCents += cents
+            guard event.validTimestampMS != nil, let cents = event.chargedCents else { continue }
+            guard cents >= 0 else { return nil }
+            let nextTotal = totalCents + cents
+            guard nextTotal.isFinite else { return nil }
+            totalCents = nextTotal
             sawCharged = true
         }
         return sawCharged ? totalCents / 100.0 : nil
@@ -444,8 +466,11 @@ struct CursorUsageEventsFetcher: Sendable {
     {
         var days: [String: [String: ModelAccumulator]] = [:]
         for event in events {
-            guard let usage = event.tokenUsage, usage.hasTokens else { continue }
-            let date = Date(timeIntervalSince1970: Double(event.timestampMS ?? 0) / 1000.0)
+            guard let timestampMS = event.validTimestampMS,
+                  let usage = event.tokenUsage,
+                  usage.hasTokens
+            else { continue }
+            let date = Date(timeIntervalSince1970: Double(timestampMS) / 1000.0)
             let dayKey = CostUsageLocalDay.key(from: date, calendar: calendar)
             let model = event.model ?? "unknown"
             var modelsForDay = days[dayKey] ?? [:]
@@ -462,43 +487,67 @@ struct CursorUsageEventsFetcher: Sendable {
     }
 
     private struct ModelAccumulator {
-        var inputTokens = 0
-        var outputTokens = 0
-        var cacheReadTokens = 0
-        var cacheCreationTokens = 0
-        var costUSD = 0.0
-        var requestCount = 0
+        var inputTokens: Int? = 0
+        var outputTokens: Int? = 0
+        var cacheReadTokens: Int? = 0
+        var cacheCreationTokens: Int? = 0
+        var costUSD: Double? = 0
+        var requestCount: Int? = 0
 
         mutating func add(_ usage: CursorEventTokenUsage) {
-            self.inputTokens += usage.inputTokens
-            self.outputTokens += usage.outputTokens
-            self.cacheReadTokens += usage.cacheReadTokens
-            self.cacheCreationTokens += usage.cacheWriteTokens
-            self.costUSD += (usage.totalCents ?? 0) / 100.0
-            self.requestCount += 1
+            self.inputTokens = Self.checkedSum(self.inputTokens, usage.inputTokens)
+            self.outputTokens = Self.checkedSum(self.outputTokens, usage.outputTokens)
+            self.cacheReadTokens = Self.checkedSum(self.cacheReadTokens, usage.cacheReadTokens)
+            self.cacheCreationTokens = Self.checkedSum(self.cacheCreationTokens, usage.cacheWriteTokens)
+            self.costUSD = Self.checkedCostSum(self.costUSD, usage.totalCents)
+            self.requestCount = Self.checkedSum(self.requestCount, 1)
         }
 
-        var totalTokens: Int {
-            self.inputTokens + self.outputTokens + self.cacheReadTokens + self.cacheCreationTokens
+        var totalTokens: Int? {
+            Self.checkedSum([
+                self.inputTokens,
+                self.outputTokens,
+                self.cacheReadTokens,
+                self.cacheCreationTokens,
+            ])
+        }
+
+        private static func checkedSum(_ lhs: Int?, _ rhs: Int) -> Int? {
+            guard let lhs else { return nil }
+            let (sum, overflow) = lhs.addingReportingOverflow(rhs)
+            return overflow ? nil : sum
+        }
+
+        static func checkedSum(_ values: [Int?]) -> Int? {
+            values.reduce(0 as Int?) { partial, value in
+                guard let value else { return nil }
+                return Self.checkedSum(partial, value)
+            }
+        }
+
+        static func checkedCostSum(_ lhsUSD: Double?, _ rhsCents: Double?) -> Double? {
+            guard let lhsUSD, let rhsCents, rhsCents >= 0 else { return nil }
+            let sum = lhsUSD + rhsCents / 100.0
+            return sum.isFinite ? sum : nil
         }
     }
 
     private static func makeEntry(date: String, models: [String: ModelAccumulator]) -> CostUsageDailyReport.Entry {
-        var inputTokens = 0
-        var outputTokens = 0
-        var cacheReadTokens = 0
-        var cacheCreationTokens = 0
-        var requestCount = 0
-        var costUSD = 0.0
+        var inputTokens: Int? = 0
+        var outputTokens: Int? = 0
+        var cacheReadTokens: Int? = 0
+        var cacheCreationTokens: Int? = 0
+        var requestCount: Int? = 0
+        var costUSD: Double? = 0
         var breakdowns: [CostUsageDailyReport.ModelBreakdown] = []
 
         for (model, accumulator) in models {
-            inputTokens += accumulator.inputTokens
-            outputTokens += accumulator.outputTokens
-            cacheReadTokens += accumulator.cacheReadTokens
-            cacheCreationTokens += accumulator.cacheCreationTokens
-            requestCount += accumulator.requestCount
-            costUSD += accumulator.costUSD
+            inputTokens = ModelAccumulator.checkedSum([inputTokens, accumulator.inputTokens])
+            outputTokens = ModelAccumulator.checkedSum([outputTokens, accumulator.outputTokens])
+            cacheReadTokens = ModelAccumulator.checkedSum([cacheReadTokens, accumulator.cacheReadTokens])
+            cacheCreationTokens = ModelAccumulator.checkedSum([cacheCreationTokens, accumulator.cacheCreationTokens])
+            requestCount = ModelAccumulator.checkedSum([requestCount, accumulator.requestCount])
+            costUSD = Self.checkedUSDTotal(costUSD, accumulator.costUSD)
             breakdowns.append(CostUsageDailyReport.ModelBreakdown(
                 modelName: model,
                 costUSD: accumulator.costUSD,
@@ -512,7 +561,12 @@ struct CursorUsageEventsFetcher: Sendable {
             outputTokens: outputTokens,
             cacheReadTokens: cacheReadTokens,
             cacheCreationTokens: cacheCreationTokens,
-            totalTokens: inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens,
+            totalTokens: ModelAccumulator.checkedSum([
+                inputTokens,
+                outputTokens,
+                cacheReadTokens,
+                cacheCreationTokens,
+            ]),
             requestCount: requestCount,
             costUSD: costUSD,
             modelsUsed: models.keys.sorted(),
@@ -520,19 +574,19 @@ struct CursorUsageEventsFetcher: Sendable {
     }
 
     private static func makeSummary(from entries: [CostUsageDailyReport.Entry]) -> CostUsageDailyReport.Summary {
-        var totalInput = 0
-        var totalOutput = 0
-        var totalCacheRead = 0
-        var totalCacheCreation = 0
-        var totalTokens = 0
-        var totalCost = 0.0
+        var totalInput: Int? = 0
+        var totalOutput: Int? = 0
+        var totalCacheRead: Int? = 0
+        var totalCacheCreation: Int? = 0
+        var totalTokens: Int? = 0
+        var totalCost: Double? = 0
         for entry in entries {
-            totalInput += entry.inputTokens ?? 0
-            totalOutput += entry.outputTokens ?? 0
-            totalCacheRead += entry.cacheReadTokens ?? 0
-            totalCacheCreation += entry.cacheCreationTokens ?? 0
-            totalTokens += entry.totalTokens ?? 0
-            totalCost += entry.costUSD ?? 0
+            totalInput = ModelAccumulator.checkedSum([totalInput, entry.inputTokens])
+            totalOutput = ModelAccumulator.checkedSum([totalOutput, entry.outputTokens])
+            totalCacheRead = ModelAccumulator.checkedSum([totalCacheRead, entry.cacheReadTokens])
+            totalCacheCreation = ModelAccumulator.checkedSum([totalCacheCreation, entry.cacheCreationTokens])
+            totalTokens = ModelAccumulator.checkedSum([totalTokens, entry.totalTokens])
+            totalCost = Self.checkedUSDTotal(totalCost, entry.costUSD)
         }
         return CostUsageDailyReport.Summary(
             totalInputTokens: totalInput,
@@ -541,6 +595,12 @@ struct CursorUsageEventsFetcher: Sendable {
             cacheCreationTokens: totalCacheCreation,
             totalTokens: totalTokens,
             totalCostUSD: totalCost)
+    }
+
+    private static func checkedUSDTotal(_ lhs: Double?, _ rhs: Double?) -> Double? {
+        guard let lhs, let rhs else { return nil }
+        let sum = lhs + rhs
+        return sum.isFinite ? sum : nil
     }
 
     private static func sortedBreakdowns(

@@ -200,6 +200,137 @@ struct CursorUsageEventsFetcherTests {
         #expect(Self.approxEqual(event.tokenUsage?.totalCents, 12.5))
     }
 
+    @Test
+    func `invalid and out of range numeric fields fail closed without trapping`() throws {
+        let json = """
+        {
+          "totalUsageEventsCount": "Infinity",
+          "usageEventsDisplay": [
+            {
+              "timestamp": "Infinity",
+              "model": "fixture-model",
+              "chargedCents": "NaN",
+              "tokenUsage": {
+                "inputTokens": "Infinity",
+                "outputTokens": "1e999",
+                "cacheWriteTokens": "-Infinity",
+                "cacheReadTokens": "NaN",
+                "totalCents": "Infinity"
+              }
+            }
+          ]
+        }
+        """
+        let page = try JSONDecoder().decode(CursorUsageEventsPage.self, from: Data(json.utf8))
+        let event = try #require(page.usageEventsDisplay.first)
+
+        #expect(page.totalUsageEventsCount == nil)
+        #expect(event.timestampMS == nil)
+        #expect(event.chargedCents == nil)
+        #expect(event.tokenUsage?.inputTokens == 0)
+        #expect(event.tokenUsage?.outputTokens == 0)
+        #expect(event.tokenUsage?.cacheWriteTokens == 0)
+        #expect(event.tokenUsage?.cacheReadTokens == 0)
+        #expect(event.tokenUsage?.totalCents == nil)
+    }
+
+    @Test
+    func `reports skip events without a valid timestamp`() {
+        let event = CursorUsageEvent(
+            timestampMS: nil,
+            model: "fixture-model",
+            tokenUsage: CursorEventTokenUsage(
+                inputTokens: 10,
+                outputTokens: 5,
+                cacheWriteTokens: 0,
+                cacheReadTokens: 0,
+                totalCents: 100),
+            chargedCents: 25)
+
+        let report = CursorUsageEventsFetcher.makeDailyReport(from: [event], calendar: Self.utcCalendar)
+
+        #expect(report.data.isEmpty)
+        #expect(report.summary?.totalCostUSD == 0)
+        #expect(CursorUsageEventsFetcher.meteredCostUSD(from: [event]) == nil)
+    }
+
+    @Test
+    func `token totals fail closed on overflow`() {
+        let usage = CursorEventTokenUsage(
+            inputTokens: Int.max,
+            outputTokens: 1,
+            cacheWriteTokens: 0,
+            cacheReadTokens: 0,
+            totalCents: nil)
+
+        #expect(usage.totalTokens == 0)
+        #expect(!usage.hasTokens)
+    }
+
+    @Test
+    func `reports preserve unknown cost when a token event omits total cents`() {
+        let event = Self.event(
+            timestampMS: 1_700_000_000_000,
+            model: "fixture-model",
+            input: 5,
+            totalCents: nil)
+
+        let report = CursorUsageEventsFetcher.makeDailyReport(from: [event], calendar: Self.utcCalendar)
+
+        #expect(report.data.count == 1)
+        #expect(report.data[0].inputTokens == 5)
+        #expect(report.data[0].costUSD == nil)
+        #expect(report.data[0].modelBreakdowns?.first?.costUSD == nil)
+        #expect(report.summary?.totalCostUSD == nil)
+    }
+
+    @Test
+    func `reports preserve unknown aggregate tokens on cross event overflow`() {
+        let events = [
+            Self.event(
+                timestampMS: 1_700_000_000_000,
+                model: "fixture-model",
+                input: Int.max,
+                totalCents: 1),
+            Self.event(
+                timestampMS: 1_700_000_001_000,
+                model: "fixture-model",
+                input: Int.max,
+                totalCents: 1),
+        ]
+
+        let report = CursorUsageEventsFetcher.makeDailyReport(from: events, calendar: Self.utcCalendar)
+
+        #expect(report.data.count == 1)
+        #expect(report.data[0].inputTokens == nil)
+        #expect(report.data[0].totalTokens == nil)
+        #expect(report.data[0].requestCount == 2)
+        #expect(report.data[0].modelBreakdowns?.first?.totalTokens == nil)
+        #expect(report.summary?.totalInputTokens == nil)
+        #expect(report.summary?.totalTokens == nil)
+        #expect(Self.approxEqual(report.summary?.totalCostUSD, 0.02))
+    }
+
+    @Test
+    func `metered totals fail closed on overflow`() {
+        let events = [
+            Self.event(
+                timestampMS: 1_700_000_000_000,
+                model: "fixture-model",
+                input: 1,
+                totalCents: 1,
+                chargedCents: Double.greatestFiniteMagnitude),
+            Self.event(
+                timestampMS: 1_700_000_001_000,
+                model: "fixture-model",
+                input: 1,
+                totalCents: 1,
+                chargedCents: Double.greatestFiniteMagnitude),
+        ]
+
+        #expect(CursorUsageEventsFetcher.meteredCostUSD(from: events) == nil)
+    }
+
     // MARK: - Fetching
 
     @Test
@@ -354,6 +485,39 @@ struct CursorUsageEventsFetcherTests {
         #expect(result.daily.data.first?.requestCount == 2)
         #expect(Self.approxEqual(result.daily.data.first?.costUSD, 1.25))
         #expect(Self.approxEqual(result.meteredCostUSD, 0.12))
+    }
+
+    @Test
+    func `pagination fails closed when the reported total changes between pages`() async {
+        // swiftlint:disable line_length
+        let first = #"{"timestamp":"1700000000000","model":"gpt-5","tokenUsage":{"inputTokens":10,"outputTokens":5,"cacheWriteTokens":0,"cacheReadTokens":0,"totalCents":50},"chargedCents":4}"#
+        let second = #"{"timestamp":"1700000001000","model":"gpt-5","tokenUsage":{"inputTokens":20,"outputTokens":5,"cacheWriteTokens":0,"cacheReadTokens":0,"totalCents":75},"chargedCents":8}"#
+        // swiftlint:enable line_length
+        let transport = ProviderHTTPTransportStub { request in
+            if Self.requestedPage(request) == 1 {
+                return Self.httpResponse("{\"totalUsageEventsCount\":1,\"usageEventsDisplay\":[\(first)]}")
+            }
+            return Self.httpResponse("{\"totalUsageEventsCount\":2,\"usageEventsDisplay\":[\(second)]}")
+        }
+        let fetcher = CursorUsageEventsFetcher(
+            baseURL: Self.baseURL,
+            transport: transport,
+            pageSize: 1,
+            maxPages: 2)
+
+        let error = await #expect(throws: CostUsageError.self) {
+            _ = try await fetcher.fetchUsage(
+                cookieHeader: "WorkosCursorSessionToken=abc",
+                since: nil,
+                until: nil,
+                calendar: Self.utcCalendar)
+        }
+        guard case let .cursorPaginationInconsistent(expected, received) = error else {
+            Issue.record("Expected cursorPaginationInconsistent")
+            return
+        }
+        #expect(expected == 1)
+        #expect(received == 2)
     }
 
     @Test

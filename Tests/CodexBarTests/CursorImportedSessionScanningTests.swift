@@ -268,6 +268,84 @@ struct CursorImportedSessionScanningTests {
     }
 
     @Test
+    func `resolved session accepts result when the same credential is cached concurrently`() async throws {
+        let probe = CursorStatusProbe(browserDetection: BrowserDetection(cacheTTL: 0))
+        let session = Self.makeSessionInfo(sourceLabel: "Background", cookieValue: "background")
+        let service = "cursor-login-same-credential-race-\(UUID().uuidString)"
+        let legacyBase = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+
+        try await KeychainCacheStore.withServiceOverrideForTesting(service) {
+            try await CookieHeaderCache.withLegacyBaseURLOverrideForTesting(legacyBase) {
+                KeychainCacheStore.setTestStoreForTesting(true)
+                defer { KeychainCacheStore.setTestStoreForTesting(false) }
+
+                let observation = CookieHeaderCache.observeForConditionalMutation(provider: .cursor)
+                let outcome = try await probe.resolveImportedSession(
+                    session,
+                    perform: { cookieHeader, _ in
+                        #expect(CookieHeaderCache.storeResult(
+                            provider: .cursor,
+                            cookieHeader: cookieHeader,
+                            sourceLabel: "Interactive login"))
+                        return cookieHeader
+                    },
+                    log: { _ in },
+                    cacheObservation: observation)
+
+                guard case let .succeeded(cookieHeader) = outcome else {
+                    Issue.record("Expected the matching concurrent credential result")
+                    return
+                }
+                #expect(cookieHeader == session.cookieHeader)
+                #expect(CookieHeaderCache.load(provider: .cursor)?.cookieHeader == session.cookieHeader)
+            }
+        }
+    }
+
+    @Test
+    func `resolved session retries a different credential cached concurrently`() async throws {
+        let probe = CursorStatusProbe(browserDetection: BrowserDetection(cacheTTL: 0))
+        let session = Self.makeSessionInfo(sourceLabel: "Background", cookieValue: "background")
+        let replacement = "fixtureSession=replacement"
+        let attempts = LockedArray<String>()
+        let service = "cursor-login-replacement-race-\(UUID().uuidString)"
+        let legacyBase = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+
+        try await KeychainCacheStore.withServiceOverrideForTesting(service) {
+            try await CookieHeaderCache.withLegacyBaseURLOverrideForTesting(legacyBase) {
+                KeychainCacheStore.setTestStoreForTesting(true)
+                defer { KeychainCacheStore.setTestStoreForTesting(false) }
+
+                let observation = CookieHeaderCache.observeForConditionalMutation(provider: .cursor)
+                let outcome = try await probe.resolveImportedSession(
+                    session,
+                    perform: { cookieHeader, _ in
+                        attempts.append(cookieHeader)
+                        if cookieHeader == session.cookieHeader {
+                            #expect(CookieHeaderCache.storeResult(
+                                provider: .cursor,
+                                cookieHeader: replacement,
+                                sourceLabel: "Interactive login"))
+                        }
+                        return cookieHeader
+                    },
+                    log: { _ in },
+                    cacheObservation: observation)
+
+                guard case let .succeeded(cookieHeader) = outcome else {
+                    Issue.record("Expected the replacement credential result")
+                    return
+                }
+                #expect(cookieHeader == replacement)
+                #expect(attempts.snapshot() == [session.cookieHeader, replacement])
+                #expect(CookieHeaderCache.load(provider: .cursor)?.cookieHeader == replacement)
+            }
+        }
+    }
+
+    @Test
     func `imported session scan continues after non auth failure until later success`() async {
         let probe = CursorStatusProbe(browserDetection: BrowserDetection(cacheTTL: 0))
         let expected = CursorStatusSnapshot(
