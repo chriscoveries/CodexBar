@@ -146,7 +146,7 @@ struct CursorUsageEventsFetcherTests {
     }
 
     @Test
-    func `meteredCostUSD excludes events explicitly marked non chargeable`() {
+    func `meteredCostUSD includes plan consumption not marked additionally chargeable`() {
         let events = [
             Self.event(
                 timestampMS: 1_700_000_000_000,
@@ -170,7 +170,8 @@ struct CursorUsageEventsFetcherTests {
                 chargedCents: 4),
         ]
 
-        #expect(Self.approxEqual(CursorUsageEventsFetcher.meteredCostUSD(from: events), 0.12))
+        // Cursor's dashboard reconciliation sums chargedCents even for included-plan events.
+        #expect(Self.approxEqual(CursorUsageEventsFetcher.meteredCostUSD(from: events), 0.52))
     }
 
     // MARK: - Snapshot
@@ -649,6 +650,23 @@ struct CursorUsageEventsFetcherTests {
             return false
         } ?? false
         #expect(isNotLoggedIn)
+    }
+
+    @Test
+    func `fetchUsage preserves a 403 as a non authentication failure`() async {
+        let transport = ProviderHTTPTransportStub { _ in
+            Self.httpResponse(#"{"error":"forbidden"}"#, statusCode: 403)
+        }
+        let fetcher = CursorUsageEventsFetcher(baseURL: Self.baseURL, transport: transport)
+
+        let error = await #expect(throws: CursorStatusProbeError.self) {
+            _ = try await fetcher.fetchUsage(cookieHeader: "x=y", since: nil, until: nil)
+        }
+        guard case let .networkError(message) = error else {
+            Issue.record("Expected networkError")
+            return
+        }
+        #expect(message == "HTTP 403")
     }
 
     @Test

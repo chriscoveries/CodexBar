@@ -616,6 +616,41 @@ struct ProviderConfigEnvironmentTests {
     }
 
     @Test
+    func `projects the legacy DeepSeek Platform token and stable profile identifier`() {
+        let config = ProviderConfig(
+            id: .deepseek,
+            apiKey: "legacy-api-key",
+            cookieHeader: "browser-platform-token",
+            deepseekProfileID: "/profiles/Profile 2",
+            deepseekProfileScope: "account-id")
+        let env = ProviderConfigEnvironment.applyProviderConfigOverrides(
+            base: [:],
+            provider: .deepseek,
+            config: config)
+
+        #expect(env[DeepSeekSettingsReader.apiKeyEnvironmentKey] == nil)
+        #expect(env[DeepSeekSettingsReader.platformTokenEnvironmentKey] == "browser-platform-token")
+        #expect(env[DeepSeekSettingsReader.profileIDEnvironmentKey] == "chrome:Profile 2")
+        #expect(env[DeepSeekSettingsReader.profileScopeEnvironmentKey] == "account-id")
+    }
+
+    @Test
+    func `normalization preserves a legacy DeepSeek browser token and canonicalizes the profile path`() throws {
+        let config = CodexBarConfig(providers: [
+            ProviderConfig(
+                id: .deepseek,
+                cookieHeader: "browser-platform-token",
+                deepseekProfileID: "/profiles/Profile 2",
+                deepseekProfileScope: " account-id "),
+        ]).normalized()
+        let deepseek = try #require(config.providerConfig(for: .deepseek))
+
+        #expect(deepseek.cookieHeader == "browser-platform-token")
+        #expect(deepseek.deepseekProfileID == "chrome:Profile 2")
+        #expect(deepseek.deepseekProfileScope == "account-id")
+    }
+
+    @Test
     func `applies API key override for kilo`() {
         let config = ProviderConfig(id: .kilo, apiKey: "kilo-token")
         let env = ProviderConfigEnvironment.applyAPIKeyOverride(

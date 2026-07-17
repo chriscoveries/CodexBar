@@ -407,7 +407,7 @@ struct CursorUsageEventsFetcher: Sendable {
         guard let http = response as? HTTPURLResponse else {
             throw CursorStatusProbeError.networkError("Invalid response")
         }
-        if http.statusCode == 401 || http.statusCode == 403 {
+        if http.statusCode == 401 {
             throw CursorStatusProbeError.notLoggedIn
         }
         guard http.statusCode == 200 else {
@@ -444,7 +444,6 @@ struct CursorUsageEventsFetcher: Sendable {
         var totalCents = 0.0
         var sawCharged = false
         for event in events {
-            guard event.isChargeable != false else { continue }
             guard event.validTimestampMS != nil, let cents = event.chargedCents else { continue }
             guard cents >= 0 else { return nil }
             let nextTotal = totalCents + cents

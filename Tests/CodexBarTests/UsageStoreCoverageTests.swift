@@ -1,8 +1,8 @@
-import CodexBarCore
 import Foundation
 import Observation
 import Testing
 @testable import CodexBar
+@testable import CodexBarCore
 
 @MainActor
 struct UsageStoreCoverageTests {
@@ -130,6 +130,48 @@ struct UsageStoreCoverageTests {
 
         #expect(store.tokenSnapshot(for: .cursor)?.meteredCostUSD == 1.25)
         #expect(store.tokenError(for: .cursor) == nil)
+    }
+
+    @Test
+    func `cursor auto credential resolution cannot relax a changed history window`() throws {
+        let settings = Self.makeSettingsStore(suite: "UsageStoreCoverageTests-cursor-history-race")
+        settings.costUsageEnabled = true
+        settings.costUsageHistoryDays = 30
+        settings.cursorCookieSource = .auto
+        let metadata = try #require(ProviderRegistry.shared.metadata[.cursor])
+        settings.setProviderEnabled(provider: .cursor, metadata: metadata, enabled: true)
+        let store = Self.makeUsageStore(settings: settings)
+        let cookie = "fixture=resolved"
+        let fingerprint = CookieHeaderCache.credentialFingerprint(cookie)
+        let generation = CookieHeaderCache.beginDisplayReadGenerationForTesting(provider: .cursor)
+        let previousEntry = CookieHeaderCache.currentDisplayEntryForTesting(provider: .cursor)
+        _ = CookieHeaderCache.commitDisplaySnapshotIfCurrentForTesting(
+            provider: .cursor,
+            entry: CookieHeaderCache.Entry(
+                cookieHeader: cookie,
+                storedAt: Date(),
+                sourceLabel: "test"),
+            generation: generation)
+        defer {
+            _ = CookieHeaderCache.commitDisplaySnapshotIfCurrentForTesting(
+                provider: .cursor,
+                entry: previousEntry,
+                generation: generation)
+        }
+
+        let initialSignature = store.cursorCostScopeSignature(
+            historyDays: 30,
+            source: .auto,
+            credentialFingerprint: "unresolved")
+        let revision = store.providerPublicationRevision(for: .cursor)
+        settings.costUsageHistoryDays = 7
+
+        #expect(!store.tokenRefreshPublicationIsCurrent(
+            provider: .cursor,
+            publicationRevision: revision,
+            historyDays: 30,
+            costScopeSignature: initialSignature,
+            fetchedCredentialScopeFingerprint: fingerprint))
     }
 
     @Test

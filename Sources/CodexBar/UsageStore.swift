@@ -330,6 +330,7 @@ final class UsageStore {
     @ObservationIgnored var codexHistoricalDataset: CodexHistoricalDataset?
     @ObservationIgnored var codexHistoricalDatasetAccountKey: String?
     @ObservationIgnored var lastKnownResetSnapshots: [UsageProvider: UsageSnapshot] = [:]
+    @ObservationIgnored var deepseekProfileTransition: DeepSeekProfileTransition?
     @ObservationIgnored var sessionQuotaTransitionStates: [UsageProvider: SessionQuotaTransitionState] = [:]
     @ObservationIgnored var codexSessionQuotaBaselineRequirement: CodexSessionQuotaBaselineRequirement?
     var codexSessionQuotaBaselineRequired: Bool {
@@ -1530,6 +1531,7 @@ extension UsageStore {
             guard self.tokenRefreshPublicationIsCurrent(
                 provider: provider,
                 publicationRevision: publicationRevision,
+                historyDays: historyDays,
                 costScopeSignature: costScopeSignature,
                 fetchedCredentialScopeFingerprint: snapshot.credentialScopeFingerprint)
             else {
@@ -1553,10 +1555,9 @@ extension UsageStore {
                 .map { UsageFormatter.currencyString($0, currencyCode: snapshot.currencyCode) } ?? "—"
             let monthCost = snapshot.last30DaysCostUSD
                 .map { UsageFormatter.currencyString($0, currencyCode: snapshot.currencyCode) } ?? "—"
-            let durationText = String(format: "%.2f", duration)
             let message =
                 "cost usage success provider=\(providerText) " +
-                "duration=\(durationText)s " +
+                "duration=\(String(format: "%.2f", duration))s " +
                 "today=\(sessionCost) " +
                 "historyDays=\(historyDays) windowCost=\(monthCost)"
             self.tokenCostLogger.info(message)
@@ -1568,6 +1569,7 @@ extension UsageStore {
             guard self.tokenRefreshPublicationIsCurrent(
                 provider: provider,
                 publicationRevision: publicationRevision,
+                historyDays: historyDays,
                 costScopeSignature: costScopeSignature)
             else {
                 self.clearTokenFetchMetadataIfMatching(
@@ -1586,9 +1588,8 @@ extension UsageStore {
             }
             let duration = Date().timeIntervalSince(startedAt)
             let msg = error.localizedDescription
-            let durationText = String(format: "%.2f", duration)
-            let message = "cost usage failed provider=\(providerText) duration=\(durationText)s error=\(msg)"
-            self.tokenCostLogger.error(message)
+            self.tokenCostLogger.error(
+                "cost usage failed provider=\(providerText) duration=\(String(format: "%.2f", duration))s error=\(msg)")
             if Self.tokenFetchFailureAllowsEarlyRetry(error) {
                 self.clearTokenFetchMetadataIfMatching(
                     provider: provider,

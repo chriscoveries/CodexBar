@@ -175,16 +175,17 @@ extension UsageStore {
     func tokenRefreshPublicationIsCurrent(
         provider: UsageProvider,
         publicationRevision: ProviderPublicationRevision,
+        historyDays: Int,
         costScopeSignature: String,
         fetchedCredentialScopeFingerprint: String? = nil) -> Bool
     {
         guard self.providerPublicationRevisionIsCurrent(publicationRevision, for: provider),
               self.settings.costUsageEnabled,
-              self.isEnabled(provider)
+              self.isEnabled(provider),
+              self.settings.costUsageHistoryDays == historyDays
         else {
             return false
         }
-        let historyDays = self.settings.costUsageHistoryDays
         let currentSignature = self.tokenCostScopeSignature(
             for: provider,
             historyDays: historyDays)
