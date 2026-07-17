@@ -59,18 +59,10 @@ enum CodexBarCLI {
                 await self.runSessionsFocus(invocation.parsedValues)
             case ["serve"]:
                 await self.runServe(invocation.parsedValues)
-            case ["config", "validate"]:
-                self.runConfigValidate(invocation.parsedValues)
-            case ["config", "dump"]:
-                self.runConfigDump(invocation.parsedValues)
-            case ["config", "providers"]:
-                self.runConfigProviders(invocation.parsedValues)
-            case ["config", "enable"]:
-                self.runConfigSetProviderEnabled(invocation.parsedValues, enabled: true)
-            case ["config", "disable"]:
-                self.runConfigSetProviderEnabled(invocation.parsedValues, enabled: false)
-            case ["config", "set-api-key"]:
-                self.runConfigSetAPIKey(invocation.parsedValues)
+            case let path where path.first == "config":
+                self.runConfig(path: path, values: invocation.parsedValues)
+            case let path where path.first == "hooks":
+                await self.runHooks(path: path, values: invocation.parsedValues)
             case ["cache", "clear"]:
                 self.runCacheClear(invocation.parsedValues)
             case ["diagnose"]:
@@ -79,6 +71,8 @@ enum CodexBarCLI {
                 }
                 defer { signalMonitor.cancel() }
                 await self.runDiagnose(invocation.parsedValues)
+            case ["guard"]:
+                await self.runGuard(invocation.parsedValues)
             default:
                 Self.exit(
                     code: .failure,
@@ -87,7 +81,8 @@ enum CodexBarCLI {
                     kind: .args)
             }
         } catch let error as CommanderProgramError {
-            Self.exit(code: .failure, message: error.description, output: outputPreferences, kind: .args)
+            let exitCode: ExitCode = argv.first == "guard" ? .usage : .failure
+            Self.exit(code: exitCode, message: error.description, output: outputPreferences, kind: .args)
         } catch {
             Self.exit(code: .failure, message: error.localizedDescription, output: outputPreferences, kind: .runtime)
         }
@@ -105,6 +100,9 @@ enum CodexBarCLI {
         let configSetAPIKeySignature = CommandSignature.describe(ConfigSetAPIKeyOptions())
         let cacheSignature = CommandSignature.describe(CacheOptions())
         let diagnoseSignature = CommandSignature.describe(DiagnoseOptions())
+        let hooksSignature = CommandSignature.describe(HooksOptions())
+        let hooksTestSignature = CommandSignature.describe(HooksTestOptions())
+        let guardSignature = CommandSignature.describe(GuardOptions())
 
         return [
             CommandDescriptor(
@@ -117,6 +115,11 @@ enum CodexBarCLI {
                 abstract: "Print usage as text or JSON",
                 discussion: nil,
                 signature: usageSignature),
+            CommandDescriptor(
+                name: "guard",
+                abstract: "Exit non-zero when a provider lacks quota headroom (for gating scripts)",
+                discussion: nil,
+                signature: guardSignature),
             CommandDescriptor(
                 name: "cost",
                 abstract: "Print local cost usage as text or JSON",
@@ -142,7 +145,7 @@ enum CodexBarCLI {
                 defaultSubcommandName: "list"),
             CommandDescriptor(
                 name: "serve",
-                abstract: "Serve usage and cost JSON over localhost HTTP",
+                abstract: "Serve usage, cost, and dashboard JSON over HTTP",
                 discussion: nil,
                 signature: serveSignature),
             CommandDescriptor(
@@ -183,6 +186,34 @@ enum CodexBarCLI {
                         signature: configSetAPIKeySignature),
                 ],
                 defaultSubcommandName: "validate"),
+            CommandDescriptor(
+                name: "hooks",
+                abstract: "Run external commands on quota/provider events",
+                discussion: nil,
+                signature: CommandSignature(),
+                subcommands: [
+                    CommandDescriptor(
+                        name: "list",
+                        abstract: "List configured hooks",
+                        discussion: nil,
+                        signature: hooksSignature),
+                    CommandDescriptor(
+                        name: "enable",
+                        abstract: "Enable hooks",
+                        discussion: nil,
+                        signature: hooksSignature),
+                    CommandDescriptor(
+                        name: "disable",
+                        abstract: "Disable hooks",
+                        discussion: nil,
+                        signature: hooksSignature),
+                    CommandDescriptor(
+                        name: "test",
+                        abstract: "Fire matching hooks for an event",
+                        discussion: nil,
+                        signature: hooksTestSignature),
+                ],
+                defaultSubcommandName: "list"),
             CommandDescriptor(
                 name: "cache",
                 abstract: "Cache management",

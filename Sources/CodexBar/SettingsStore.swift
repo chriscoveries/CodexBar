@@ -10,15 +10,16 @@ enum RefreshFrequency: String, CaseIterable, Identifiable {
     case fiveMinutes
     case fifteenMinutes
     case thirtyMinutes
-    /// Newest/most advanced option; kept last so the picker still lists the fixed intervals
-    /// in ascending cadence order before it.
     case adaptive
+    /// Adaptive plus consent-gated local agent activity. Kept after plain Adaptive so the
+    /// privacy-preserving mode remains the first adaptive choice.
+    case adaptiveAgentAware
 
     var id: String {
         self.rawValue
     }
 
-    /// nil for `.manual` (no timer) and `.adaptive` (delay is computed per tick by
+    /// nil for `.manual` (no timer) and adaptive modes (delay is computed per tick by
     /// `AdaptiveRefreshPolicy`, not a fixed interval).
     var seconds: TimeInterval? {
         switch self {
@@ -28,7 +29,7 @@ enum RefreshFrequency: String, CaseIterable, Identifiable {
         case .fiveMinutes: 300
         case .fifteenMinutes: 900
         case .thirtyMinutes: 1800
-        case .adaptive: nil
+        case .adaptive, .adaptiveAgentAware: nil
         }
     }
 
@@ -41,8 +42,19 @@ enum RefreshFrequency: String, CaseIterable, Identifiable {
         case .fifteenMinutes: L("refresh_15min")
         case .thirtyMinutes: L("refresh_30min")
         case .adaptive: L("refresh_adaptive")
+        case .adaptiveAgentAware: L("refresh_adaptive_agent_aware")
         }
     }
+
+    var usesAdaptivePolicy: Bool {
+        self == .adaptive || self == .adaptiveAgentAware
+    }
+}
+
+enum AdaptiveActivityScanConsent: String, Sendable {
+    case undecided
+    case allowed
+    case declined
 }
 
 enum MenuBarMetricPreference: String, CaseIterable, Identifiable {
@@ -215,7 +227,9 @@ final class SettingsStore {
     @ObservationIgnored var selectedMenuProviderRawStorage: String?
     var defaultsState: SettingsDefaultsState
     var configRevision: Int = 0
+    var providerDetailSettingsRevision: Int = 0
     var backgroundWorkSettingsRevision: Int = 0
+    var costUsageSettingsRevision: UInt64 = 0
     var providerOrder: [UsageProvider] = []
     var providerEnablement: [UsageProvider: Bool] = [:]
     @ObservationIgnored var providerEnablementRevisions: [UsageProvider: UInt64] = [:]
@@ -258,7 +272,6 @@ final class SettingsStore {
         minimaxCookieStore: any MiniMaxCookieStoring = KeychainMiniMaxCookieStore(),
         minimaxAPITokenStore: any MiniMaxAPITokenStoring = KeychainMiniMaxAPITokenStore(),
         kimiTokenStore: any KimiTokenStoring = KeychainKimiTokenStore(),
-        kimiK2TokenStore: any KimiK2TokenStoring = KeychainKimiK2TokenStore(),
         augmentCookieStore: any CookieHeaderStoring = KeychainCookieHeaderStore(
             account: "augment-cookie",
             promptKind: .augmentCookie),
@@ -270,6 +283,9 @@ final class SettingsStore {
         antigravityOAuthCredentialsStore: AntigravityOAuthCredentialsStore = AntigravityOAuthCredentialsStore(),
         performInitialProviderDetection: Bool = !SettingsStore.isRunningTests)
     {
+        // Capture this before app-group/config migrations can create prior-installation state.
+        let hadExistingConfig = (try? configStore.load()) != nil
+        let hadPreviousInstallationState = hadExistingConfig || Self.hadPreviousAppLaunch(userDefaults: userDefaults)
         let appGroupID = AppGroupSupport.currentGroupID()
         let appGroupMigration: AppGroupSupport.MigrationResult
         if Self.isRunningTests {
@@ -297,7 +313,6 @@ final class SettingsStore {
             userDefaults.set(legacyOpenAIWebAccess, forKey: "openAIWebAccessEnabled")
         }
         let hasStoredOpenAIWebAccessPreference = userDefaults.object(forKey: "openAIWebAccessEnabled") != nil
-        let hadExistingConfig = (try? configStore.load()) != nil
         let legacyStores = CodexBarConfigMigrator.LegacyStores(
             zaiTokenStore: zaiTokenStore,
             syntheticTokenStore: syntheticTokenStore,
@@ -309,7 +324,6 @@ final class SettingsStore {
             minimaxCookieStore: minimaxCookieStore,
             minimaxAPITokenStore: minimaxAPITokenStore,
             kimiTokenStore: kimiTokenStore,
-            kimiK2TokenStore: kimiK2TokenStore,
             augmentCookieStore: augmentCookieStore,
             ampCookieStore: ampCookieStore,
             copilotTokenStore: copilotTokenStore,
@@ -323,7 +337,9 @@ final class SettingsStore {
         self.antigravityOAuthCredentialsStore = antigravityOAuthCredentialsStore
         self.config = config
         self.configLoading = true
-        let defaultsState = Self.loadDefaultsState(userDefaults: userDefaults)
+        let defaultsState = Self.loadDefaultsState(
+            userDefaults: userDefaults,
+            hadPreviousInstallationState: hadPreviousInstallationState)
         self.defaultsState = defaultsState
         self.mergedMenuLastSelectedWasOverviewStorage = defaultsState.mergedMenuLastSelectedWasOverview
         self.selectedMenuProviderRawStorage = defaultsState.selectedMenuProviderRaw
@@ -396,13 +412,14 @@ extension SettingsStore {
     }
 
     // swiftlint:disable:next function_body_length
-    private static func loadDefaultsState(userDefaults: UserDefaults) -> SettingsDefaultsState {
-        let refreshDefault = userDefaults.string(forKey: "refreshFrequency")
-            .flatMap(RefreshFrequency.init(rawValue:))
-        let refreshFrequency = refreshDefault ?? .fiveMinutes
-        if Self.isRunningTests, refreshDefault == nil {
-            userDefaults.set(refreshFrequency.rawValue, forKey: "refreshFrequency")
-        }
+    private static func loadDefaultsState(
+        userDefaults: UserDefaults,
+        hadPreviousInstallationState: Bool) -> SettingsDefaultsState
+    {
+        let refreshFrequency = Self.loadRefreshFrequency(
+            userDefaults: userDefaults,
+            hadPreviousInstallationState: hadPreviousInstallationState)
+        let adaptiveActivityScanConsent = Self.loadAdaptiveActivityScanConsent(userDefaults: userDefaults)
         let refreshAllProvidersOnMenuOpen = userDefaults.object(
             forKey: "refreshAllProvidersOnMenuOpen") as? Bool ?? false
         let launchAtLogin = userDefaults.object(forKey: "launchAtLogin") as? Bool ?? false
@@ -441,9 +458,17 @@ extension SettingsStore {
         let historicalTrackingEnabled = userDefaults.object(forKey: "historicalTrackingEnabled") as? Bool ?? false
         let multiAccountMenuLayoutRaw = Self.loadMultiAccountMenuLayoutRaw(userDefaults: userDefaults)
         let resolvedPreferences = Self.loadMenuBarMetricPreferences(userDefaults: userDefaults)
+        let storedMenuBarLayout = Self.loadMenuBarLayout(userDefaults: userDefaults, key: "menuBarLayout")
+        let menuBarLayoutOverridesRaw = Self.loadMenuBarLayoutOverrides(userDefaults: userDefaults)
+        let menuBarLayoutSizeRaw = userDefaults.string(forKey: "menuBarLayoutSize")
+            ?? MenuBarLayoutSize.regular.rawValue
+        let menuBarLayoutGapRaw = userDefaults.string(forKey: "menuBarLayoutGap")
+            ?? MenuBarLayoutGap.regular.rawValue
         let copilotBudgetExtrasEnabled = userDefaults.object(forKey: "copilotBudgetExtrasEnabled") as? Bool ?? false
         let copilotIconSecondaryWindowIDRaw = Self.loadCopilotIconSecondaryWindowIDRaw(userDefaults: userDefaults)
         let costUsageEnabled = userDefaults.object(forKey: "tokenCostUsageEnabled") as? Bool ?? false
+        let codexLocalSessionCostLedgerEnabled = userDefaults.object(
+            forKey: "codexLocalSessionCostLedgerEnabled") as? Bool ?? false
         let rawCostUsageHistoryDays = userDefaults.object(forKey: "tokenCostUsageHistoryDays") as? Int ?? 30
         let costUsageHistoryDays = max(1, min(365, rawCostUsageHistoryDays))
         let costComparisonPeriodsEnabled = userDefaults.object(
@@ -499,6 +524,7 @@ extension SettingsStore {
         let agentSessionsManualHosts = userDefaults.string(forKey: "agentSessionsManualHosts") ?? ""
         return SettingsDefaultsState(
             refreshFrequency: refreshFrequency,
+            adaptiveActivityScanConsent: adaptiveActivityScanConsent,
             refreshAllProvidersOnMenuOpen: refreshAllProvidersOnMenuOpen,
             launchAtLogin: launchAtLogin,
             debugMenuEnabled: debugMenuEnabled,
@@ -532,9 +558,14 @@ extension SettingsStore {
             historicalTrackingEnabled: historicalTrackingEnabled,
             multiAccountMenuLayoutRaw: multiAccountMenuLayoutRaw,
             menuBarMetricPreferencesRaw: resolvedPreferences,
+            storedMenuBarLayout: storedMenuBarLayout,
+            menuBarLayoutOverridesRaw: menuBarLayoutOverridesRaw,
+            menuBarLayoutSizeRaw: menuBarLayoutSizeRaw,
+            menuBarLayoutGapRaw: menuBarLayoutGapRaw,
             copilotBudgetExtrasEnabled: copilotBudgetExtrasEnabled,
             copilotIconSecondaryWindowIDRaw: copilotIconSecondaryWindowIDRaw,
             costUsageEnabled: costUsageEnabled,
+            codexLocalSessionCostLedgerEnabled: codexLocalSessionCostLedgerEnabled,
             costUsageHistoryDays: costUsageHistoryDays,
             costComparisonPeriodsEnabled: costComparisonPeriodsEnabled,
             costSummaryDisplayStyleRaw: costSummaryDisplayStyleRaw,
@@ -563,6 +594,42 @@ extension SettingsStore {
             terminalAppRaw: userDefaults.string(forKey: "terminalApp"),
             agentSessionsEnabled: agentSessionsEnabled,
             agentSessionsManualHosts: agentSessionsManualHosts)
+    }
+
+    private static func hadPreviousAppLaunch(userDefaults: UserDefaults) -> Bool {
+        userDefaults.object(forKey: "providerDetectionCompleted") != nil ||
+            userDefaults.object(forKey: AppGroupSupport.migrationVersionKey) != nil
+    }
+
+    private static func loadRefreshFrequency(
+        userDefaults: UserDefaults,
+        hadPreviousInstallationState: Bool) -> RefreshFrequency
+    {
+        let rawValue = userDefaults.object(forKey: "refreshFrequency")
+        if let stored = rawValue as? String,
+           let frequency = RefreshFrequency(rawValue: stored)
+        {
+            return frequency
+        }
+
+        // An invalid value is existing state. Missing state is Adaptive only when no prior-installation
+        // state existed before migrations began; legacy unset users keep the old five-minute fallback.
+        let frequency: RefreshFrequency = rawValue == nil && !hadPreviousInstallationState ? .adaptive : .fiveMinutes
+        userDefaults.set(frequency.rawValue, forKey: "refreshFrequency")
+        return frequency
+    }
+
+    private static func loadAdaptiveActivityScanConsent(
+        userDefaults: UserDefaults) -> AdaptiveActivityScanConsent
+    {
+        if let rawValue = userDefaults.string(forKey: "adaptiveActivityScanConsent"),
+           let consent = AdaptiveActivityScanConsent(rawValue: rawValue)
+        {
+            return consent
+        }
+
+        userDefaults.set(AdaptiveActivityScanConsent.undecided.rawValue, forKey: "adaptiveActivityScanConsent")
+        return .undecided
     }
 
     private static func loadNotificationDefaults(userDefaults: UserDefaults) -> NotificationDefaults {
@@ -642,6 +709,16 @@ extension SettingsStore {
         userDefaults.set(migrated, forKey: "menuBarMetricPreferences")
         userDefaults.set(true, forKey: migrationKey)
         return migrated
+    }
+
+    private static func loadMenuBarLayout(userDefaults: UserDefaults, key: String) -> MenuBarLayout? {
+        guard let data = userDefaults.data(forKey: key) else { return nil }
+        return try? JSONDecoder().decode(MenuBarLayout.self, from: data)
+    }
+
+    private static func loadMenuBarLayoutOverrides(userDefaults: UserDefaults) -> [String: MenuBarLayout] {
+        guard let data = userDefaults.data(forKey: "menuBarLayoutOverrides") else { return [:] }
+        return (try? JSONDecoder().decode([String: MenuBarLayout].self, from: data)) ?? [:]
     }
 
     private static func loadMultiAccountMenuLayoutRaw(userDefaults: UserDefaults) -> String {
