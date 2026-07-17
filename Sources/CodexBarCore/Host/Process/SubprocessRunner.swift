@@ -11,6 +11,7 @@ public enum SubprocessRunnerError: LocalizedError, Sendable {
     case binaryNotFound(String)
     case launchFailed(String)
     case timedOut(String)
+    case outputTooLarge(String)
     case nonZeroExit(code: Int32, stderr: String)
 
     public var errorDescription: String? {
@@ -21,6 +22,8 @@ public enum SubprocessRunnerError: LocalizedError, Sendable {
             return "Failed to launch process: \(details)"
         case let .timedOut(label):
             return "Command timed out: \(label)"
+        case let .outputTooLarge(label):
+            return "Command produced too much output: \(label)"
         case let .nonZeroExit(code, stderr):
             let trimmed = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmed.isEmpty {
@@ -176,6 +179,7 @@ public enum SubprocessRunner {
         arguments: [String],
         environment: [String: String],
         timeout: TimeInterval,
+        maxOutputBytes: Int = 1 * 1024 * 1024,
         standardInput: Any? = nil,
         currentDirectoryURL: URL? = nil,
         acceptsNonZeroExit: Bool = false,
@@ -202,8 +206,12 @@ public enum SubprocessRunner {
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
         process.standardInput = standardInput
-        let stdoutCapture = ProcessPipeCapture(pipe: stdoutPipe)
-        let stderrCapture = ProcessPipeCapture(pipe: stderrPipe)
+        let normalizedMaxOutputBytes = max(0, maxOutputBytes)
+        let captureMaxBytes = normalizedMaxOutputBytes == Int.max
+            ? Int.max
+            : normalizedMaxOutputBytes + 1
+        let stdoutCapture = ProcessPipeCapture(pipe: stdoutPipe, maxBytes: captureMaxBytes)
+        let stderrCapture = ProcessPipeCapture(pipe: stderrPipe, maxBytes: captureMaxBytes)
 
         let termination = ProcessTermination()
         process.terminationHandler = { process in
@@ -276,8 +284,18 @@ public enum SubprocessRunner {
 
             async let stdoutData = stdoutCapture.finish(timeout: .seconds(1))
             async let stderrData = stderrCapture.finish(timeout: .seconds(1))
-            let stdout = await ProcessPipeCapture.decodeUTF8(stdoutData)
-            let stderr = await ProcessPipeCapture.decodeUTF8(stderrData)
+            let capturedStdout = await stdoutData
+            let capturedStderr = await stderrData
+            guard capturedStdout.count <= normalizedMaxOutputBytes,
+                  capturedStderr.count <= normalizedMaxOutputBytes
+            else {
+                self.log.warning(
+                    "Subprocess output exceeded memory limit",
+                    metadata: ["label": label, "binary": binaryName])
+                throw SubprocessRunnerError.outputTooLarge(label)
+            }
+            let stdout = ProcessPipeCapture.decodeUTF8(capturedStdout)
+            let stderr = ProcessPipeCapture.decodeUTF8(capturedStderr)
 
             if exitCode != 0, !acceptsNonZeroExit {
                 let duration = Date().timeIntervalSince(start)

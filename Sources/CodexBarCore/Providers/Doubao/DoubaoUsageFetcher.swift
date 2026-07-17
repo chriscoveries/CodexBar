@@ -226,6 +226,7 @@ public enum DoubaoUsageError: LocalizedError, Sendable {
     case arkcliTimedOut
     case arkcliOutputTooLarge
     case arkcliFailed(Int32, String)
+    case incompletePlanUsage(String)
     case noPlanUsage(String?)
 
     public var errorDescription: String? {
@@ -248,6 +249,8 @@ public enum DoubaoUsageError: LocalizedError, Sendable {
             "arkcli returned too much output. Update arkcli and try again."
         case let .arkcliFailed(code, message):
             "arkcli usage failed (\(code)): \(message)"
+        case let .incompletePlanUsage(message):
+            "arkcli returned incomplete Coding or Agent Plan usage: \(message)"
         case let .noPlanUsage(message):
             if let message, !message.isEmpty {
                 "arkcli returned no usable Coding or Agent Plan usage: \(message)"
@@ -422,6 +425,11 @@ public struct DoubaoUsageFetcher: Sendable {
         if authMethod?.lowercased() == "none" {
             throw DoubaoUsageError.arkcliAuthenticationRequired
         }
+        if let failedSubscription = response.items.first(where: {
+            $0.subscribed == true && $0.periods?.isEmpty != false && $0.error?.isEmpty == false
+        }), let error = failedSubscription.error {
+            throw DoubaoUsageError.incompletePlanUsage(Self.compactText(error))
+        }
 
         for item in response.items {
             let product = item.product.lowercased()
@@ -433,7 +441,8 @@ public struct DoubaoUsageFetcher: Sendable {
             default: nil
             }
             guard let levelPrefix else { continue }
-            if let updatedAt = item.updatedAt, updatedAt > 0 {
+            let periods = item.periods ?? []
+            if !periods.isEmpty, let updatedAt = item.updatedAt, updatedAt > 0 {
                 // arkcli has shipped `updated_at` as both epoch milliseconds and
                 // epoch seconds across versions/plans; detect the unit by
                 // magnitude so a seconds payload isn't divided into 1970 and a
@@ -441,13 +450,16 @@ public struct DoubaoUsageFetcher: Sendable {
                 // 1e11 seconds ≈ year 5138, well past any real "seconds" value,
                 // and 1e11 milliseconds ≈ 1973, well before any real "ms" value.
                 let seconds = updatedAt >= 1e11 ? updatedAt / 1000 : updatedAt
-                updateTime = updateTime ?? Date(timeIntervalSince1970: seconds)
+                let candidate = Date(timeIntervalSince1970: seconds)
+                if updateTime.map({ candidate > $0 }) ?? true {
+                    updateTime = candidate
+                }
             }
             // A per-bucket failure is reported as an item with no `periods`
             // (often an `error` field). Keep `periods` optional so one failed
             // product bucket does not reject the entire stdout and hide the
             // otherwise valid subscribed plan usage.
-            for period in item.periods ?? [] {
+            for period in periods {
                 let level = levelPrefix + period.label
                 let resetTime = period.resetAt?.date
                 allQuotas.append(DoubaoCodingPlanUsage.Quota(
@@ -485,6 +497,7 @@ public struct DoubaoUsageFetcher: Sendable {
                 arguments: ["usage", "plan", "--format", "json"],
                 environment: commandEnvironment,
                 timeout: 15,
+                maxOutputBytes: 256 * 1024,
                 label: "doubao arkcli usage plan")
             var output = BoundedOutputBuffer(maxBytes: 256 * 1024)
             guard output.append(Data(result.stdout.utf8)) else {
@@ -493,6 +506,8 @@ public struct DoubaoUsageFetcher: Sendable {
             return output.data
         } catch SubprocessRunnerError.timedOut {
             throw DoubaoUsageError.arkcliTimedOut
+        } catch SubprocessRunnerError.outputTooLarge {
+            throw DoubaoUsageError.arkcliOutputTooLarge
         } catch let SubprocessRunnerError.nonZeroExit(code, stderr) {
             let message = Self.compactText(stderr)
             if Self.isArkcliAuthenticationError(message) {

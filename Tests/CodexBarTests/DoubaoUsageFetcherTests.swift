@@ -468,6 +468,34 @@ struct DoubaoUsageFetcherTests {
     }
 
     @Test
+    func `arkcli subscribed bucket failure does not silently return partial usage`() {
+        let data = Data(
+            """
+            {
+              "items": [
+                {
+                  "product": "coding-plan",
+                  "subscribed": true,
+                  "periods": [{"label": "session", "percent": 5}]
+                },
+                {
+                  "product": "agent-plan-team",
+                  "subscribed": true,
+                  "error": "no seat bound to caller"
+                }
+              ]
+            }
+            """.utf8)
+
+        #expect {
+            _ = try DoubaoUsageFetcher.decodeArkcliUsage(from: data)
+        } throws: { error in
+            guard case let DoubaoUsageError.incompletePlanUsage(message) = error else { return false }
+            return message == "no seat bound to caller"
+        }
+    }
+
+    @Test
     func `arkcli viewer with no authentication requires login`() {
         let data = Data(
             """
@@ -621,6 +649,40 @@ struct DoubaoUsageFetcherTests {
         #expect(usage.primary?.usedPercent == 42.0)
         #expect(usage.primary?.windowMinutes == 300)
         #expect(usage.updatedAt == Date(timeIntervalSince1970: 1_784_191_193))
+    }
+
+    @Test
+    func `arkcli aggregate freshness uses newest contributing bucket`() throws {
+        let olderFirst = Data(
+            """
+            {"items":[
+              {
+                "product":"coding-plan", "updated_at":1784191193,
+                "periods":[{"label":"session","percent":1}]
+              },
+              {
+                "product":"agent-plan", "updated_at":1784191293000,
+                "periods":[{"label":"5h","percent":2}]
+              }
+            ]}
+            """.utf8)
+        let newerFirst = Data(
+            """
+            {"items":[
+              {
+                "product":"agent-plan", "updated_at":1784191293000,
+                "periods":[{"label":"5h","percent":2}]
+              },
+              {
+                "product":"coding-plan", "updated_at":1784191193,
+                "periods":[{"label":"session","percent":1}]
+              }
+            ]}
+            """.utf8)
+
+        let expected = Date(timeIntervalSince1970: 1_784_191_293)
+        #expect(try DoubaoUsageFetcher.decodeArkcliUsage(from: olderFirst).updateTime == expected)
+        #expect(try DoubaoUsageFetcher.decodeArkcliUsage(from: newerFirst).updateTime == expected)
     }
 
     @Test
