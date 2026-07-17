@@ -70,18 +70,18 @@ struct ClaudeOAuthPromptCoalescingTests {
                 ClaudeOAuthKeychainAccessGate.recordDenied()
                 throw ClaudeOAuthCredentialsError.keychainError(status)
             },
-            operation: {
+            operation: { loadRecord in
                 let sameRequest = await ProviderRefreshRequestContext.$id.withValue(UUID()) {
-                    async let first = self.loadOutcome()
-                    async let second = self.loadOutcome()
+                    async let first = self.loadOutcome(using: loadRecord)
+                    async let second = self.loadOutcome(using: loadRecord)
                     let concurrent = await (first, second)
-                    let late = self.loadOutcome()
+                    let late = self.loadOutcome(using: loadRecord)
                     return (concurrent.0, concurrent.1, late)
                 }
                 #expect(state.readCount == 1)
                 #expect(ClaudeOAuthKeychainAccessGate.clearDenied())
                 let nextRequest = ProviderRefreshRequestContext.$id.withValue(UUID()) {
-                    self.loadOutcome()
+                    self.loadOutcome(using: loadRecord)
                 }
                 return (sameRequest.0, sameRequest.1, sameRequest.2, nextRequest)
             })
@@ -108,14 +108,14 @@ struct ClaudeOAuthPromptCoalescingTests {
                 ClaudeOAuthKeychainAccessGate.recordDenied()
                 throw ClaudeOAuthCredentialsError.keychainError(status)
             },
-            operation: {
+            operation: { loadRecord in
                 await ProviderRefreshRequestContext.$id.withValue(UUID()) {
-                    async let first = self.loadOutcome()
-                    async let second = self.loadOutcome()
+                    async let first = self.loadOutcome(using: loadRecord)
+                    async let second = self.loadOutcome(using: loadRecord)
                     let concurrent = await (first, second)
                     #expect(ClaudeOAuthKeychainAccessGate.clearDenied())
                     let afterPolicyChange = ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.never) {
-                        self.loadOutcome()
+                        self.loadOutcome(using: loadRecord)
                     }
                     return (concurrent.0, concurrent.1, afterPolicyChange)
                 }
@@ -146,14 +146,14 @@ struct ClaudeOAuthPromptCoalescingTests {
                 }
                 return credentialsData
             },
-            operation: {
+            operation: { loadRecord in
                 try await ProviderRefreshRequestContext.$id.withValue(UUID()) {
-                    async let first = self.loadOutcome()
-                    async let second = self.loadOutcome()
+                    async let first = self.loadOutcome(using: loadRecord)
+                    async let second = self.loadOutcome(using: loadRecord)
                     let concurrent = await (first, second)
                     #expect(ClaudeOAuthKeychainAccessGate.clearDenied())
                     ClaudeOAuthCredentialsStore.invalidateCache()
-                    let afterInvalidation = try self.loadRecord()
+                    let afterInvalidation = try loadRecord()
                     return (concurrent.0, concurrent.1, afterInvalidation)
                 }
             })
@@ -178,12 +178,12 @@ struct ClaudeOAuthPromptCoalescingTests {
                 try state.beginRead()
                 return credentialsData
             },
-            operation: {
+            operation: { loadRecord in
                 try await ProviderRefreshRequestContext.$id.withValue(UUID()) {
-                    async let first = self.loadRecord()
-                    async let second = self.loadRecord()
+                    async let first = loadRecord()
+                    async let second = loadRecord()
                     let concurrentRecords = try await (first, second)
-                    let lateRecord = try self.loadRecord()
+                    let lateRecord = try loadRecord()
                     return (concurrentRecords.0, concurrentRecords.1, lateRecord)
                 }
             })
@@ -201,10 +201,12 @@ struct ClaudeOAuthPromptCoalescingTests {
         state: ConcurrentPromptReadState,
         deniedStore: ClaudeOAuthKeychainAccessGate.DeniedUntilStore,
         read: @escaping @Sendable () throws -> Data,
-        operation: () async throws -> T) async throws -> T
+        operation: (_ loadRecord: @Sendable () throws -> ClaudeOAuthCredentialRecord) async throws -> T) async throws
+        -> T
     {
         let service = "com.steipete.codexbar.cache.tests.\(UUID().uuidString)"
         let missingCredentialsURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let beforePromptLock: @Sendable () -> Void = { state.enterPromptPath() }
         return try await KeychainCacheStore.withServiceOverrideForTesting(service) {
             try await KeychainAccessGate.withTaskOverrideForTesting(false) {
                 KeychainCacheStore.setTestStoreForTesting(true)
@@ -222,9 +224,17 @@ struct ClaudeOAuthPromptCoalescingTests {
                                         try await ProviderInteractionContext.$current.withValue(.userInitiated) {
                                             try await ClaudeOAuthCredentialsStore
                                                 .withInteractiveClaudeKeychainReadOverridesForTesting(
-                                                    beforePromptLock: { state.enterPromptPath() },
-                                                    read: read,
-                                                    operation: operation)
+                                                    beforePromptLock: beforePromptLock,
+                                                    read: read)
+                                                {
+                                                    try await operation {
+                                                        try ClaudeOAuthCredentialsStore.loadRecord(
+                                                            environment: [:],
+                                                            allowKeychainPrompt: true,
+                                                            respectKeychainPromptCooldown: true,
+                                                            allowClaudeKeychainRepairWithoutPrompt: false)
+                                                    }
+                                                }
                                         }
                                     }
                                 }
@@ -250,17 +260,11 @@ struct ClaudeOAuthPromptCoalescingTests {
         """.utf8)
     }
 
-    private func loadRecord() throws -> ClaudeOAuthCredentialRecord {
-        try ClaudeOAuthCredentialsStore.loadRecord(
-            environment: [:],
-            allowKeychainPrompt: true,
-            respectKeychainPromptCooldown: true,
-            allowClaudeKeychainRepairWithoutPrompt: false)
-    }
-
-    private func loadOutcome() -> LoadOutcome {
+    private func loadOutcome(
+        using loadRecord: @Sendable () throws -> ClaudeOAuthCredentialRecord) -> LoadOutcome
+    {
         do {
-            _ = try self.loadRecord()
+            _ = try loadRecord()
             return .unexpected("record")
         } catch let error as ClaudeOAuthCredentialsError {
             if case let .keychainError(status) = error {
