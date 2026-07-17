@@ -34,6 +34,8 @@ extension StatusItemController {
 
     func tokenAccountMenuDisplay(for provider: UsageProvider) -> TokenAccountMenuDisplay? {
         guard TokenAccountSupportCatalog.support(for: provider) != nil else { return nil }
+        // Retained Cursor manual accounts are dormant while Automatic browser discovery owns the live snapshot.
+        guard self.settings.effectiveSelectedTokenAccount(for: provider) != nil else { return nil }
         // Multiple claude-swap rows are the selected Claude account source, so do not mix them
         // with token-account cards or the segmented token-account switcher.
         if ClaudeSwapMenuPrecedence.prefersClaudeSwap(
@@ -65,10 +67,23 @@ extension StatusItemController {
         matching accounts: [ProviderTokenAccount]) -> [TokenAccountUsageSnapshot]
     {
         var snapshotsByID: [UUID: TokenAccountUsageSnapshot] = [:]
-        for snapshot in self.store.accountSnapshots[provider] ?? [] {
+        for snapshot in self.store.validTokenAccountSnapshots(provider: provider, accounts: accounts) {
             snapshotsByID[snapshot.account.id] = snapshot
         }
         return accounts.compactMap { snapshotsByID[$0.id] }
+    }
+
+    func tokenAccountMenuCardModel(
+        for provider: UsageProvider,
+        accountSnapshot: TokenAccountUsageSnapshot) -> UsageMenuCardView.Model?
+    {
+        let label = accountSnapshot.account.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return self.menuCardModel(
+            for: provider,
+            snapshotOverride: accountSnapshot.snapshot,
+            errorOverride: accountSnapshot.error,
+            forceOverrideCard: true,
+            accountOverride: AccountInfo(email: label.isEmpty ? nil : label, plan: nil))
     }
 
     func codexAccountMenuDisplay(for provider: UsageProvider) -> CodexAccountMenuDisplay? {

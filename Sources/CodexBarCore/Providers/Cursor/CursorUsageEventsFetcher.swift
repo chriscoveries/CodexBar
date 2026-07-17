@@ -34,11 +34,20 @@ struct CursorUsageEventsPage: Decodable, Sendable {
 }
 
 /// A single account usage event as returned by the Cursor dashboard API.
-struct CursorUsageEvent: Decodable, Sendable {
+struct CursorUsageEvent: Decodable, Sendable, Hashable {
     /// Event time in Unix milliseconds (the API serializes this as a string).
     let timestampMS: Int64?
     let model: String?
     let tokenUsage: CursorEventTokenUsage?
+    let kind: String?
+    let requestsCosts: Double?
+    let usageBasedCosts: String?
+    let isTokenBasedCall: Bool?
+    let owningUser: String?
+    let owningTeam: String?
+    let cursorTokenFee: Double?
+    let isChargeable: Bool?
+    let isHeadless: Bool?
     /// What the plan actually deducts, in cents. Distinct from the notional token cost.
     let chargedCents: Double?
 
@@ -46,13 +55,45 @@ struct CursorUsageEvent: Decodable, Sendable {
         case timestamp
         case model
         case tokenUsage
+        case kind
+        case requestsCosts
+        case usageBasedCosts
+        case isTokenBasedCall
+        case owningUser
+        case owningTeam
+        case cursorTokenFee
+        case isChargeable
+        case isHeadless
         case chargedCents
     }
 
-    init(timestampMS: Int64?, model: String?, tokenUsage: CursorEventTokenUsage?, chargedCents: Double? = nil) {
+    init(
+        timestampMS: Int64?,
+        model: String?,
+        tokenUsage: CursorEventTokenUsage?,
+        kind: String? = nil,
+        requestsCosts: Double? = nil,
+        usageBasedCosts: String? = nil,
+        isTokenBasedCall: Bool? = nil,
+        owningUser: String? = nil,
+        owningTeam: String? = nil,
+        cursorTokenFee: Double? = nil,
+        isChargeable: Bool? = nil,
+        isHeadless: Bool? = nil,
+        chargedCents: Double? = nil)
+    {
         self.timestampMS = timestampMS
         self.model = model
         self.tokenUsage = tokenUsage
+        self.kind = kind
+        self.requestsCosts = requestsCosts
+        self.usageBasedCosts = usageBasedCosts
+        self.isTokenBasedCall = isTokenBasedCall
+        self.owningUser = owningUser
+        self.owningTeam = owningTeam
+        self.cursorTokenFee = cursorTokenFee
+        self.isChargeable = isChargeable
+        self.isHeadless = isHeadless
         self.chargedCents = chargedCents
     }
 
@@ -61,6 +102,15 @@ struct CursorUsageEvent: Decodable, Sendable {
         self.timestampMS = CursorEventNumber.int64(container, .timestamp)
         self.model = (try? container.decode(String.self, forKey: .model)).flatMap { $0.isEmpty ? nil : $0 }
         self.tokenUsage = try? container.decode(CursorEventTokenUsage.self, forKey: .tokenUsage)
+        self.kind = try? container.decode(String.self, forKey: .kind)
+        self.requestsCosts = CursorEventNumber.double(container, .requestsCosts)
+        self.usageBasedCosts = try? container.decode(String.self, forKey: .usageBasedCosts)
+        self.isTokenBasedCall = try? container.decode(Bool.self, forKey: .isTokenBasedCall)
+        self.owningUser = CursorEventNumber.string(container, .owningUser)
+        self.owningTeam = CursorEventNumber.string(container, .owningTeam)
+        self.cursorTokenFee = CursorEventNumber.double(container, .cursorTokenFee)
+        self.isChargeable = try? container.decode(Bool.self, forKey: .isChargeable)
+        self.isHeadless = try? container.decode(Bool.self, forKey: .isHeadless)
         self.chargedCents = CursorEventNumber.double(container, .chargedCents)
     }
 }
@@ -70,7 +120,7 @@ struct CursorUsageEvent: Decodable, Sendable {
 /// `totalCents` matches public vendor list pricing, so it is used directly as the
 /// cost (converted to USD). Token counts mirror ccusage's mapping, with
 /// `cacheWriteTokens` treated as cache-creation input.
-struct CursorEventTokenUsage: Decodable, Sendable {
+struct CursorEventTokenUsage: Decodable, Sendable, Hashable {
     let inputTokens: Int
     let outputTokens: Int
     let cacheWriteTokens: Int
@@ -124,9 +174,23 @@ struct CursorCostFetchResult: Sendable {
 
 /// Lenient numeric decoding because Cursor serializes some numbers as strings.
 private enum CursorEventNumber {
+    static func string<K: CodingKey>(_ container: KeyedDecodingContainer<K>, _ key: K) -> String? {
+        if let value = try? container.decode(String.self, forKey: key) {
+            return value
+        }
+        if let value = try? container.decode(Int64.self, forKey: key) {
+            return String(value)
+        }
+        return nil
+    }
+
     static func int<K: CodingKey>(_ container: KeyedDecodingContainer<K>, _ key: K) -> Int {
-        if let value = try? container.decode(Int.self, forKey: key) { return value }
-        if let value = try? container.decode(Double.self, forKey: key) { return Int(value) }
+        if let value = try? container.decode(Int.self, forKey: key) {
+            return value
+        }
+        if let value = try? container.decode(Double.self, forKey: key) {
+            return Int(value)
+        }
         if let value = try? container.decode(String.self, forKey: key) {
             return Int(value) ?? Int(Double(value) ?? 0)
         }
@@ -134,15 +198,25 @@ private enum CursorEventNumber {
     }
 
     static func double<K: CodingKey>(_ container: KeyedDecodingContainer<K>, _ key: K) -> Double? {
-        if let value = try? container.decode(Double.self, forKey: key) { return value }
-        if let value = try? container.decode(Int.self, forKey: key) { return Double(value) }
-        if let value = try? container.decode(String.self, forKey: key) { return Double(value) }
+        if let value = try? container.decode(Double.self, forKey: key) {
+            return value
+        }
+        if let value = try? container.decode(Int.self, forKey: key) {
+            return Double(value)
+        }
+        if let value = try? container.decode(String.self, forKey: key) {
+            return Double(value)
+        }
         return nil
     }
 
     static func int64<K: CodingKey>(_ container: KeyedDecodingContainer<K>, _ key: K) -> Int64? {
-        if let value = try? container.decode(Int64.self, forKey: key) { return value }
-        if let value = try? container.decode(Double.self, forKey: key) { return Int64(value) }
+        if let value = try? container.decode(Int64.self, forKey: key) {
+            return value
+        }
+        if let value = try? container.decode(Double.self, forKey: key) {
+            return Int64(value)
+        }
         if let value = try? container.decode(String.self, forKey: key) {
             return Int64(value) ?? Int64(Double(value) ?? 0)
         }
@@ -207,8 +281,9 @@ struct CursorUsageEventsFetcher: Sendable {
         until: Date?,
         logger: ((String) -> Void)?) async throws -> [CursorUsageEvent]
     {
-        var events: [CursorUsageEvent] = []
-        var seen = Set<String>()
+        var pages: [[CursorUsageEvent]] = []
+        var expectedTotal: Int?
+        var completed = false
         for page in 1...self.maxPages {
             let response = try await self.fetchPage(
                 cookieHeader: cookieHeader,
@@ -216,15 +291,50 @@ struct CursorUsageEventsFetcher: Sendable {
                 since: since,
                 until: until)
             let pageEvents = response.usageEventsDisplay
-            if pageEvents.isEmpty { break }
-            for event in pageEvents where seen.insert(Self.dedupKey(event)).inserted {
-                events.append(event)
+            if let total = response.totalUsageEventsCount {
+                expectedTotal = max(expectedTotal ?? 0, total)
             }
-            logger?("[cursor-cost] page \(page): \(pageEvents.count) events (\(events.count) total)")
-            if pageEvents.count < self.pageSize { break }
-            if let total = response.totalUsageEventsCount, events.count >= total { break }
+            if pageEvents.isEmpty {
+                completed = true
+                break
+            }
+            pages.append(pageEvents)
+            let received = pages.reduce(0) { $0 + $1.count }
+            logger?("[cursor-cost] page \(page): \(pageEvents.count) events (\(received) raw total)")
+            if pageEvents.count < self.pageSize {
+                completed = true
+                break
+            }
         }
-        return events
+        let rawEvents = pages.flatMap(\.self)
+        let authoritativeCountReached = expectedTotal.map { rawEvents.count >= $0 } ?? false
+        if !completed, !authoritativeCountReached {
+            throw CostUsageError.cursorPaginationIncomplete(expected: expectedTotal, received: rawEvents.count)
+        }
+        guard let expectedTotal else { return rawEvents }
+        guard rawEvents.count >= expectedTotal else {
+            throw CostUsageError.cursorPaginationIncomplete(expected: expectedTotal, received: rawEvents.count)
+        }
+        guard rawEvents.count > expectedTotal else { return rawEvents }
+
+        // The endpoint exposes no stable event ID. Reconcile only the exact number of duplicate
+        // rows proven by its authoritative count, choosing matches at adjacent page boundaries.
+        // Equal rows remain distinct when the reported count includes both of them.
+        var removalsRemaining = rawEvents.count - expectedTotal
+        var reconciled = pages.first ?? []
+        for index in pages.indices.dropFirst() {
+            let page = pages[index]
+            let overlap = Self.boundaryOverlap(previousPage: pages[index - 1], currentPage: page)
+            let removalCount = min(overlap, removalsRemaining)
+            reconciled.append(contentsOf: page.dropFirst(removalCount))
+            removalsRemaining -= removalCount
+        }
+        guard removalsRemaining == 0, reconciled.count == expectedTotal else {
+            throw CostUsageError.cursorPaginationInconsistent(
+                expected: expectedTotal,
+                received: rawEvents.count)
+        }
+        return reconciled
     }
 
     private func fetchPage(
@@ -237,7 +347,6 @@ struct CursorUsageEventsFetcher: Sendable {
             path: "/api/dashboard/get-filtered-usage-events",
             cookieHeader: cookieHeader,
             body: FilteredUsageRequest(
-                teamId: 0,
                 page: page,
                 pageSize: self.pageSize,
                 startDate: Self.millisString(since),
@@ -250,7 +359,6 @@ struct CursorUsageEventsFetcher: Sendable {
     // MARK: Request Building
 
     private struct FilteredUsageRequest: Encodable {
-        let teamId: Int
         let page: Int
         let pageSize: Int
         let startDate: String?
@@ -293,18 +401,20 @@ struct CursorUsageEventsFetcher: Sendable {
         date.map { String(Int64(($0.timeIntervalSince1970 * 1000).rounded())) }
     }
 
-    /// Cursor usage events carry no stable id, so dedupe pages on the natural key
-    /// of timestamp, model, and token counts.
-    private static func dedupKey(_ event: CursorUsageEvent) -> String {
-        let usage = event.tokenUsage
-        return [
-            String(event.timestampMS ?? 0),
-            event.model ?? "",
-            String(usage?.inputTokens ?? 0),
-            String(usage?.outputTokens ?? 0),
-            String(usage?.cacheWriteTokens ?? 0),
-            String(usage?.cacheReadTokens ?? 0),
-        ].joined(separator: "-")
+    /// The endpoint exposes no stable event ID. Detect exact overlap only at adjacent page
+    /// boundaries; the caller uses the authoritative total count to decide whether removal is valid.
+    private static func boundaryOverlap(
+        previousPage: [CursorUsageEvent],
+        currentPage: [CursorUsageEvent]) -> Int
+    {
+        let limit = min(previousPage.count, currentPage.count)
+        guard limit > 0 else { return 0 }
+        for count in stride(from: limit, through: 1, by: -1)
+            where previousPage.suffix(count).elementsEqual(currentPage.prefix(count))
+        {
+            return count
+        }
+        return 0
     }
 
     // MARK: Mapping
@@ -439,10 +549,14 @@ struct CursorUsageEventsFetcher: Sendable {
         breakdowns.sorted { lhs, rhs in
             let lhsCost = lhs.costUSD ?? -1
             let rhsCost = rhs.costUSD ?? -1
-            if lhsCost != rhsCost { return lhsCost > rhsCost }
+            if lhsCost != rhsCost {
+                return lhsCost > rhsCost
+            }
             let lhsTokens = lhs.totalTokens ?? -1
             let rhsTokens = rhs.totalTokens ?? -1
-            if lhsTokens != rhsTokens { return lhsTokens > rhsTokens }
+            if lhsTokens != rhsTokens {
+                return lhsTokens > rhsTokens
+            }
             return lhs.modelName < rhs.modelName
         }
     }

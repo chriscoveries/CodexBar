@@ -63,6 +63,7 @@ struct ProviderConfigEnvironmentTests {
 
         #expect(env[CrossModelSettingsReader.envKey] == "cm-token")
         #expect(ProviderConfigEnvironment.supportsAPIKeyOverride(for: .crossmodel))
+        #expect(ProviderConfigEnvironment.supportsAPIKeyOverride(for: .zenmux))
     }
 
     @Test
@@ -596,6 +597,31 @@ struct ProviderConfigEnvironmentTests {
 
         #expect(env[KiloSettingsReader.apiTokenKey] == "kilo-token")
         #expect(ProviderTokenResolver.kiloToken(environment: env, authFileURL: nil) == "kilo-token")
+    }
+
+    @Test
+    func `applies API key override for factory`() {
+        let config = ProviderConfig(id: .factory, apiKey: "fk-config-token")
+        let env = ProviderConfigEnvironment.applyAPIKeyOverride(
+            base: [:],
+            provider: .factory,
+            config: config)
+
+        #expect(env[FactorySettingsReader.apiTokenKey] == "fk-config-token")
+        #expect(FactorySettingsReader.apiKey(environment: env) == "fk-config-token")
+        #expect(ProviderConfigEnvironment.supportsAPIKeyOverride(for: .factory))
+    }
+
+    @Test
+    func `factory config api key wins over existing FACTORY_API_KEY`() {
+        let config = ProviderConfig(id: .factory, apiKey: "fk-config-token")
+        let env = ProviderConfigEnvironment.applyAPIKeyOverride(
+            base: [FactorySettingsReader.apiTokenKey: "fk-env-token"],
+            provider: .factory,
+            config: config)
+
+        #expect(env[FactorySettingsReader.apiTokenKey] == "fk-config-token")
+        #expect(FactorySettingsReader.apiKey(environment: env) == "fk-config-token")
     }
 
     @Test

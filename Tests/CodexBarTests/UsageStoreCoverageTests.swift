@@ -67,31 +67,69 @@ struct UsageStoreCoverageTests {
     }
 
     @Test
-    func `cursor auto identity fingerprint tracks the resolved account`() {
-        func snapshot(email: String?) -> UsageSnapshot {
-            UsageSnapshot(
-                primary: RateWindow(usedPercent: 10, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
-                secondary: nil,
-                updatedAt: Date(),
-                identity: ProviderIdentitySnapshot(
-                    providerID: .cursor,
-                    accountEmail: email,
-                    accountOrganization: nil,
-                    loginMethod: nil))
+    func `cursor credential fingerprint is stable and does not expose the cookie`() {
+        let cookie = "fixture=a"
+        let fingerprint = CookieHeaderCache.credentialFingerprint(cookie)
+
+        #expect(fingerprint == CookieHeaderCache.credentialFingerprint("  \(cookie)  "))
+        #expect(fingerprint != CookieHeaderCache.credentialFingerprint("fixture=b"))
+        #expect(!fingerprint.contains("fixture=a"))
+    }
+
+    @Test
+    func `cursor manual cost refresh rejects an empty cookie without falling back`() async throws {
+        let settings = Self.makeSettingsStore(suite: "UsageStoreCoverageTests-cursor-manual-cost")
+        settings.costUsageEnabled = true
+        settings.cursorCookieSource = .manual
+        settings.cursorCookieHeader = "  "
+        let metadata = try #require(ProviderRegistry.shared.metadata[.cursor])
+        settings.setProviderEnabled(provider: .cursor, metadata: metadata, enabled: true)
+        let store = Self.makeUsageStore(settings: settings)
+        let invoked = ObservationFlag()
+        store._test_tokenUsageSnapshotLoaderOverride = { _, _, now, _, _ in
+            invoked.set()
+            return CostUsageTokenSnapshot(
+                sessionTokens: nil,
+                sessionCostUSD: nil,
+                last30DaysTokens: nil,
+                last30DaysCostUSD: nil,
+                meteredCostUSD: 1,
+                daily: [],
+                updatedAt: now)
         }
 
-        // No snapshot or no resolved account: a stable sentinel, so the scope stays cacheable.
-        #expect(UsageStore.cursorAutoIdentityFingerprint(nil) == "none")
-        #expect(UsageStore.cursorAutoIdentityFingerprint(snapshot(email: nil)) == "none")
-        #expect(UsageStore.cursorAutoIdentityFingerprint(snapshot(email: "  ")) == "none")
+        await store.refreshTokenUsage(.cursor, force: true)
 
-        // Same account (modulo case/whitespace) keeps the fingerprint; a different account changes
-        // it, which is what invalidates the cost TTL after a silent session switch.
-        let first = UsageStore.cursorAutoIdentityFingerprint(snapshot(email: "a@example.com"))
-        #expect(first == UsageStore.cursorAutoIdentityFingerprint(snapshot(email: " A@Example.com ")))
-        #expect(first != UsageStore.cursorAutoIdentityFingerprint(snapshot(email: "b@example.com")))
-        // The raw email must never leak into the scope signature.
-        #expect(!first.contains("example.com"))
+        #expect(!invoked.get())
+        #expect(store.tokenSnapshot(for: .cursor) == nil)
+        #expect(store.tokenError(for: .cursor)?.contains("non-empty Manual cookie header") == true)
+        #expect(store.tokenCostScopeSignature(for: .cursor, historyDays: 30).contains("manual:missing"))
+    }
+
+    @Test
+    func `cursor metered-only cost refresh publishes the snapshot`() async throws {
+        let settings = Self.makeSettingsStore(suite: "UsageStoreCoverageTests-cursor-metered-only")
+        settings.costUsageEnabled = true
+        settings.cursorCookieSource = .manual
+        settings.cursorCookieHeader = "fixture=cursor"
+        let metadata = try #require(ProviderRegistry.shared.metadata[.cursor])
+        settings.setProviderEnabled(provider: .cursor, metadata: metadata, enabled: true)
+        let store = Self.makeUsageStore(settings: settings)
+        store._test_tokenUsageSnapshotLoaderOverride = { _, _, now, _, _ in
+            CostUsageTokenSnapshot(
+                sessionTokens: nil,
+                sessionCostUSD: nil,
+                last30DaysTokens: nil,
+                last30DaysCostUSD: nil,
+                meteredCostUSD: 1.25,
+                daily: [],
+                updatedAt: now)
+        }
+
+        await store.refreshTokenUsage(.cursor, force: true)
+
+        #expect(store.tokenSnapshot(for: .cursor)?.meteredCostUSD == 1.25)
+        #expect(store.tokenError(for: .cursor) == nil)
     }
 
     @Test
@@ -411,6 +449,29 @@ struct UsageStoreCoverageTests {
         #expect(store.userFacingError(for: .synthetic) == SyntheticSettingsError.missingToken.errorDescription)
         #expect(store.unavailableMessage(for: .synthetic) == SyntheticSettingsError.missingToken.errorDescription)
     }
+}
+
+extension UsageStoreCoverageTests {
+    @Test
+    func `sub2api unavailable message identifies the missing setting`() throws {
+        let settings = Self.makeSettingsStore(suite: "UsageStoreCoverageTests-sub2api-unavailable-message")
+        settings.refreshFrequency = .manual
+        settings.statusChecksEnabled = false
+
+        let metadata = ProviderRegistry.shared.metadata
+        for provider in UsageProvider.allCases {
+            try settings.setProviderEnabled(
+                provider: provider,
+                metadata: #require(metadata[provider]),
+                enabled: provider == .sub2api)
+        }
+
+        let store = Self.makeUsageStore(settings: settings)
+        #expect(store.unavailableMessage(for: .sub2api) == Sub2APIUsageError.missingCredentials.errorDescription)
+
+        settings.sub2APIAPIKey = "group-key"
+        #expect(store.unavailableMessage(for: .sub2api) == Sub2APIUsageError.missingBaseURL.errorDescription)
+    }
 
     @Test
     func `refresh clears enabled but unavailable cached state`() async throws {
@@ -438,7 +499,12 @@ struct UsageStoreCoverageTests {
         store._setSnapshotForTesting(cachedSnapshot, provider: .synthetic)
         let account = ProviderTokenAccount(id: UUID(), label: "Account", token: "token", addedAt: 0, lastUsed: nil)
         store.accountSnapshots[.synthetic] = [
-            TokenAccountUsageSnapshot(account: account, snapshot: cachedSnapshot, error: nil, sourceLabel: "api"),
+            TokenAccountUsageSnapshot(
+                account: account,
+                snapshot: cachedSnapshot,
+                error: nil,
+                sourceLabel: "api",
+                cacheKey: store.tokenAccountSnapshotCacheKey(provider: .synthetic, account: account)),
         ]
         store._setTokenSnapshotForTesting(
             CostUsageTokenSnapshot(
@@ -955,7 +1021,9 @@ private actor StartupConnectivityRetrySleepGate {
     }
 
     func waitUntilSleeping() async {
-        if self.continuation != nil { return }
+        if self.continuation != nil {
+            return
+        }
         await withCheckedContinuation { continuation in
             self.waiters.append(continuation)
         }

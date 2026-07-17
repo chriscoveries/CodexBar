@@ -413,6 +413,7 @@ struct CodexBarWidgetProviderTests {
     @Test
     func `provider choice excludes unsupported Chutes widgets`() {
         #expect(ProviderChoice(provider: .chutes) == nil)
+        #expect(ProviderChoice(provider: .sub2api) == nil)
     }
 
     @Test
@@ -944,8 +945,15 @@ extension CodexBarWidgetProviderTests {
         let todayMetric = CompactMetricFormatter.display(for: entry, metric: .todayCost)
         let historyMetric = CompactMetricFormatter.display(for: entry, metric: .last30DaysCost)
 
-        #expect(todayMetric.label.hasPrefix("Today cost · "))
-        #expect(historyMetric.label.hasPrefix("30d cost · "))
+        #expect(todayMetric.label.hasPrefix("Today API est. · not billed · "))
+        #expect(historyMetric.label.hasPrefix("30d API est. · not billed · "))
+        #expect(CompactMetricFormatter.costMetricLabel("7d", provider: .codex) == "7d API est. · not billed")
+        #expect(CompactMetricFormatter.costMetricLabel("90d", provider: .codex) == "90d API est. · not billed")
+        #expect(CompactMetricFormatter.costMetricLabel("This month", provider: .codex) ==
+            "This month API est. · not billed")
+        #expect(CompactMetricFormatter.costMetricLabel(
+            "This month API est. · not billed",
+            provider: .codex) == "This month API est. · not billed")
     }
 
     @Test

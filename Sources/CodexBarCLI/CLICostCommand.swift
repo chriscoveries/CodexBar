@@ -43,7 +43,15 @@ extension CodexBarCLI {
         // Cursor cost reuses the same cookie-source policy as usage fetches: reject the fetch when the
         // user set Cursor cookies to Off, and forward the Manual header so the dashboard request uses
         // the configured session instead of auto-resolving a different one.
-        let cursorCookieSettings = Self.cursorCookieSettings(config: config, providers: providers)
+        let cursorCookieSettings: ProviderSettingsSnapshot.CursorProviderSettings?
+        let cursorCookieSettingsError: Error?
+        do {
+            cursorCookieSettings = try Self.cursorCookieSettings(config: config, providers: providers)
+            cursorCookieSettingsError = nil
+        } catch {
+            cursorCookieSettings = nil
+            cursorCookieSettingsError = error
+        }
         let groupBy = Self.decodeCostGroupBy(from: values)
         if groupBy == .project {
             let unsupportedProjectProviders = providers.filter { $0 != .codex }
@@ -62,7 +70,11 @@ extension CodexBarCLI {
         var exitCode: ExitCode = .success
 
         for provider in providers where groupBy != .project || provider == .codex || format == .json {
-            if let error = Self.cursorCostAvailabilityError(provider, settings: cursorCookieSettings) {
+            if let error = Self.cursorCostAvailabilityError(
+                provider,
+                settings: cursorCookieSettings,
+                resolutionError: cursorCookieSettingsError)
+            {
                 exitCode = Self.mapError(error)
                 if format == .json {
                     payload.append(Self.makeCostPayload(provider: provider, snapshot: nil, error: error))
@@ -126,7 +138,10 @@ extension CodexBarCLI {
         useColor: Bool) -> String
     {
         let name = ProviderDescriptorRegistry.descriptor(for: provider).metadata.displayName
-        let header = Self.costHeaderLine("\(name) Cost (API-rate estimate)", useColor: useColor)
+        let title = provider == .codex
+            ? "\(name) API-equivalent estimate (not billed)"
+            : "\(name) Cost (API-rate estimate)"
+        let header = Self.costHeaderLine(title, useColor: useColor)
         if groupBy == .project, provider == .codex {
             return Self.renderProjectCostText(header: header, snapshot: snapshot)
         }
@@ -152,7 +167,7 @@ extension CodexBarCLI {
             return "Cursor-metered: \(amount) (\(historyLabel.lowercased()))"
         }
 
-        let hintLine = UsageFormatter.costEstimateHint(provider: provider)
+        let hintLine = Self.costEstimateHint(provider: provider)
         return [header, todayLine, monthLine, meteredLine, hintLine]
             .compactMap(\.self)
             .joined(separator: "\n")
@@ -164,7 +179,7 @@ extension CodexBarCLI {
         var lines = [header, "Projects (\(historyLabel)):"]
         guard !snapshot.projects.isEmpty else {
             lines.append("—")
-            lines.append(UsageFormatter.costEstimateHint(provider: .codex))
+            lines.append(Self.costEstimateHint(provider: .codex))
             return lines.joined(separator: "\n")
         }
         for project in snapshot.projects {
@@ -187,8 +202,14 @@ extension CodexBarCLI {
                 }
             }
         }
-        lines.append(UsageFormatter.costEstimateHint(provider: .codex))
+        lines.append(Self.costEstimateHint(provider: .codex))
         return lines.joined(separator: "\n")
+    }
+
+    private static func costEstimateHint(provider: UsageProvider) -> String {
+        provider == .codex
+            ? "Not a subscription bill or plan value · local usage × public API prices"
+            : UsageFormatter.costEstimateHint(provider: provider)
     }
 
     private static func costHeaderLine(_ header: String, useColor: Bool) -> String {
@@ -356,23 +377,34 @@ extension CodexBarCLI {
     /// Shared by `cost` and the serve `/cost` route.
     static func cursorCookieSettings(
         config: CodexBarConfig,
-        providers: [UsageProvider]) -> ProviderSettingsSnapshot.CursorProviderSettings?
+        providers: [UsageProvider]) throws -> ProviderSettingsSnapshot.CursorProviderSettings?
     {
         guard providers.contains(.cursor) else { return nil }
         let selection = TokenAccountCLISelection(label: nil, index: nil, allAccounts: false)
-        guard let context = try? TokenAccountCLIContext(selection: selection, config: config, verbose: false)
-        else { return nil }
-        let account = (try? context.resolvedAccounts(for: .cursor))?.first
+        let context = try TokenAccountCLIContext(selection: selection, config: config, verbose: false)
+        let account = try context.resolvedAccounts(for: .cursor).first
         return context.settingsSnapshot(for: .cursor, account: account)?.cursor
     }
 
     /// Return the actionable error for a Cursor cost fetch disabled by cookie-source policy.
     static func cursorCostAvailabilityError(
         _ provider: UsageProvider,
-        settings: ProviderSettingsSnapshot.CursorProviderSettings?) -> Error?
+        settings: ProviderSettingsSnapshot.CursorProviderSettings?,
+        resolutionError: Error? = nil) -> Error?
     {
-        guard provider == .cursor, settings?.cookieSource == .off else { return nil }
-        return CursorCostAvailabilityError.cookieSourceOff
+        guard provider == .cursor else { return nil }
+        if let resolutionError {
+            return resolutionError
+        }
+        guard let settings else { return nil }
+        switch settings.cookieSource {
+        case .off:
+            return CursorCostAvailabilityError.cookieSourceOff
+        case .manual where CookieHeaderNormalizer.normalize(settings.manualCookieHeader) == nil:
+            return CursorCostAvailabilityError.manualCookieMissing
+        default:
+            return nil
+        }
     }
 
     /// Manual cookie header to forward for a Cursor cost fetch, or nil for auto/non-cursor sources.
@@ -387,11 +419,14 @@ extension CodexBarCLI {
 
 enum CursorCostAvailabilityError: LocalizedError {
     case cookieSourceOff
+    case manualCookieMissing
 
     var errorDescription: String? {
         switch self {
         case .cookieSourceOff:
             "Cursor cost is unavailable because the Cursor cookie source is set to Off."
+        case .manualCookieMissing:
+            "Cursor cost requires a non-empty Manual cookie header."
         }
     }
 }

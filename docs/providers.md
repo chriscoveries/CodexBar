@@ -8,7 +8,7 @@ read_when:
 
 # Providers
 
-CodexBar currently registers 58 provider IDs. Some companies expose multiple surfaces, such as Codex vs OpenAI API or
+CodexBar currently registers 60 provider IDs. Some companies expose multiple surfaces, such as Codex vs OpenAI API or
 OpenCode vs OpenCode Go, because the auth source and quota shape differ.
 
 ## Fetch strategies (current)
@@ -27,12 +27,12 @@ headers, source selection, provider ordering, and token accounts are stored in `
 | Claude | Admin API key (`api`) when configured; otherwise App Auto: OAuth API (`oauth`) → CLI PTY (`claude`) → Web API (`web`). CLI Auto: Web API (`web`) → CLI PTY (`claude`). |
 | Gemini | OAuth-backed API via Gemini CLI credentials (`api`). |
 | Antigravity | Local LSP/HTTP probe (`local`). |
-| Cursor | Web API via cookies → stored WebKit session (`web`). |
+| Cursor | Web API via cookies → legacy stored session → Cursor.app local auth (`web`). |
 | OpenCode | Web dashboard via cookies (`web`). |
 | OpenCode Go | Web dashboard via cookies (`web`) -> local SQLite usage (`local`) in auto mode; optional workspace ID. |
 | Alibaba Coding Plan | Console RPC via web cookies (auto/manual) with API key fallback (`web`, `api`). |
 | Alibaba Token Plan | Bailian subscription summary API via browser or manual cookies (`web`). |
-| Droid/Factory | Web cookies → stored tokens → local storage → WorkOS cookies (`web`). |
+| Droid/Factory | API key (`FACTORY_API_KEY` / config) → web cookies → stored tokens → local storage → WorkOS cookies (`auto`, `api`, `web`). |
 | Devin | Chrome localStorage session or manual Bearer token → daily and weekly quota API (`web`). |
 | z.ai | API token from config/env → quota API (`api`). |
 | Manus | Browser `session_id` cookie (auto/manual/env) → credits API (`web`). |
@@ -76,6 +76,7 @@ headers, source selection, provider ordering, and token accounts are stored in `
 | LiteLLM | API key + base URL → `/key/info`, then `/user/info` or `/team/info` budget usage (`api`). |
 | Deepgram | API key → project discovery and usage breakdown API (`api`). |
 | Chutes | API key from config/env → subscription usage and quota API (`api`). |
+| ZenMux | Management API key from config/env → five-hour and seven-day quota windows plus PAYG balance (`api`). |
 | Zed | Zed editor Keychain session → `cloud.zed.dev/client/users/me` for plan and quota data (`local`). |
 
 ## Codex
@@ -178,7 +179,8 @@ headers, source selection, provider ordering, and token accounts are stored in `
 
 ## Cursor
 - Web API via browser cookies (`cursor.com` + `cursor.sh`).
-- Fallback: stored WebKit session.
+- Fallbacks: a legacy stored session, then Cursor.app local auth.
+- Add Account and Switch Account open Cursor's authenticator in a supported browser; Switch Account prefers stable account IDs and falls back to normalized email when IDs are unavailable. CodexBar uses the supported system HTTPS handler when possible and otherwise asks the user to choose an eligible supported browser.
 - Status: Statuspage.io (Cursor).
 - Details: `docs/cursor.md`.
 
@@ -213,8 +215,9 @@ headers, source selection, provider ordering, and token accounts are stored in `
 - Details: `docs/alibaba-token-plan.md`.
 
 ## Droid (Factory)
+- API key from `~/.codexbar/config.json` (`providers[].apiKey`), `FACTORY_API_KEY`, or `~/.factory/.env`.
 - Web API via Factory cookies, bearer tokens, and WorkOS refresh tokens.
-- Multiple fallback strategies (cookies → stored tokens → local storage → WorkOS cookies).
+- Auto prefers API when a key is available, then falls back to web strategies.
 - Status: `https://status.factory.ai`.
 - Details: `docs/factory.md`.
 
@@ -454,6 +457,13 @@ headers, source selection, provider ordering, and token accounts are stored in `
 - Reads `/healthz`, `/router/models`, and `/v1/savings?period=30d` for gateway health, the per-route breakdown by configured name, and savings vs. the highest-cost route; parses `/metrics` best-effort for average decision latency.
 - Read-only: never calls the gateway's chat endpoints, and the polled endpoints return accounting metadata only — no prompt text.
 - Details: `docs/wayfinder.md`.
+
+## sub2api
+- API key from config, a labeled token account, or `SUB2API_API_KEY`; base URL from config `enterpriseHost` or `SUB2API_BASE_URL`.
+- Reads `GET /v1/usage` for key quota, 5-hour/day/week rate limits, subscription limits, wallet balance, and key-scoped request/token/cost totals.
+- Store one labeled token account per sub2api group. Wallet balance is user-scoped and is never summed across keys.
+- Base URLs must use HTTPS, except loopback HTTP for local development.
+- Details: `docs/sub2api.md`.
 
 ## AWS Bedrock
 - AWS credentials from `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and optional `AWS_SESSION_TOKEN`.

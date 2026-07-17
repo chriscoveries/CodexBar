@@ -11,11 +11,11 @@ extension UsageStore {
     var menuObservationToken: Int {
         _ = self.snapshots
         _ = self.errors
+        _ = self.diagnostics
         _ = self.knownLimitsAvailabilityByProvider
         _ = self.lastSourceLabels
         _ = self.lastFetchAttempts
-        _ = self.accountSnapshots
-        _ = self.codexAccountSnapshots
+        _ = (self.accountSnapshots, self.tokenAccountLiveStateProviders, self.codexAccountSnapshots)
         _ = self.kiloScopeSnapshots
         _ = self.claudeSwapAccountSnapshots
         _ = self.claudeSwapLastError
@@ -45,6 +45,7 @@ extension UsageStore {
     var iconObservationToken: Int {
         _ = self.snapshots
         _ = self.errors
+        _ = self.diagnostics
         _ = self.knownLimitsAvailabilityByProvider
         _ = self.credits
         _ = self.lastCreditsError
@@ -87,16 +88,8 @@ extension UsageStore {
 
     private static func isRunningTestsProcess() -> Bool {
         let environment = ProcessInfo.processInfo.environment
-        if environment["XCTestConfigurationFilePath"] != nil {
-            return true
-        }
-        if environment["XCTestSessionIdentifier"] != nil {
-            return true
-        }
-        if environment["SWIFT_TESTING_ENABLED"] != nil {
-            return true
-        }
-        return CommandLine.arguments.contains { argument in
+        let testKeys = ["XCTestConfigurationFilePath", "XCTestSessionIdentifier", "SWIFT_TESTING_ENABLED"]
+        return testKeys.contains(where: { environment[$0] != nil }) || CommandLine.arguments.contains { argument in
             argument.contains("xctest") || argument.contains("swift-testing")
         }
     }
@@ -162,11 +155,13 @@ final class UsageStore {
 
     var snapshots: [UsageProvider: UsageSnapshot] = [:]
     var errors: [UsageProvider: String] = [:]
+    var diagnostics: [UsageProvider: String] = [:]
     var geminiObservedConsumerTierDeprecation = false
     var knownLimitsAvailabilityByProvider: [UsageProvider: UsageLimitsAvailability] = [:]
     var lastSourceLabels: [UsageProvider: String] = [:]
     var lastFetchAttempts: [UsageProvider: [ProviderFetchAttempt]] = [:]
     var accountSnapshots: [UsageProvider: [TokenAccountUsageSnapshot]] = [:]
+    var tokenAccountLiveStateProviders: Set<UsageProvider> = []
     var codexAccountSnapshots: [CodexAccountUsageSnapshot] = []
     var kiloScopeSnapshots: [KiloScopeSnapshot] = []
     var claudeSwapAccountSnapshots: [ProviderAccountUsageSnapshot] = []
@@ -243,7 +238,19 @@ final class UsageStore {
     @ObservationIgnored var _test_codexResetCreditsFetcherOverride: CodexResetCreditsFetcher?
     @ObservationIgnored var _test_widgetSnapshotSaveOverride: (@MainActor (WidgetSnapshot) async -> Void)?
     @ObservationIgnored var _test_providerRefreshOverride: (@MainActor (UsageProvider) async -> Void)?
+    @ObservationIgnored var _test_providerFetchOutcomeOverride: (@MainActor (
+        UsageProvider) async -> ProviderFetchOutcome)?
     @ObservationIgnored var _test_tokenUsageRefreshOverride: (@MainActor (UsageProvider, Bool) async -> Void)?
+    @ObservationIgnored var _test_tokenUsageSnapshotLoaderOverride: (@MainActor (
+        UsageProvider,
+        Bool,
+        Date,
+        String?,
+        Int) async throws -> CostUsageTokenSnapshot)?
+    @ObservationIgnored var _test_cachedCodexTokenSnapshotLoaderOverride: (@MainActor (
+        Date,
+        String?,
+        Int) async -> (snapshot: CostUsageTokenSnapshot, lastRefreshAt: Date?)?)?
     @ObservationIgnored var _test_providerStatusFetchOverride: (@MainActor (
         UsageProvider) async throws -> ProviderStatus)?
     @ObservationIgnored var _test_forcedRefreshEnrichmentWaitObserver: (@MainActor () -> Void)?
@@ -273,6 +280,12 @@ final class UsageStore {
     @ObservationIgnored let providerMetadata: [UsageProvider: ProviderMetadata]
     @ObservationIgnored var providerRuntimes: [UsageProvider: any ProviderRuntime] = [:]
     @ObservationIgnored var providerRefreshCoordinator = ProviderRefreshCoordinator<UsageProvider>()
+    @ObservationIgnored var providerRefreshPublicationContexts: [UsageProvider: (
+        generation: UInt64,
+        enablementRevision: UInt64,
+        configRevision: UInt64,
+        allowDisabled: Bool)] = [:]
+    @ObservationIgnored var providerCleanupRevisions: [UsageProvider: UInt64] = [:]
     @ObservationIgnored private var providerAvailabilityCache: [UsageProvider: ProviderAvailabilityCacheEntry] = [:]
     @ObservationIgnored var accountInfoCache: [UsageProvider: AccountInfoCacheEntry] = [:]
     @ObservationIgnored private var timerTask: Task<Void, Never>?
@@ -283,6 +296,7 @@ final class UsageStore {
     @ObservationIgnored var tokenRefreshSequenceTask: Task<Void, Never>?
     @ObservationIgnored var tokenRefreshSequenceToken: UUID?
     @ObservationIgnored var tokenRefreshSequenceProvider: UsageProvider?
+    @ObservationIgnored var tokenRefreshRetryProviders: Set<UsageProvider> = []
     @ObservationIgnored var forcedRefreshEnrichmentTask: Task<Void, Never>?
     @ObservationIgnored var forcedRefreshEnrichmentToken: UUID?
     @ObservationIgnored var pendingForcedRefreshEnrichmentTask: Task<Void, Never>?
@@ -316,21 +330,31 @@ final class UsageStore {
     @ObservationIgnored var codexHistoricalDataset: CodexHistoricalDataset?
     @ObservationIgnored var codexHistoricalDatasetAccountKey: String?
     @ObservationIgnored var lastKnownResetSnapshots: [UsageProvider: UsageSnapshot] = [:]
-    @ObservationIgnored var lastKnownSessionRemaining: [UsageProvider: Double] = [:]
-    @ObservationIgnored var lastKnownSessionWindowSource: [UsageProvider: SessionQuotaWindowSource] = [:]
+    @ObservationIgnored var sessionQuotaTransitionStates: [UsageProvider: SessionQuotaTransitionState] = [:]
+    @ObservationIgnored var codexSessionQuotaBaselineRequirement: CodexSessionQuotaBaselineRequirement?
+    var codexSessionQuotaBaselineRequired: Bool {
+        self.codexSessionQuotaBaselineRequirement != nil
+    }
+
     @ObservationIgnored var quotaWarningState: [QuotaWarningStateKey: QuotaWarningState] = [:]
     @ObservationIgnored var predictivePaceWarningNotifiedKeys: Set<PredictivePaceWarningStateKey> = []
     @ObservationIgnored var lastPermissionPromptNotificationAt: [UsageProvider: Date] = [:]
     @ObservationIgnored var lastTokenFetchAt: [UsageProvider: Date] = [:]
     @ObservationIgnored var lastTokenFetchScope: [UsageProvider: String] = [:]
     @ObservationIgnored var planUtilizationHistory: [UsageProvider: PlanUtilizationHistoryBuckets] = [:]
+
+    /// Background load task; cleared on deinit and on the cancel test seam.
+    @ObservationIgnored var planUtilizationHistoryLoadTask: Task<Void, Never>?
+    /// Set once after the load completes. Gates mutation paths and sync menu
+    /// accessors so they cannot race the decode or write empty history back to disk.
+    @ObservationIgnored var planUtilizationHistoryLoaded: Bool = false
     @ObservationIgnored var sessionLimitResetDetectorStates: [String: LimitResetDetectorState] = [:]
     @ObservationIgnored var weeklyLimitResetDetectorStates: [String: LimitResetDetectorState] = [:]
     @ObservationIgnored private var hasCompletedInitialRefresh: Bool = false
     @ObservationIgnored private let providerAvailabilityCacheTTL: TimeInterval = 1
     @ObservationIgnored let accountInfoCacheTTL: TimeInterval = 30
     @ObservationIgnored let tokenFetchTTL: TimeInterval = 60 * 60
-    @ObservationIgnored private let tokenFetchTimeout: TimeInterval = 10 * 60
+    @ObservationIgnored let tokenFetchTimeout: TimeInterval = 10 * 60
     @ObservationIgnored let startupBehavior: StartupBehavior
     @ObservationIgnored let planUtilizationPersistenceCoordinator: PlanUtilizationHistoryPersistenceCoordinator
 
@@ -342,11 +366,12 @@ final class UsageStore {
         settings: SettingsStore,
         registry: ProviderRegistry = .shared,
         historicalUsageHistoryStore: HistoricalUsageHistoryStore = HistoricalUsageHistoryStore(),
-        planUtilizationHistoryStore: PlanUtilizationHistoryStore = .defaultAppSupport(),
+        planUtilizationHistoryStore: PlanUtilizationHistoryStore? = nil,
         codexAccountUsageSnapshotStore: (any CodexAccountUsageSnapshotStoring)? = nil,
         sessionQuotaNotifier: any SessionQuotaNotifying = SessionQuotaNotifier(),
         startupBehavior: StartupBehavior = .automatic,
-        environmentBase: [String: String] = ProcessInfo.processInfo.environment)
+        environmentBase: [String: String] = ProcessInfo.processInfo.environment,
+        planUtilizationHistoryLoadGateForTesting: PlanUtilizationHistoryLoadGate? = nil)
     {
         self.codexFetcher = fetcher
         self.browserDetection = browserDetection
@@ -356,13 +381,14 @@ final class UsageStore {
         self.registry = registry
         self.environmentBase = environmentBase
         self.historicalUsageHistoryStore = historicalUsageHistoryStore
-        self.planUtilizationHistoryStore = planUtilizationHistoryStore
-        self.sessionQuotaNotifier = sessionQuotaNotifier
         self.startupBehavior = startupBehavior.resolved(isRunningTests: Self.isRunningTestsProcess())
+        let planHistoryStore = Self.resolvedPlanHistoryStore(planUtilizationHistoryStore, startup: self.startupBehavior)
+        self.planUtilizationHistoryStore = planHistoryStore
+        self.sessionQuotaNotifier = sessionQuotaNotifier
         self.codexAccountUsageSnapshotStore = codexAccountUsageSnapshotStore ??
             (self.startupBehavior.automaticallyStartsBackgroundWork ? FileCodexAccountUsageSnapshotStore() : nil)
         self.planUtilizationPersistenceCoordinator = PlanUtilizationHistoryPersistenceCoordinator(
-            store: planUtilizationHistoryStore)
+            store: planHistoryStore)
         self.providerMetadata = registry.metadata
         self
             .failureGates = Dictionary(
@@ -381,7 +407,9 @@ final class UsageStore {
         self.providerRuntimes = Dictionary(uniqueKeysWithValues: ProviderCatalog.all.compactMap { implementation in
             implementation.makeRuntime().map { (implementation.id, $0) }
         })
-        self.planUtilizationHistory = planUtilizationHistoryStore.load()
+        self.startPlanUtilizationHistoryLoad(
+            gate: planUtilizationHistoryLoadGateForTesting,
+            enabled: self.startupBehavior.automaticallyStartsBackgroundWork)
         self.sessionLimitResetDetectorStates = Self.loadLimitResetDetectorStates(
             from: settings.userDefaults,
             defaultsKey: Self.sessionLimitResetDetectorDefaultsKey,
@@ -794,6 +822,7 @@ final class UsageStore {
         self.storageRefreshTask?.cancel()
         self.codexPlanHistoryBackfillTask?.cancel()
         self.resetBoundaryRefreshTask?.cancel()
+        self.planUtilizationHistoryLoadTask?.cancel()
     }
 
     enum SessionQuotaWindowSource: String {
@@ -802,28 +831,6 @@ final class UsageStore {
         case zaiTertiary
         case antigravityQuotaSummary
         case antigravityLegacy
-    }
-
-    struct QuotaWarningStateKey: Hashable {
-        let provider: UsageProvider
-        let window: QuotaWarningWindow
-        /// Distinguishes independent extra rate windows that share a provider/window lane
-        /// (e.g. multiple `claude-weekly-scoped-*` windows) so their fired-threshold state
-        /// does not clobber each other or the primary session/weekly lanes. `nil` for the
-        /// primary session and weekly lanes.
-        let windowID: String?
-
-        init(provider: UsageProvider, window: QuotaWarningWindow, windowID: String? = nil) {
-            self.provider = provider
-            self.window = window
-            self.windowID = windowID
-        }
-    }
-
-    struct QuotaWarningState {
-        var lastRemaining: Double?
-        var firedThresholds: Set<Int> = []
-        var source: SessionQuotaWindowSource?
     }
 
     func postQuotaWarning(_ event: QuotaWarningEvent, provider: UsageProvider) {
@@ -843,7 +850,12 @@ final class UsageStore {
             now: now)
     }
 
-    func handleSessionQuotaTransition(provider: UsageProvider, snapshot: UsageSnapshot) {
+    func handleSessionQuotaTransition(
+        provider: UsageProvider,
+        snapshot: UsageSnapshot,
+        codexOwnerKey: CodexSessionQuotaOwnerKey? = nil,
+        now: Date = Date())
+    {
         // Session quota notifications are tied to the primary session window. Copilot free plans can
         // expose only chat quota, so allow Copilot to fall back to secondary for transition tracking.
         // Command Code synthesizes a depleted primary while subscription enrichment is unavailable.
@@ -854,120 +866,101 @@ final class UsageStore {
         {
             return
         }
+        if provider == .codex, !self.settings.sessionQuotaNotificationsEnabled {
+            self.requireFreshCodexSessionQuotaBaseline(observedAt: snapshot.updatedAt)
+            self.sessionQuotaLogger.debug("Codex session notifications disabled; cleared notification baseline")
+            return
+        }
+        if provider == .codex, codexOwnerKey == nil {
+            self.requireFreshCodexSessionQuotaBaseline(observedAt: snapshot.updatedAt)
+            self.sessionQuotaLogger.debug("missing Codex session owner; cleared notification baseline")
+            return
+        }
         guard let sessionWindow = self.sessionQuotaWindow(provider: provider, snapshot: snapshot) else {
             if provider == .commandcode, snapshot.commandCodeSubscriptionEnrichmentUnavailable {
                 return
             }
-            self.lastKnownSessionRemaining.removeValue(forKey: provider)
-            self.lastKnownSessionWindowSource.removeValue(forKey: provider)
+            if provider == .codex {
+                if let previous = self.sessionQuotaTransitionStates[.codex] {
+                    if previous.codexOwnerKey != codexOwnerKey {
+                        self.requireFreshCodexSessionQuotaBaseline(observedAt: snapshot.updatedAt)
+                    } else {
+                        self.sessionQuotaTransitionStates[.codex] = previous.advancingObservationWatermark(
+                            to: snapshot.updatedAt)
+                    }
+                } else if self.codexSessionQuotaBaselineRequirement != nil {
+                    self.requireFreshCodexSessionQuotaBaseline(observedAt: snapshot.updatedAt)
+                }
+                self.sessionQuotaLogger.debug("missing Codex session window; retained notification baseline")
+            } else {
+                self.clearSessionQuotaTransitionState(provider: provider)
+            }
             return
         }
+        guard !sessionWindow.window.isSyntheticPlaceholder else { return }
         let currentRemaining = sessionWindow.window.remainingPercent
         let currentSource = sessionWindow.source
-        let previousRemaining = self.lastKnownSessionRemaining[provider]
-        let previousSource = self.lastKnownSessionWindowSource[provider]
-
-        if let previousSource, previousSource != currentSource {
-            let providerText = provider.rawValue
-            self.sessionQuotaLogger.debug(
-                "session window source changed: provider=\(providerText) prevSource=\(previousSource.rawValue) " +
-                    "currSource=\(currentSource.rawValue) curr=\(currentRemaining)")
-            self.lastKnownSessionRemaining[provider] = currentRemaining
-            self.lastKnownSessionWindowSource[provider] = currentSource
+        let currentResetBoundary = sessionWindow.window.resetsAt
+        if provider == .codex,
+           let requirement = self.codexSessionQuotaBaselineRequirement,
+           !requirement.admits(observedAt: snapshot.updatedAt)
+        {
+            self.sessionQuotaLogger.debug("ignored stale session observation while awaiting a fresh Codex baseline")
             return
         }
-
-        defer {
-            self.lastKnownSessionRemaining[provider] = currentRemaining
-            self.lastKnownSessionWindowSource[provider] = currentSource
-        }
-
-        guard self.settings.sessionQuotaNotificationsEnabled else {
-            if SessionQuotaNotificationLogic.isDepleted(currentRemaining) ||
-                SessionQuotaNotificationLogic.isDepleted(previousRemaining)
-            {
-                let providerText = provider.rawValue
-                let message =
-                    "notifications disabled: provider=\(providerText) " +
-                    "prev=\(previousRemaining ?? -1) curr=\(currentRemaining)"
-                self.sessionQuotaLogger.debug(message)
-            }
-            return
-        }
-
-        guard previousRemaining != nil else {
-            if SessionQuotaNotificationLogic.isDepleted(currentRemaining) {
-                let providerText = provider.rawValue
-                let message = "startup depleted: provider=\(providerText) curr=\(currentRemaining)"
-                self.sessionQuotaLogger.info(message)
-                self.sessionQuotaNotifier.post(transition: .depleted, provider: provider, badge: nil)
-            }
-            return
-        }
-
-        let transition = SessionQuotaNotificationLogic.transition(
-            previousRemaining: previousRemaining,
-            currentRemaining: currentRemaining)
-        guard transition != .none else {
-            if SessionQuotaNotificationLogic.isDepleted(currentRemaining) ||
-                SessionQuotaNotificationLogic.isDepleted(previousRemaining)
-            {
-                let providerText = provider.rawValue
-                let message =
-                    "no transition: provider=\(providerText) " +
-                    "prev=\(previousRemaining ?? -1) curr=\(currentRemaining)"
-                self.sessionQuotaLogger.debug(message)
-            }
-            return
+        let previousState = self.sessionQuotaTransitionStates[provider]
+        let forceBaseline = provider == .codex && self.codexSessionQuotaBaselineRequirement != nil
+        let evaluation = SessionQuotaTransitionReducer.evaluate(
+            previous: previousState,
+            observation: SessionQuotaTransitionObservation(
+                provider: provider,
+                remaining: currentRemaining,
+                source: currentSource,
+                resetBoundary: currentResetBoundary,
+                observedAt: snapshot.updatedAt,
+                evaluationTime: now,
+                codexOwnerKey: codexOwnerKey),
+            notificationsEnabled: self.settings.sessionQuotaNotificationsEnabled,
+            forceBaseline: forceBaseline)
+        self.sessionQuotaTransitionStates[provider] = evaluation.state
+        if provider == .codex {
+            self.codexSessionQuotaBaselineRequirement = nil
         }
 
         let providerText = provider.rawValue
-        let transitionText = String(describing: transition)
-        let message =
-            "transition \(transitionText): provider=\(providerText) " +
-            "prev=\(previousRemaining ?? -1) curr=\(currentRemaining)"
-        self.sessionQuotaLogger.info(message)
-
-        self.sessionQuotaNotifier.post(transition: transition, provider: provider, badge: nil)
-    }
-
-    func refreshProviderStatus(_ provider: UsageProvider) async {
-        guard self.settings.statusChecksEnabled else { return }
-        guard let meta = self.providerMetadata[provider] else { return }
-
-        do {
-            let status: ProviderStatus
-            var components: [ProviderStatusComponent]?
-            if let override = self._test_providerStatusFetchOverride {
-                status = try await override(provider)
-            } else if let urlString = meta.statusPageURL, let baseURL = URL(string: urlString) {
-                let summary = try await Self.fetchStatusSummary(from: baseURL)
-                status = summary.status
-                components = summary.components
-            } else if let productID = meta.statusWorkspaceProductID {
-                status = try await Self.fetchWorkspaceStatus(productID: productID)
-            } else {
-                return
+        let previousRemaining = previousState?.remaining
+        switch evaluation.outcome {
+        case .none:
+            if SessionQuotaNotificationLogic.isDepleted(currentRemaining) ||
+                SessionQuotaNotificationLogic.isDepleted(previousRemaining)
+            {
+                let reason = self.settings.sessionQuotaNotificationsEnabled
+                    ? "no transition"
+                    : "notifications disabled"
+                self.sessionQuotaLogger.debug(
+                    "\(reason): provider=\(providerText) " +
+                        "prev=\(previousRemaining ?? -1) curr=\(currentRemaining)")
             }
-            await MainActor.run {
-                self.statuses[provider] = status
-                // A component endpoint is best-effort. Preserve the last good list when the
-                // overall status succeeds but the component request or decoding fails.
-                if let components {
-                    self.statusComponents[provider] = components
-                }
-            }
-        } catch {
-            self.recordStartupConnectivityRetryableFailure(error)
-            // Keep the previous status to avoid flapping when the API hiccups.
-            await MainActor.run {
-                if self.statuses[provider] == nil {
-                    self.statuses[provider] = ProviderStatus(
-                        indicator: .unknown,
-                        description: error.localizedDescription,
-                        updatedAt: nil)
-                }
-            }
+        case .baselineChanged:
+            self.sessionQuotaLogger.debug(
+                "session notification baseline changed: provider=\(providerText) curr=\(currentRemaining)")
+        case .staleCodexObservation:
+            self.sessionQuotaLogger.debug(
+                "ignored stale session observation: provider=\(providerText) curr=\(currentRemaining)")
+        case .suppressedCodexRestore:
+            self.sessionQuotaLogger.info(
+                "suppressed transient restore: provider=\(providerText) " +
+                    "prev=\(previousRemaining ?? -1) curr=\(currentRemaining)")
+        case .awaitingCodexRestoreConfirmation:
+            self.sessionQuotaLogger.info(
+                "awaiting restore confirmation: provider=\(providerText) " +
+                    "prev=\(previousRemaining ?? -1) curr=\(currentRemaining)")
+        case .depleted, .restored:
+            let transition = evaluation.outcome.transition
+            self.sessionQuotaLogger.info(
+                "transition \(String(describing: transition)): provider=\(providerText) " +
+                    "prev=\(previousRemaining ?? -1) curr=\(currentRemaining)")
+            self.sessionQuotaNotifier.post(transition: transition, provider: provider, badge: nil)
         }
     }
 }
@@ -1083,6 +1076,8 @@ extension UsageStore {
                 .chutes: "Chutes debug log not yet implemented",
                 .clawrouter: "ClawRouter debug log not yet implemented",
                 .wayfinder: "Wayfinder debug log not yet implemented",
+                .sub2api: "sub2api debug log not yet implemented",
+                .zenmux: "ZenMux debug log not yet implemented",
             ]
             let buildText = {
                 switch provider {
@@ -1164,7 +1159,7 @@ extension UsageStore {
                      .sakana, .abacus, .mistral, .codebuff, .crof, .windsurf, .venice, .manus, .commandcode, .qoder,
                      .stepfun,
                      .bedrock, .grok, .groq, .t3chat, .llmproxy, .litellm, .zed, .deepgram, .poe, .chutes,
-                     .clawrouter, .wayfinder:
+                     .clawrouter, .wayfinder, .sub2api, .zenmux:
                     return unimplementedDebugLogMessages[provider] ?? "Debug log not yet implemented"
                 }
             }
@@ -1481,28 +1476,12 @@ extension UsageStore {
         let historyDays = self.settings.costUsageHistoryDays
         // Cursor cost reuses the status cookie policy: a Manual source forwards the manual header so
         // cost and status share the same session; other sources fall back to auto resolution.
-        let cursorCookieSource = self.settings.cursorCookieSource
-        let cursorCookieHeaderOverride: String? = provider == .cursor && cursorCookieSource == .manual
-            ? CookieHeaderNormalizer.normalize(self.settings.cursorCookieHeader)
-            : nil
-        let costScope = self.tokenCostScope(for: provider)
-        // Fold the manual cookie into the cache key (via an in-process hash, never the raw header) so
-        // pasting a different Cursor cookie invalidates a snapshot fetched within the TTL instead of
-        // showing the previous account's data.
-        let cursorScopeSuffix = if provider != .cursor {
-            ""
-        } else if let override = cursorCookieHeaderOverride {
-            "|cursorCookie=manual:\(override.hashValue)"
-        } else {
-            // Auto/cached resolution can silently switch Cursor accounts (e.g. the old cookie is
-            // rejected and a status refresh imports a new browser session). Fold the resolved
-            // account identity into the scope so an account change invalidates the TTL instead of
-            // returning the previous account's cost snapshot.
-            "|cursorCookie=\(cursorCookieSource.rawValue):" +
-                Self.cursorAutoIdentityFingerprint(self.snapshots[.cursor])
+        guard case let .proceed(cursorCookieHeaderOverride) = self.prepareCursorCostCookie(for: provider) else {
+            return
         }
-        let costScopeSignature =
-            "\(costScope.signature)|historyDays=\(historyDays)\(cursorScopeSuffix)"
+        let costScope = self.tokenCostScope(for: provider)
+        let costScopeSignature = self.tokenCostScopeSignature(for: provider, historyDays: historyDays)
+        let publicationRevision = self.providerPublicationRevision(for: provider)
         if !force,
            let last = self.lastTokenFetchAt[provider],
            self.lastTokenFetchScope[provider] == costScopeSignature,
@@ -1530,43 +1509,40 @@ extension UsageStore {
             .debug("cost usage start provider=\(providerText) force=\(force)")
 
         do {
-            let fetcher = self.costUsageFetcher
-            let timeoutSeconds = self.tokenFetchTimeout
-            let environment = provider == .bedrock
-                ? ProviderRegistry.makeEnvironment(
-                    base: self.environmentBase,
-                    provider: provider,
-                    settings: self.settings,
-                    tokenOverride: nil)
-                : self.environmentBase
             // Codex cost usage scans local session logs from this machine. That data is
             // intentionally presented as provider-level local telemetry rather than managed-account
             // remote state, so managed Codex account selection does not retarget that fetch.
             // If the UI later needs account-scoped token history, it should label and source that
             // separately instead of silently changing the meaning of this section.
-            let snapshot = try await withThrowingTaskGroup(of: CostUsageTokenSnapshot.self) { group in
-                group.addTask(priority: .utility) {
-                    try await fetcher.loadTokenSnapshot(
-                        provider: provider,
-                        environment: environment,
-                        now: now,
-                        forceRefresh: force,
-                        allowVertexClaudeFallback: !self.isEnabled(.claude),
-                        codexHomePath: costScope.codexHomePath,
-                        historyDays: historyDays,
-                        cursorCookieHeaderOverride: cursorCookieHeaderOverride)
-                }
-                group.addTask {
-                    try await Task.sleep(nanoseconds: UInt64(timeoutSeconds * 1_000_000_000))
-                    throw CostUsageError.timedOut(seconds: Int(timeoutSeconds))
-                }
-                defer { group.cancelAll() }
-                guard let snapshot = try await group.next() else { throw CancellationError() }
-                return snapshot
-            }
+            let snapshot = try await self.loadTokenUsageSnapshot(
+                provider: provider,
+                force: force,
+                now: now,
+                codexHomePath: costScope.codexHomePath,
+                historyDays: historyDays,
+                cursorCookieHeaderOverride: cursorCookieHeaderOverride)
             try Task.checkCancellation()
+            let completedCostScopeSignature = self.completedTokenCostScopeSignature(
+                provider: provider,
+                historyDays: historyDays,
+                initialSignature: costScopeSignature,
+                snapshot: snapshot)
+            guard self.tokenRefreshPublicationIsCurrent(
+                provider: provider,
+                publicationRevision: publicationRevision,
+                costScopeSignature: costScopeSignature,
+                fetchedCredentialScopeFingerprint: snapshot.credentialScopeFingerprint)
+            else {
+                self.clearTokenFetchMetadataIfMatching(
+                    provider: provider,
+                    attemptedAt: now,
+                    costScopeSignature: costScopeSignature)
+                self.requestTokenRefreshAfterStaleCompletion(for: provider)
+                return
+            }
+            self.lastTokenFetchScope[provider] = completedCostScopeSignature
 
-            guard !snapshot.daily.isEmpty else {
+            guard !snapshot.daily.isEmpty || snapshot.meteredCostUSD != nil else {
                 self.tokenSnapshots.removeValue(forKey: provider)
                 self.tokenErrors[provider] = Self.tokenCostNoDataMessage(for: provider)
                 self.tokenFailureGates[provider]?.recordSuccess()
@@ -1589,9 +1565,23 @@ extension UsageStore {
             self.tokenFailureGates[provider]?.recordSuccess()
             self.persistWidgetSnapshot(reason: "token-usage")
         } catch {
+            guard self.tokenRefreshPublicationIsCurrent(
+                provider: provider,
+                publicationRevision: publicationRevision,
+                costScopeSignature: costScopeSignature)
+            else {
+                self.clearTokenFetchMetadataIfMatching(
+                    provider: provider,
+                    attemptedAt: now,
+                    costScopeSignature: costScopeSignature)
+                self.requestTokenRefreshAfterStaleCompletion(for: provider)
+                return
+            }
             if error is CancellationError {
-                self.lastTokenFetchAt.removeValue(forKey: provider)
-                self.lastTokenFetchScope.removeValue(forKey: provider)
+                self.clearTokenFetchMetadataIfMatching(
+                    provider: provider,
+                    attemptedAt: now,
+                    costScopeSignature: costScopeSignature)
                 return
             }
             let duration = Date().timeIntervalSince(startedAt)
@@ -1600,8 +1590,10 @@ extension UsageStore {
             let message = "cost usage failed provider=\(providerText) duration=\(durationText)s error=\(msg)"
             self.tokenCostLogger.error(message)
             if Self.tokenFetchFailureAllowsEarlyRetry(error) {
-                self.lastTokenFetchAt.removeValue(forKey: provider)
-                self.lastTokenFetchScope.removeValue(forKey: provider)
+                self.clearTokenFetchMetadataIfMatching(
+                    provider: provider,
+                    attemptedAt: now,
+                    costScopeSignature: costScopeSignature)
             }
             let hadPriorData = self.tokenSnapshots[provider] != nil
             let shouldSurface = self.tokenFailureGates[provider]?
@@ -1613,6 +1605,20 @@ extension UsageStore {
                 self.tokenErrors[provider] = nil
             }
         }
+    }
+
+    private func clearTokenFetchMetadataIfMatching(
+        provider: UsageProvider,
+        attemptedAt: Date,
+        costScopeSignature: String)
+    {
+        guard self.lastTokenFetchAt[provider] == attemptedAt,
+              self.lastTokenFetchScope[provider] == costScopeSignature
+        else {
+            return
+        }
+        self.lastTokenFetchAt.removeValue(forKey: provider)
+        self.lastTokenFetchScope.removeValue(forKey: provider)
     }
 
     /// Fast failures may retry on the next scheduled pass instead of waiting out the fetch

@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import CodexBarCore
 
+#if os(macOS)
 @Suite(.serialized)
 struct CursorUsageEventsFetcherTests {
     // MARK: - Helpers
@@ -223,11 +224,13 @@ struct CursorUsageEventsFetcherTests {
                 Self.httpResponse("""
                 {"totalUsageEventsCount":3,"usageEventsDisplay":[\(firstEvent),\(secondEvent)]}
                 """)
-            default:
+            case 2:
                 // Second event repeats (must dedupe) alongside one new event.
                 Self.httpResponse("""
                 {"totalUsageEventsCount":3,"usageEventsDisplay":[\(secondEvent),\(thirdEvent)]}
                 """)
+            default:
+                Self.httpResponse(#"{"totalUsageEventsCount":3,"usageEventsDisplay":[]}"#)
             }
         }
 
@@ -249,13 +252,157 @@ struct CursorUsageEventsFetcherTests {
         #expect(Self.approxEqual(result.meteredCostUSD, 0.16))
 
         let requests = await transport.requests()
-        #expect(requests.count == 2)
+        #expect(requests.count == 3)
         for request in requests {
             #expect(request.httpMethod == "POST")
             #expect(request.url?.path == "/api/dashboard/get-filtered-usage-events")
             #expect(request.value(forHTTPHeaderField: "Origin") == "https://cursor.test")
             #expect(request.value(forHTTPHeaderField: "Cookie") == "WorkosCursorSessionToken=abc")
+            let body = try #require(request.httpBody)
+            let fields = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            #expect(fields["teamId"] == nil)
         }
+    }
+
+    @Test
+    func `pagination preserves rows with matching tokens but distinct billing fields`() async throws {
+        // swiftlint:disable line_length
+        let first = #"{"timestamp":"1700000000000","model":"gpt-5","kind":"USAGE_EVENT_KIND_USAGE_BASED","owningUser":"42","tokenUsage":{"inputTokens":10,"outputTokens":5,"cacheWriteTokens":0,"cacheReadTokens":0,"totalCents":50},"chargedCents":4}"#
+        let second = #"{"timestamp":"1700000000000","model":"gpt-5","kind":"USAGE_EVENT_KIND_USAGE_BASED","owningUser":"42","tokenUsage":{"inputTokens":10,"outputTokens":5,"cacheWriteTokens":0,"cacheReadTokens":0,"totalCents":75},"chargedCents":8}"#
+        // swiftlint:enable line_length
+        let transport = ProviderHTTPTransportStub { request in
+            switch Self.requestedPage(request) {
+            case 1:
+                Self.httpResponse("{\"totalUsageEventsCount\":2,\"usageEventsDisplay\":[\(first)]}")
+            case 2:
+                Self.httpResponse("{\"totalUsageEventsCount\":2,\"usageEventsDisplay\":[\(second)]}")
+            default:
+                Self.httpResponse(#"{"totalUsageEventsCount":2,"usageEventsDisplay":[]}"#)
+            }
+        }
+        let fetcher = CursorUsageEventsFetcher(
+            baseURL: Self.baseURL,
+            transport: transport,
+            pageSize: 1,
+            maxPages: 3)
+
+        let result = try await fetcher.fetchUsage(
+            cookieHeader: "WorkosCursorSessionToken=abc",
+            since: nil,
+            until: nil,
+            calendar: Self.utcCalendar)
+
+        #expect(result.daily.data.first?.requestCount == 2)
+        #expect(Self.approxEqual(result.daily.data.first?.costUSD, 1.25))
+        #expect(Self.approxEqual(result.meteredCostUSD, 0.12))
+    }
+
+    @Test
+    func `pagination preserves identical rows when the reported count includes both`() async throws {
+        // swiftlint:disable line_length
+        let event = #"{"timestamp":"1700000000000","model":"gpt-5","tokenUsage":{"inputTokens":10,"outputTokens":5,"cacheWriteTokens":0,"cacheReadTokens":0,"totalCents":50},"chargedCents":4}"#
+        // swiftlint:enable line_length
+        let transport = ProviderHTTPTransportStub { request in
+            if Self.requestedPage(request) <= 2 {
+                return Self.httpResponse("{\"totalUsageEventsCount\":2,\"usageEventsDisplay\":[\(event)]}")
+            }
+            return Self.httpResponse(#"{"totalUsageEventsCount":2,"usageEventsDisplay":[]}"#)
+        }
+        let fetcher = CursorUsageEventsFetcher(
+            baseURL: Self.baseURL,
+            transport: transport,
+            pageSize: 1,
+            maxPages: 3)
+
+        let result = try await fetcher.fetchUsage(
+            cookieHeader: "WorkosCursorSessionToken=abc",
+            since: nil,
+            until: nil,
+            calendar: Self.utcCalendar)
+
+        #expect(result.daily.data.first?.requestCount == 2)
+        #expect(Self.approxEqual(result.daily.data.first?.costUSD, 1.0))
+        #expect(Self.approxEqual(result.meteredCostUSD, 0.08))
+    }
+
+    @Test
+    func `pagination completes at max pages when the reported total is reached`() async throws {
+        // swiftlint:disable line_length
+        let first = #"{"timestamp":"1700000000000","model":"gpt-5","tokenUsage":{"inputTokens":10,"outputTokens":5,"cacheWriteTokens":0,"cacheReadTokens":0,"totalCents":50},"chargedCents":4}"#
+        let second = #"{"timestamp":"1700000001000","model":"gpt-5","tokenUsage":{"inputTokens":20,"outputTokens":5,"cacheWriteTokens":0,"cacheReadTokens":0,"totalCents":75},"chargedCents":8}"#
+        // swiftlint:enable line_length
+        let transport = ProviderHTTPTransportStub { request in
+            switch Self.requestedPage(request) {
+            case 1:
+                Self.httpResponse("{\"totalUsageEventsCount\":2,\"usageEventsDisplay\":[\(first)]}")
+            default:
+                Self.httpResponse("{\"totalUsageEventsCount\":2,\"usageEventsDisplay\":[\(second)]}")
+            }
+        }
+        let fetcher = CursorUsageEventsFetcher(
+            baseURL: Self.baseURL,
+            transport: transport,
+            pageSize: 1,
+            maxPages: 2)
+
+        let result = try await fetcher.fetchUsage(
+            cookieHeader: "WorkosCursorSessionToken=abc",
+            since: nil,
+            until: nil,
+            calendar: Self.utcCalendar)
+
+        #expect(result.daily.data.first?.requestCount == 2)
+        #expect(Self.approxEqual(result.daily.data.first?.costUSD, 1.25))
+        #expect(Self.approxEqual(result.meteredCostUSD, 0.12))
+    }
+
+    @Test
+    func `cost report carries the exact fetched credential scope`() async throws {
+        let transport = ProviderHTTPTransportStub { _ in
+            Self.httpResponse(#"{"totalUsageEventsCount":0,"usageEventsDisplay":[]}"#)
+        }
+        let probe = CursorStatusProbe(
+            baseURL: Self.baseURL,
+            timeout: 1,
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            urlSession: transport)
+        let cookie = "WorkosCursorSessionToken=abc"
+
+        let report = try await probe.fetchCostReport(
+            since: nil,
+            until: nil,
+            cookieHeaderOverride: cookie)
+
+        #expect(report.credentialScopeFingerprint == CookieHeaderCache.credentialFingerprint(cookie))
+    }
+
+    @Test
+    func `fetchUsage fails instead of publishing a truncated pagination window`() async {
+        // swiftlint:disable line_length
+        let event = #"{"timestamp":"1700000000000","model":"gpt-5","tokenUsage":{"inputTokens":10,"outputTokens":5,"cacheWriteTokens":0,"cacheReadTokens":0,"totalCents":50},"chargedCents":4}"#
+        // swiftlint:enable line_length
+        let transport = ProviderHTTPTransportStub { _ in
+            Self.httpResponse("{\"totalUsageEventsCount\":2,\"usageEventsDisplay\":[\(event)]}")
+        }
+        let fetcher = CursorUsageEventsFetcher(
+            baseURL: Self.baseURL,
+            transport: transport,
+            pageSize: 1,
+            maxPages: 1)
+
+        let error = await #expect(throws: CostUsageError.self) {
+            _ = try await fetcher.fetchUsage(
+                cookieHeader: "WorkosCursorSessionToken=abc",
+                since: nil,
+                until: nil,
+                calendar: Self.utcCalendar)
+        }
+        guard case let .cursorPaginationIncomplete(expected, received) = error else {
+            Issue.record("Expected cursorPaginationIncomplete")
+            return
+        }
+        #expect(expected == 2)
+        #expect(received == 1)
     }
 
     @Test
@@ -291,7 +438,9 @@ struct CursorUsageEventsFetcherTests {
             _ = try await fetcher.fetchUsage(cookieHeader: "x=y", since: nil, until: nil)
         }
         let isNotLoggedIn = error.map { thrown in
-            if case .notLoggedIn = thrown { return true }
+            if case .notLoggedIn = thrown {
+                return true
+            }
             return false
         } ?? false
         #expect(isNotLoggedIn)
@@ -302,3 +451,4 @@ struct CursorUsageEventsFetcherTests {
         #expect(CostUsageFetcher.supportsTokenSnapshot(.cursor))
     }
 }
+#endif

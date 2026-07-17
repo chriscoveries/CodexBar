@@ -48,6 +48,7 @@ private struct UsageSuccessRenderInput {
     let dashboard: OpenAIDashboardSnapshot?
     let effectiveSourceMode: ProviderSourceMode
     let command: UsageCommandContext
+    let diagnostic: String?
     let notes: [String]
 }
 
@@ -287,6 +288,7 @@ extension CodexBarCLI {
         credits: CreditsSnapshot?,
         antigravityPlanInfo: AntigravityPlanInfoSummary?,
         dashboard: OpenAIDashboardSnapshot?,
+        diagnostic: String?,
         weeklyWorkDays: Int?) -> ProviderPayload
     {
         ProviderPayload(
@@ -301,6 +303,7 @@ extension CodexBarCLI {
             antigravityPlanInfo: antigravityPlanInfo,
             openaiDashboard: dashboard,
             error: nil,
+            diagnostic: diagnostic,
             pace: CLIRenderer.providerPacePayload(provider: provider, snapshot: usage, weeklyWorkDays: weeklyWorkDays))
     }
 
@@ -354,6 +357,7 @@ extension CodexBarCLI {
                 credits: input.credits,
                 antigravityPlanInfo: input.antigravityPlanInfo,
                 dashboard: input.dashboard,
+                diagnostic: input.diagnostic,
                 weeklyWorkDays: input.command.weeklyWorkDays))
         }
     }
@@ -458,7 +462,7 @@ extension CodexBarCLI {
             let notes = Self.usageTextNotes(
                 provider: provider,
                 sourceMode: effectiveSourceMode,
-                resolvedSourceLabel: source)
+                resolvedSourceLabel: source) + (result.diagnostic.map { [$0] } ?? [])
 
             Self.appendSuccessRenderOutput(
                 UsageSuccessRenderInput(
@@ -474,6 +478,7 @@ extension CodexBarCLI {
                     dashboard: dashboard,
                     effectiveSourceMode: effectiveSourceMode,
                     command: command,
+                    diagnostic: result.diagnostic,
                     notes: notes),
                 output: &output)
         case let .failure(error):
@@ -711,8 +716,18 @@ extension CodexBarCLI {
         }
         if provider == .kimi,
            sourceMode == .auto,
-           environment.map({ ProviderTokenResolver.kimiAPIToken(environment: $0) != nil }) == true
+           environment.map({ environment in
+               ProviderTokenResolver.kimiAPIToken(environment: environment) != nil ||
+                   KimiSettingsReader.hasKimiCodeCredential(environment: environment)
+           }) == true
         {
+            return false
+        }
+        if provider == .factory,
+           sourceMode == .auto || sourceMode == .cli,
+           environment.map({ FactorySettingsReader.apiKey(environment: $0) != nil }) == true
+        {
+            // Linux Auto/legacy-cli can use FACTORY_API_KEY without browser cookies.
             return false
         }
         if provider == .mimo,

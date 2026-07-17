@@ -98,6 +98,7 @@ enum ProviderChoice: String, AppEnum {
         case .openrouter: return nil // OpenRouter not yet supported in widgets
         case .crossmodel: return nil // CrossModel not yet supported in widgets
         case .clawrouter: return nil // ClawRouter not yet supported in widgets
+        case .sub2api: return nil // sub2api not yet supported in widgets
         case .wayfinder: return nil // Wayfinder not yet supported in widgets
         case .elevenlabs: return nil // ElevenLabs not yet supported in widgets
         case .warp: return nil // Warp not yet supported in widgets
@@ -124,6 +125,7 @@ enum ProviderChoice: String, AppEnum {
         case .poe: return nil // Poe not yet supported in widgets
         case .chutes: return nil // Chutes not yet supported in widgets
         case .zed: return nil // Zed not yet supported in widgets
+        case .zenmux: return nil // ZenMux not yet supported in widgets
         }
     }
 }

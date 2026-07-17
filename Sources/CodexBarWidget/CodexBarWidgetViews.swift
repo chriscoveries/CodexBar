@@ -209,7 +209,10 @@ enum CompactMetricFormatter {
             } ?? "—"
             let detail = entry.tokenUsage?.sessionTokens.map(WidgetFormat.tokenCount)
             let label = entry.tokenUsage.map {
-                WidgetFormat.tokenRowTitle("\($0.sessionLabel) cost", summary: $0, entryUpdatedAt: entry.updatedAt)
+                WidgetFormat.tokenRowTitle(
+                    Self.costMetricLabel($0.sessionLabel, provider: entry.provider),
+                    summary: $0,
+                    entryUpdatedAt: entry.updatedAt)
             } ?? "Today cost"
             return CompactMetricDisplay(value: value, label: label, detail: detail)
         case .last30DaysCost:
@@ -218,10 +221,21 @@ enum CompactMetricFormatter {
             } ?? "—"
             let detail = entry.tokenUsage?.last30DaysTokens.map(WidgetFormat.tokenCount)
             let label = entry.tokenUsage.map {
-                WidgetFormat.tokenRowTitle("\($0.last30DaysLabel) cost", summary: $0, entryUpdatedAt: entry.updatedAt)
+                WidgetFormat.tokenRowTitle(
+                    Self.costMetricLabel($0.last30DaysLabel, provider: entry.provider),
+                    summary: $0,
+                    entryUpdatedAt: entry.updatedAt)
             } ?? "30d cost"
             return CompactMetricDisplay(value: value, label: label, detail: detail)
         }
+    }
+
+    static func costMetricLabel(_ label: String, provider: UsageProvider) -> String {
+        guard provider == .codex else { return "\(label) cost" }
+        // Existing widget timelines may predate the estimate labels. Do not leave a bare
+        // dollar value until the app next republishes it.
+        guard !label.contains("API est.") else { return label }
+        return "\(label) API est. · not billed"
     }
 }
 
@@ -319,6 +333,7 @@ private struct ProviderSwitchChip: View {
         case .openrouter: "OpenRouter"
         case .crossmodel: "CrossModel"
         case .clawrouter: "ClawRouter"
+        case .sub2api: "sub2api"
         case .wayfinder: "Wayfinder"
         case .elevenlabs: "ElevenLabs"
         case .warp: "Warp"
@@ -345,6 +360,7 @@ private struct ProviderSwitchChip: View {
         case .poe: "Poe"
         case .chutes: "Chutes"
         case .zed: "Zed"
+        case .zenmux: "ZenMux"
         }
     }
 }
@@ -1028,6 +1044,8 @@ enum WidgetColors {
             Color(red: 124 / 255, green: 58 / 255, blue: 237 / 255) // CrossModel purple
         case .clawrouter:
             Color(red: 89 / 255, green: 110 / 255, blue: 246 / 255)
+        case .sub2api:
+            Color(red: 45 / 255, green: 198 / 255, blue: 216 / 255)
         case .wayfinder:
             Color(red: 16 / 255, green: 163 / 255, blue: 127 / 255)
         case .elevenlabs:
@@ -1080,6 +1098,8 @@ enum WidgetColors {
             Color(red: 24 / 255, green: 160 / 255, blue: 88 / 255)
         case .zed:
             Color(red: 64 / 255, green: 156 / 255, blue: 255 / 255)
+        case .zenmux:
+            Color(red: 108 / 255, green: 92 / 255, blue: 231 / 255)
         }
     }
 }

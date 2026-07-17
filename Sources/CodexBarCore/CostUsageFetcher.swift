@@ -3,6 +3,8 @@ import Foundation
 public enum CostUsageError: LocalizedError, Sendable {
     case unsupportedProvider(UsageProvider)
     case timedOut(seconds: Int)
+    case cursorPaginationIncomplete(expected: Int?, received: Int)
+    case cursorPaginationInconsistent(expected: Int, received: Int)
 
     public var errorDescription: String? {
         switch self {
@@ -13,6 +15,13 @@ public enum CostUsageError: LocalizedError, Sendable {
                 return "Cost refresh timed out after \(seconds / 60)m."
             }
             return "Cost refresh timed out after \(seconds)s."
+        case let .cursorPaginationIncomplete(expected, received):
+            if let expected {
+                return "Cursor cost refresh was incomplete (received \(received) of \(expected) events)."
+            }
+            return "Cursor cost refresh reached its pagination safety limit after \(received) events."
+        case let .cursorPaginationInconsistent(expected, received):
+            return "Cursor cost pagination was inconsistent (expected \(expected), received \(received) events)."
         }
     }
 }
@@ -78,6 +87,33 @@ public struct CostUsageFetcher: Sendable {
             historyDays: historyDays,
             cursorCookieHeaderOverride: cursorCookieHeaderOverride,
             refreshPricingInBackground: refreshPricingInBackground,
+            bypassScannerDebounce: false,
+            scannerOptions: self.scannerOptionsOverride())
+    }
+
+    package func loadTokenSnapshot(
+        provider: UsageProvider,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        now: Date = Date(),
+        forceRefresh: Bool = false,
+        allowVertexClaudeFallback: Bool = false,
+        codexHomePath: String? = nil,
+        historyDays: Int = 30,
+        cursorCookieHeaderOverride: String? = nil,
+        refreshPricingInBackground: Bool = true,
+        bypassScannerDebounce: Bool) async throws -> CostUsageTokenSnapshot
+    {
+        try await Self.loadTokenSnapshot(
+            provider: provider,
+            environment: environment,
+            now: now,
+            forceRefresh: forceRefresh,
+            allowVertexClaudeFallback: allowVertexClaudeFallback,
+            codexHomePath: codexHomePath,
+            historyDays: historyDays,
+            cursorCookieHeaderOverride: cursorCookieHeaderOverride,
+            refreshPricingInBackground: refreshPricingInBackground,
+            bypassScannerDebounce: bypassScannerDebounce,
             scannerOptions: self.scannerOptionsOverride())
     }
 
@@ -118,6 +154,7 @@ public struct CostUsageFetcher: Sendable {
         historyDays: Int = 30,
         cursorCookieHeaderOverride: String? = nil,
         refreshPricingInBackground: Bool = true,
+        bypassScannerDebounce: Bool = false,
         scannerOptions overrideScannerOptions: CostUsageScanner.Options? = nil,
         piScannerOptions overridePiScannerOptions: PiSessionCostScanner
             .Options? = nil,
@@ -185,14 +222,14 @@ public struct CostUsageFetcher: Sendable {
         } else if provider == .claude {
             options.claudeLogProviderFilter = .excludeVertexAI
         }
-        if forceRefresh {
+        if forceRefresh || bypassScannerDebounce {
             options.refreshMinIntervalSeconds = 0
         }
         var resolvedPiOptions = overridePiScannerOptions ?? PiSessionCostScanner.Options()
         if resolvedPiOptions.cacheRoot == nil {
             resolvedPiOptions.cacheRoot = options.cacheRoot
         }
-        if forceRefresh {
+        if forceRefresh || bypassScannerDebounce {
             resolvedPiOptions.refreshMinIntervalSeconds = 0
         }
         let piOptions = resolvedPiOptions
@@ -308,8 +345,14 @@ public struct CostUsageFetcher: Sendable {
     {
         guard provider == .codex || provider == .claude else { return nil }
         let unknownModelIDs = Set(daily.data.flatMap { entry in
-            entry.modelBreakdowns?.compactMap { breakdown in
-                breakdown.costUSD == nil ? breakdown.modelName : nil
+            entry.modelBreakdowns?.compactMap { breakdown -> String? in
+                guard breakdown.costUSD == nil else { return nil }
+                if provider == .codex,
+                   CostUsagePricing.isCodexUnattributedModel(breakdown.modelName)
+                {
+                    return nil
+                }
+                return breakdown.modelName
             } ?? []
         })
         guard !unknownModelIDs.isEmpty else { return nil }
@@ -509,7 +552,8 @@ public struct CostUsageFetcher: Sendable {
             now: now,
             historyDays: historyDays,
             useCurrentLocalDayForSession: true,
-            meteredCostUSD: report.meteredCostUSD)
+            meteredCostUSD: report.meteredCostUSD,
+            credentialScopeFingerprint: report.credentialScopeFingerprint)
     }
     #endif
 
@@ -519,6 +563,7 @@ public struct CostUsageFetcher: Sendable {
         historyDays: Int = 30,
         useCurrentLocalDayForSession: Bool = true,
         meteredCostUSD: Double? = nil,
+        credentialScopeFingerprint: String? = nil,
         historyLabel: String? = nil,
         projects: [CostUsageProjectBreakdown] = [],
         updatedAt: Date? = nil) -> CostUsageTokenSnapshot
@@ -557,6 +602,7 @@ public struct CostUsageFetcher: Sendable {
             historyDays: historyDays,
             historyLabel: historyLabel,
             meteredCostUSD: meteredCostUSD,
+            credentialScopeFingerprint: credentialScopeFingerprint,
             daily: daily.data,
             projects: projects,
             updatedAt: updatedAt ?? now)
