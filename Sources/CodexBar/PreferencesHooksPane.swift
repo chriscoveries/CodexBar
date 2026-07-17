@@ -37,6 +37,7 @@ struct HooksPane: View {
                 } label: {
                     Label(L("hooks_add_rule"), systemImage: "plus")
                 }
+                .disabled(!HookEditorValidation.canAddRule(count: self.settings.hookRules.count))
             } header: {
                 Text(L("hooks_rules_header"))
             }
@@ -131,6 +132,7 @@ private struct HookRuleRow: View {
                     }
                     .buttonStyle(.borderless)
                     .controlSize(.small)
+                    .disabled(!HookEditorValidation.canAddArgument(count: self.argumentRows.count))
                 }
 
                 ForEach(self.$argumentRows) { $argument in
@@ -170,11 +172,25 @@ private struct HookRuleRow: View {
     private var thresholdPercentBinding: Binding<Double?> {
         Binding(
             get: { self.rule.threshold.map { $0 * 100 } },
-            set: { self.rule.threshold = $0.map { min(max($0, 0), 100) / 100 } })
+            set: { self.rule.threshold = HookEditorValidation.thresholdFraction(percent: $0) })
     }
 
     private struct ArgumentRow: Identifiable {
         let id = UUID()
         var value: String
+    }
+}
+
+enum HookEditorValidation {
+    static func canAddRule(count: Int) -> Bool {
+        count < HooksConfig.maximumRuleCount
+    }
+
+    static func canAddArgument(count: Int) -> Bool {
+        count < HookRule.maximumArgumentCount
+    }
+
+    static func thresholdFraction(percent: Double?) -> Double? {
+        percent.map { min(max($0, 1), 100) / 100 }
     }
 }
