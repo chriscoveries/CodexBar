@@ -79,14 +79,7 @@ public struct DeepInfraUsageSnapshot: Sendable {
     }
 
     public func toUsageSnapshot() -> UsageSnapshot {
-        let fundedAmount = self.availableBalanceUSD + self.recentCostUSD
-        let usedPercent: Double = if self.suspended {
-            100
-        } else if self.amountOwedUSD > 0 || fundedAmount <= 0 {
-            100
-        } else {
-            Self.clamp(self.recentCostUSD / fundedAmount * 100)
-        }
+        let usedPercent: Double = self.suspended || self.amountOwedUSD > 0 || self.availableBalanceUSD <= 0 ? 100 : 0
 
         let balanceText = if self.amountOwedUSD > 0 {
             "\(Self.usd(self.amountOwedUSD)) owed"
@@ -136,10 +129,6 @@ public struct DeepInfraUsageSnapshot: Sendable {
     private static func usd(_ value: Double) -> String {
         String(format: "$%.2f", value)
     }
-
-    private static func clamp(_ value: Double) -> Double {
-        min(max(value, 0), 100)
-    }
 }
 
 public enum DeepInfraUsageError: LocalizedError, Sendable {
@@ -166,6 +155,7 @@ public struct DeepInfraUsageFetcher: Sendable {
     private static let checklistURL = URL(string: "https://api.deepinfra.com/payment/checklist?compute_owed=true")!
     private static let usageURL = URL(string: "https://api.deepinfra.com/payment/usage?from=current")!
     private static let timeoutSeconds: TimeInterval = 30
+    /// The usage endpoint reports `total_cost` in cents; checklist monetary fields use USD.
     private static let centsPerDollar = 100.0
 
     public static func fetchUsage(apiKey: String) async throws -> DeepInfraUsageSnapshot {

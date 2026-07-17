@@ -29,7 +29,7 @@ DeepInfra represents prepaid funds as a negative `stripe_balance`; CodexBar conv
 ## Display
 
 - The automatic menu-bar metric shows available prepaid balance.
-- The provider card shows available balance and current-month spend.
+- The provider card shows available balance and current-month spend without inventing a percentage quota.
 - If the account has a positive spending limit, CodexBar shows billing-cycle spend against that limit.
 - A suspended account is shown as exhausted with DeepInfra's suspension reason when one is provided.
 
@@ -40,3 +40,5 @@ DeepInfra represents prepaid funds as a negative `stripe_balance`; CodexBar conv
 - Missing provider: enable DeepInfra under **Settings > Providers** and add a token account or environment key.
 
 CodexBar never logs the API key or raw billing response.
+
+[DeepInfra service status](https://status.deepinfra.com)

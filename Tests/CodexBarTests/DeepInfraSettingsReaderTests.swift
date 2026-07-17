@@ -44,7 +44,10 @@ struct DeepInfraProviderTokenResolverTests {
         let descriptor = ProviderDescriptorRegistry.descriptor(for: .deepinfra)
         #expect(descriptor.metadata.displayName == "DeepInfra")
         #expect(descriptor.metadata.dashboardURL == "https://deepinfra.com/dash")
+        #expect(descriptor.metadata.statusLinkURL == "https://status.deepinfra.com")
         #expect(descriptor.branding.iconResourceName == "ProviderIcon-deepinfra")
+        #expect(descriptor.branding.confettiPalette.count == 3)
+        #expect(descriptor.branding.confettiPalette[0] != descriptor.branding.confettiPalette[1])
         #expect(descriptor.fetchPlan.sourceModes == Set([.auto, .api]))
     }
 

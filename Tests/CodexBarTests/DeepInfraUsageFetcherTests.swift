@@ -25,8 +25,8 @@ struct DeepInfraUsageFetcherTests {
         #expect(snapshot.updatedAt == now)
 
         let usage = snapshot.toUsageSnapshot()
-        #expect(abs((usage.primary?.usedPercent ?? 0) - 3.949_874_686_7) < 0.000_001)
-        #expect(abs((usage.primary?.remainingPercent ?? 0) - 96.050_125_313_3) < 0.000_001)
+        #expect(usage.primary?.usedPercent == 0)
+        #expect(usage.primary?.remainingPercent == 100)
         #expect(usage.primary?.resetDescription == "$95.81 available · $3.94 spent this month")
         #expect(usage.providerCost?.used == 3.94)
         #expect(usage.providerCost?.limit == 20)
@@ -94,6 +94,8 @@ struct DeepInfraUsageFetcherTests {
 
         #expect(snapshot.availableBalanceUSD == 7)
         #expect(requests.map(\.url?.path) == ["/payment/checklist", "/payment/usage"])
+        #expect(requests.allSatisfy { $0.url?.scheme == "https" })
+        #expect(requests.allSatisfy { $0.url?.host == "api.deepinfra.com" })
         #expect(requests[0].url?.query == "compute_owed=true")
         #expect(requests[1].url?.query == "from=current")
         #expect(requests.allSatisfy { $0.value(forHTTPHeaderField: "Authorization") == "Bearer fixture-token" })

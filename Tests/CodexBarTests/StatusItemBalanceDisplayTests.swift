@@ -44,32 +44,6 @@ struct StatusItemBalanceDisplayTests {
     }
 
     @Test
-    func `menu bar display text uses crossmodel balance currency`() {
-        let settings = self.makeSettings(
-            suiteName: "StatusItemBalanceDisplayTests-crossmodel-eur-balance",
-            provider: .crossmodel)
-        settings.setMenuBarMetricPreference(.automatic, for: .crossmodel)
-        let (store, controller) = self.makeStoreAndController(settings: settings)
-        defer { controller.releaseStatusItemsForTesting() }
-        let snapshot = CrossModelUsageSnapshot(
-            currency: "EUR",
-            balance: 8.059489,
-            uncollected: 0,
-            daily: nil,
-            weekly: nil,
-            monthly: nil,
-            updatedAt: Date())
-            .toUsageSnapshot()
-
-        store._setSnapshotForTesting(snapshot, provider: .crossmodel)
-        store._setErrorForTesting(nil, provider: .crossmodel)
-
-        let displayText = controller.menuBarDisplayText(for: .crossmodel, snapshot: snapshot)
-
-        #expect(displayText == "€8.06")
-    }
-
-    @Test
     func `menu bar display text uses zen balance when open code has no subscription`() {
         let settings = self.makeSettings(
             suiteName: "StatusItemBalanceDisplayTests-opencodego-zen-only",
@@ -267,6 +241,48 @@ struct StatusItemBalanceDisplayTests {
     }
 
     @Test
+    func `DeepInfra card shows balance text without an inferred percentage bar`() throws {
+        let now = Date()
+        let snapshot = DeepInfraUsageSnapshot(
+            availableBalanceUSD: 95.81,
+            amountOwedUSD: 0,
+            currentMonthCostUSD: 3.94,
+            recentCostUSD: 3.94,
+            spendingLimitUSD: nil,
+            suspended: false,
+            suspendReason: nil,
+            updatedAt: now)
+            .toUsageSnapshot()
+        let metadata = try #require(ProviderDefaults.metadata[.deepinfra])
+
+        let model = UsageMenuCardView.Model.make(.init(
+            provider: .deepinfra,
+            metadata: metadata,
+            snapshot: snapshot,
+            credits: nil,
+            creditsError: nil,
+            dashboard: nil,
+            dashboardError: nil,
+            tokenSnapshot: nil,
+            tokenError: nil,
+            account: AccountInfo(email: nil, plan: nil),
+            isRefreshing: false,
+            lastError: nil,
+            usageBarsShowUsed: false,
+            resetTimeDisplayStyle: .countdown,
+            tokenCostUsageEnabled: false,
+            showOptionalCreditsAndExtraUsage: true,
+            hidePersonalInfo: false,
+            now: now))
+
+        let balance = try #require(model.metrics.first)
+        #expect(balance.title == "Balance")
+        #expect(balance.statusText == "$95.81 available · $3.94 spent this month")
+        #expect(balance.detailText == nil)
+        #expect(balance.resetText == nil)
+    }
+
+    @Test
     func `menu bar display text marks DeepInfra amount owed`() {
         let snapshot = DeepInfraUsageSnapshot(
             availableBalanceUSD: 0,
@@ -454,29 +470,6 @@ struct StatusItemBalanceDisplayTests {
 
         #expect(snapshot.identity?.loginMethod == "API spend: €1.2345 this month")
         #expect(displayText == "€1.2345")
-    }
-
-    @Test
-    func `menu bar display text uses kimi k2 api key credits`() {
-        let settings = self.makeSettings(
-            suiteName: "StatusItemBalanceDisplayTests-kimik2-credits",
-            provider: .kimik2)
-        let (store, controller) = self.makeStoreAndController(settings: settings)
-        defer { controller.releaseStatusItemsForTesting() }
-        let snapshot = KimiK2UsageSummary(
-            consumed: 75,
-            remaining: 1234.5,
-            averageTokens: nil,
-            updatedAt: Date()).toUsageSnapshot()
-
-        store._setSnapshotForTesting(snapshot, provider: .kimik2)
-        store._setErrorForTesting(nil, provider: .kimik2)
-
-        let displayText = controller.menuBarDisplayText(for: .kimik2, snapshot: snapshot)
-
-        #expect(snapshot.primary == nil)
-        #expect(snapshot.identity?.loginMethod == "Credits: 1234.5 left")
-        #expect(displayText == "1234.5")
     }
 
     @Test

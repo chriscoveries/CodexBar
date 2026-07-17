@@ -23,11 +23,16 @@ public enum DeepInfraProviderDescriptor {
                 browserCookieOrder: nil,
                 dashboardURL: "https://deepinfra.com/dash",
                 statusPageURL: nil,
-                statusLinkURL: nil),
+                statusLinkURL: "https://status.deepinfra.com"),
             branding: ProviderBranding(
                 iconStyle: .deepinfra,
                 iconResourceName: "ProviderIcon-deepinfra",
-                color: ProviderColor(red: 42 / 255, green: 50 / 255, blue: 117 / 255)),
+                color: ProviderColor(red: 42 / 255, green: 50 / 255, blue: 117 / 255),
+                confettiPalette: [
+                    ProviderColor(hex: 0x2A3275),
+                    ProviderColor(hex: 0x747FDE),
+                    ProviderColor(hex: 0xFFFFFF),
+                ]),
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "DeepInfra per-request cost history is not available in CodexBar." }),
