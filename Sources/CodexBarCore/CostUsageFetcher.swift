@@ -256,7 +256,8 @@ public struct CostUsageFetcher: Sendable {
                 sessions = CostUsageScanner.buildCodexSessionBreakdownsFromCache(
                     cache: cache,
                     range: range,
-                    modelsDevCacheRoot: scanOptions.cacheRoot)
+                    modelsDevCacheRoot: scanOptions.cacheRoot,
+                    sessionRoots: CostUsageScanner.codexSessionsRoots(options: scanOptions))
             }
             if provider == .codex || provider == .claude {
                 let piReport = try PiSessionCostScanner.loadDailyReportCancellable(
@@ -465,7 +466,8 @@ public struct CostUsageFetcher: Sendable {
                     sessions = CostUsageScanner.buildCodexSessionBreakdownsFromCache(
                         cache: cache,
                         range: range,
-                        modelsDevCacheRoot: options.cacheRoot)
+                        modelsDevCacheRoot: options.cacheRoot,
+                        sessionRoots: CostUsageScanner.codexSessionsRoots(options: options))
                     if cache.codexProjectMetadataVersion == CostUsageScanner.codexProjectMetadataVersion {
                         projects.append(contentsOf: CostUsageScanner.buildCodexProjectBreakdownsFromCache(
                             cache: cache,

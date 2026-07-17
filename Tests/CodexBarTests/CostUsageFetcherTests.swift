@@ -960,5 +960,15 @@ extension CostUsageFetcherTests {
         #expect(first.requestCount == nil)
         #expect(first.modelBreakdowns.map(\.modelName) == ["gpt-5.4"])
         #expect(first.costUSD != nil)
+
+        let cache = CostUsageCacheIO.load(provider: .codex, cacheRoot: env.cacheRoot)
+        let range = CostUsageScanner.CostUsageDayRange(since: day, until: day)
+        let unrelatedRoot = env.root.appendingPathComponent("unrelated/sessions", isDirectory: true)
+        let filtered = CostUsageScanner.buildCodexSessionBreakdownsFromCache(
+            cache: cache,
+            range: range,
+            modelsDevCacheRoot: env.cacheRoot,
+            sessionRoots: [unrelatedRoot])
+        #expect(filtered.isEmpty)
     }
 }

@@ -6,6 +6,7 @@ extension CostUsageScanner {
         range: CostUsageDayRange,
         modelsDevCatalog: ModelsDevCatalog? = nil,
         modelsDevCacheRoot: URL? = nil,
+        sessionRoots: [URL]? = nil,
         priorityTurns: [String: CodexPriorityTurnMetadata] = [:],
         modelsDevCatalogLoader: (URL?) -> ModelsDevCatalog? = {
             CostUsagePricing.modelsDevCatalog(cacheRoot: $0)
@@ -17,6 +18,11 @@ extension CostUsageScanner {
         var latestFileBySessionID: [String: (path: String, usage: CostUsageFileUsage)] = [:]
 
         for (filePath, usage) in cache.files {
+            if let sessionRoots,
+               !Self.isWithinCodexRoots(fileURL: URL(fileURLWithPath: filePath), roots: sessionRoots)
+            {
+                continue
+            }
             guard usage.touchesCodexScanWindow(sinceKey: range.scanSinceKey, untilKey: range.scanUntilKey) else {
                 continue
             }

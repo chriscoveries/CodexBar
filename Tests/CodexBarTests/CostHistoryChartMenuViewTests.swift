@@ -866,6 +866,16 @@ struct CostHistoryChartMenuViewTests {
 
 extension CostHistoryChartMenuViewTests {
     @Test
+    func `session labels distinguish concurrent uuid v7 identifiers`() {
+        let first = CostHistoryChartMenuView.shortSessionID("019f6d91-970b-7e13-b08e-000000000001")
+        let second = CostHistoryChartMenuView.shortSessionID("019f6d91-970b-7e13-b08e-000000000002")
+
+        #expect(first == "019f...00000001")
+        #expect(second == "019f...00000002")
+        #expect(first != second)
+    }
+
+    @Test
     @MainActor
     func `render fingerprint tracks displayed session token components`() {
         func session(input: Int?, cached: Int?, output: Int?) -> CostUsageSessionBreakdown {

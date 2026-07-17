@@ -402,10 +402,10 @@ struct CostHistoryChartMenuView: View {
         .accessibilityElement(children: .combine)
     }
 
-    private static func shortSessionID(_ sessionID: String) -> String {
+    static func shortSessionID(_ sessionID: String) -> String {
         let trimmed = sessionID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count > 12 else { return trimmed }
-        return "\(trimmed.prefix(8))..."
+        return "\(trimmed.prefix(4))...\(trimmed.suffix(8))"
     }
 
     private static func sessionUsageLine(_ session: CostUsageSessionBreakdown) -> String {
