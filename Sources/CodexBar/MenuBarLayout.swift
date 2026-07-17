@@ -49,6 +49,21 @@ enum MenuBarLayoutSemanticWindowResolver {
     }
 }
 
+enum MenuBarLayoutCostResolver {
+    static func todayCostUSD(
+        snapshot: CostUsageTokenSnapshot?,
+        now: Date,
+        calendar: Calendar = .current)
+        -> Double?
+    {
+        guard let snapshot else { return nil }
+        return CostUsageTokenSnapshot.entry(
+            in: snapshot.daily,
+            forLocalDayContaining: now,
+            calendar: calendar)?.costUSD
+    }
+}
+
 struct MenuBarLayout: Codable, Hashable, Sendable {
     static let defaultLayout = MenuBarLayout(lines: [[.icon, .percent(window: .automatic)]])
 

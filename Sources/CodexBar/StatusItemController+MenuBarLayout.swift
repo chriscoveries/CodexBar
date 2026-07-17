@@ -61,6 +61,7 @@ extension StatusItemController {
             .flatMap { self.store.weeklyPace(provider: provider, window: $0, now: now) }
             .flatMap { UsagePaceText.weeklyDetail(provider: provider, pace: $0, now: now).rightLabel }
         let costSnapshot = self.store.tokenSnapshotForCurrentProviderConfig(for: provider)?.snapshot
+        let costToday = MenuBarLayoutCostResolver.todayCostUSD(snapshot: costSnapshot, now: now)
         let providerName = L(self.store.metadata(for: provider).displayName)
         let rawAccountLabel = snapshot?.accountEmail(for: provider)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -76,7 +77,7 @@ extension StatusItemController {
             weekly: MenuBarLayoutRenderWindow(windows.weekly),
             automatic: MenuBarLayoutRenderWindow(windows.automatic),
             runsOut: runsOut,
-            costToday: costSnapshot?.sessionCostUSD.map {
+            costToday: costToday.map {
                 UsageFormatter.currencyString($0, currencyCode: costSnapshot?.currencyCode ?? "USD")
             },
             cost30d: costSnapshot?.last30DaysCostUSD.map {

@@ -129,6 +129,38 @@ private enum MenuBarLayoutEditorScope: Hashable {
     case provider(UsageProvider)
 }
 
+@MainActor
+enum MenuBarLayoutEditorPersistence {
+    static func activate(
+        _ layout: MenuBarLayout,
+        for provider: UsageProvider?,
+        settings: SettingsStore)
+    {
+        settings.menuBarIconStyle = .iconAndPercent
+        settings.setMenuBarLayout(layout, for: provider)
+    }
+
+    static func setSize(
+        _ size: MenuBarLayoutSize,
+        activating layout: MenuBarLayout,
+        for provider: UsageProvider?,
+        settings: SettingsStore)
+    {
+        settings.menuBarLayoutSize = size
+        self.activate(layout, for: provider, settings: settings)
+    }
+
+    static func setGap(
+        _ gap: MenuBarLayoutGap,
+        activating layout: MenuBarLayout,
+        for provider: UsageProvider?,
+        settings: SettingsStore)
+    {
+        settings.menuBarLayoutGap = gap
+        self.activate(layout, for: provider, settings: settings)
+    }
+}
+
 private struct MenuBarLayoutPaletteGroup: Identifiable {
     let id: String
     let title: String
@@ -167,6 +199,37 @@ struct MenuBarLayoutEditor: View {
         case .all: self.providers.first
         case let .provider(provider): provider
         }
+    }
+
+    private var persistenceProvider: UsageProvider? {
+        switch self.scope {
+        case .all: nil
+        case let .provider(provider): provider
+        }
+    }
+
+    private var sizeBinding: Binding<MenuBarLayoutSize> {
+        Binding(
+            get: { self.settings.menuBarLayoutSize },
+            set: { size in
+                MenuBarLayoutEditorPersistence.setSize(
+                    size,
+                    activating: self.layout,
+                    for: self.persistenceProvider,
+                    settings: self.settings)
+            })
+    }
+
+    private var gapBinding: Binding<MenuBarLayoutGap> {
+        Binding(
+            get: { self.settings.menuBarLayoutGap },
+            set: { gap in
+                MenuBarLayoutEditorPersistence.setGap(
+                    gap,
+                    activating: self.layout,
+                    for: self.persistenceProvider,
+                    settings: self.settings)
+            })
     }
 
     private var paletteGroups: [MenuBarLayoutPaletteGroup] {
@@ -456,14 +519,14 @@ struct MenuBarLayoutEditor: View {
 
     private var displayOptions: some View {
         HStack(spacing: 18) {
-            Picker(L("menu_bar_layout_size"), selection: self.$settings.menuBarLayoutSize) {
+            Picker(L("menu_bar_layout_size"), selection: self.sizeBinding) {
                 ForEach(MenuBarLayoutSize.allCases) { size in
                     Text(size.label).tag(size)
                 }
             }
             .pickerStyle(.menu)
 
-            Picker(L("menu_bar_layout_gap"), selection: self.$settings.menuBarLayoutGap) {
+            Picker(L("menu_bar_layout_gap"), selection: self.gapBinding) {
                 ForEach(MenuBarLayoutGap.allCases) { gap in
                     Text(gap.label).tag(gap)
                 }
@@ -506,13 +569,10 @@ struct MenuBarLayoutEditor: View {
     }
 
     private func write(_ layout: MenuBarLayout) {
-        self.settings.menuBarIconStyle = .iconAndPercent
-        switch self.scope {
-        case .all:
-            self.settings.setMenuBarLayout(layout, for: nil)
-        case let .provider(provider):
-            self.settings.setMenuBarLayout(layout, for: provider)
-        }
+        MenuBarLayoutEditorPersistence.activate(
+            layout,
+            for: self.persistenceProvider,
+            settings: self.settings)
     }
 }
 
@@ -607,6 +667,7 @@ private struct MenuBarLayoutPreview: View {
             .flatMap { self.store.weeklyPace(provider: provider, window: $0, now: now) }
             .flatMap { UsagePaceText.weeklyDetail(provider: provider, pace: $0, now: now).rightLabel }
         let cost = self.store.tokenSnapshotForCurrentProviderConfig(for: provider)?.snapshot
+        let costToday = MenuBarLayoutCostResolver.todayCostUSD(snapshot: cost, now: now)
         return MenuBarLayoutRenderData(
             iconKey: provider.rawValue,
             providerName: L(self.store.metadata(for: provider).displayName),
@@ -615,7 +676,7 @@ private struct MenuBarLayoutPreview: View {
             weekly: MenuBarLayoutRenderWindow(weekly),
             automatic: MenuBarLayoutRenderWindow(automatic),
             runsOut: runsOut,
-            costToday: cost?.sessionCostUSD.map {
+            costToday: costToday.map {
                 UsageFormatter.currencyString($0, currencyCode: cost?.currencyCode ?? "USD")
             },
             cost30d: cost?.last30DaysCostUSD.map {

@@ -84,6 +84,42 @@ struct MenuBarLayoutTests {
     }
 
     @Test
+    func `cost today resolves the current calendar day aggregate`() {
+        let now = Date(timeIntervalSince1970: 1_752_768_000)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .gmt
+        let snapshot = CostUsageTokenSnapshot(
+            sessionTokens: nil,
+            sessionCostUSD: 99,
+            last30DaysTokens: nil,
+            last30DaysCostUSD: 9,
+            daily: [
+                CostUsageDailyReport.Entry(
+                    date: "2025-07-16",
+                    inputTokens: nil,
+                    outputTokens: nil,
+                    totalTokens: nil,
+                    costUSD: 6.25,
+                    modelsUsed: nil,
+                    modelBreakdowns: nil),
+                CostUsageDailyReport.Entry(
+                    date: "2025-07-17",
+                    inputTokens: nil,
+                    outputTokens: nil,
+                    totalTokens: nil,
+                    costUSD: 2.75,
+                    modelsUsed: nil,
+                    modelBreakdowns: nil),
+            ],
+            updatedAt: now)
+
+        #expect(MenuBarLayoutCostResolver.todayCostUSD(
+            snapshot: snapshot,
+            now: now,
+            calendar: calendar) == 2.75)
+    }
+
+    @Test
     func `migration maps every legacy style mode metric and reset combination`() {
         var visited = 0
         for style in MenuBarIconStyle.allCases {
@@ -165,6 +201,33 @@ struct MenuBarLayoutTests {
         let stored = try #require(MenuBarLayoutPreset.iconOnly.layout)
         settings.setMenuBarLayout(stored, for: nil)
         #expect(settings.menuBarLayoutForGlobalEditing(representativeProvider: .kimi) == stored)
+    }
+
+    @Test
+    @MainActor
+    func `size and gap changes activate the edited layout`() throws {
+        let globalSettings = testSettingsStore(suiteName: "MenuBarLayoutTests-size-activation")
+        let globalLayout = try #require(MenuBarLayoutPreset.compactStacked.layout)
+        MenuBarLayoutEditorPersistence.setSize(
+            .small,
+            activating: globalLayout,
+            for: nil,
+            settings: globalSettings)
+
+        #expect(globalSettings.menuBarLayoutSize == .small)
+        #expect(globalSettings.hasStoredMenuBarLayout)
+        #expect(globalSettings.menuBarLayout == globalLayout)
+
+        let providerSettings = testSettingsStore(suiteName: "MenuBarLayoutTests-gap-activation")
+        let providerLayout = try #require(MenuBarLayoutPreset.percentAndReset.layout)
+        MenuBarLayoutEditorPersistence.setGap(
+            .tight,
+            activating: providerLayout,
+            for: .kimi,
+            settings: providerSettings)
+
+        #expect(providerSettings.menuBarLayoutGap == .tight)
+        #expect(providerSettings.menuBarLayoutOverrides[.kimi] == providerLayout)
     }
 
     @Test
