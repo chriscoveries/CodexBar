@@ -40,6 +40,7 @@ extension CostUsageScanner {
             guard !report.data.isEmpty else { return nil }
 
             let summary = report.summary
+            let requestCounts = report.data.compactMap(\.requestCount)
             return CostUsageSessionBreakdown(
                 sessionID: sessionID,
                 lastActivity: Date(timeIntervalSince1970: TimeInterval(file.usage.mtimeUnixMs) / 1000),
@@ -47,7 +48,7 @@ extension CostUsageScanner {
                 cachedInputTokens: summary?.cacheReadTokens,
                 outputTokens: summary?.totalOutputTokens,
                 totalTokens: summary?.totalTokens,
-                requestCount: report.data.compactMap(\.requestCount).reduce(0, +),
+                requestCount: requestCounts.isEmpty ? nil : requestCounts.reduce(0, +),
                 costUSD: summary?.totalCostUSD,
                 modelBreakdowns: Self.codexProjectModelBreakdowns(from: report.data) ?? [])
         }

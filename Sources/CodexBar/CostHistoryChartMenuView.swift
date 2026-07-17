@@ -355,7 +355,7 @@ struct CostHistoryChartMenuView: View {
             .frame(height: Self.detailPrimaryLineHeight, alignment: .leading)
 
             ScrollView(.vertical) {
-                VStack(alignment: .leading, spacing: Self.sessionRowSpacing) {
+                LazyVStack(alignment: .leading, spacing: Self.sessionRowSpacing) {
                     ForEach(self.sessions) { session in
                         self.sessionRow(session)
                     }
@@ -400,7 +400,6 @@ struct CostHistoryChartMenuView: View {
         }
         .frame(height: Self.sessionRowHeight, alignment: .topLeading)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Session \(session.sessionID)")
     }
 
     private static func shortSessionID(_ sessionID: String) -> String {
