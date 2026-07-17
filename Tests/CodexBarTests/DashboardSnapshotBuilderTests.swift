@@ -270,6 +270,38 @@ struct DashboardSnapshotBuilderTests {
     }
 
     @Test
+    func `dashboard provider freshness includes status updates`() throws {
+        let payload = ProviderPayload(
+            provider: .claude,
+            account: nil,
+            version: nil,
+            source: "status",
+            status: ProviderStatusPayload(
+                indicator: .none,
+                description: "Operational",
+                updatedAt: Date(timeIntervalSince1970: 30),
+                url: "https://status.anthropic.com"),
+            usage: nil,
+            credits: nil,
+            antigravityPlanInfo: nil,
+            openaiDashboard: nil,
+            error: nil)
+
+        let snapshot = DashboardSnapshotBuilder.makeSnapshot(
+            usagePayloads: [payload],
+            costPayloads: [],
+            config: CodexBarConfig(providers: [ProviderConfig(id: .claude, enabled: true)]),
+            identityMode: .redacted,
+            generatedAt: Date(timeIntervalSince1970: 40),
+            refreshInterval: 60,
+            codexBarVersion: nil)
+        let object = try self.jsonObject(snapshot)
+        let provider = try #require((object["providers"] as? [[String: Any]])?.first)
+
+        #expect(provider["updatedAt"] as? String == "1970-01-01T00:00:30Z")
+    }
+
+    @Test
     func `dashboard safely clamps extreme refresh intervals`() {
         let snapshot = DashboardSnapshotBuilder.makeSnapshot(
             usagePayloads: [],

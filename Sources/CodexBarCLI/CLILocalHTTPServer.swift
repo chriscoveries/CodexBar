@@ -458,14 +458,16 @@ private func handleClient(
         sendResponse(
             CLILocalHTTPResponse(
                 status: .forbidden,
-                body: Data(#"{"error":"forbidden host"}"#.utf8)),
+                body: Data(#"{"error":"forbidden host"}"#.utf8),
+                extraHeaders: [("Cache-Control", "no-store")]),
             to: clientFD)
         return
     case .failure:
         sendResponse(
             CLILocalHTTPResponse(
                 status: .badRequest,
-                body: Data(#"{"error":"invalid request"}"#.utf8)),
+                body: Data(#"{"error":"invalid request"}"#.utf8),
+                extraHeaders: [("Cache-Control", "no-store")]),
             to: clientFD)
         return
     }

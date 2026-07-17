@@ -80,6 +80,7 @@ struct CLIServeRawHTTPTests {
                 request: "GET /health HTTP/1.1\r\nHost: 127.0.0.1\r\nHost: localhost\r\n\r\n")
 
             #expect(response.statusLine == "HTTP/1.1 400 Bad Request")
+            #expect(response.headerValue("Cache-Control") == "no-store")
         })
     }
 
@@ -99,6 +100,7 @@ struct CLIServeRawHTTPTests {
 
             #expect(response.statusLine == "HTTP/1.1 400 Bad Request")
             #expect(response.body == #"{"error":"invalid request"}"#)
+            #expect(response.headerValue("Cache-Control") == "no-store")
         })
     }
 
@@ -198,6 +200,7 @@ struct CLIServeRawHTTPTests {
                 ].joined(separator: "\r\n"))
 
             #expect(response.statusLine == "HTTP/1.1 400 Bad Request")
+            #expect(response.headerValue("Cache-Control") == "no-store")
         })
     }
 

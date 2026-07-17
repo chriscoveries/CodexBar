@@ -75,8 +75,7 @@ enum DashboardSnapshotBuilder {
                 priority: "normal"),
             error: error,
             updatedAt: self.updatedAt(
-                usage: payload.usage,
-                credits: payload.credits,
+                payload: payload,
                 cost: cost,
                 error: error,
                 generatedAt: generatedAt))
@@ -242,13 +241,12 @@ enum DashboardSnapshotBuilder {
     }
 
     private static func updatedAt(
-        usage: UsageSnapshot?,
-        credits: CreditsSnapshot?,
+        payload: ProviderPayload,
         cost: CostPayload?,
         error: ProviderErrorPayload?,
         generatedAt: Date) -> Date?
     {
-        let newest = [usage?.updatedAt, credits?.updatedAt, cost?.updatedAt]
+        let newest = [payload.status?.updatedAt, payload.usage?.updatedAt, payload.credits?.updatedAt, cost?.updatedAt]
             .compactMap(\.self)
             .max()
         if let newest {
