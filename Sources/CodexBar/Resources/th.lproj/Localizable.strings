@@ -510,7 +510,28 @@
 "tab_menu_bar" = "แถบเมนู";
 "tab_menu" = "เมนู";
 "tab_advanced" = "ขั้นสูง";
+"tab_hooks" = "ฮุก";
 "tab_about" = "เกี่ยวกับ";
+
+/* Hooks Pane */
+"hooks_enable_title" = "เปิดใช้งานฮุก";
+"hooks_enable_subtitle" = "เรียกใช้คำสั่งภายนอกเมื่อเกิดเหตุการณ์โควตาหรือผู้ให้บริการ";
+"hooks_trust_warning" = "ฮุกสามารถเรียกใช้คำสั่งในเครื่อง Mac ของคุณได้ ตั้งค่าเฉพาะคำสั่งที่คุณเชื่อถือเท่านั้น";
+"hooks_rules_header" = "กฎ";
+"hooks_empty" = "ยังไม่ได้ตั้งค่าฮุก";
+"hooks_add_rule" = "เพิ่มกฎ";
+"hooks_delete_rule" = "ลบกฎ";
+"hooks_rule_enabled" = "เปิดใช้งาน";
+"hooks_event" = "เหตุการณ์";
+"hooks_provider" = "ผู้ให้บริการ";
+"hooks_any_provider" = "ผู้ให้บริการใดก็ได้";
+"hooks_threshold" = "เรียกใช้เมื่อการใช้งาน ≥";
+"hooks_threshold_placeholder" = "90";
+"hooks_executable_placeholder" = "/usr/local/bin/my-command";
+"hooks_arguments_placeholder" = "อาร์กิวเมนต์";
+"hooks_argument_placeholder" = "อาร์กิวเมนต์";
+"hooks_add_argument" = "เพิ่มอาร์กิวเมนต์";
+"hooks_delete_argument" = "ลบอาร์กิวเมนต์";
 "tab_debug" = "แก้ไขข้อบกพร่อง";
 
 /* Providers Pane */

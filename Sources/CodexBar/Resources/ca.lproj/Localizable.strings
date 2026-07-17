@@ -490,7 +490,28 @@
 "tab_menu_bar" = "Barra de menús";
 "tab_menu" = "Menú";
 "tab_advanced" = "Avançat";
+"tab_hooks" = "Hooks";
 "tab_about" = "Quant a";
+
+/* Hooks Pane */
+"hooks_enable_title" = "Activa els hooks";
+"hooks_enable_subtitle" = "Executa ordres externes quan es produeixen esdeveniments de quota o de proveïdor.";
+"hooks_trust_warning" = "Els hooks poden executar ordres locals al teu Mac. Configura només ordres en què confiïs.";
+"hooks_rules_header" = "Regles";
+"hooks_empty" = "No hi ha cap hook configurat.";
+"hooks_add_rule" = "Afegeix una regla";
+"hooks_delete_rule" = "Elimina la regla";
+"hooks_rule_enabled" = "Activat";
+"hooks_event" = "Esdeveniment";
+"hooks_provider" = "Proveïdor";
+"hooks_any_provider" = "Qualsevol proveïdor";
+"hooks_threshold" = "Activa amb ús ≥";
+"hooks_threshold_placeholder" = "90";
+"hooks_executable_placeholder" = "/usr/local/bin/my-command";
+"hooks_arguments_placeholder" = "Arguments";
+"hooks_argument_placeholder" = "Argument";
+"hooks_add_argument" = "Afegeix un argument";
+"hooks_delete_argument" = "Elimina l'argument";
 "tab_debug" = "Depuració";
 
 /* Providers Pane */

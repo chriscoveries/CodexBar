@@ -5,10 +5,17 @@ public struct CodexBarConfig: Codable, Sendable {
 
     public var version: Int
     public var providers: [ProviderConfig]
+    /// Optional external event hooks. Absent (nil) or disabled means no hooks run.
+    public var hooks: HooksConfig?
 
-    public init(version: Int = Self.currentVersion, providers: [ProviderConfig]) {
+    public init(
+        version: Int = Self.currentVersion,
+        providers: [ProviderConfig],
+        hooks: HooksConfig? = nil)
+    {
         self.version = version
         self.providers = providers
+        self.hooks = hooks
     }
 
     public static func makeDefault(
@@ -70,7 +77,8 @@ public struct CodexBarConfig: Codable, Sendable {
 
         return CodexBarConfig(
             version: Self.currentVersion,
-            providers: normalized)
+            providers: normalized,
+            hooks: self.hooks)
     }
 
     public func orderedProviders() -> [UsageProvider] {

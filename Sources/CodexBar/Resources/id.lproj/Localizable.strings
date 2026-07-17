@@ -512,6 +512,27 @@
 "tab_menu_bar" = "Menu bar";
 "tab_menu" = "Menu";
 "tab_advanced" = "Lanjutan";
+"tab_hooks" = "Hook";
+
+/* Hooks Pane */
+"hooks_enable_title" = "Aktifkan hook";
+"hooks_enable_subtitle" = "Jalankan perintah eksternal saat terjadi peristiwa kuota atau penyedia.";
+"hooks_trust_warning" = "Hook dapat menjalankan perintah lokal di Mac Anda. Hanya konfigurasikan perintah yang Anda percayai.";
+"hooks_rules_header" = "Aturan";
+"hooks_empty" = "Belum ada hook yang dikonfigurasi.";
+"hooks_add_rule" = "Tambah aturan";
+"hooks_delete_rule" = "Hapus aturan";
+"hooks_rule_enabled" = "Aktif";
+"hooks_event" = "Peristiwa";
+"hooks_provider" = "Penyedia";
+"hooks_any_provider" = "Penyedia apa pun";
+"hooks_threshold" = "Picu saat penggunaan ≥";
+"hooks_threshold_placeholder" = "90";
+"hooks_executable_placeholder" = "/usr/local/bin/my-command";
+"hooks_arguments_placeholder" = "Argumen";
+"hooks_argument_placeholder" = "Argumen";
+"hooks_add_argument" = "Tambah argumen";
+"hooks_delete_argument" = "Hapus argumen";
 "tab_about" = "Tentang";
 "tab_debug" = "Debug";
 

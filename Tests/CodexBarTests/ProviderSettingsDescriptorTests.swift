@@ -853,7 +853,9 @@ extension ProviderSettingsDescriptorTests {
 
         #expect(DeepSeekProviderImplementation().settingsPickers(context: context).isEmpty)
     }
+}
 
+extension ProviderSettingsDescriptorTests {
     private func makeSettingsFixture(
         suite: String,
         environmentBase: [String: String] = [:]) throws -> ProviderSettingsFixture

@@ -510,8 +510,29 @@
 "tab_menu_bar" = "Menu Bar";
 "tab_menu" = "Menu";
 "tab_advanced" = "Advanced";
+"tab_hooks" = "Hooks";
 "tab_about" = "About";
 "tab_debug" = "Debug";
+
+/* Hooks Pane */
+"hooks_enable_title" = "Enable hooks";
+"hooks_enable_subtitle" = "Run external commands when quota or provider events occur.";
+"hooks_trust_warning" = "Hooks can execute local commands on your Mac. Only configure commands you trust.";
+"hooks_rules_header" = "Rules";
+"hooks_empty" = "No hooks configured.";
+"hooks_add_rule" = "Add rule";
+"hooks_delete_rule" = "Delete rule";
+"hooks_rule_enabled" = "Enabled";
+"hooks_event" = "Event";
+"hooks_provider" = "Provider";
+"hooks_any_provider" = "Any provider";
+"hooks_threshold" = "Fire at usage ≥";
+"hooks_threshold_placeholder" = "90";
+"hooks_executable_placeholder" = "/usr/local/bin/my-command";
+"hooks_arguments_placeholder" = "Arguments";
+"hooks_argument_placeholder" = "Argument";
+"hooks_add_argument" = "Add argument";
+"hooks_delete_argument" = "Delete argument";
 
 /* Providers Pane */
 "select_a_provider" = "Select a provider";

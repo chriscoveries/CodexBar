@@ -510,7 +510,28 @@
 "tab_menu_bar" = "نوار منو";
 "tab_menu" = "منو";
 "tab_advanced" = "پیشرفته";
+"tab_hooks" = "قلاب‌ها";
 "tab_about" = "درباره";
+
+/* Hooks Pane */
+"hooks_enable_title" = "فعال‌سازی قلاب‌ها";
+"hooks_enable_subtitle" = "اجرای دستورهای خارجی هنگام رخ‌دادن رویدادهای سهمیه یا ارائه‌دهنده.";
+"hooks_trust_warning" = "قلاب‌ها می‌توانند دستورهای محلی را روی مک شما اجرا کنند. فقط دستورهایی را تنظیم کنید که به آن‌ها اعتماد دارید.";
+"hooks_rules_header" = "قوانین";
+"hooks_empty" = "هیچ قلابی پیکربندی نشده است.";
+"hooks_add_rule" = "افزودن قانون";
+"hooks_delete_rule" = "حذف قانون";
+"hooks_rule_enabled" = "فعال";
+"hooks_event" = "رویداد";
+"hooks_provider" = "ارائه‌دهنده";
+"hooks_any_provider" = "هر ارائه‌دهنده";
+"hooks_threshold" = "اجرا در مصرف ≥";
+"hooks_threshold_placeholder" = "90";
+"hooks_executable_placeholder" = "/usr/local/bin/my-command";
+"hooks_arguments_placeholder" = "آرگومان‌ها";
+"hooks_argument_placeholder" = "آرگومان";
+"hooks_add_argument" = "افزودن آرگومان";
+"hooks_delete_argument" = "حذف آرگومان";
 "tab_debug" = "اشکال زدایی";
 
 /* Providers Pane */

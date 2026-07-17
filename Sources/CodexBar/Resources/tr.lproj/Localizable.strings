@@ -510,6 +510,27 @@
 "tab_menu_bar" = "Menü çubuğu";
 "tab_menu" = "Menü";
 "tab_advanced" = "Gelişmiş";
+"tab_hooks" = "Kancalar";
+
+/* Hooks Pane */
+"hooks_enable_title" = "Kancaları etkinleştir";
+"hooks_enable_subtitle" = "Kota veya sağlayıcı olayları gerçekleştiğinde harici komutlar çalıştır.";
+"hooks_trust_warning" = "Kancalar Mac'inizde yerel komutlar çalıştırabilir. Yalnızca güvendiğiniz komutları yapılandırın.";
+"hooks_rules_header" = "Kurallar";
+"hooks_empty" = "Yapılandırılmış kanca yok.";
+"hooks_add_rule" = "Kural ekle";
+"hooks_delete_rule" = "Kuralı sil";
+"hooks_rule_enabled" = "Etkin";
+"hooks_event" = "Olay";
+"hooks_provider" = "Sağlayıcı";
+"hooks_any_provider" = "Herhangi bir sağlayıcı";
+"hooks_threshold" = "Şu kullanımda tetikle ≥";
+"hooks_threshold_placeholder" = "90";
+"hooks_executable_placeholder" = "/usr/local/bin/my-command";
+"hooks_arguments_placeholder" = "Argümanlar";
+"hooks_argument_placeholder" = "Argüman";
+"hooks_add_argument" = "Argüman ekle";
+"hooks_delete_argument" = "Argümanı sil";
 "tab_about" = "Hakkında";
 "tab_debug" = "Hata Ayıklama";
 

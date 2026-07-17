@@ -485,6 +485,27 @@
 "tab_menu_bar" = "Barra de menús";
 "tab_menu" = "Menú";
 "tab_advanced" = "Avanzado";
+"tab_hooks" = "Ganchos";
+
+/* Hooks Pane */
+"hooks_enable_title" = "Activar ganchos";
+"hooks_enable_subtitle" = "Executa comandos externos cando se producen eventos de cota ou provedor.";
+"hooks_trust_warning" = "Os ganchos poden executar comandos locais no teu Mac. Configura só comandos nos que confíes.";
+"hooks_rules_header" = "Regras";
+"hooks_empty" = "Non hai ganchos configurados.";
+"hooks_add_rule" = "Engadir regra";
+"hooks_delete_rule" = "Eliminar regra";
+"hooks_rule_enabled" = "Activado";
+"hooks_event" = "Evento";
+"hooks_provider" = "Provedor";
+"hooks_any_provider" = "Calquera provedor";
+"hooks_threshold" = "Activar cun uso ≥";
+"hooks_threshold_placeholder" = "90";
+"hooks_executable_placeholder" = "/usr/local/bin/my-command";
+"hooks_arguments_placeholder" = "Argumentos";
+"hooks_argument_placeholder" = "Argumento";
+"hooks_add_argument" = "Engadir argumento";
+"hooks_delete_argument" = "Eliminar argumento";
 "tab_about" = "Acerca de";
 "tab_debug" = "Depuración";
 
