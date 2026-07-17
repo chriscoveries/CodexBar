@@ -4,6 +4,56 @@ final class SettingsOpenRequest {
     var wasHandled = false
 }
 
+@MainActor
+struct SettingsWindowOpener {
+    enum Path {
+        case notification
+        case appKit
+    }
+
+    enum Outcome: Equatable {
+        case preferred
+        case fallback
+        case failed
+    }
+
+    private let notification: @MainActor () -> Bool
+    private let appKit: @MainActor () -> Bool
+
+    init(
+        notification: @escaping @MainActor () -> Bool,
+        appKit: @escaping @MainActor () -> Bool)
+    {
+        self.notification = notification
+        self.appKit = appKit
+    }
+
+    static func live() -> Self {
+        Self(
+            notification: {
+                let request = SettingsOpenRequest()
+                NotificationCenter.default.post(name: .codexbarOpenSettings, object: request)
+                return request.wasHandled
+            },
+            appKit: {
+                NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
+            })
+    }
+
+    func open(preferred: Path) -> Outcome {
+        let attempts = preferred == .notification
+            ? [self.notification, self.appKit]
+            : [self.appKit, self.notification]
+        if attempts[0]() {
+            return .preferred
+        }
+        if attempts[1]() {
+            return .fallback
+        }
+        return .failed
+    }
+}
+
 struct HiddenWindowView: View {
     @Environment(\.openSettings) private var openSettings
 
@@ -27,7 +77,7 @@ struct HiddenWindowView: View {
 }
 
 @MainActor
-private struct KeepaliveWindowConfigurator: NSViewRepresentable {
+struct KeepaliveWindowConfigurator: NSViewRepresentable {
     func makeNSView(context: Context) -> KeepaliveWindowConfiguratorView {
         KeepaliveWindowConfiguratorView()
     }
@@ -36,7 +86,7 @@ private struct KeepaliveWindowConfigurator: NSViewRepresentable {
 }
 
 @MainActor
-private final class KeepaliveWindowConfiguratorView: NSView {
+final class KeepaliveWindowConfiguratorView: NSView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         guard let window else { return }

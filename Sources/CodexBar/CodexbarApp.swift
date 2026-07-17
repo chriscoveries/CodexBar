@@ -106,14 +106,14 @@ struct CodexBarApp: App {
     private func openSettings(pane: SettingsPane) {
         self.preferencesSelection.pane = pane
         NSApp.activate(ignoringOtherApps: true)
-        guard !NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil) else { return }
-
-        let request = SettingsOpenRequest()
-        NotificationCenter.default.post(name: .codexbarOpenSettings, object: request)
+        let outcome = SettingsWindowOpener.live().open(preferred: .appKit)
         let logger = CodexBarLog.logger(LogCategories.app)
-        if request.wasHandled {
+        switch outcome {
+        case .preferred:
+            break
+        case .fallback:
             logger.warning("Settings AppKit action was not handled; used notification fallback")
-        } else {
+        case .failed:
             logger.error("Failed to open Settings; AppKit action and notification fallback unavailable")
         }
     }
