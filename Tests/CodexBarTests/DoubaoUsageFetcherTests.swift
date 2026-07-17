@@ -112,8 +112,14 @@ struct DoubaoUsageFetcherTests {
                   "subscribed": true,
                   "periods": [
                     {"label": "5h", "total": 2000, "percent": 0},
-                    {"label": "weekly", "used": 2009.33, "total": 7000, "percent": 28.7, "reset_at": "2026-07-20T00:00:00+08:00"},
-                    {"label": "monthly", "used": 2009.33, "total": 20000, "percent": 10.05, "reset_at": "2026-08-14T23:59:59+08:00"}
+                    {
+                      "label": "weekly", "used": 2009.33, "total": 7000, "percent": 28.7,
+                      "reset_at": "2026-07-20T00:00:00+08:00"
+                    },
+                    {
+                      "label": "monthly", "used": 2009.33, "total": 20000, "percent": 10.05,
+                      "reset_at": "2026-08-14T23:59:59+08:00"
+                    }
                   ]
                 },
                 {
@@ -284,6 +290,33 @@ struct DoubaoUsageFetcherTests {
     }
 
     @Test
+    func `arkcli response accepts updated_at in seconds`() throws {
+        // Real arkcli output (0.1.x) emits `updated_at` in epoch seconds, not
+        // milliseconds. Verify the auto-detection picks the right unit so the
+        // menu doesn't show a 1970 timestamp.
+        let data = Data(
+            """
+            {
+              "items": [
+                {
+                  "product": "coding-plan",
+                  "subscribed": true,
+                  "periods": [
+                    {"label": "session", "percent": 27.3, "reset_at": "2026-07-17T19:22:45+08:00"}
+                  ],
+                  "updated_at": 1784270829
+                }
+              ]
+            }
+            """.utf8)
+
+        let usage = try DoubaoUsageFetcher.decodeArkcliUsage(from: data).toUsageSnapshot(
+            updatedAt: Date(timeIntervalSince1970: 0))
+
+        #expect(usage.updatedAt == Date(timeIntervalSince1970: 1_784_270_829))
+    }
+
+    @Test
     func `arkcli fetch via injected runner returns parsed snapshot`() async throws {
         let jsonData = Data(
             """
@@ -317,7 +350,7 @@ struct DoubaoUsageFetcherTests {
             _ = try await DoubaoUsageFetcher.fetchCodingPlanUsage(
                 runArkcli: { Data("not json".utf8) })
         } throws: { error in
-            guard case let DoubaoUsageError.parseFailed(_) = error else { return false }
+            guard case DoubaoUsageError.parseFailed = error else { return false }
             return true
         }
     }
@@ -436,6 +469,108 @@ struct DoubaoUsageFetcherTests {
             (error as? URLError)?.code == .cancelled
         }
         #expect(await transport.requestCount() == 2)
+    }
+
+    // MARK: - AK/SK signed Coding Plan usage (legacy Volcengine API)
+
+    @Test
+    func `signed coding plan response decodes quota windows`() throws {
+        let data = Data(
+            """
+            {
+              "Result": {
+                "Status": "active",
+                "UpdateTimestamp": 1784191193.0,
+                "QuotaUsage": [
+                  {"Level": "session", "Percent": 7.48, "ResetTimestamp": 1784192000.0},
+                  {"Level": "weekly", "Percent": 2.71, "ResetTimestamp": 1784534400.0},
+                  {"Level": "monthly", "Percent": 1.36, "ResetTimestamp": 1787040000.0}
+                ]
+              }
+            }
+            """.utf8)
+
+        let usage = try DoubaoUsageFetcher.decodeCodingPlanUsage(from: data)
+
+        #expect(usage.status == "active")
+        #expect(usage.updateTime == Date(timeIntervalSince1970: 1_784_191_193))
+        #expect(usage.quotas.count == 3)
+        #expect(usage.quotas[0].level == "session")
+        #expect(usage.quotas[0].percent == 7.48)
+        #expect(usage.quotas[1].level == "weekly")
+        #expect(usage.quotas[1].percent == 2.71)
+        #expect(usage.quotas[2].level == "monthly")
+        #expect(usage.quotas[2].percent == 1.36)
+    }
+
+    @Test
+    func `signed coding plan fetch sends signed request and returns snapshot`() async throws {
+        let body = """
+        {
+          "Result": {
+            "Status": "active",
+            "UpdateTimestamp": 1784191193.0,
+            "QuotaUsage": [
+              {"Level": "session", "Percent": 42.0, "ResetTimestamp": 1784192000.0}
+            ]
+          }
+        }
+        """
+        let transport = DoubaoScriptedTransport(results: [
+            .rawResponse(statusCode: 200, body: body),
+        ])
+        let credentials = DoubaoCodingPlanCredentials(
+            accessKeyID: "AKLTtest",
+            secretAccessKey: "secret123",
+            region: "cn-beijing")
+
+        let snapshot = try await DoubaoUsageFetcher.fetchCodingPlanUsage(
+            credentials: credentials,
+            session: transport,
+            date: Date(timeIntervalSince1970: 1_700_000_000))
+
+        #expect(snapshot.codingPlanUsage != nil)
+        #expect(snapshot.codingPlanUsage?.quotas.first?.percent == 42.0)
+
+        // Verify the signed request headers were set.
+        let captured = await transport.lastCapturedRequest()
+        #expect(captured?.date != nil)
+        #expect(captured?.contentSHA256 != nil)
+        #expect(captured?.authorization?.hasPrefix("HMAC-SHA256 Credential=AKLTtest/") == true)
+        #expect(await transport.requestCount() == 1)
+    }
+
+    @Test
+    func `signed coding plan fetch surfaces non-200 error`() async {
+        let transport = DoubaoScriptedTransport(results: [
+            .rawResponse(
+                statusCode: 403,
+                body: #"{"ResponseMetadata":{"Error":{"Code":"SignatureExpired","Message":"signature expired"}}}"#),
+        ])
+        let credentials = DoubaoCodingPlanCredentials(
+            accessKeyID: "AKLTtest",
+            secretAccessKey: "secret123",
+            region: "cn-beijing")
+
+        await #expect {
+            _ = try await DoubaoUsageFetcher.fetchCodingPlanUsage(
+                credentials: credentials,
+                session: transport)
+        } throws: { error in
+            guard case let DoubaoUsageError.apiError(code, _) = error else { return false }
+            return code == 403
+        }
+        #expect(await transport.requestCount() == 1)
+    }
+
+    @Test
+    func `signed coding plan decode fails on invalid JSON`() {
+        #expect {
+            _ = try DoubaoUsageFetcher.decodeCodingPlanUsage(from: Data("not json".utf8))
+        } throws: { error in
+            guard case DoubaoUsageError.parseFailed = error else { return false }
+            return true
+        }
     }
 }
 

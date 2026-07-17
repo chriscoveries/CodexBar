@@ -40,94 +40,127 @@ public enum DoubaoProviderDescriptor {
                 supportsTokenCost: false,
                 noDataMessage: { "Doubao cost summary is not available." }),
             fetchPlan: ProviderFetchPlan(
-                sourceModes: [.auto, .api],
-                pipeline: ProviderFetchPipeline(resolveStrategies: { _ in
-                    [DoubaoAPIFetchStrategy()]
-                })),
+                sourceModes: [.auto, .cli, .api],
+                pipeline: ProviderFetchPipeline(resolveStrategies: self.resolveStrategies)),
             cli: ProviderCLIConfig(
                 name: "doubao",
                 aliases: ["volcengine", "ark", "bytedance"],
                 versionDetector: nil))
     }
+
+    static func resolveStrategies(context: ProviderFetchContext) async -> [any ProviderFetchStrategy] {
+        switch context.sourceMode {
+        case .auto:
+            // arkcli SSO first (preferred, no credentials needed), then API fallback.
+            [DoubaoCLIFetchStrategy(), DoubaoAPIFetchStrategy()]
+        case .cli:
+            // Explicit CLI source: arkcli only, no API fallback.
+            [DoubaoCLIFetchStrategy()]
+        case .api:
+            // Explicit API source: AK/SK signed or API key probe only, no SSO fallback.
+            [DoubaoAPIFetchStrategy()]
+        case .web, .oauth:
+            []
+        }
+    }
 }
 
-struct DoubaoAPIFetchStrategy: ProviderFetchStrategy {
-    let id: String = "doubao.api"
-    let kind: ProviderFetchKind = .apiToken
+// MARK: - CLI strategy (arkcli SSO)
+
+struct DoubaoCLIFetchStrategy: ProviderFetchStrategy {
+    let id: String = "doubao.cli"
+    let kind: ProviderFetchKind = .cli
     private let cliUsageLoader: @Sendable () async throws -> DoubaoUsageSnapshot
-    private let arkUsageLoader: @Sendable (String) async throws -> DoubaoUsageSnapshot
 
     init(
         cliUsageLoader: @escaping @Sendable () async throws -> DoubaoUsageSnapshot = {
             try await DoubaoUsageFetcher.fetchCodingPlanUsage()
-        },
+        })
+    {
+        self.cliUsageLoader = cliUsageLoader
+    }
+
+    func isAvailable(_ context: ProviderFetchContext) async -> Bool {
+        DoubaoUsageFetcher.findArkcli(environment: context.env) != nil
+    }
+
+    func fetch(_ context: ProviderFetchContext) async throws -> ProviderFetchResult {
+        let usage = try await self.cliUsageLoader()
+        return self.makeResult(usage: usage.toUsageSnapshot(), sourceLabel: "cli")
+    }
+
+    func shouldFallback(on error: Error, context: ProviderFetchContext) -> Bool {
+        // Only allow fallback to API in auto mode; explicit CLI mode stays strict.
+        guard context.sourceMode == .auto else { return false }
+        if error is CancellationError || (error as? URLError)?.code == .cancelled || Task.isCancelled {
+            return false
+        }
+        return true
+    }
+}
+
+// MARK: - API strategy (AK/SK signed + Ark API key probe)
+
+struct DoubaoAPIFetchStrategy: ProviderFetchStrategy {
+    let id: String = "doubao.api"
+    let kind: ProviderFetchKind = .apiToken
+    private let signedUsageLoader: @Sendable (DoubaoCodingPlanCredentials) async throws -> DoubaoUsageSnapshot
+    private let arkUsageLoader: @Sendable (String) async throws -> DoubaoUsageSnapshot
+
+    init(
+        signedUsageLoader: @escaping @Sendable (DoubaoCodingPlanCredentials) async throws
+            -> DoubaoUsageSnapshot = { credentials in
+                try await DoubaoUsageFetcher.fetchCodingPlanUsage(credentials: credentials)
+            },
         arkUsageLoader: @escaping @Sendable (String) async throws -> DoubaoUsageSnapshot = { apiKey in
             try await DoubaoUsageFetcher.fetchUsage(apiKey: apiKey)
         })
     {
-        self.cliUsageLoader = cliUsageLoader
+        self.signedUsageLoader = signedUsageLoader
         self.arkUsageLoader = arkUsageLoader
     }
 
     func isAvailable(_ context: ProviderFetchContext) async -> Bool {
-        DoubaoAPIFetchStrategy.arkcliInstalled(environment: context.env) ||
+        // Explicit API mode always runs so a missing key surfaces an error.
+        // Auto mode only tries API when credentials are resolvable.
+        context.sourceMode == .api ||
+            DoubaoSettingsReader.codingPlanCredentials(environment: context.env) != nil ||
             ProviderTokenResolver.doubaoToken(environment: context.env) != nil
     }
 
     func fetch(_ context: ProviderFetchContext) async throws -> ProviderFetchResult {
         let apiKey = ProviderTokenResolver.doubaoToken(environment: context.env)
+        var signedError: Error?
 
-        // When the user explicitly selected the API source and supplied a key,
-        // prefer the Ark API-key probe. If it fails (e.g. invalid key, network,
-        // wrong account), still fall through to arkcli so SSO users are not
-        // left with a hard error when a working CLI login is available.
-        if context.sourceMode == .api, let apiKey {
+        // 1) Try AK/SK signed Coding Plan usage (legacy Volcengine API).
+        if let credentials = DoubaoSettingsReader.codingPlanCredentials(environment: context.env) {
             do {
-                let usage = try await self.arkUsageLoader(apiKey)
+                let usage = try await self.signedUsageLoader(credentials)
                 return self.makeResult(usage: usage.toUsageSnapshot(), sourceLabel: "api")
             } catch {
                 if Self.isCancellation(error) {
                     throw error
                 }
-                // Fall through to arkcli
+                // Preserve the signed error so it surfaces when there is no API key to fall back to.
+                signedError = error
             }
         }
 
-        // 1) Try arkcli CLI (SSO-based, no credentials needed).
-        // The loader throws quickly if arkcli is not installed.
-        do {
-            let usage = try await self.cliUsageLoader()
-            return self.makeResult(usage: usage.toUsageSnapshot(), sourceLabel: "cli")
-        } catch {
-            if Self.isCancellation(error) {
-                throw error
-            }
-            // Fall through to API key probe
-        }
-
-        // 2) Fall back to Ark API key probe (rate-limit headers)
+        // 2) Fall back to Ark API key probe (rate-limit headers).
         guard let apiKey else {
-            throw DoubaoUsageError.missingCredentials
+            // If the signed request failed, surface that error instead of a generic "missing key".
+            throw signedError ?? DoubaoUsageError.missingCredentials
         }
         let usage = try await self.arkUsageLoader(apiKey)
         return self.makeResult(usage: usage.toUsageSnapshot(), sourceLabel: "api")
     }
 
     func shouldFallback(on _: Error, context _: ProviderFetchContext) -> Bool {
+        // API strategy never falls back to CLI; explicit API mode stays strict.
         false
     }
 
     private static func isCancellation(_ error: Error) -> Bool {
         error is CancellationError || (error as? URLError)?.code == .cancelled || Task.isCancelled
-    }
-
-    private static func arkcliInstalled(environment: [String: String]) -> Bool {
-        if let envPath = environment["ARKCLI_PATH"],
-           FileManager.default.isExecutableFile(atPath: envPath)
-        {
-            return true
-        }
-        let candidates = ["/usr/local/bin/arkcli", "/opt/homebrew/bin/arkcli"]
-        return candidates.contains { FileManager.default.isExecutableFile(atPath: $0) }
     }
 }

@@ -589,8 +589,9 @@ private struct UsageMenuCardUsageContentView: View {
     /// Doubao ships two subscriptions (Coding Plan + Agent Plan) whose windows
     /// share the same period labels. Rendering them as a flat list is confusing,
     /// so split by the "doubao-agent-" id prefix and surface two group headers.
-    private var doubaoSplitMetrics: (coding: [UsageMenuCardView.Model.Metric],
-                                     agent: [UsageMenuCardView.Model.Metric])?
+    private var doubaoSplitMetrics: (
+        coding: [UsageMenuCardView.Model.Metric],
+        agent: [UsageMenuCardView.Model.Metric])?
     {
         guard self.model.provider == .doubao else { return nil }
         let agent = self.model.metrics.filter { $0.id.hasPrefix("doubao-agent-") }
@@ -599,7 +600,6 @@ private struct UsageMenuCardUsageContentView: View {
         return (coding, agent)
     }
 
-    @ViewBuilder
     private func groupHeader(_ title: String) -> some View {
         Text(title)
             .font(.caption.weight(.semibold))
