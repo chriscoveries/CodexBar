@@ -22,6 +22,46 @@ public struct CostUsageWindowSummary: Sendable, Equatable {
     }
 }
 
+/// An estimated local Codex conversation total derived from one session log.
+/// This is intentionally distinct from account-level billing or quota data.
+public struct CostUsageSessionBreakdown: Sendable, Equatable, Identifiable {
+    public let sessionID: String
+    public let lastActivity: Date
+    public let inputTokens: Int?
+    public let cachedInputTokens: Int?
+    public let outputTokens: Int?
+    public let totalTokens: Int?
+    public let requestCount: Int?
+    public let costUSD: Double?
+    public let modelBreakdowns: [CostUsageDailyReport.ModelBreakdown]
+
+    public var id: String {
+        self.sessionID
+    }
+
+    public init(
+        sessionID: String,
+        lastActivity: Date,
+        inputTokens: Int?,
+        cachedInputTokens: Int?,
+        outputTokens: Int?,
+        totalTokens: Int?,
+        requestCount: Int?,
+        costUSD: Double?,
+        modelBreakdowns: [CostUsageDailyReport.ModelBreakdown])
+    {
+        self.sessionID = sessionID
+        self.lastActivity = lastActivity
+        self.inputTokens = inputTokens
+        self.cachedInputTokens = cachedInputTokens
+        self.outputTokens = outputTokens
+        self.totalTokens = totalTokens
+        self.requestCount = requestCount
+        self.costUSD = costUSD
+        self.modelBreakdowns = modelBreakdowns
+    }
+}
+
 public struct CostUsageTokenSnapshot: Sendable, Equatable {
     public let sessionTokens: Int?
     public let sessionCostUSD: Double?
@@ -42,6 +82,7 @@ public struct CostUsageTokenSnapshot: Sendable, Equatable {
     public let credentialScopeFingerprint: String?
     public let daily: [CostUsageDailyReport.Entry]
     public let projects: [CostUsageProjectBreakdown]
+    public let sessions: [CostUsageSessionBreakdown]
     public let updatedAt: Date
 
     public init(
@@ -59,6 +100,7 @@ public struct CostUsageTokenSnapshot: Sendable, Equatable {
         credentialScopeFingerprint: String? = nil,
         daily: [CostUsageDailyReport.Entry],
         projects: [CostUsageProjectBreakdown] = [],
+        sessions: [CostUsageSessionBreakdown] = [],
         updatedAt: Date)
     {
         self.sessionTokens = sessionTokens
@@ -76,6 +118,7 @@ public struct CostUsageTokenSnapshot: Sendable, Equatable {
         self.credentialScopeFingerprint = credentialScopeFingerprint
         self.daily = daily
         self.projects = projects
+        self.sessions = sessions
         self.updatedAt = updatedAt
     }
 

@@ -384,6 +384,15 @@ extension SettingsStore {
         }
     }
 
+    var codexLocalSessionCostLedgerEnabled: Bool {
+        get { self.defaultsState.codexLocalSessionCostLedgerEnabled }
+        set {
+            self.defaultsState.codexLocalSessionCostLedgerEnabled = newValue
+            self.userDefaults.set(newValue, forKey: "codexLocalSessionCostLedgerEnabled")
+            self.noteBackgroundWorkSettingsChanged()
+        }
+    }
+
     var costUsageHistoryDays: Int {
         get { self.defaultsState.costUsageHistoryDays }
         set {

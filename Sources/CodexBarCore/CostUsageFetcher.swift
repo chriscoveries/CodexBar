@@ -75,6 +75,7 @@ public struct CostUsageFetcher: Sendable {
         codexHomePath: String? = nil,
         historyDays: Int = 30,
         cursorCookieHeaderOverride: String? = nil,
+        allowPricingRefresh: Bool = true,
         refreshPricingInBackground: Bool = true,
         includePiSessions: Bool = true) async throws -> CostUsageTokenSnapshot
     {
@@ -87,6 +88,7 @@ public struct CostUsageFetcher: Sendable {
             codexHomePath: codexHomePath,
             historyDays: historyDays,
             cursorCookieHeaderOverride: cursorCookieHeaderOverride,
+            allowPricingRefresh: allowPricingRefresh,
             refreshPricingInBackground: refreshPricingInBackground,
             includePiSessions: includePiSessions,
             bypassScannerDebounce: false,
@@ -102,6 +104,7 @@ public struct CostUsageFetcher: Sendable {
         codexHomePath: String? = nil,
         historyDays: Int = 30,
         cursorCookieHeaderOverride: String? = nil,
+        allowPricingRefresh: Bool = true,
         refreshPricingInBackground: Bool = true,
         includePiSessions: Bool = true,
         bypassScannerDebounce: Bool) async throws -> CostUsageTokenSnapshot
@@ -115,6 +118,7 @@ public struct CostUsageFetcher: Sendable {
             codexHomePath: codexHomePath,
             historyDays: historyDays,
             cursorCookieHeaderOverride: cursorCookieHeaderOverride,
+            allowPricingRefresh: allowPricingRefresh,
             refreshPricingInBackground: refreshPricingInBackground,
             includePiSessions: includePiSessions,
             bypassScannerDebounce: bypassScannerDebounce,
@@ -130,6 +134,7 @@ public struct CostUsageFetcher: Sendable {
         allowVertexClaudeFallback: Bool = false,
         codexHomePath: String? = nil,
         historyDays: Int = 30,
+        allowPricingRefresh: Bool = true,
         refreshPricingInBackground: Bool = true,
         automaticCodexScanByteLimit _: Int64?) async throws -> CostUsageTokenSnapshot
     {
@@ -141,11 +146,28 @@ public struct CostUsageFetcher: Sendable {
             allowVertexClaudeFallback: allowVertexClaudeFallback,
             codexHomePath: codexHomePath,
             historyDays: historyDays,
+            allowPricingRefresh: allowPricingRefresh,
             refreshPricingInBackground: refreshPricingInBackground)
     }
 
     private func scannerOptionsOverride() -> CostUsageScanner.Options? {
         self.scannerOptions
+    }
+
+    private static func resolvedScannerOptions(
+        _ override: CostUsageScanner.Options?,
+        provider: UsageProvider,
+        codexHomePath: String?) -> CostUsageScanner.Options
+    {
+        var options = override ?? CostUsageScanner.Options()
+        if provider == .codex,
+           let codexHomePath = codexHomePath?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !codexHomePath.isEmpty
+        {
+            options.codexSessionsRoot = URL(fileURLWithPath: codexHomePath, isDirectory: true)
+                .appendingPathComponent("sessions", isDirectory: true)
+        }
+        return options
     }
 
     static func loadTokenSnapshot(
@@ -157,6 +179,7 @@ public struct CostUsageFetcher: Sendable {
         codexHomePath: String? = nil,
         historyDays: Int = 30,
         cursorCookieHeaderOverride: String? = nil,
+        allowPricingRefresh: Bool = true,
         refreshPricingInBackground: Bool = true,
         includePiSessions: Bool = true,
         bypassScannerDebounce: Bool = false,
@@ -170,56 +193,36 @@ public struct CostUsageFetcher: Sendable {
             throw CostUsageError.unsupportedProvider(provider)
         }
 
+        let until = now
         let clampedHistoryDays = max(1, min(365, historyDays))
         // Rolling window is inclusive, so a 30-day display starts 29 days before `now`.
         let since = Calendar.current.date(byAdding: .day, value: -(clampedHistoryDays - 1), to: now) ?? now
 
-        if provider == .bedrock {
-            let daily = try await Self.loadBedrockDailyReport(
-                environment: environment,
-                since: since,
-                until: now)
-            return Self.tokenSnapshot(
-                from: daily,
-                now: now,
-                historyDays: clampedHistoryDays,
-                useCurrentLocalDayForSession: false)
-        }
-
-        #if os(macOS)
-        if provider == .cursor {
-            return try await Self.loadCursorTokenSnapshot(
-                now: now,
-                since: since,
-                historyDays: clampedHistoryDays,
-                cookieHeaderOverride: cursorCookieHeaderOverride)
-        }
-        #endif
-
-        var options = overrideScannerOptions ?? CostUsageScanner.Options()
-        if provider == .codex,
-           let codexHomePath = codexHomePath?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !codexHomePath.isEmpty
+        if let remoteSnapshot = try await self.loadRemoteTokenSnapshot(
+            provider: provider,
+            environment: environment,
+            now: now,
+            historyDays: clampedHistoryDays,
+            cursorCookieHeaderOverride: cursorCookieHeaderOverride)
         {
-            options.codexSessionsRoot = URL(fileURLWithPath: codexHomePath, isDirectory: true)
-                .appendingPathComponent("sessions", isDirectory: true)
+            return remoteSnapshot
         }
-        if retryUnknownPricing, provider == .codex || provider == .claude {
-            let pricingCacheRoot = options.cacheRoot
-            if refreshPricingInBackground {
-                Task.detached(priority: .utility) {
-                    await ModelsDevPricingPipeline.refreshIfNeeded(
-                        now: now,
-                        cacheRoot: pricingCacheRoot,
-                        client: modelsDevClient)
-                }
-            } else {
-                await ModelsDevPricingPipeline.refreshIfNeeded(
-                    now: now,
-                    cacheRoot: pricingCacheRoot,
-                    client: modelsDevClient)
-            }
-        }
+
+        var options = Self.resolvedScannerOptions(
+            overrideScannerOptions,
+            provider: provider,
+            codexHomePath: codexHomePath)
+        let scopedCodexHomePath = codexHomePath?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let shouldMergePiUsage = provider != .codex || scopedCodexHomePath?.isEmpty != false
+        await Self.refreshPricingIfAllowed(
+            options: PricingRefreshOptions(
+                provider: provider,
+                isAllowed: allowPricingRefresh,
+                retryUnknown: retryUnknownPricing,
+                inBackground: refreshPricingInBackground),
+            now: now,
+            cacheRoot: options.cacheRoot,
+            client: modelsDevClient)
 
         if provider == .vertexai {
             options.claudeLogProviderFilter = allowVertexClaudeFallback ? .all : .vertexAIOnly
@@ -248,7 +251,7 @@ public struct CostUsageFetcher: Sendable {
             var daily = try CostUsageScanner.loadDailyReportCancellable(
                 provider: provider,
                 since: since,
-                until: now,
+                until: until,
                 now: now,
                 options: scanOptions,
                 checkCancellation: checkCancellation)
@@ -264,7 +267,7 @@ public struct CostUsageFetcher: Sendable {
                 daily = try CostUsageScanner.loadDailyReportCancellable(
                     provider: provider,
                     since: since,
-                    until: now,
+                    until: until,
                     now: now,
                     options: fallback,
                     checkCancellation: checkCancellation)
@@ -272,19 +275,29 @@ public struct CostUsageFetcher: Sendable {
             }
 
             var projects: [CostUsageProjectBreakdown] = []
+            var sessions: [CostUsageSessionBreakdown] = []
             var piDaily: CostUsageDailyReport?
             if provider == .codex {
-                let cache = CostUsageCacheIO.load(provider: .codex, cacheRoot: scanOptions.cacheRoot)
+                let roots = CostUsageScanner.codexSessionsRoots(options: scanOptions)
+                let cache = CostUsageScanner.codexCache(
+                    CostUsageCacheIO.load(provider: .codex, cacheRoot: scanOptions.cacheRoot),
+                    scopedTo: roots)
+                let range = CostUsageScanner.CostUsageDayRange(since: since, until: until)
                 projects = CostUsageScanner.buildCodexProjectBreakdownsFromCache(
                     cache: cache,
-                    range: CostUsageScanner.CostUsageDayRange(since: since, until: now),
+                    range: range,
                     modelsDevCacheRoot: scanOptions.cacheRoot)
+                sessions = CostUsageScanner.buildCodexSessionBreakdownsFromCache(
+                    cache: cache,
+                    range: range,
+                    modelsDevCacheRoot: scanOptions.cacheRoot,
+                    sessionRoots: roots)
             }
-            if includePiSessions, provider == .codex || provider == .claude {
+            if includePiSessions, provider == .claude || (provider == .codex && shouldMergePiUsage) {
                 let piReport = try PiSessionCostScanner.loadDailyReportCancellable(
                     provider: provider,
                     since: since,
-                    until: now,
+                    until: until,
                     now: now,
                     options: piOptions,
                     checkCancellation: checkCancellation)
@@ -297,11 +310,15 @@ public struct CostUsageFetcher: Sendable {
             if provider == .codex {
                 projects = Self.mergedProjectBreakdowns(
                     projects + [piDaily.flatMap(Self.unknownProjectBreakdown(from:))].compactMap(\.self))
+                if piDaily?.data.isEmpty == false {
+                    sessions = []
+                }
             }
-            return (daily: daily, projects: projects)
+            return (daily: daily, projects: projects, sessions: sessions)
         }
 
-        if retryUnknownPricing,
+        if allowPricingRefresh,
+           retryUnknownPricing,
            let request = Self.unknownPricingRefreshRequest(
                provider: provider,
                daily: scanResult.daily,
@@ -318,6 +335,8 @@ public struct CostUsageFetcher: Sendable {
                 allowVertexClaudeFallback: allowVertexClaudeFallback,
                 codexHomePath: codexHomePath,
                 historyDays: historyDays,
+                cursorCookieHeaderOverride: cursorCookieHeaderOverride,
+                allowPricingRefresh: allowPricingRefresh,
                 refreshPricingInBackground: false,
                 includePiSessions: includePiSessions,
                 scannerOptions: options,
@@ -330,7 +349,35 @@ public struct CostUsageFetcher: Sendable {
             from: scanResult.daily,
             now: now,
             historyDays: clampedHistoryDays,
-            projects: scanResult.projects)
+            projects: scanResult.projects,
+            sessions: scanResult.sessions)
+    }
+
+    private struct PricingRefreshOptions: Sendable {
+        let provider: UsageProvider
+        let isAllowed: Bool
+        let retryUnknown: Bool
+        let inBackground: Bool
+    }
+
+    private static func refreshPricingIfAllowed(
+        options: PricingRefreshOptions,
+        now: Date,
+        cacheRoot: URL?,
+        client: ModelsDevClient) async
+    {
+        guard options.isAllowed,
+              options.retryUnknown,
+              options.provider == .codex || options.provider == .claude
+        else { return }
+
+        if options.inBackground {
+            Task.detached(priority: .utility) {
+                await ModelsDevPricingPipeline.refreshIfNeeded(now: now, cacheRoot: cacheRoot, client: client)
+            }
+        } else {
+            await ModelsDevPricingPipeline.refreshIfNeeded(now: now, cacheRoot: cacheRoot, client: client)
+        }
     }
 
     private struct UnknownPricingRefreshRequest: Sendable {
@@ -427,9 +474,13 @@ public struct CostUsageFetcher: Sendable {
             let since = Calendar.current.date(byAdding: .day, value: -(clampedHistoryDays - 1), to: now) ?? now
             let range = CostUsageScanner.CostUsageDayRange(since: since, until: until)
             let options = overrideScannerOptions ?? CostUsageScanner.Options()
-            let cache = CostUsageCacheIO.load(provider: .codex, cacheRoot: options.cacheRoot)
+            let roots = CostUsageScanner.codexSessionsRoots(options: options)
+            let cache = CostUsageScanner.codexCache(
+                CostUsageCacheIO.load(provider: .codex, cacheRoot: options.cacheRoot),
+                scopedTo: roots)
             var reports: [CostUsageDailyReport] = []
             var projects: [CostUsageProjectBreakdown] = []
+            var sessions: [CostUsageSessionBreakdown] = []
             // Raw inputs for the derived result fields below: the native cache's own scan
             // time, every constituent scan time, and whether a second source joined the merge.
             var nativeScanAt: Date?
@@ -451,6 +502,11 @@ public struct CostUsageFetcher: Sendable {
                         nativeScanAt = scanAt
                         scanTimes.append(scanAt)
                     }
+                    sessions = CostUsageScanner.buildCodexSessionBreakdownsFromCache(
+                        cache: cache,
+                        range: range,
+                        modelsDevCacheRoot: options.cacheRoot,
+                        sessionRoots: roots)
                     if cache.codexProjectMetadataVersion == CostUsageScanner.codexProjectMetadataVersion {
                         projects.append(contentsOf: CostUsageScanner.buildCodexProjectBreakdownsFromCache(
                             cache: cache,
@@ -475,6 +531,9 @@ public struct CostUsageFetcher: Sendable {
                 if let piProject = Self.unknownProjectBreakdown(from: piResult.report) {
                     projects.append(piProject)
                 }
+                if !piResult.report.data.isEmpty {
+                    sessions = []
+                }
             }
 
             guard !reports.isEmpty else { return nil }
@@ -488,6 +547,7 @@ public struct CostUsageFetcher: Sendable {
                     now: now,
                     historyDays: clampedHistoryDays,
                     projects: Self.mergedProjectBreakdowns(projects),
+                    sessions: sessions,
                     updatedAt: scanTimes.min()),
                 lastRefreshAt: piMerged ? nil : nativeScanAt)
         }
@@ -571,6 +631,7 @@ public struct CostUsageFetcher: Sendable {
         credentialScopeFingerprint: String? = nil,
         historyLabel: String? = nil,
         projects: [CostUsageProjectBreakdown] = [],
+        sessions: [CostUsageSessionBreakdown] = [],
         updatedAt: Date? = nil) -> CostUsageTokenSnapshot
     {
         let sessionEntry = useCurrentLocalDayForSession
@@ -610,6 +671,7 @@ public struct CostUsageFetcher: Sendable {
             credentialScopeFingerprint: credentialScopeFingerprint,
             daily: daily.data,
             projects: projects,
+            sessions: sessions,
             updatedAt: updatedAt ?? now)
     }
 
@@ -824,5 +886,39 @@ public struct CostUsageFetcher: Sendable {
             }
             return lhs.month < rhs.month
         }
+    }
+}
+
+extension CostUsageFetcher {
+    fileprivate static func loadRemoteTokenSnapshot(
+        provider: UsageProvider,
+        environment: [String: String],
+        now: Date,
+        historyDays: Int,
+        cursorCookieHeaderOverride: String?) async throws -> CostUsageTokenSnapshot?
+    {
+        let since = Calendar.current.date(byAdding: .day, value: -(historyDays - 1), to: now) ?? now
+        if provider == .bedrock {
+            let daily = try await Self.loadBedrockDailyReport(
+                environment: environment,
+                since: since,
+                until: now)
+            return Self.tokenSnapshot(
+                from: daily,
+                now: now,
+                historyDays: historyDays,
+                useCurrentLocalDayForSession: false)
+        }
+
+        #if os(macOS)
+        if provider == .cursor {
+            return try await self.loadCursorTokenSnapshot(
+                now: now,
+                since: since,
+                historyDays: historyDays,
+                cookieHeaderOverride: cursorCookieHeaderOverride)
+        }
+        #endif
+        return nil
     }
 }
