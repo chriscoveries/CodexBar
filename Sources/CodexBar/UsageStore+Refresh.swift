@@ -662,6 +662,7 @@ extension UsageStore {
         await self.handleProviderFetchFailure(
             provider: provider,
             error: error,
+            attempts: attempts,
             context: context)
     }
 
@@ -978,6 +979,7 @@ extension UsageStore {
     private func handleProviderFetchFailure(
         provider: UsageProvider,
         error: Error,
+        attempts: [ProviderFetchAttempt],
         context: ProviderRefreshOutcomeContext) async
     {
         let shouldNotifyPermissionPrompt = Self.isPermissionPromptWaiting(error)
@@ -1058,13 +1060,18 @@ extension UsageStore {
                 return
             }
             let hadPriorData = self.snapshots[provider] != nil
+            let isTerminalClaudeCLIParseFailure =
+                provider == .claude &&
+                hadPriorData &&
+                Self.lastAvailableFailedFetchKind(from: attempts) == .cli &&
+                Self.isClaudeCLIUsageParseFailure(error)
             let preservesPriorData = Self.shouldPreservePriorSnapshot(
                 after: error,
                 hadPriorData: hadPriorData) ||
                 (provider == .claude &&
                     hadPriorData &&
                     (Self.isClaudeCLIRateLimitFailure(error) ||
-                        Self.isClaudeCLIUsageParseFailure(error)))
+                        isTerminalClaudeCLIParseFailure))
             let shouldSurface =
                 self.failureGates[provider]?
                     .shouldSurfaceError(onFailureWithPriorData: hadPriorData) ?? true
@@ -1161,6 +1168,12 @@ extension UsageStore {
             return false
         }
         return true
+    }
+
+    private static func lastAvailableFailedFetchKind(from attempts: [ProviderFetchAttempt]) -> ProviderFetchKind? {
+        attempts.last { attempt in
+            attempt.wasAvailable && attempt.errorDescription != nil
+        }?.kind
     }
 
     static func isPreservableNetworkTransportError(_ error: Error) -> Bool {
