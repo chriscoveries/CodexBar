@@ -315,7 +315,7 @@ extension CodexBarCLI {
                                  [--pretty]
 
         Description:
-          Re-import the default browser-cookie scope using each provider's configured browser order.
+          Re-import browser cookies using each provider's configured browser order.
           Providers that may decrypt Chromium cookies fail before clearing the cache
           unless --allow-keychain-prompt explicitly acknowledges a possible macOS
           Keychain prompt. A prior denial keeps its six-hour cooldown unless that

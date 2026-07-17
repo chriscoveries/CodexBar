@@ -71,7 +71,7 @@ struct CLICookieRefreshTests {
     }
 
     @Test
-    func `failed refresh restores default cookie and preserves unrelated account scopes`() async {
+    func `failed refresh preserves default cookie and unrelated account scopes`() async {
         let provider = UsageProvider.opencode
         let accountScope = CookieHeaderCache.Scope.managedAccount(UUID())
         let service = "com.steipete.codexbar.tests.cookie-refresh.\(UUID().uuidString)"
@@ -88,11 +88,13 @@ struct CLICookieRefreshTests {
                     cookieHeader: "account-test-cookie",
                     sourceLabel: "Test account")
 
-                let result = await CodexBarCLI.withCookieRefreshRollback(
+                let result = await CodexBarCLI.withCookieRefreshCacheSuppressed(
                     provider: provider,
                     providerName: "opencode")
                 {
                     #expect(CookieHeaderCache.load(provider: provider) == nil)
+                    #expect(CookieHeaderCache.loadSerialized(provider: provider) == nil)
+                    #expect(CookieHeaderCache.load(provider: provider, scope: accountScope) == nil)
                     return CookieRefreshResult(provider: "opencode", status: .failed, message: "test failure")
                 }
 
@@ -110,12 +112,14 @@ struct CLICookieRefreshTests {
 
         await KeychainCacheStore.withServiceOverrideForTesting(service) {
             await KeychainCacheStore.withImplicitTestStoreForTesting {
-                CookieHeaderCache.store(
+                let stored = CookieHeaderCache.storeResult(
                     provider: provider,
                     cookieHeader: "old-test-cookie",
-                    sourceLabel: "Test old")
+                    sourceLabel: "Test old",
+                    authenticationFailurePolicy: .stopFallback)
+                #expect(stored)
 
-                let result = await CodexBarCLI.withCookieRefreshRollback(
+                let result = await CodexBarCLI.withCookieRefreshCacheSuppressed(
                     provider: provider,
                     providerName: "opencode")
                 {

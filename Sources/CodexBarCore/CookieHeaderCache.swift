@@ -31,6 +31,11 @@ public struct CookieHeaderCacheEntry: Codable, Equatable, Sendable {
     }
 }
 
+public struct CookieRefreshReadSuppressionGate: Sendable {
+    fileprivate let keys: [KeychainCacheStore.Key]
+    fileprivate let token: UUID
+}
+
 public enum CookieHeaderCache {
     public typealias AuthenticationFailurePolicy = CookieAuthenticationFailurePolicy
 
@@ -118,6 +123,9 @@ public enum CookieHeaderCache {
 
     private static let legacyMutationLock = NSLock()
     private static let conditionalMutationGateLock = NSLock()
+    private static let refreshReadSuppressionLock = NSLock()
+    private nonisolated(unsafe) static var refreshReadSuppressions:
+        [KeychainCacheStore.Key: [UUID: Entry]] = [:]
     private struct ConditionalMutationGateState {
         var generation: UInt64 = 0
         var activeTokens: Set<UUID> = []
@@ -380,7 +388,7 @@ public enum CookieHeaderCache {
                 let key = self.key(for: provider, scope: scope)
                 switch KeychainCacheStore.load(key: key, as: Entry.self) {
                 case let .found(entry):
-                    return entry
+                    return self.isRefreshEntrySuppressed(entry, key: key) ? nil : entry
                 case .temporarilyUnavailable:
                     return nil
                 case .invalid:
@@ -405,6 +413,9 @@ public enum CookieHeaderCache {
         let key = self.key(for: provider, scope: scope)
         switch KeychainCacheStore.load(key: key, as: Entry.self) {
         case let .found(entry):
+            guard !self.isRefreshEntrySuppressed(entry, key: key) else {
+                return .authoritative(nil, loadedFromLegacy: false)
+            }
             self.log.debug("Cookie cache hit", metadata: ["provider": provider.rawValue])
             return .authoritative(entry, loadedFromLegacy: false)
         case .temporarilyUnavailable:
@@ -928,6 +939,65 @@ public enum CookieHeaderCache {
 }
 
 extension CookieHeaderCache {
+    /// Hides the currently cached entry from reads without deleting it. A replacement written while
+    /// the gate is active becomes visible immediately because only the captured entry is suppressed.
+    /// Returns nil when the cache cannot be read safely, so callers can avoid a destructive refresh.
+    public static func beginRefreshReadSuppression(provider: UsageProvider) -> CookieRefreshReadSuppressionGate? {
+        let token = UUID()
+        do {
+            return try self.withLegacyMutationLock {
+                let (keys, enumerationFailed) = self.cookieKeysResult(for: provider)
+                guard !enumerationFailed else { return nil }
+                let globalKey = self.key(for: provider, scope: nil)
+                var entries: [KeychainCacheStore.Key: Entry] = [:]
+                for key in keys {
+                    switch KeychainCacheStore.load(key: key, as: Entry.self) {
+                    case let .found(entry):
+                        entries[key] = entry
+                    case .temporarilyUnavailable:
+                        return nil
+                    case .invalid:
+                        KeychainCacheStore.clear(key: key)
+                    case .missing:
+                        if key == globalKey,
+                           let legacy = self.migrateLegacyEntryIfNeededLocked(provider: provider)
+                        {
+                            entries[key] = legacy
+                        }
+                    }
+                }
+                self.refreshReadSuppressionLock.withLock {
+                    for (key, entry) in entries {
+                        self.refreshReadSuppressions[key, default: [:]][token] = entry
+                    }
+                }
+                return CookieRefreshReadSuppressionGate(keys: keys, token: token)
+            }
+        } catch {
+            self.log.error("Cookie refresh read suppression lock failed: \(error)")
+            return nil
+        }
+    }
+
+    public static func endRefreshReadSuppression(_ gate: CookieRefreshReadSuppressionGate) {
+        self.refreshReadSuppressionLock.withLock {
+            for key in gate.keys {
+                guard var entries = self.refreshReadSuppressions[key] else { continue }
+                entries.removeValue(forKey: gate.token)
+                self.refreshReadSuppressions[key] = entries.isEmpty ? nil : entries
+            }
+        }
+    }
+
+    private static func isRefreshEntrySuppressed(
+        _ entry: Entry,
+        key: KeychainCacheStore.Key) -> Bool
+    {
+        self.refreshReadSuppressionLock.withLock {
+            self.refreshReadSuppressions[key]?.values.contains(where: { self.entriesMatch($0, entry) }) == true
+        }
+    }
+
     /// Prevents conditional background refresh writes for the lifetime of an interactive credential mutation.
     /// Direct stores remain available to the interactive flow itself.
     public static func beginConditionalMutationGate(
@@ -1108,6 +1178,7 @@ extension CookieHeaderCache {
         switch KeychainCacheStore.load(key: key, as: Entry.self) {
         case let .found(current):
             return current.authenticationFailurePolicy == .stopFallback
+                && !self.isRefreshEntrySuppressed(current, key: key)
         case .temporarilyUnavailable:
             return true
         case .missing:

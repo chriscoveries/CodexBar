@@ -192,7 +192,7 @@ extension CodexBarCLI {
             return result
         }
 
-        return await Self.withCookieRefreshRollback(provider: provider, providerName: descriptor.cli.name) {
+        return await Self.withCookieRefreshCacheSuppressed(provider: provider, providerName: descriptor.cli.name) {
             let environment = tokenContext.environment(
                 base: ProcessInfo.processInfo.environment,
                 provider: provider,
@@ -223,39 +223,19 @@ extension CodexBarCLI {
         }
     }
 
-    static func withCookieRefreshRollback(
+    static func withCookieRefreshCacheSuppressed(
         provider: UsageProvider,
         providerName: String,
         operation: () async -> CookieRefreshResult) async -> CookieRefreshResult
     {
-        let previousEntry = CookieHeaderCache.load(provider: provider)
-        let clearSummary = CookieHeaderCache.clearDetailed(provider: provider)
-        guard clearSummary.failedCount == 0 else {
+        guard let gate = CookieHeaderCache.beginRefreshReadSuppression(provider: provider) else {
             return CookieRefreshResult(
                 provider: providerName,
                 status: .failed,
-                message: "Cookie cache cleanup failed; no browser import was attempted.")
+                message: "Cookie cache could not be read safely; no browser import was attempted.")
         }
-
-        let result = await operation()
-        guard result.isFailure,
-              let previousEntry,
-              CookieHeaderCache.load(provider: provider) == nil
-        else { return result }
-
-        let restored = CookieHeaderCache.storeResult(
-            provider: provider,
-            cookieHeader: previousEntry.cookieHeader,
-            sourceLabel: previousEntry.sourceLabel,
-            authenticationFailurePolicy: previousEntry.authenticationFailurePolicy,
-            now: previousEntry.storedAt)
-        guard restored else {
-            return CookieRefreshResult(
-                provider: providerName,
-                status: .failed,
-                message: "Browser refresh failed and the previous cached session could not be restored.")
-        }
-        return result
+        defer { CookieHeaderCache.endRefreshReadSuppression(gate) }
+        return await operation()
     }
 
     private static func cookieRefreshSkipResult(
