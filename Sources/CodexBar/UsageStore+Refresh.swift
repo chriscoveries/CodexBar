@@ -1030,6 +1030,12 @@ extension UsageStore {
             if provider == .claude,
                ClaudeStatusProbe.isSubscriptionQuotaUnavailableDescription(error.localizedDescription)
             {
+                if self.shouldPreserveClaudeSubscriptionSnapshotAcrossUnavailableProbe(provider: provider) {
+                    self.errors[provider] = nil
+                    self.knownLimitsAvailabilityByProvider[provider] = .available
+                    self.failureGates[provider]?.reset()
+                    return
+                }
                 // This is a successful answer about quota availability, not a transient probe failure.
                 // Drop prior limits immediately so an Education subscription notice cannot leave stale bars visible.
                 self.snapshots.removeValue(forKey: provider)
@@ -1057,7 +1063,8 @@ extension UsageStore {
                 hadPriorData: hadPriorData) ||
                 (provider == .claude &&
                     hadPriorData &&
-                    Self.isClaudeCLIRateLimitFailure(error))
+                    (Self.isClaudeCLIRateLimitFailure(error) ||
+                        Self.isClaudeCLIUsageParseFailure(error)))
             let shouldSurface =
                 self.failureGates[provider]?
                     .shouldSurfaceError(onFailureWithPriorData: hadPriorData) ?? true
@@ -1146,6 +1153,16 @@ extension UsageStore {
             message.contains("not connected to the internet")
     }
 
+    private func shouldPreserveClaudeSubscriptionSnapshotAcrossUnavailableProbe(provider: UsageProvider) -> Bool {
+        guard provider == .claude,
+              let snapshot = self.snapshots[provider],
+              Self.isSubscriptionPlan(snapshot.loginMethod(for: provider))
+        else {
+            return false
+        }
+        return true
+    }
+
     static func isPreservableNetworkTransportError(_ error: Error) -> Bool {
         let nsError = error as NSError
         guard nsError.domain == NSURLErrorDomain else { return false }
@@ -1208,6 +1225,16 @@ extension UsageStore {
 
     private static func isClaudeCLIRateLimitFailure(_ error: Error) -> Bool {
         ClaudeUsageFetcher.isCLIRateLimitError(error)
+    }
+
+    private static func isClaudeCLIUsageParseFailure(_ error: Error) -> Bool {
+        if case let ClaudeStatusProbeError.parseFailed(message) = error {
+            return !ClaudeStatusProbe.isSubscriptionQuotaUnavailableDescription(message)
+        }
+        if case let ClaudeUsageError.parseFailed(message) = error {
+            return !ClaudeStatusProbe.isSubscriptionQuotaUnavailableDescription(message)
+        }
+        return false
     }
 
     private static func isClaudeWebSessionRefreshFailure(_ error: Error) -> Bool {
