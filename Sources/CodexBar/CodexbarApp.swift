@@ -106,7 +106,16 @@ struct CodexBarApp: App {
     private func openSettings(pane: SettingsPane) {
         self.preferencesSelection.pane = pane
         NSApp.activate(ignoringOtherApps: true)
-        _ = NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
+        guard !NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil) else { return }
+
+        let request = SettingsOpenRequest()
+        NotificationCenter.default.post(name: .codexbarOpenSettings, object: request)
+        let logger = CodexBarLog.logger(LogCategories.app)
+        if request.wasHandled {
+            logger.warning("Settings AppKit action was not handled; used notification fallback")
+        } else {
+            logger.error("Failed to open Settings; AppKit action and notification fallback unavailable")
+        }
     }
 
     private static func applyLanguagePreference(from settings: SettingsStore) {
