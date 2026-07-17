@@ -1197,7 +1197,9 @@ extension CodexBarCLI {
             codexBarVersion: context.codexBarVersion)
 
         // Cache-Control: no-store is applied uniformly at the route level.
-        return Self.serveJSON(snapshot)
+        return Self.serveJSON(
+            snapshot,
+            usageCacheKeys: usageOutput.payload.map(\.cacheAccountKey))
     }
 
     /// Per-provider fetch budget for `/usage` and `/cost`. Finite provider work

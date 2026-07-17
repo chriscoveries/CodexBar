@@ -303,6 +303,38 @@ struct CLIServeRawHTTPTests {
         })
     }
 
+    @Test
+    func `snapshot response preserves usage cache metadata`() async throws {
+        let store = testConfigStore(suiteName: "CLIServeRawHTTPTests-\(UUID().uuidString)")
+        defer { try? store.deleteIfPresent() }
+        try store.save(CodexBarConfig(providers: UsageProvider.allCases.map {
+            ProviderConfig(id: $0, enabled: false)
+        }))
+        let runtime = ServeRuntime(
+            configStore: store,
+            cache: CLIServeResponseCache(),
+            providerOperations: CLIServeOperationCoordinator(),
+            costOperations: CLIServeOperationCoordinator(),
+            refreshInterval: 60,
+            requestTimeout: 5,
+            healthVersion: "0.0.0-test",
+            dashboardAuth: CLIServeDashboardAuth(bearer: "secret"),
+            bindHost: "127.0.0.1")
+        let request = CLILocalHTTPRequest(
+            method: "GET",
+            target: "/dashboard/v1/snapshot",
+            host: "127.0.0.1",
+            path: "/dashboard/v1/snapshot",
+            queryItems: [:],
+            authorization: "Bearer secret")
+
+        let response = await CodexBarCLI.handleServeRequest(request, runtime: runtime)
+
+        #expect(response.status == .ok)
+        #expect(response.usageCacheKeys != nil)
+        #expect(response.usageCacheKeys?.isEmpty == true)
+    }
+
     // MARK: - Harness
 
     /// Boots the production serve handler with an isolated config store whose providers
