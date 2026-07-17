@@ -8,7 +8,9 @@ struct DashboardSnapshotBuilderTests {
     func `builds stable display-oriented dashboard snapshot`() throws {
         let generatedAt = Date(timeIntervalSince1970: 1_800_000_000)
         let updatedAt = Date(timeIntervalSince1970: 1_800_000_010)
+        let costUpdatedAt = Date(timeIntervalSince1970: 1_800_000_020)
         let resetAt = Date(timeIntervalSince1970: 1_800_003_600)
+        let generatedDay = self.gregorianDayKey(generatedAt)
         let usage = UsageSnapshot(
             primary: RateWindow(
                 usedPercent: 28,
@@ -46,13 +48,22 @@ struct DashboardSnapshotBuilderTests {
         let cost = CostPayload(
             provider: "codex",
             source: "local",
-            updatedAt: updatedAt,
+            updatedAt: costUpdatedAt,
             sessionTokens: 1000,
             sessionCostUSD: 1.04,
             historyDays: 30,
             last30DaysTokens: 30000,
             last30DaysCostUSD: 18.22,
-            daily: [],
+            daily: [CostDailyEntryPayload(
+                date: generatedDay,
+                inputTokens: nil,
+                outputTokens: nil,
+                cacheReadTokens: nil,
+                cacheCreationTokens: nil,
+                totalTokens: 1000,
+                costUSD: 1.04,
+                modelsUsed: nil,
+                modelBreakdowns: nil)],
             totals: nil,
             error: nil)
         let config = CodexBarConfig(providers: [
@@ -88,7 +99,7 @@ struct DashboardSnapshotBuilderTests {
         #expect(provider["enabled"] as? Bool == true)
         #expect(provider["source"] as? String == "oauth")
         #expect(provider["error"] is NSNull)
-        #expect(provider["updatedAt"] as? String == "2027-01-15T08:00:10Z")
+        #expect(provider["updatedAt"] as? String == "2027-01-15T08:00:20Z")
 
         #expect(status["level"] as? String == "ok")
         #expect(status["label"] as? String == "Operational")
@@ -211,6 +222,94 @@ struct DashboardSnapshotBuilderTests {
         #expect(provider["openaiDashboard"] == nil)
     }
 
+    @Test
+    func `dashboard surfaces cost failures when usage succeeds`() throws {
+        let usage = self.identityPayload(email: "user@example.com")
+        let cost = CostPayload(
+            provider: "claude",
+            source: "local",
+            updatedAt: Date(timeIntervalSince1970: 10),
+            sessionTokens: nil,
+            sessionCostUSD: nil,
+            historyDays: nil,
+            last30DaysTokens: nil,
+            last30DaysCostUSD: nil,
+            daily: [],
+            totals: nil,
+            error: ProviderErrorPayload(code: 1, message: "cost unavailable", kind: .provider))
+
+        let snapshot = DashboardSnapshotBuilder.makeSnapshot(
+            usagePayloads: [usage],
+            costPayloads: [cost],
+            config: CodexBarConfig(providers: [ProviderConfig(id: .claude, enabled: true)]),
+            identityMode: .redacted,
+            generatedAt: Date(timeIntervalSince1970: 20),
+            refreshInterval: 60,
+            codexBarVersion: nil)
+        let object = try self.jsonObject(snapshot)
+        let provider = try #require((object["providers"] as? [[String: Any]])?.first)
+        let error = try #require(provider["error"] as? [String: Any])
+
+        #expect(error["message"] as? String == "cost unavailable")
+        #expect(provider["updatedAt"] as? String == "1970-01-01T00:00:10Z")
+    }
+
+    @Test
+    func `dashboard safely clamps extreme refresh intervals`() {
+        let snapshot = DashboardSnapshotBuilder.makeSnapshot(
+            usagePayloads: [],
+            costPayloads: [],
+            config: CodexBarConfig(providers: []),
+            identityMode: .redacted,
+            generatedAt: Date(timeIntervalSince1970: 0),
+            refreshInterval: .greatestFiniteMagnitude,
+            codexBarVersion: nil)
+
+        #expect(snapshot.host.refreshIntervalSeconds == Int.max / 3)
+        #expect(snapshot.staleAfterSeconds == (Int.max / 3) * 3)
+    }
+
+    @Test
+    func `dashboard daily cost uses generation day without update metadata`() throws {
+        let generatedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let usage = self.identityPayload(email: "user@example.com")
+        let cost = CostPayload(
+            provider: "claude",
+            source: "local",
+            updatedAt: nil,
+            sessionTokens: nil,
+            sessionCostUSD: nil,
+            historyDays: 1,
+            last30DaysTokens: nil,
+            last30DaysCostUSD: nil,
+            daily: [CostDailyEntryPayload(
+                date: self.gregorianDayKey(generatedAt),
+                inputTokens: nil,
+                outputTokens: nil,
+                cacheReadTokens: nil,
+                cacheCreationTokens: nil,
+                totalTokens: nil,
+                costUSD: 2.5,
+                modelsUsed: nil,
+                modelBreakdowns: nil)],
+            totals: nil,
+            error: nil)
+
+        let snapshot = DashboardSnapshotBuilder.makeSnapshot(
+            usagePayloads: [usage],
+            costPayloads: [cost],
+            config: CodexBarConfig(providers: [ProviderConfig(id: .claude, enabled: true)]),
+            identityMode: .redacted,
+            generatedAt: generatedAt,
+            refreshInterval: 60,
+            codexBarVersion: nil)
+        let object = try self.jsonObject(snapshot)
+        let provider = try #require((object["providers"] as? [[String: Any]])?.first)
+        let costObject = try #require(provider["cost"] as? [String: Any])
+
+        #expect(costObject["todayUSD"] as? Double == 2.5)
+    }
+
     private func identityPayload(email: String) -> ProviderPayload {
         ProviderPayload(
             provider: .claude,
@@ -238,6 +337,17 @@ struct DashboardSnapshotBuilderTests {
         guard let object = try? self.jsonObject(snapshot) else { return nil }
         let provider = (object["providers"] as? [[String: Any]])?.first
         return provider?["identity"] as? [String: Any]
+    }
+
+    private func gregorianDayKey(_ date: Date) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        return String(
+            format: "%04d-%02d-%02d",
+            components.year ?? 0,
+            components.month ?? 0,
+            components.day ?? 0)
     }
 
     private func jsonObject(_ payload: some Encodable) throws -> [String: Any] {

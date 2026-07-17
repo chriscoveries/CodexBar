@@ -34,13 +34,14 @@ enum DashboardSnapshotBuilder {
                 generatedAt: generatedAt)
         }
 
+        let refreshSeconds = self.dashboardRefreshSeconds(refreshInterval)
         return DashboardSnapshotPayload(
             schemaVersion: 1,
             generatedAt: generatedAt,
-            staleAfterSeconds: max(180, Int(refreshInterval.rounded(.up)) * 3),
+            staleAfterSeconds: max(180, refreshSeconds * 3),
             host: DashboardHostPayload(
                 codexBarVersion: codexBarVersion,
-                refreshIntervalSeconds: max(0, Int(refreshInterval.rounded()))),
+                refreshIntervalSeconds: refreshSeconds),
             providers: providers)
     }
 
@@ -57,6 +58,7 @@ enum DashboardSnapshotBuilder {
         let descriptor = provider.map { ProviderDescriptorRegistry.descriptor(for: $0) }
         let metadata = descriptor?.metadata
 
+        let error = payload.error ?? cost?.error
         return DashboardProviderPayload(
             id: payload.provider,
             name: metadata?.displayName ?? payload.provider,
@@ -66,17 +68,17 @@ enum DashboardSnapshotBuilder {
             identity: self.makeIdentity(provider: provider, usage: payload.usage, mode: identityMode),
             windows: self.makeWindows(provider: provider, metadata: metadata, usage: payload.usage),
             credits: self.makeCredits(payload.credits),
-            cost: self.makeCost(cost),
+            cost: self.makeCost(cost, referenceDate: generatedAt),
             display: DashboardDisplayPayload(
                 accentColor: self.hexColor(descriptor?.branding.color),
                 sortKey: sortKey,
                 priority: "normal"),
-            error: payload.error,
+            error: error,
             updatedAt: self.updatedAt(
                 usage: payload.usage,
                 credits: payload.credits,
                 cost: cost,
-                error: payload.error,
+                error: error,
                 generatedAt: generatedAt))
     }
 
@@ -221,12 +223,22 @@ enum DashboardSnapshotBuilder {
         return DashboardCreditsPayload(remaining: credits.remaining, unit: "credits")
     }
 
-    private static func makeCost(_ cost: CostPayload?) -> DashboardCostPayload? {
+    private static func makeCost(_ cost: CostPayload?, referenceDate: Date) -> DashboardCostPayload? {
         guard let cost else { return nil }
-        guard cost.sessionCostUSD != nil || cost.last30DaysCostUSD != nil else { return nil }
+        let todayUSD = self.todayCostUSD(cost, referenceDate: referenceDate)
+        guard todayUSD != nil || cost.last30DaysCostUSD != nil else { return nil }
         return DashboardCostPayload(
-            todayUSD: cost.sessionCostUSD,
+            todayUSD: todayUSD,
             last30DaysUSD: cost.last30DaysCostUSD)
+    }
+
+    private static func todayCostUSD(_ cost: CostPayload, referenceDate: Date) -> Double? {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let components = calendar.dateComponents([.year, .month, .day], from: referenceDate)
+        guard let year = components.year, let month = components.month, let day = components.day else { return nil }
+        let dayKey = String(format: "%04d-%02d-%02d", year, month, day)
+        return cost.daily.first { String($0.date.prefix(10)) == dayKey }?.costUSD
     }
 
     private static func updatedAt(
@@ -236,10 +248,20 @@ enum DashboardSnapshotBuilder {
         error: ProviderErrorPayload?,
         generatedAt: Date) -> Date?
     {
-        if let usage { return usage.updatedAt }
-        if let credits { return credits.updatedAt }
-        if let cost { return cost.updatedAt }
+        let newest = [usage?.updatedAt, credits?.updatedAt, cost?.updatedAt]
+            .compactMap(\.self)
+            .max()
+        if let newest {
+            return newest
+        }
         return error == nil ? nil : generatedAt
+    }
+
+    private static func dashboardRefreshSeconds(_ refreshInterval: TimeInterval) -> Int {
+        guard refreshInterval > 0 else { return 0 }
+        let maximum = Int.max / 3
+        guard refreshInterval < Double(maximum) else { return maximum }
+        return min(maximum, Int(refreshInterval.rounded(.up)))
     }
 
     private static func hexColor(_ color: ProviderColor?) -> String {

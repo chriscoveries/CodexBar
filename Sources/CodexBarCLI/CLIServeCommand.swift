@@ -15,7 +15,7 @@ struct ServeOptions: CommanderParsable {
     @Option(name: .long("port"), help: "Local HTTP port (default: 8080)")
     var port: Int?
 
-    @Option(name: .long("host"), help: "HTTP bind host (default: 127.0.0.1)")
+    @Option(name: .long("host"), help: "IPv4 bind address or localhost (default: 127.0.0.1)")
     var host: String?
 
     @Option(name: .long("refresh-interval"), help: "Response cache TTL in seconds (default: 60)")
@@ -546,7 +546,7 @@ private enum CLIServeArgumentError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidHost:
-            "--host must not be empty."
+            "--host must be 'localhost' or an IPv4 address."
         case .invalidPort:
             "--port must be between 1 and 65535."
         case .invalidRefreshInterval:
@@ -742,7 +742,9 @@ extension CodexBarCLI {
     static func decodeServeHost(from values: ParsedValues) -> String? {
         let raw = values.options["host"]?.last ?? "127.0.0.1"
         let host = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        return host.isEmpty ? nil : host
+        guard !host.isEmpty else { return nil }
+        let bindHost = CLIServeSecurity.bindHost(host)
+        return CLIServeSecurity.isSupportedIPv4BindHost(bindHost) ? host : nil
     }
 
     static func decodeServeAllowPlainHTTP(from values: ParsedValues) -> Bool {
@@ -1129,7 +1131,9 @@ extension CodexBarCLI {
 
         return await Self.serveCollectUsageOutputs(
             providers: selection.asList,
-            configFingerprint: context.configFingerprint,
+            configFingerprint: Self.serveUsageOperationFingerprint(
+                configFingerprint: context.configFingerprint,
+                includeAllCodexAccounts: context.includeAllCodexAccounts),
             deadline: context.providerDeadline,
             operations: context.providerOperations)
         { provider in
@@ -1141,6 +1145,13 @@ extension CodexBarCLI {
                     command: command)
             }
         }
+    }
+
+    static func serveUsageOperationFingerprint(
+        configFingerprint: String,
+        includeAllCodexAccounts: Bool) -> String
+    {
+        "\(configFingerprint):codex-accounts=\(includeAllCodexAccounts ? "all" : "selected")"
     }
 
     /// Builds the token-gated dashboard snapshot. Reuses the same coordinated

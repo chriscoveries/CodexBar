@@ -35,6 +35,7 @@ codexbar serve --dashboard-token YOUR_TOKEN
 - `CODEXBAR_DASHBOARD_TOKEN` wins over `--dashboard-token` when both are set.
 - Empty or whitespace-only tokens are startup errors, not a silent no-auth mode.
 - Rotate the token by restarting `serve` with a new value.
+- `--host` accepts `localhost` or an IPv4 address; the socket layer does not support IPv6 binds.
 
 ## Threat model — read before binding beyond loopback
 
@@ -51,11 +52,16 @@ Deployments, from safest to least safe:
 
    ```caddyfile
    dashboard.example.com {
-       reverse_proxy 127.0.0.1:8080
+       handle /dashboard/v1/* {
+           reverse_proxy 127.0.0.1:8080 {
+               header_up Host 127.0.0.1
+           }
+       }
+       respond 404
    }
    ```
 
-   Caddy provisions certificates automatically; the token then travels inside TLS from the client to the proxy, and only crosses the loopback interface in cleartext.
+   Caddy provisions certificates automatically. The route matcher exposes only the authenticated dashboard API, while the upstream `Host` rewrite satisfies the loopback server's rebinding check. The token travels inside TLS from the client to the proxy and only crosses the loopback interface in cleartext.
 3. **Trusted network segment, cleartext accepted.** Bind a LAN address directly:
 
    ```bash

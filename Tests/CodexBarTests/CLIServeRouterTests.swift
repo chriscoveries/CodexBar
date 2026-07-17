@@ -13,6 +13,37 @@ import Glibc
 // swiftlint:disable:next type_body_length
 struct CLIServeRouterTests {
     @Test
+    func `local HTTP connection gate caps pre-auth clients`() {
+        let gate = CLILocalHTTPConnectionGate(maximumConnections: 2)
+
+        #expect(gate.tryAcquire())
+        #expect(gate.tryAcquire())
+        #expect(!gate.tryAcquire())
+        #expect(gate.activeCount == 2)
+        gate.release()
+        #expect(gate.tryAcquire())
+        #expect(gate.activeCount == 2)
+        gate.release()
+        gate.release()
+        #expect(gate.activeCount == 0)
+    }
+
+    @Test
+    func `usage operation fingerprint separates dashboard account mode`() {
+        let allAccounts = CodexBarCLI.serveUsageOperationFingerprint(
+            configFingerprint: "config",
+            includeAllCodexAccounts: true)
+        let selectedAccount = CodexBarCLI.serveUsageOperationFingerprint(
+            configFingerprint: "config",
+            includeAllCodexAccounts: false)
+
+        #expect(allAccounts != selectedAccount)
+        #expect(allAccounts == CodexBarCLI.serveUsageOperationFingerprint(
+            configFingerprint: "config",
+            includeAllCodexAccounts: true))
+    }
+
+    @Test
     func `termination monitor handles interactive and hangup signals`() {
         #expect(CLITerminationSignalMonitor.signalNumbers == [SIGINT, SIGTERM, SIGHUP])
     }

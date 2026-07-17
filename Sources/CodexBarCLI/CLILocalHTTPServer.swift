@@ -91,7 +91,9 @@ struct CLILocalHTTPRequest {
         var headers: [(String, String)] = []
 
         for line in lines.dropFirst() {
-            if line.isEmpty { break }
+            if line.isEmpty {
+                break
+            }
             guard let separator = line.firstIndex(of: ":") else {
                 return .failure(.invalidRequest)
             }
@@ -234,12 +236,48 @@ struct CLILocalHTTPResponse {
     }
 }
 
+/// Hard cap on accepted connections. Acquisition happens before spawning the
+/// per-client task, so slow or partial pre-auth requests cannot create an
+/// unbounded task or file-descriptor population.
+final class CLILocalHTTPConnectionGate: @unchecked Sendable {
+    private let maximumConnections: Int
+    private let lock = NSLock()
+    private var activeConnections = 0
+
+    init(maximumConnections: Int) {
+        precondition(maximumConnections > 0)
+        self.maximumConnections = maximumConnections
+    }
+
+    func tryAcquire() -> Bool {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        guard self.activeConnections < self.maximumConnections else { return false }
+        self.activeConnections += 1
+        return true
+    }
+
+    func release() {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        precondition(self.activeConnections > 0)
+        self.activeConnections -= 1
+    }
+
+    var activeCount: Int {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        return self.activeConnections
+    }
+}
+
 final class CLILocalHTTPServer: @unchecked Sendable {
     typealias Handler = @Sendable (CLILocalHTTPRequest) async -> CLILocalHTTPResponse
 
     private let host: String
     private let port: UInt16
     private let allowedHosts: CLILocalHTTPAllowedHosts
+    private let connectionGate: CLILocalHTTPConnectionGate
     private let handler: Handler
     private let stateLock = NSLock()
     private var listeningFD: Int32?
@@ -250,11 +288,13 @@ final class CLILocalHTTPServer: @unchecked Sendable {
         host: String,
         port: UInt16,
         allowedHosts: CLILocalHTTPAllowedHosts = .loopbackOnly,
+        maximumConnections: Int = 16,
         handler: @escaping Handler)
     {
         self.host = host
         self.port = port
         self.allowedHosts = allowedHosts
+        self.connectionGate = CLILocalHTTPConnectionGate(maximumConnections: maximumConnections)
         self.handler = handler
     }
 
@@ -343,16 +383,26 @@ final class CLILocalHTTPServer: @unchecked Sendable {
             var clientLength = socklen_t(MemoryLayout<sockaddr>.size)
             let clientFD = accept(serverFD, &clientAddress, &clientLength)
             guard clientFD >= 0 else {
-                if self.isStopRequested { return }
+                if self.isStopRequested {
+                    return
+                }
                 if errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK || errno == ECONNABORTED {
                     continue
                 }
                 throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
             }
+            guard self.connectionGate.tryAcquire() else {
+                closeSocket(clientFD)
+                continue
+            }
             let handler = self.handler
             let allowedHosts = self.allowedHosts
+            let connectionGate = self.connectionGate
             Task {
-                defer { closeSocket(clientFD) }
+                defer {
+                    closeSocket(clientFD)
+                    connectionGate.release()
+                }
                 await handleClient(clientFD, allowedHosts: allowedHosts, handler: handler)
             }
         }

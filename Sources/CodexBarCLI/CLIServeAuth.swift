@@ -59,8 +59,12 @@ enum CLIServeSecurity {
 
     static func isLoopbackHost(_ host: String) -> Bool {
         let normalized = host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if normalized == "localhost" || normalized == "::1" || normalized == "[::1]" { return true }
-        if normalized.hasPrefix("127.") { return true }
+        if normalized == "localhost" || normalized == "::1" || normalized == "[::1]" {
+            return true
+        }
+        if normalized.hasPrefix("127.") {
+            return true
+        }
         return normalized == "0:0:0:0:0:0:0:1"
     }
 
@@ -69,12 +73,30 @@ enum CLIServeSecurity {
         return normalized == "0.0.0.0" || normalized == "::" || normalized == "[::]"
     }
 
+    static func isSupportedIPv4BindHost(_ host: String) -> Bool {
+        let parts = host.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 4 else { return false }
+        return parts.allSatisfy { part in
+            guard !part.isEmpty,
+                  part.utf8.allSatisfy({ $0 >= 48 && $0 <= 57 }),
+                  let value = UInt8(part)
+            else {
+                return false
+            }
+            return String(value) == part
+        }
+    }
+
     /// Host header values the server accepts for a given bind host: loopback names for
     /// loopback binds, any host for wildcard binds (clients reach those through any of
     /// the machine's addresses), and loopback plus the configured name otherwise.
     static func allowedHosts(forBindHost bindHost: String) -> CLILocalHTTPAllowedHosts {
-        if self.isLoopbackHost(bindHost) { return .loopbackOnly }
-        if self.isWildcardHost(bindHost) { return .any }
+        if self.isLoopbackHost(bindHost) {
+            return .loopbackOnly
+        }
+        if self.isWildcardHost(bindHost) {
+            return .any
+        }
         return .loopbackAnd([bindHost.lowercased()])
     }
 }

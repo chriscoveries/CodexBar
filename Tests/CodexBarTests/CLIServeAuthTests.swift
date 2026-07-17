@@ -37,11 +37,27 @@ struct CLIServeAuthTests {
             positional: [],
             options: ["host": ["  "]],
             flags: [])) == nil)
+        #expect(CodexBarCLI.decodeServeHost(from: ParsedValues(
+            positional: [],
+            options: ["host": ["::1"]],
+            flags: [])) == nil)
+        #expect(CodexBarCLI.decodeServeHost(from: ParsedValues(
+            positional: [],
+            options: ["host": ["dashboard.local"]],
+            flags: [])) == nil)
+        #expect(CodexBarCLI.decodeServeHost(from: ParsedValues(
+            positional: [],
+            options: ["host": ["256.1.1.1"]],
+            flags: [])) == nil)
 
         #expect(CLIServeSecurity.bindHost("localhost") == "127.0.0.1")
         #expect(CLIServeSecurity.bindHost(" LOCALHOST ") == "127.0.0.1")
         #expect(CLIServeSecurity.bindHost("0.0.0.0") == "0.0.0.0")
         #expect(CLIServeSecurity.bindHost("192.168.1.10") == "192.168.1.10")
+        #expect(CLIServeSecurity.isSupportedIPv4BindHost("127.0.0.1"))
+        #expect(CLIServeSecurity.isSupportedIPv4BindHost("0.0.0.0"))
+        #expect(!CLIServeSecurity.isSupportedIPv4BindHost("::1"))
+        #expect(!CLIServeSecurity.isSupportedIPv4BindHost("01.2.3.4"))
 
         #expect(CLIServeSecurity.isLoopbackHost("127.0.0.1"))
         #expect(CLIServeSecurity.isLoopbackHost("127.1.2.3"))
