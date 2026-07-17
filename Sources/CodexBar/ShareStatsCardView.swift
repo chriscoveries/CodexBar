@@ -5,6 +5,10 @@ struct ShareStatsCardView: View {
 
     let payload: ShareStatsPayload
 
+    static func providerDisplayLimit(for providerCount: Int) -> Int {
+        providerCount > 5 ? 4 : min(providerCount, 5)
+    }
+
     private let background = Color(red: 0.078, green: 0.067, blue: 0.063)
     private let primary = Color(red: 0.96, green: 0.94, blue: 0.91)
     private let secondary = Color(red: 0.70, green: 0.66, blue: 0.62)
@@ -158,7 +162,7 @@ struct ShareStatsCardView: View {
     }
 
     private var providerDisplayLimit: Int {
-        self.payload.topModels.isEmpty ? 7 : 5
+        Self.providerDisplayLimit(for: self.payload.providers.count)
     }
 
     private func color(forProviderNamed name: String) -> Color {

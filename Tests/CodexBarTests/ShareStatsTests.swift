@@ -119,6 +119,13 @@ struct ShareStatsTests {
         #expect(data.starts(with: [0x89, 0x50, 0x4E, 0x47]))
     }
 
+    @Test @MainActor
+    func `provider rows leave room for overflow summary`() {
+        #expect(ShareStatsCardView.providerDisplayLimit(for: 5) == 5)
+        #expect(ShareStatsCardView.providerDisplayLimit(for: 6) == 4)
+        #expect(ShareStatsCardView.providerDisplayLimit(for: 12) == 4)
+    }
+
     private static let date = Date(timeIntervalSince1970: 1_783_382_400)
 
     private static var dashboard: SpendDashboardModel {
