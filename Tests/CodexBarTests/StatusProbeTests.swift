@@ -486,6 +486,7 @@ struct StatusProbeTests {
             (type: "error", message: "Your account does not have access to Claude Code. Please run /login"),
             (type: "error", message: "API Error: 401"),
             (type: "permission_error", message: "API Error: 403"),
+            (type: "error", message: "Claude CLI token expired. Run `claude login` to refresh."),
         ]
 
         for failure in failures {

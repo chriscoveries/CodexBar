@@ -1437,8 +1437,15 @@ private struct CLIAuthenticationFailureFetchStrategy: ProviderFetchStrategy {
     }
 
     func fetch(_: ProviderFetchContext) async throws -> ProviderFetchResult {
-        throw ClaudeStatusProbeError.authenticationFailed(
-            "Claude CLI token expired. Run `claude login` to refresh.")
+        do {
+            _ = try ClaudeStatusProbe.parse(text: """
+            Error: Failed to load usage data: {"error":{"type":"error",\
+            "message":"Claude CLI token expired. Run `claude login` to refresh."}}
+            """)
+        } catch {
+            throw error
+        }
+        throw ClaudeStatusProbeError.parseFailed("Expected authentication error")
     }
 
     func shouldFallback(on _: Error, context _: ProviderFetchContext) -> Bool {
