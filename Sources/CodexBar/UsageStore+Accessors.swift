@@ -38,10 +38,17 @@ extension UsageStore {
         self.errors[provider]
     }
 
+    func diagnostic(for provider: UsageProvider) -> String? {
+        self.diagnostics[provider]
+    }
+
     func userFacingError(for provider: UsageProvider) -> String? {
         if let raw = self.errors[provider] {
             guard provider == .codex else { return raw }
             return CodexUIErrorMapper.userFacingMessage(raw)
+        }
+        if let diagnostic = self.diagnostics[provider] {
+            return diagnostic
         }
         return self.unavailableMessage(for: provider)
     }
@@ -64,6 +71,16 @@ extension UsageStore {
             return CrossModelSettingsError.missingToken.errorDescription
         case .clawrouter:
             return ClawRouterUsageError.missingCredentials.errorDescription
+        case .sub2api:
+            let environment = ProviderRegistry.makeEnvironment(
+                base: self.environmentBase,
+                provider: provider,
+                settings: self.settings,
+                tokenOverride: nil)
+            if Sub2APISettingsReader.apiKey(environment: environment) == nil {
+                return Sub2APIUsageError.missingCredentials.errorDescription
+            }
+            return Sub2APIUsageError.missingBaseURL.errorDescription
         case .azureopenai:
             return AzureOpenAISettingsError.missingAPIKey.errorDescription
         case .elevenlabs:

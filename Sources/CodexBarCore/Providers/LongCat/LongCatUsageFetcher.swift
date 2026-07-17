@@ -5,6 +5,20 @@ import FoundationNetworking
 #endif
 
 public struct LongCatUsageFetcher: Sendable {
+    private enum Authentication: @unchecked Sendable {
+        case header(String)
+        case cookies([HTTPCookie])
+
+        func header(for url: URL) -> String? {
+            switch self {
+            case let .header(value):
+                value.isEmpty ? nil : value
+            case let .cookies(cookies):
+                LongCatCookieHeader.header(from: cookies, for: url)
+            }
+        }
+    }
+
     private static let log = CodexBarLog.logger(LogCategories.longcatAPI)
     private static let host = "https://longcat.chat"
 
@@ -29,6 +43,28 @@ public struct LongCatUsageFetcher: Sendable {
         transport transportOverride: (any ProviderHTTPTransport)? = nil,
         now: Date = Date()) async throws -> LongCatUsageSnapshot
     {
+        try await self.fetchUsage(
+            authentication: .header(cookieHeader),
+            transport: transportOverride,
+            now: now)
+    }
+
+    static func fetchUsage(
+        cookies: [HTTPCookie],
+        transport transportOverride: (any ProviderHTTPTransport)? = nil,
+        now: Date = Date()) async throws -> LongCatUsageSnapshot
+    {
+        try await self.fetchUsage(
+            authentication: .cookies(cookies),
+            transport: transportOverride,
+            now: now)
+    }
+
+    private static func fetchUsage(
+        authentication: Authentication,
+        transport transportOverride: (any ProviderHTTPTransport)?,
+        now: Date) async throws -> LongCatUsageSnapshot
+    {
         let transport = transportOverride ?? Self.defaultTransport
         // Account name. The user-current payload also carries a session token and
         // phone number, so its body is never logged. This is the required probe:
@@ -38,33 +74,50 @@ public struct LongCatUsageFetcher: Sendable {
         var account: [String: Any]?
         if let data = try await self.get(
             self.userCurrentPath,
-            cookieHeader: cookieHeader,
+            authentication: authentication,
             transport: transport,
             required: true)
         {
-            account = try LongCatEnvelope.unwrap(self.json(data)) as? [String: Any]
+            let payload = try LongCatEnvelope.unwrap(self.json(data))
+            guard let object = payload as? [String: Any] else {
+                throw LongCatAPIError.parseFailed("user-current data was not an object")
+            }
+            account = object
         }
 
-        var usage: [String: Any]?
-        if let data = try? await self.get(
+        guard let usageData = try await self.get(
             self.tokenUsagePath,
-            cookieHeader: cookieHeader,
+            authentication: authentication,
             transport: transport,
-            required: false)
-        {
-            self.logRawShape(self.tokenUsagePath, data)
-            usage = (try? LongCatEnvelope.unwrap(self.json(data))) as? [String: Any]
+            required: true)
+        else {
+            throw LongCatAPIError.parseFailed("tokenUsage response was empty")
+        }
+        let usagePayload = try LongCatEnvelope.unwrap(self.json(usageData))
+        guard let usage = usagePayload as? [String: Any] else {
+            throw LongCatAPIError.parseFailed("tokenUsage data was not an object")
+        }
+        let canonicalUsage = LongCatJSON.object(usage["usage"]) ?? usage
+        guard LongCatJSON.double(canonicalUsage["totalToken"]) != nil else {
+            throw LongCatAPIError.parseFailed("tokenUsage data was missing totalToken")
         }
 
         var fuel: [String: Any]?
-        if let data = try? await self.get(
-            self.pendingFuelPath,
-            cookieHeader: cookieHeader,
-            transport: transport,
-            required: false)
-        {
-            self.logRawShape(self.pendingFuelPath, data)
-            fuel = (try? LongCatEnvelope.unwrap(self.json(data))) as? [String: Any]
+        do {
+            if let data = try await self.get(
+                self.pendingFuelPath,
+                authentication: authentication,
+                transport: transport,
+                required: false)
+            {
+                let payload = try LongCatEnvelope.unwrap(self.json(data))
+                guard let object = payload as? [String: Any] else {
+                    throw LongCatAPIError.parseFailed("pending fuel data was not an object")
+                }
+                fuel = object
+            }
+        } catch {
+            Self.log.error("LongCat supplemental fuel probe failed: \(error.localizedDescription)")
         }
 
         return self.buildSnapshot(account: account, tokenUsage: usage, pendingFuel: fuel, now: now)
@@ -116,7 +169,9 @@ public struct LongCatUsageFetcher: Sendable {
                 sawRemaining = true
             }
             if let expiry = self.parseDate(package["expireTime"]) {
-                if nearestExpiry == nil || expiry < nearestExpiry! { nearestExpiry = expiry }
+                if nearestExpiry == nil || expiry < nearestExpiry! {
+                    nearestExpiry = expiry
+                }
             }
         }
 
@@ -131,7 +186,7 @@ public struct LongCatUsageFetcher: Sendable {
 
     private static func get(
         _ path: String,
-        cookieHeader: String,
+        authentication: Authentication,
         transport: any ProviderHTTPTransport,
         required: Bool) async throws -> Data?
     {
@@ -140,6 +195,9 @@ public struct LongCatUsageFetcher: Sendable {
         }
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
+        guard let cookieHeader = authentication.header(for: url) else {
+            throw LongCatAPIError.missingCookies
+        }
         request.setValue(cookieHeader, forHTTPHeaderField: "Cookie")
         request.setValue("application/json, text/plain, */*", forHTTPHeaderField: "Accept")
         request.setValue(self.host, forHTTPHeaderField: "Origin")
@@ -173,25 +231,24 @@ public struct LongCatUsageFetcher: Sendable {
         try? JSONSerialization.jsonObject(with: data)
     }
 
-    /// Logs the (non-sensitive) response shape to help future debugging. Never
-    /// called for user-current, whose body carries a session token + phone.
-    private static func logRawShape(_ path: String, _ data: Data) {
-        guard let body = String(data: data, encoding: .utf8) else { return }
-        Self.log.debug("LongCat \(path) raw: \(body.prefix(1200))")
-    }
-
     private static func parseDate(_ value: Any?) -> Date? {
         if let number = LongCatJSON.double(value) {
             let seconds = number > 1_000_000_000_000 ? number / 1000 : number
-            if seconds > 1_000_000_000 { return Date(timeIntervalSince1970: seconds) }
+            if seconds > 1_000_000_000 {
+                return Date(timeIntervalSince1970: seconds)
+            }
         }
         if let string = LongCatJSON.string(value) {
             let iso = ISO8601DateFormatter()
-            if let date = iso.date(from: string) { return date }
+            if let date = iso.date(from: string) {
+                return date
+            }
             let formatter = DateFormatter()
             formatter.locale = Locale(identifier: "en_US_POSIX")
             formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-            if let date = formatter.date(from: string) { return date }
+            if let date = formatter.date(from: string) {
+                return date
+            }
         }
         return nil
     }

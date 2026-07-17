@@ -1,5 +1,9 @@
 import Foundation
 
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+
 public struct LongCatCookieOverride: Sendable {
     /// Full `Cookie:` header value (e.g. `name=value; name2=value2`).
     public let cookieHeader: String
@@ -59,6 +63,49 @@ public enum LongCatCookieHeader {
         return nil
     }
 
+    static func header(from cookies: [HTTPCookie], for url: URL, now: Date = Date()) -> String? {
+        guard let host = url.host?.lowercased() else { return nil }
+        let requestPath = url.path.isEmpty ? "/" : url.path
+        let isHTTPS = url.scheme?.lowercased() == "https"
+
+        let matching = cookies.filter { cookie in
+            guard cookie.expiresDate.map({ $0 > now }) ?? true else { return false }
+            guard !cookie.isSecure || isHTTPS else { return false }
+            guard self.domain(cookie.domain, matches: host) else { return false }
+            return self.path(cookie.path, matches: requestPath)
+        }.sorted { lhs, rhs in
+            if lhs.path.count != rhs.path.count {
+                return lhs.path.count > rhs.path.count
+            }
+            if lhs.name != rhs.name {
+                return lhs.name < rhs.name
+            }
+            return lhs.domain < rhs.domain
+        }
+
+        guard !matching.isEmpty else { return nil }
+        return matching.map { "\($0.name)=\($0.value)" }.joined(separator: "; ")
+    }
+
+    private static func domain(_ cookieDomain: String, matches host: String) -> Bool {
+        let normalized = cookieDomain.lowercased()
+        if normalized.hasPrefix(".") {
+            let base = String(normalized.dropFirst())
+            return host == base || host.hasSuffix("." + base)
+        }
+        return host == normalized
+    }
+
+    private static func path(_ cookiePath: String, matches requestPath: String) -> Bool {
+        let normalized = cookiePath.isEmpty ? "/" : cookiePath
+        guard requestPath.hasPrefix(normalized) else { return false }
+        if requestPath.count == normalized.count || normalized.hasSuffix("/") {
+            return true
+        }
+        let boundary = requestPath.index(requestPath.startIndex, offsetBy: normalized.count)
+        return requestPath[boundary] == "/"
+    }
+
     private static func extractHeader(from raw: String) -> String? {
         for pattern in self.headerPatterns {
             guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { continue }
@@ -70,7 +117,9 @@ public enum LongCatCookieHeader {
                 continue
             }
             let captured = String(raw[captureRange]).trimmingCharacters(in: .whitespacesAndNewlines)
-            if !captured.isEmpty { return captured }
+            if !captured.isEmpty {
+                return captured
+            }
         }
         return nil
     }

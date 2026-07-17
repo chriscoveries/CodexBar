@@ -325,7 +325,9 @@ struct ProvidersPane: View {
     }
 
     func providerErrorDisplay(_ provider: UsageProvider) -> ProviderErrorDisplay? {
-        guard let full = self.store.error(for: provider), !full.isEmpty else { return nil }
+        guard let full = self.store.error(for: provider) ?? self.store.diagnostic(for: provider),
+              !full.isEmpty
+        else { return nil }
         let preview = self.store.userFacingError(for: provider) ?? full
         return ProviderErrorDisplay(
             preview: self.truncated(preview, prefix: ""),
@@ -587,6 +589,7 @@ struct ProvidersPane: View {
             id: "menuBarMetric",
             title: L("menu_bar_metric_title"),
             subtitle: Self.menuBarMetricPickerSubtitle(for: provider),
+            placement: .menuBar,
             binding: Binding(
                 get: {
                     self.settings
@@ -688,6 +691,7 @@ struct ProvidersPane: View {
             // available cost data in their Usage section.
             tokenCostMenuSectionEnabled: self.settings.isCostUsageEffectivelyEnabled(for: provider),
             showOptionalCreditsAndExtraUsage: self.settings.showOptionalCreditsAndExtraUsage,
+            codexSparkUsageVisible: self.settings.codexSparkUsageVisible,
             copilotBudgetExtrasEnabled: self.settings.copilotBudgetExtrasEnabled,
             hidePersonalInfo: self.settings.hidePersonalInfo,
             weeklyPace: weeklyPace,

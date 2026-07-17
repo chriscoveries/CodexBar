@@ -50,6 +50,24 @@ struct LongCatProviderTests {
         #expect(LongCatCookieHeader.override(from: "   ") == nil)
     }
 
+    @Test
+    func `imported cookies honor request host path secure and expiry scope`() throws {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let cookies = try [
+            self.cookie(name: "root", value: "1", domain: "longcat.chat", path: "/"),
+            self.cookie(name: "scoped", value: "2", domain: ".longcat.chat", path: "/api/v1"),
+            self.cookie(name: "www", value: "3", domain: "www.longcat.chat", path: "/"),
+            self.cookie(name: "other", value: "4", domain: "longcat.chat", path: "/platform"),
+            self.cookie(name: "expired", value: "5", domain: "longcat.chat", path: "/", expires: now - 1),
+            self.cookie(name: "secure", value: "6", domain: "longcat.chat", path: "/", secure: true),
+        ]
+        let secureURL = try #require(URL(string: "https://longcat.chat/api/v1/user-current"))
+        let insecureURL = try #require(URL(string: "http://longcat.chat/api/v1/user-current"))
+
+        #expect(LongCatCookieHeader.header(from: cookies, for: secureURL, now: now) == "scoped=2; root=1; secure=6")
+        #expect(LongCatCookieHeader.header(from: cookies, for: insecureURL, now: now) == "scoped=2; root=1")
+    }
+
     // MARK: - Snapshot mapping
 
     @Test
@@ -191,6 +209,47 @@ struct LongCatProviderTests {
         }
     }
 
+    #if os(macOS)
+    @Test
+    func `browser import tries later profiles after credential failure`() async throws {
+        let cookie = try self.cookie(name: "session", value: "x", domain: "longcat.chat", path: "/")
+        let sessions = [
+            LongCatCookieImporter.SessionInfo(cookies: [cookie], sourceLabel: "Chrome Profile 1"),
+            LongCatCookieImporter.SessionInfo(cookies: [cookie], sourceLabel: "Chrome Profile 2"),
+        ]
+        var attempts: [String] = []
+
+        let snapshot = try await LongCatWebFetchStrategy.fetchImportedSessions(sessions) { session in
+            attempts.append(session.sourceLabel)
+            if session.sourceLabel == "Chrome Profile 1" {
+                throw LongCatAPIError.invalidSession
+            }
+            return LongCatUsageSnapshot(totalQuota: 100, usedQuota: 10)
+        }
+
+        #expect(attempts == ["Chrome Profile 1", "Chrome Profile 2"])
+        #expect(snapshot.totalQuota == 100)
+    }
+
+    @Test
+    func `browser import stops on non-credential failure`() async throws {
+        let cookie = try self.cookie(name: "session", value: "x", domain: "longcat.chat", path: "/")
+        let sessions = [
+            LongCatCookieImporter.SessionInfo(cookies: [cookie], sourceLabel: "Chrome Profile 1"),
+            LongCatCookieImporter.SessionInfo(cookies: [cookie], sourceLabel: "Chrome Profile 2"),
+        ]
+        var attempts = 0
+
+        await #expect(throws: LongCatAPIError.apiError("HTTP 500")) {
+            _ = try await LongCatWebFetchStrategy.fetchImportedSessions(sessions) { _ in
+                attempts += 1
+                throw LongCatAPIError.apiError("HTTP 500")
+            }
+        }
+        #expect(attempts == 1)
+    }
+    #endif
+
     // MARK: - HTTP status handling (fetchUsage over an injected transport)
 
     @Test
@@ -232,6 +291,88 @@ struct LongCatProviderTests {
         #expect(snapshot.usedQuota == 120_000)
         #expect(snapshot.fuelPackTotal == 1000)
         #expect(snapshot.fuelPackRemaining == 600)
+    }
+
+    @Test
+    func `fetch requires the canonical token usage response`() async {
+        let transport = LongCatScriptedTransport(results: [
+            .body(#"{"code":0,"data":{"name":"Leo"}}"#),
+            .status(500),
+        ])
+        await #expect(throws: LongCatAPIError.apiError("HTTP 500 for /api/lc-platform/v1/tokenUsage")) {
+            _ = try await LongCatUsageFetcher.fetchUsage(cookieHeader: "session=x", transport: transport)
+        }
+    }
+
+    @Test
+    func `fetch rejects malformed canonical token usage data`() async {
+        let transport = LongCatScriptedTransport(results: [
+            .body(#"{"code":0,"data":{"name":"Leo"}}"#),
+            .body(#"{"code":0,"data":[]}"#),
+        ])
+        await #expect(throws: LongCatAPIError.parseFailed("tokenUsage data was not an object")) {
+            _ = try await LongCatUsageFetcher.fetchUsage(cookieHeader: "session=x", transport: transport)
+        }
+    }
+
+    @Test
+    func `fetch rejects canonical token usage without quota fields`() async {
+        let transport = LongCatScriptedTransport(results: [
+            .body(#"{"code":0,"data":{"name":"Leo"}}"#),
+            .body(#"{"code":0,"data":{"usage":{"usedToken":120000}}}"#),
+        ])
+        await #expect(throws: LongCatAPIError.parseFailed("tokenUsage data was missing totalToken")) {
+            _ = try await LongCatUsageFetcher.fetchUsage(cookieHeader: "session=x", transport: transport)
+        }
+    }
+
+    @Test
+    func `supplemental fuel failures do not erase primary quota`() async throws {
+        let transport = LongCatScriptedTransport(results: [
+            .body(#"{"code":0,"data":{"name":"Leo"}}"#),
+            .body(#"{"code":0,"data":{"usage":{"totalToken":500000,"usedToken":120000}}}"#),
+            .status(500),
+        ])
+        let snapshot = try await LongCatUsageFetcher.fetchUsage(cookieHeader: "session=x", transport: transport)
+        #expect(snapshot.totalQuota == 500_000)
+        #expect(snapshot.usedQuota == 120_000)
+        #expect(snapshot.fuelPackTotal == nil)
+    }
+
+    @Test
+    func `supplemental fuel auth failure does not erase primary quota`() async throws {
+        let transport = LongCatScriptedTransport(results: [
+            .body(#"{"code":0,"data":{"name":"Leo"}}"#),
+            .body(#"{"code":0,"data":{"usage":{"totalToken":500000,"usedToken":120000}}}"#),
+            .status(401),
+        ])
+        let snapshot = try await LongCatUsageFetcher.fetchUsage(cookieHeader: "session=x", transport: transport)
+        #expect(snapshot.totalQuota == 500_000)
+        #expect(snapshot.usedQuota == 120_000)
+        #expect(snapshot.fuelPackTotal == nil)
+    }
+
+    private func cookie(
+        name: String,
+        value: String,
+        domain: String,
+        path: String,
+        expires: Date? = nil,
+        secure: Bool = false) throws -> HTTPCookie
+    {
+        var properties: [HTTPCookiePropertyKey: Any] = [
+            .name: name,
+            .value: value,
+            .domain: domain,
+            .path: path,
+        ]
+        if let expires {
+            properties[.expires] = expires
+        }
+        if secure {
+            properties[.secure] = "TRUE"
+        }
+        return try #require(HTTPCookie(properties: properties))
     }
 }
 

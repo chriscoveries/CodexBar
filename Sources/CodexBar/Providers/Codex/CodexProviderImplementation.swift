@@ -70,16 +70,35 @@ struct CodexProviderImplementation: ProviderImplementation {
                 }
             })
         let batterySaverBinding = context.boolBinding(\.openAIWebBatterySaverEnabled)
+        let historicalTrackingSubtitle = [
+            L("Stores local Codex usage history (8 weeks) to personalize Pace predictions."),
+            "[\(L("weekly_progress_work_days_title")) = \(L("Automatic"))]",
+        ].joined(separator: " ")
 
         return [
             ProviderSettingsToggleDescriptor(
                 id: "codex-historical-tracking",
                 title: "Historical tracking",
-                subtitle: "Stores local Codex usage history (8 weeks) to personalize Pace predictions.",
+                subtitle: historicalTrackingSubtitle,
                 binding: context.boolBinding(\.historicalTrackingEnabled),
                 statusText: nil,
                 actions: [],
                 isVisible: nil,
+                onChange: nil,
+                onAppDidBecomeActive: nil,
+                onAppearWhenEnabled: nil),
+            ProviderSettingsToggleDescriptor(
+                id: "codex-spark-usage-visible",
+                title: "Show Codex Spark usage",
+                subtitle: [
+                    "Shows Codex Spark quota rows in the menu and provider preview.",
+                    "Requires optional credits and extra usage in Display settings.",
+                ].joined(separator: " "),
+                binding: context.boolBinding(\.codexSparkUsageVisible),
+                statusText: nil,
+                actions: [],
+                isVisible: nil,
+                isEnabled: { context.settings.showOptionalCreditsAndExtraUsage },
                 onChange: nil,
                 onAppDidBecomeActive: nil,
                 onAppearWhenEnabled: nil),

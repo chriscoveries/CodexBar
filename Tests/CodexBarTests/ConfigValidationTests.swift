@@ -53,11 +53,124 @@ struct ConfigValidationTests {
     }
 
     @Test
+    func `accepts legacy factory cli source as compatibility alias`() {
+        var config = CodexBarConfig.makeDefault()
+        config.setProviderConfig(ProviderConfig(id: .factory, source: .cli))
+        let issues = CodexBarConfigValidator.validate(config)
+        #expect(!issues.contains(where: {
+            $0.provider == .factory && $0.code == "unsupported_source"
+        }))
+        #expect(FactoryProviderDescriptor.descriptor.fetchPlan.sourceModes.contains(.cli))
+    }
+
+    @Test
     func `reports missing API key when source API`() {
         var config = CodexBarConfig.makeDefault()
         config.setProviderConfig(ProviderConfig(id: .zai, source: .api, apiKey: nil))
         let issues = CodexBarConfigValidator.validate(config)
         #expect(issues.contains(where: { $0.code == "api_key_missing" }))
+    }
+
+    @Test
+    func `allows credentialless Wayfinder API source`() {
+        var config = CodexBarConfig.makeDefault()
+        config.setProviderConfig(ProviderConfig(
+            id: .wayfinder,
+            source: .api,
+            enterpriseHost: "http://127.0.0.1:9191"))
+        let issues = CodexBarConfigValidator.validate(config)
+
+        #expect(!issues.contains(where: { $0.provider == .wayfinder && $0.code == "api_key_missing" }))
+    }
+
+    @Test
+    func `sub2api token accounts satisfy API credentials`() {
+        let accounts = ProviderTokenAccountData(
+            version: 1,
+            accounts: [
+                ProviderTokenAccount(
+                    id: UUID(),
+                    label: "Primary",
+                    token: "fixture",
+                    addedAt: 0,
+                    lastUsed: nil),
+            ],
+            activeIndex: 0)
+        var config = CodexBarConfig.makeDefault()
+        config.setProviderConfig(ProviderConfig(
+            id: .sub2api,
+            source: .api,
+            enterpriseHost: "https://sub2api.example.com",
+            tokenAccounts: accounts))
+        let issues = CodexBarConfigValidator.validate(config)
+
+        #expect(!issues.contains(where: { $0.provider == .sub2api && $0.code == "api_key_missing" }))
+    }
+
+    @Test
+    func `sub2api accepts HTTPS and loopback HTTP base URLs`() {
+        for host in ["https://sub2api.example.com", "http://127.0.0.1:8080"] {
+            var config = CodexBarConfig.makeDefault()
+            config.setProviderConfig(ProviderConfig(
+                id: .sub2api,
+                source: .api,
+                apiKey: "fixture",
+                enterpriseHost: host))
+            let invalidHostIssue = CodexBarConfigValidator.validate(config).first { issue in
+                issue.provider == .sub2api && issue.code == "invalid_enterprise_host"
+            }
+
+            #expect(invalidHostIssue == nil)
+        }
+    }
+
+    @Test
+    func `sub2api rejects unsafe base URLs`() {
+        let invalidHosts = [
+            "http://sub2api.example.com",
+            "https://user:pass@sub2api.example.com",
+            "https://sub2api.example.com?token=secret",
+            "https://sub2api.example.com#fragment",
+        ]
+        for host in invalidHosts {
+            var config = CodexBarConfig.makeDefault()
+            config.setProviderConfig(ProviderConfig(
+                id: .sub2api,
+                source: .api,
+                apiKey: "fixture",
+                enterpriseHost: host))
+            let invalidHostIssue = CodexBarConfigValidator.validate(config).first { issue in
+                issue.provider == .sub2api &&
+                    issue.field == "enterpriseHost" &&
+                    issue.code == "invalid_enterprise_host"
+            }
+
+            #expect(invalidHostIssue != nil)
+        }
+    }
+
+    @Test
+    func `sub2api rejects blank token accounts as API credentials`() {
+        let accounts = ProviderTokenAccountData(
+            version: 1,
+            accounts: [
+                ProviderTokenAccount(
+                    id: UUID(),
+                    label: "Blank",
+                    token: "   ",
+                    addedAt: 0,
+                    lastUsed: nil),
+            ],
+            activeIndex: 0)
+        var config = CodexBarConfig.makeDefault()
+        config.setProviderConfig(ProviderConfig(
+            id: .sub2api,
+            source: .api,
+            enterpriseHost: "https://sub2api.example.com",
+            tokenAccounts: accounts))
+        let issues = CodexBarConfigValidator.validate(config)
+
+        #expect(issues.contains(where: { $0.provider == .sub2api && $0.code == "api_key_missing" }))
     }
 
     @Test
@@ -131,6 +244,20 @@ struct ConfigValidationTests {
         let issues = CodexBarConfigValidator.validate(config)
 
         #expect(!issues.contains(where: { $0.provider == .litellm && $0.code == "enterprise_host_unused" }))
+    }
+
+    @Test
+    func `unsupported enterprise host warning lists every supported provider`() throws {
+        var config = CodexBarConfig.makeDefault()
+        config.setProviderConfig(ProviderConfig(id: .gemini, enterpriseHost: "https://example.com"))
+        let issue = try #require(CodexBarConfigValidator.validate(config).first(where: {
+            $0.provider == .gemini && $0.code == "enterprise_host_unused"
+        }))
+
+        #expect(issue.message ==
+            "enterpriseHost is set but only azureopenai, clawrouter, copilot, kimi, litellm, llmproxy, sub2api, and " +
+            "wayfinder " +
+            "support enterpriseHost.")
     }
 
     @Test

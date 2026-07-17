@@ -5,8 +5,7 @@ import Foundation
 ///
 /// The exact `data` field names are not documented and cannot be derived from the
 /// minified front-end bundle, so extraction is intentionally lenient: we walk the
-/// decoded JSON trying a list of candidate keys and log the raw shape once so the
-/// mapping can be tightened against a real response. See `LongCatUsageFetcher`.
+/// decoded JSON trying a list of candidate keys. See `LongCatUsageFetcher`.
 enum LongCatEnvelope {
     /// Returns the `data` payload if the envelope reports success, else throws.
     static func unwrap(_ object: Any?) throws -> Any {

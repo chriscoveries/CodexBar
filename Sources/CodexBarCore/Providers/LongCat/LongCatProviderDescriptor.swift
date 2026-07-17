@@ -52,7 +52,7 @@ struct LongCatWebFetchStrategy: ProviderFetchStrategy {
 
         #if os(macOS)
         if Self.allowsBrowserImport(context: context) {
-            return LongCatCookieImporter.hasSession()
+            return LongCatCookieImporter.hasSession(browserDetection: context.browserDetection)
         }
         #endif
 
@@ -60,39 +60,59 @@ struct LongCatWebFetchStrategy: ProviderFetchStrategy {
     }
 
     func fetch(_ context: ProviderFetchContext) async throws -> ProviderFetchResult {
-        guard let cookieHeader = self.resolveCookieHeader(context: context) else {
+        let snapshot: LongCatUsageSnapshot
+        if let override = LongCatCookieHeader.resolveCookieOverride(context: context) {
+            snapshot = try await LongCatUsageFetcher.fetchUsage(cookieHeader: override.cookieHeader)
+        } else {
+            #if os(macOS)
+            guard Self.allowsBrowserImport(context: context) else {
+                throw LongCatAPIError.missingCookies
+            }
+            let sessions = try LongCatCookieImporter.importSessions(browserDetection: context.browserDetection)
+            snapshot = try await Self.fetchImportedSessions(sessions) { session in
+                try await LongCatUsageFetcher.fetchUsage(cookies: session.cookies)
+            }
+            #else
             throw LongCatAPIError.missingCookies
+            #endif
         }
-
-        let snapshot = try await LongCatUsageFetcher.fetchUsage(cookieHeader: cookieHeader)
         return self.makeResult(
             usage: snapshot.toUsageSnapshot(),
             sourceLabel: "web")
     }
 
     func shouldFallback(on error: Error, context _: ProviderFetchContext) -> Bool {
-        if case LongCatAPIError.missingCookies = error { return false }
-        if case LongCatAPIError.invalidSession = error { return false }
+        if case LongCatAPIError.missingCookies = error {
+            return false
+        }
+        if case LongCatAPIError.invalidSession = error {
+            return false
+        }
         return true
     }
 
-    private func resolveCookieHeader(context: ProviderFetchContext) -> String? {
-        if let override = LongCatCookieHeader.resolveCookieOverride(context: context) {
-            return override.cookieHeader
-        }
-
-        #if os(macOS)
-        if Self.allowsBrowserImport(context: context) {
-            if let session = try? LongCatCookieImporter.importSession(),
-               let header = session.cookieHeader
-            {
-                return header
+    #if os(macOS)
+    static func fetchImportedSessions(
+        _ sessions: [LongCatCookieImporter.SessionInfo],
+        fetch: (LongCatCookieImporter.SessionInfo) async throws -> LongCatUsageSnapshot) async throws
+        -> LongCatUsageSnapshot
+    {
+        var lastCredentialError: LongCatAPIError?
+        for session in sessions {
+            do {
+                return try await fetch(session)
+            } catch let error as LongCatAPIError {
+                switch error {
+                case .invalidSession, .missingCookies:
+                    lastCredentialError = error
+                default:
+                    throw error
+                }
             }
         }
-        #endif
-
-        return nil
+        throw lastCredentialError ?? LongCatAPIError.missingCookies
     }
+    #endif
 
     /// Browser cookie/keychain import is only used for user-initiated app
     /// refreshes in the Auto source. Manual must use the pasted header and Off

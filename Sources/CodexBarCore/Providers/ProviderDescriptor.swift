@@ -57,6 +57,7 @@ public enum ProviderDescriptorRegistry {
         .openai: OpenAIAPIProviderDescriptor.descriptor,
         .azureopenai: AzureOpenAIProviderDescriptor.descriptor,
         .claude: ClaudeProviderDescriptor.descriptor,
+        .clinepass: ClinePassProviderDescriptor.descriptor,
         .cursor: CursorProviderDescriptor.descriptor,
         .opencode: OpenCodeProviderDescriptor.descriptor,
         .opencodego: OpenCodeGoProviderDescriptor.descriptor,
@@ -111,6 +112,9 @@ public enum ProviderDescriptorRegistry {
         .crossmodel: CrossModelProviderDescriptor.descriptor,
         .clawrouter: ClawRouterProviderDescriptor.descriptor,
         .longcat: LongCatProviderDescriptor.descriptor,
+        .sub2api: Sub2APIProviderDescriptor.descriptor,
+        .wayfinder: WayfinderProviderDescriptor.descriptor,
+        .zenmux: ZenMuxProviderDescriptor.descriptor,
     ]
     private static let bootstrap: Void = {
         for provider in UsageProvider.allCases {

@@ -383,6 +383,29 @@ struct UsageStoreCoverageTests {
         #expect(store.userFacingError(for: .synthetic) == SyntheticSettingsError.missingToken.errorDescription)
         #expect(store.unavailableMessage(for: .synthetic) == SyntheticSettingsError.missingToken.errorDescription)
     }
+}
+
+extension UsageStoreCoverageTests {
+    @Test
+    func `sub2api unavailable message identifies the missing setting`() throws {
+        let settings = Self.makeSettingsStore(suite: "UsageStoreCoverageTests-sub2api-unavailable-message")
+        settings.refreshFrequency = .manual
+        settings.statusChecksEnabled = false
+
+        let metadata = ProviderRegistry.shared.metadata
+        for provider in UsageProvider.allCases {
+            try settings.setProviderEnabled(
+                provider: provider,
+                metadata: #require(metadata[provider]),
+                enabled: provider == .sub2api)
+        }
+
+        let store = Self.makeUsageStore(settings: settings)
+        #expect(store.unavailableMessage(for: .sub2api) == Sub2APIUsageError.missingCredentials.errorDescription)
+
+        settings.sub2APIAPIKey = "group-key"
+        #expect(store.unavailableMessage(for: .sub2api) == Sub2APIUsageError.missingBaseURL.errorDescription)
+    }
 
     @Test
     func `refresh clears enabled but unavailable cached state`() async throws {
@@ -410,7 +433,12 @@ struct UsageStoreCoverageTests {
         store._setSnapshotForTesting(cachedSnapshot, provider: .synthetic)
         let account = ProviderTokenAccount(id: UUID(), label: "Account", token: "token", addedAt: 0, lastUsed: nil)
         store.accountSnapshots[.synthetic] = [
-            TokenAccountUsageSnapshot(account: account, snapshot: cachedSnapshot, error: nil, sourceLabel: "api"),
+            TokenAccountUsageSnapshot(
+                account: account,
+                snapshot: cachedSnapshot,
+                error: nil,
+                sourceLabel: "api",
+                cacheKey: store.tokenAccountSnapshotCacheKey(provider: .synthetic, account: account)),
         ]
         store._setTokenSnapshotForTesting(
             CostUsageTokenSnapshot(
@@ -624,6 +652,112 @@ struct UsageStoreCoverageTests {
     }
 
     @Test
+    func `background work settings observation ignores display only settings churn`() async throws {
+        let settings = Self.makeSettingsStore(suite: "UsageStoreCoverageTests-display-only-observation")
+        settings.refreshFrequency = .manual
+        settings.statusChecksEnabled = false
+        settings.mergeIcons = false
+        settings.randomBlinkEnabled = false
+        settings.usageBarsShowUsed = false
+        settings.showOptionalCreditsAndExtraUsage = false
+        try Self.enableOnly(.codex, settings: settings)
+
+        let store = Self.makeUsageStore(settings: settings)
+        let didChange = ObservationFlag()
+
+        withObservationTracking {
+            _ = store.backgroundWorkSettingsObservationToken
+        } onChange: {
+            didChange.set()
+        }
+
+        settings.usageBarsShowUsed = true
+        settings.mergeIcons = true
+        settings.randomBlinkEnabled = true
+        settings.codexSparkUsageVisible.toggle()
+        settings.debugLoadingPattern = .pulse
+        settings.setProviderOrder(Array(settings.orderedProviders().reversed()))
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        #expect(didChange.get() == false)
+
+        let refreshDidChange = ObservationFlag()
+        withObservationTracking {
+            _ = store.backgroundWorkSettingsObservationToken
+        } onChange: {
+            refreshDidChange.set()
+        }
+
+        settings.statusChecksEnabled = true
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        #expect(refreshDidChange.get() == true)
+
+        let layoutDidChange = ObservationFlag()
+        withObservationTracking {
+            _ = store.backgroundWorkSettingsObservationToken
+        } onChange: {
+            layoutDidChange.set()
+        }
+
+        settings.multiAccountMenuLayout = .stacked
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        #expect(layoutDidChange.get() == true)
+
+        let optionalUsageDidChange = ObservationFlag()
+        withObservationTracking {
+            _ = store.backgroundWorkSettingsObservationToken
+        } onChange: {
+            optionalUsageDidChange.set()
+        }
+
+        settings.showOptionalCreditsAndExtraUsage = true
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        #expect(optionalUsageDidChange.get() == true)
+    }
+
+    @Test
+    func `display only settings do not invoke provider refresh while background work is active`() async throws {
+        let settings = Self.makeSettingsStore(suite: "UsageStoreCoverageTests-display-only-no-provider-refresh")
+        settings.refreshFrequency = .manual
+        settings.statusChecksEnabled = false
+        settings.mergeIcons = false
+        settings.randomBlinkEnabled = false
+        settings.usageBarsShowUsed = false
+        try Self.enableOnly(.codex, settings: settings)
+
+        let store = Self.makeUsageStore(settings: settings)
+        var refreshedProviders: [UsageProvider] = []
+        store._test_providerRefreshOverride = { refreshedProviders.append($0) }
+        defer { store._test_providerRefreshOverride = nil }
+
+        func observeBackgroundSettingsForTest() {
+            withObservationTracking {
+                _ = store.backgroundWorkSettingsObservationToken
+            } onChange: {
+                Task { @MainActor in
+                    await store.refreshForSettingsChange()
+                }
+            }
+        }
+
+        observeBackgroundSettingsForTest()
+
+        settings.usageBarsShowUsed = true
+        settings.mergeIcons = true
+        settings.randomBlinkEnabled = true
+        settings.codexSparkUsageVisible.toggle()
+        settings.debugLoadingPattern = .pulse
+        settings.setProviderOrder(Array(settings.orderedProviders().reversed()))
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        #expect(refreshedProviders.isEmpty)
+
+        settings.codexUsageDataSource = .cli
+        for _ in 0..<20 where !refreshedProviders.contains(.codex) {
+            try? await Task.sleep(nanoseconds: 25_000_000)
+        }
+        #expect(refreshedProviders.contains(.codex))
+    }
+
+    @Test
     func `startup status network failure schedules bounded retry`() async throws {
         let settings = Self.makeSettingsStore(suite: "UsageStoreCoverageTests-startup-status-retry")
         settings.refreshFrequency = .manual
@@ -821,7 +955,9 @@ private actor StartupConnectivityRetrySleepGate {
     }
 
     func waitUntilSleeping() async {
-        if self.continuation != nil { return }
+        if self.continuation != nil {
+            return
+        }
         await withCheckedContinuation { continuation in
             self.waiters.append(continuation)
         }

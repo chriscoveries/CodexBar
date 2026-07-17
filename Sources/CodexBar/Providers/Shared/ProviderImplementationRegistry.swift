@@ -17,6 +17,7 @@ enum ProviderImplementationRegistry {
         case .openai: OpenAIAPIProviderImplementation()
         case .azureopenai: AzureOpenAIProviderImplementation()
         case .claude: ClaudeProviderImplementation()
+        case .clinepass: ClinePassProviderImplementation()
         case .cursor: CursorProviderImplementation()
         case .opencode: OpenCodeProviderImplementation()
         case .opencodego: OpenCodeGoProviderImplementation()
@@ -71,6 +72,9 @@ enum ProviderImplementationRegistry {
         case .crossmodel: CrossModelProviderImplementation()
         case .clawrouter: ClawRouterProviderImplementation()
         case .longcat: LongCatProviderImplementation()
+        case .sub2api: Sub2APIProviderImplementation()
+        case .wayfinder: WayfinderProviderImplementation()
+        case .zenmux: ZenMuxProviderImplementation()
         }
     }
 

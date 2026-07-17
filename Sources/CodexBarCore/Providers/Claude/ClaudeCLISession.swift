@@ -35,6 +35,7 @@ actor ClaudeCLISession {
         case ioFailed(String)
         case timedOut
         case processExited
+        case outputTooLarge
 
         var errorDescription: String? {
             switch self {
@@ -42,6 +43,7 @@ actor ClaudeCLISession {
             case let .ioFailed(msg): "Claude CLI PTY I/O failed: \(msg)"
             case .timedOut: "Claude CLI session timed out."
             case .processExited: "Claude CLI session exited."
+            case .outputTooLarge: "Claude CLI session produced more output than CodexBar can safely process."
             }
         }
     }
@@ -156,7 +158,13 @@ actor ClaudeCLISession {
         var scanBuffer = RollingBuffer(maxNeedle: maxNeedle)
         var triggeredSends = Set<String>()
 
-        var buffer = Data()
+        var buffer = BoundedOutputBuffer()
+        func appendOutput(_ data: Data) throws {
+            guard buffer.append(data) else {
+                self.cleanup()
+                throw SessionError.outputTooLarge
+            }
+        }
         var scanTailText = ""
         var normalizedScan = ""
         var utf8Carry = Data()
@@ -171,10 +179,12 @@ actor ClaudeCLISession {
         while Date() < deadline {
             let newData = self.readChunk()
             if !newData.isEmpty {
-                buffer.append(newData)
+                try appendOutput(newData)
                 lastOutputAt = Date()
                 Self.appendScanText(newData: newData, scanTailText: &scanTailText, utf8Carry: &utf8Carry)
-                if scanTailText.count > 8192 { scanTailText = String(scanTailText.suffix(8192)) }
+                if scanTailText.count > 8192 {
+                    scanTailText = String(scanTailText.suffix(8192))
+                }
                 normalizedScan = Self.normalizedNeedle(TextParsing.stripANSICodes(scanTailText))
 
                 let scanData = scanBuffer.append(newData)
@@ -221,13 +231,15 @@ actor ClaudeCLISession {
                 let settleDeadline = Date().addingTimeInterval(settle)
                 while Date() < settleDeadline {
                     let newData = self.readChunk()
-                    if !newData.isEmpty { buffer.append(newData) }
+                    if !newData.isEmpty {
+                        try appendOutput(newData)
+                    }
                     try await Task.sleep(nanoseconds: 50_000_000)
                 }
             }
         }
 
-        guard !buffer.isEmpty, let text = String(data: buffer, encoding: .utf8) else {
+        guard !buffer.data.isEmpty, let text = String(data: buffer.data, encoding: .utf8) else {
             throw SessionError.timedOut
         }
         return text
@@ -353,7 +365,10 @@ actor ClaudeCLISession {
     }
 
     static func launchEnvironment(baseEnv: [String: String] = ProcessInfo.processInfo.environment) -> [String: String] {
-        self.scrubbedClaudeEnvironment(from: TTYCommandRunner.enrichedEnvironment(baseEnv: baseEnv))
+        var env = self.scrubbedClaudeEnvironment(from: TTYCommandRunner.enrichedEnvironment(baseEnv: baseEnv))
+        // Passive status and auth probes must not mutate or update the user's Claude CLI installation.
+        env["DISABLE_AUTOUPDATER"] = "1"
+        return env
     }
 
     private static func scrubbedClaudeEnvironment(from base: [String: String]) -> [String: String] {
@@ -472,7 +487,9 @@ actor ClaudeCLISession {
                     retries = 0
                     continue
                 }
-                if written == 0 { break }
+                if written == 0 {
+                    break
+                }
 
                 let err = errno
                 if err == EINTR || err == EAGAIN || err == EWOULDBLOCK {

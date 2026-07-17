@@ -11,22 +11,14 @@ public enum LongCatCookieImporter {
         ProviderDefaults.metadata[.longcat]?.browserCookieOrder ?? Browser.defaultImportOrder
 
     public struct SessionInfo: Sendable {
+        /// Full imported jar. The fetcher applies browser-equivalent URL matching
+        /// before building each request header.
         public let cookies: [HTTPCookie]
         public let sourceLabel: String
 
         public init(cookies: [HTTPCookie], sourceLabel: String) {
             self.cookies = cookies
             self.sourceLabel = sourceLabel
-        }
-
-        /// Full `Cookie:` header built from every longcat.chat cookie. LongCat's
-        /// console uses Meituan passport SSO; the exact auth cookie name is not
-        /// documented, so we forward the whole jar rather than keying on one name.
-        public var cookieHeader: String? {
-            guard !self.cookies.isEmpty else { return nil }
-            let header = HTTPCookie.requestHeaderFields(with: self.cookies)["Cookie"]
-            if let header, !header.isEmpty { return header }
-            return nil
         }
     }
 

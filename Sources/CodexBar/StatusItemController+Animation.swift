@@ -296,6 +296,7 @@ extension StatusItemController {
            let brand = ProviderBrandIcon.image(for: primaryProvider)
         {
             let displayText = self.menuBarDisplayText(for: primaryProvider, snapshot: snapshot)
+            let displayedImage = warningFlash ? Self.quotaWarningFlashImage(base: brand) : brand
             let signature = [
                 "mode=brandPercent",
                 "provider=\(primaryProvider.rawValue)",
@@ -309,22 +310,22 @@ extension StatusItemController {
                 "warningFlash=\(warningFlash ? "1" : "0")",
                 "anim=\(needsAnimation ? "1" : "0")",
                 "hideCritters=\(self.settings.menuBarHidesCritters ? "1" : "0")",
+                "highContrast=\(self.shouldUseHighContrastStatusItemContent ? "1" : "0")",
             ].joined(separator: "|")
             if self.shouldSkipMergedIconRender(signature) {
-                // AppKit can lose button title/image-position state independently of the cached render signature.
-                // Keep the cheap title path self-healing even when the icon image itself can be skipped.
-                self.setButtonTitle(displayText, for: button)
+                // AppKit can lose button content state independently of the cached render signature.
+                // Keep this cheap path self-healing even when the provider image itself can be skipped.
+                self.setButtonContent(image: displayedImage, title: displayText, for: button)
                 self.noteIconPerfRender(skipped: true)
                 return true
             }
-            self.setButtonImage(
-                warningFlash ? Self.quotaWarningFlashImage(base: brand) : brand, for: button)
-            self.setButtonTitle(displayText, for: button)
+            self.setButtonContent(image: displayedImage, title: displayText, for: button)
             self.noteIconPerfRender(skipped: false)
             return false
         }
 
-        self.setButtonTitle(nil, for: button)
+        // Brand + percent returns above; remaining paths are image-only apart from the debug marker.
+        let canSkipCachedRender = self.prepareButtonForImageOnlyCacheHit(button)
         if let morphProgress {
             let signature = [
                 "mode=morph",
@@ -335,8 +336,9 @@ extension StatusItemController {
                 "warningFlash=\(warningFlash ? "1" : "0")",
                 "anim=\(needsAnimation ? "1" : "0")",
                 "hideCritters=\(self.settings.menuBarHidesCritters ? "1" : "0")",
+                "highContrast=\(self.shouldUseHighContrastStatusItemContent ? "1" : "0")",
             ].joined(separator: "|")
-            if self.shouldSkipMergedIconRender(signature) {
+            if self.shouldSkipMergedIconRender(signature), canSkipCachedRender {
                 self.noteIconPerfRender(skipped: true)
                 return true
             }
@@ -344,8 +346,10 @@ extension StatusItemController {
                 progress: morphProgress,
                 style: style,
                 hideCritters: self.settings.menuBarHidesCritters)
-            self.setButtonImage(
-                warningFlash ? Self.quotaWarningFlashImage(base: image) : image, for: button)
+            self.setButtonContent(
+                image: warningFlash ? Self.quotaWarningFlashImage(base: image) : image,
+                title: nil,
+                for: button)
         } else {
             let signature = [
                 "mode=icon",
@@ -362,8 +366,9 @@ extension StatusItemController {
                 "warningFlash=\(warningFlash ? "1" : "0")",
                 "anim=\(needsAnimation ? "1" : "0")",
                 "hideCritters=\(self.settings.menuBarHidesCritters ? "1" : "0")",
+                "highContrast=\(self.shouldUseHighContrastStatusItemContent ? "1" : "0")",
             ].joined(separator: "|")
-            if self.shouldSkipMergedIconRender(signature) {
+            if self.shouldSkipMergedIconRender(signature), canSkipCachedRender {
                 self.noteIconPerfRender(skipped: true)
                 return true
             }
@@ -378,8 +383,10 @@ extension StatusItemController {
                 tilt: tilt,
                 statusIndicator: statusIndicator,
                 hideCritters: self.settings.menuBarHidesCritters)
-            self.setButtonImage(
-                warningFlash ? Self.quotaWarningFlashImage(base: image) : image, for: button)
+            self.setButtonContent(
+                image: warningFlash ? Self.quotaWarningFlashImage(base: image) : image,
+                title: nil,
+                for: button)
         }
         self.noteIconPerfRender(skipped: false)
         return false
@@ -439,25 +446,24 @@ extension StatusItemController {
            let brand = ProviderBrandIcon.image(for: provider)
         {
             let displayText = self.menuBarDisplayText(for: provider, snapshot: snapshot)
+            let displayedImage = warningFlash ? Self.quotaWarningFlashImage(base: brand) : brand
             let signature = [
                 "mode=brandPercent",
                 "provider=\(provider.rawValue)",
                 "style=\(String(describing: style))",
                 "text=\(displayText ?? "nil")",
                 "warningFlash=\(warningFlash ? "1" : "0")",
+                "highContrast=\(self.shouldUseHighContrastStatusItemContent ? "1" : "0")",
             ].joined(separator: "|")
             if self.shouldSkipProviderIconRender(provider: provider, signature: signature) {
+                self.setButtonContent(image: displayedImage, title: displayText, for: button)
                 self.noteIconPerfRender(skipped: true)
                 return true
             }
-            self.setButtonImage(
-                warningFlash ? Self.quotaWarningFlashImage(base: brand) : brand, for: button)
-            self.setButtonTitle(displayText, for: button)
+            self.setButtonContent(image: displayedImage, title: displayText, for: button)
             self.noteIconPerfRender(skipped: false)
             return false
         }
-
-        self.setButtonTitle(nil, for: button)
 
         // OpenRouter always gets a meter here — the brand-logo fallback was removed on purpose.
         let resolved = self.resolvedMenuBarIconPercents(
@@ -504,6 +510,8 @@ extension StatusItemController {
         let wiggle = self.wiggleAmount(for: provider)
         let tilt = self.tiltAmount(for: provider) * .pi / 28 // limit to ~6.4°
         let statusIndicator = self.store.statusIndicator(for: provider)
+        // Brand + percent returns above; remaining paths are image-only apart from the debug marker.
+        let canSkipCachedRender = self.prepareButtonForImageOnlyCacheHit(button)
         if let morphProgress {
             let signature = [
                 "mode=morph",
@@ -514,8 +522,9 @@ extension StatusItemController {
                 "warningFlash=\(warningFlash ? "1" : "0")",
                 "loading=\(isLoading ? "1" : "0")",
                 "hideCritters=\(self.settings.menuBarHidesCritters ? "1" : "0")",
+                "highContrast=\(self.shouldUseHighContrastStatusItemContent ? "1" : "0")",
             ].joined(separator: "|")
-            if self.shouldSkipProviderIconRender(provider: provider, signature: signature) {
+            if self.shouldSkipProviderIconRender(provider: provider, signature: signature), canSkipCachedRender {
                 self.noteIconPerfRender(skipped: true)
                 return true
             }
@@ -523,8 +532,10 @@ extension StatusItemController {
                 progress: morphProgress,
                 style: style,
                 hideCritters: self.settings.menuBarHidesCritters)
-            self.setButtonImage(
-                warningFlash ? Self.quotaWarningFlashImage(base: image) : image, for: button)
+            self.setButtonContent(
+                image: warningFlash ? Self.quotaWarningFlashImage(base: image) : image,
+                title: nil,
+                for: button)
         } else {
             let signature = [
                 "mode=icon",
@@ -541,8 +552,9 @@ extension StatusItemController {
                 "warningFlash=\(warningFlash ? "1" : "0")",
                 "loading=\(isLoading ? "1" : "0")",
                 "hideCritters=\(self.settings.menuBarHidesCritters ? "1" : "0")",
+                "highContrast=\(self.shouldUseHighContrastStatusItemContent ? "1" : "0")",
             ].joined(separator: "|")
-            if self.shouldSkipProviderIconRender(provider: provider, signature: signature) {
+            if self.shouldSkipProviderIconRender(provider: provider, signature: signature), canSkipCachedRender {
                 self.noteIconPerfRender(skipped: true)
                 return true
             }
@@ -557,8 +569,10 @@ extension StatusItemController {
                 tilt: tilt,
                 statusIndicator: statusIndicator,
                 hideCritters: self.settings.menuBarHidesCritters)
-            self.setButtonImage(
-                warningFlash ? Self.quotaWarningFlashImage(base: image) : image, for: button)
+            self.setButtonContent(
+                image: warningFlash ? Self.quotaWarningFlashImage(base: image) : image,
+                title: nil,
+                for: button)
         }
         self.noteIconPerfRender(skipped: false)
         return false
@@ -692,17 +706,27 @@ extension StatusItemController {
         return image
     }
 
-    private func setButtonImage(_ image: NSImage, for button: NSStatusBarButton) {
-        if button.image === image { return }
-        button.image = image
+    private var shouldUseHighContrastStatusItemContent: Bool {
+        self.settings.menuBarHighContrastOnInactiveDisplays
+            && self.settings.menuBarIconStyle == .iconAndPercent
     }
 
-    private func setButtonTitle(_ title: String?, for button: NSStatusBarButton) {
-        let isDebugApp = Self.isDebugApp(bundleIdentifier: Bundle.main.bundleIdentifier)
+    func prepareButtonForImageOnlyCacheHit(_ button: NSStatusBarButton) -> Bool {
+        if self.shouldUseHighContrastStatusItemContent {
+            guard button.image == nil,
+                  button.imagePosition == .noImage,
+                  button.attributedTitle.length > 0
+            else { return false }
+            return button.attributedTitle.attribute(
+                .attachment,
+                at: 0,
+                effectiveRange: nil) is NSTextAttachment
+        }
+
         let value = Self.buttonTitle(
-            title,
-            hasImage: button.image != nil || title == nil,
-            isDebugApp: isDebugApp)
+            nil,
+            hasImage: true,
+            isDebugApp: Self.isDebugApp(bundleIdentifier: Bundle.main.bundleIdentifier))
         if button.title != value {
             button.title = value
         }
@@ -710,6 +734,55 @@ extension StatusItemController {
         if button.imagePosition != position {
             button.imagePosition = position
         }
+        return true
+    }
+
+    private func setButtonContent(image: NSImage, title: String?, for button: NSStatusBarButton) {
+        let isDebugApp = Self.isDebugApp(bundleIdentifier: Bundle.main.bundleIdentifier)
+        let value = Self.buttonTitle(
+            title,
+            hasImage: true,
+            isDebugApp: isDebugApp)
+
+        if self.shouldUseHighContrastStatusItemContent {
+            button.image = nil
+            button.imagePosition = .noImage
+            button.attributedTitle = Self.highContrastButtonTitle(image: image, title: value)
+            return
+        }
+
+        if button.image !== image {
+            button.image = image
+        }
+        if button.title != value {
+            button.title = value
+        }
+        let position: NSControl.ImagePosition = value.isEmpty ? .imageOnly : .imageLeft
+        if button.imagePosition != position {
+            button.imagePosition = position
+        }
+    }
+
+    static func highContrastButtonTitle(image: NSImage, title: String) -> NSAttributedString {
+        let font = NSFont.systemFont(ofSize: NSFont.systemFontSize)
+        let attachment = NSTextAttachment()
+        attachment.image = image
+        attachment.bounds = NSRect(
+            x: 0,
+            y: ((font.capHeight - image.size.height) / 2).rounded(),
+            width: image.size.width,
+            height: image.size.height)
+
+        let value = NSMutableAttributedString(attachment: attachment)
+        if !title.isEmpty {
+            value.append(NSAttributedString(
+                string: title,
+                attributes: [
+                    .font: font,
+                    .foregroundColor: NSColor.labelColor,
+                ]))
+        }
+        return value
     }
 
     nonisolated static func buttonTitle(_ title: String?, hasImage: Bool, isDebugApp: Bool = false) -> String {
@@ -846,7 +919,10 @@ extension StatusItemController {
             if let combinedText = MenuBarDisplayText.combinedSessionWeeklyPercentText(
                 sessionWindow: combinedLanes.session,
                 weeklyWindow: combinedLanes.weekly,
-                showUsed: self.settings.usageBarsShowUsed)
+                showUsed: self.settings.usageBarsShowUsed,
+                resetTimeDisplayStyle: self.settings.resetTimeDisplayStyle,
+                showsResetTimeWhenExhausted: self.settings.menuBarShowsResetTimeWhenExhausted,
+                now: now)
             {
                 return combinedText
             }
@@ -861,7 +937,10 @@ extension StatusItemController {
             mode: mode,
             percentWindow: displayPercentWindow,
             pace: pace,
-            showUsed: self.settings.usageBarsShowUsed)
+            showUsed: self.settings.usageBarsShowUsed,
+            resetTimeDisplayStyle: self.settings.resetTimeDisplayStyle,
+            showsResetTimeWhenExhausted: self.settings.menuBarShowsResetTimeWhenExhausted,
+            now: now)
     }
 
     nonisolated static func deepSeekBalanceDisplayText(snapshot: UsageSnapshot?) -> String? {
@@ -1096,6 +1175,51 @@ extension StatusItemController {
             Self.rateWindow(in: snapshot, matchingCadenceMinutes: Self.weeklyWindowMinutes)
         }
         return (session, weekly)
+    }
+
+    /// Reset dates for every lane whose menu-bar text is currently rendered as a reset time, so the
+    /// countdown scheduler can refresh each of them. Reset-time mode drives a single window. The smart
+    /// "reset time when exhausted" option can surface BOTH combined session/weekly lanes in percent mode,
+    /// while pace/both render the one lane chosen by `combinedDisplayPercentWindow` — mirror that presentation
+    /// here rather than scheduling whichever lane happened to drive the icon.
+    func menuBarDisplayedResetDates(for provider: UsageProvider, now: Date) -> [Date] {
+        let snapshot = self.store.snapshot(for: provider)
+        let mode = self.settings.menuBarDisplayMode
+
+        let projection = self.store.codexConsumerProjectionIfNeeded(
+            for: provider,
+            surface: .menuBar,
+            snapshotOverride: snapshot,
+            now: now)
+        if let lanes = self.combinedSessionWeeklyLanes(
+            for: provider, snapshot: snapshot, projection: projection),
+            lanes.session != nil || lanes.weekly != nil
+        {
+            switch mode {
+            case .percent:
+                // Percent renders both lanes independently, so schedule every exhausted reset.
+                return [lanes.session, lanes.weekly]
+                    .compactMap(\.self)
+                    .filter { $0.remainingPercent <= 0 }
+                    .compactMap(\.resetsAt)
+            case .pace, .both:
+                // Pace/both render one usage lane alongside the weekly pace. Use that exact lane rather
+                // than `menuBarMetricWindow`, whose tie-breaking can select the other exhausted window.
+                let window = Self.combinedDisplayPercentWindow(
+                    lanes: lanes,
+                    fallback: self.menuBarMetricWindow(for: provider, snapshot: snapshot, now: now))
+                guard let window, window.remainingPercent <= 0 else { return [] }
+                return window.resetsAt.map { [$0] } ?? []
+            case .resetTime:
+                break
+            }
+        }
+
+        guard let window = self.menuBarMetricWindow(for: provider, snapshot: snapshot, now: now)
+        else { return [] }
+        // Outside reset-time mode the reset text is only visible once the quota is exhausted.
+        if mode != .resetTime, window.remainingPercent > 0 { return [] }
+        return window.resetsAt.map { [$0] } ?? []
     }
 
     /// The combined metric's session (5h) lane. Codex resolves it through the consumer projection; other

@@ -63,6 +63,7 @@ struct ProviderConfigEnvironmentTests {
 
         #expect(env[CrossModelSettingsReader.envKey] == "cm-token")
         #expect(ProviderConfigEnvironment.supportsAPIKeyOverride(for: .crossmodel))
+        #expect(ProviderConfigEnvironment.supportsAPIKeyOverride(for: .zenmux))
     }
 
     @Test
@@ -263,6 +264,34 @@ struct ProviderConfigEnvironmentTests {
 
         #expect(env[SakanaSettingsReader.cookieHeaderKey] == "Cookie: session=abc")
         #expect(SakanaSettingsReader.cookieHeader(environment: env) == "session=abc")
+    }
+
+    @Test
+    func `applies cookie header override for longcat`() {
+        let config = ProviderConfig(
+            id: .longcat,
+            cookieHeader: "Cookie: passport_token=abc; uid=42",
+            cookieSource: .manual)
+        let env = ProviderConfigEnvironment.applyProviderConfigOverrides(
+            base: [:],
+            provider: .longcat,
+            config: config)
+
+        #expect(env[LongCatSettingsReader.cookieHeaderKey] == "Cookie: passport_token=abc; uid=42")
+        #expect(LongCatSettingsReader.cookieHeader(environment: env) == "Cookie: passport_token=abc; uid=42")
+    }
+
+    @Test
+    func `does not expose stored longcat cookie outside manual mode`() {
+        for source in [ProviderCookieSource.auto, .off] {
+            let config = ProviderConfig(id: .longcat, cookieHeader: "stale=1", cookieSource: source)
+            let env = ProviderConfigEnvironment.applyProviderConfigOverrides(
+                base: [:],
+                provider: .longcat,
+                config: config)
+
+            #expect(env[LongCatSettingsReader.cookieHeaderKey] == nil)
+        }
     }
 
     @Test
@@ -596,6 +625,31 @@ struct ProviderConfigEnvironmentTests {
 
         #expect(env[KiloSettingsReader.apiTokenKey] == "kilo-token")
         #expect(ProviderTokenResolver.kiloToken(environment: env, authFileURL: nil) == "kilo-token")
+    }
+
+    @Test
+    func `applies API key override for factory`() {
+        let config = ProviderConfig(id: .factory, apiKey: "fk-config-token")
+        let env = ProviderConfigEnvironment.applyAPIKeyOverride(
+            base: [:],
+            provider: .factory,
+            config: config)
+
+        #expect(env[FactorySettingsReader.apiTokenKey] == "fk-config-token")
+        #expect(FactorySettingsReader.apiKey(environment: env) == "fk-config-token")
+        #expect(ProviderConfigEnvironment.supportsAPIKeyOverride(for: .factory))
+    }
+
+    @Test
+    func `factory config api key wins over existing FACTORY_API_KEY`() {
+        let config = ProviderConfig(id: .factory, apiKey: "fk-config-token")
+        let env = ProviderConfigEnvironment.applyAPIKeyOverride(
+            base: [FactorySettingsReader.apiTokenKey: "fk-env-token"],
+            provider: .factory,
+            config: config)
+
+        #expect(env[FactorySettingsReader.apiTokenKey] == "fk-config-token")
+        #expect(FactorySettingsReader.apiKey(environment: env) == "fk-config-token")
     }
 
     @Test

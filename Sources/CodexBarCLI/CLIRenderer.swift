@@ -38,6 +38,8 @@ enum CLIRenderer {
         self.appendMiMoBalanceLine(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendCrossModelUsageLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendClawRouterUsageLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
+        self.appendSub2APIUsageLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
+        self.appendWayfinderUsageLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendDeepgramLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendAmpBalanceLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendDevinOverageBalanceLine(
@@ -100,6 +102,8 @@ enum CLIRenderer {
         self.appendMiMoBalanceLine(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendCrossModelUsageLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendClawRouterUsageLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
+        self.appendSub2APIUsageLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
+        self.appendWayfinderUsageLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendDeepgramLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendAmpBalanceLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendDevinOverageBalanceLine(
@@ -158,7 +162,7 @@ enum CLIRenderer {
         if provider == .codex {
             return CodexPlanFormatting.displayName(plan) ?? plan
         }
-        return plan.capitalized
+        return self.nonCodexPlanDisplay(provider: provider, plan: plan)
     }
 
     static func colorizeAccentBold(_ text: String) -> String {
@@ -484,6 +488,8 @@ enum CLIRenderer {
         }
         self.appendCrossModelUsageLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendClawRouterUsageLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
+        self.appendSub2APIUsageLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
+        self.appendWayfinderUsageLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendDeepgramLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendAmpBalanceLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendDevinOverageBalanceLine(
@@ -707,6 +713,58 @@ enum CLIRenderer {
         }
     }
 
+    private static func appendSub2APIUsageLines(
+        snapshot: UsageSnapshot,
+        useColor: Bool,
+        lines: inout [String])
+    {
+        guard let usage = snapshot.sub2APIUsage else { return }
+        if let balance = usage.balance {
+            lines.append(self.labelValueLine(
+                "Balance",
+                value: UsageFormatter.currencyString(balance, currencyCode: usage.unit),
+                useColor: useColor))
+        }
+        if let today = usage.today {
+            lines.append(self.labelValueLine(
+                "Today",
+                value: self.sub2APITotalsText(today, unit: usage.unit),
+                useColor: useColor))
+        }
+        if let total = usage.total {
+            lines.append(self.labelValueLine(
+                "Total",
+                value: self.sub2APITotalsText(total, unit: usage.unit),
+                useColor: useColor))
+        }
+    }
+
+    private static func sub2APITotalsText(_ totals: Sub2APIUsageDetails.Totals, unit: String) -> String {
+        "\(UsageFormatter.tokenCountString(totals.requests)) requests · " +
+            "\(UsageFormatter.tokenCountString(totals.totalTokens)) tokens · " +
+            UsageFormatter.currencyString(totals.actualCostUSD, currencyCode: unit)
+    }
+
+    private static func appendWayfinderUsageLines(
+        snapshot: UsageSnapshot,
+        useColor: Bool,
+        lines: inout [String])
+    {
+        guard let usage = snapshot.wayfinderUsage else { return }
+
+        lines.append(self.labelValueLine("Gateway", value: usage.gatewaySummary, useColor: useColor))
+
+        if let routed = usage.routedSummary {
+            lines.append(self.labelValueLine("Routed", value: routed, useColor: useColor))
+        }
+        if let saved = usage.savedSummary {
+            lines.append(self.labelValueLine("Saved", value: saved, useColor: useColor))
+        }
+        if let avgDecision = usage.avgDecisionSummary {
+            lines.append(self.labelValueLine("Avg decision", value: avgDecision, useColor: useColor))
+        }
+    }
+
     private enum CrossModelMetric {
         case tokens
         case requests
@@ -803,9 +861,13 @@ enum CLIRenderer {
                 tertiary: "Monthly",
                 showsTertiary: true)
         }
-        let primaryLabel = provider == .grok
-            ? GrokProviderDescriptor.primaryLabel(window: snapshot.primary) ?? metadata.sessionLabel
-            : metadata.sessionLabel
+        let primaryLabel = if provider == .grok {
+            GrokProviderDescriptor.primaryLabel(window: snapshot.primary) ?? metadata.sessionLabel
+        } else if provider == .sub2api {
+            Sub2APIProviderDescriptor.primaryLabel(details: snapshot.sub2APIUsage) ?? metadata.sessionLabel
+        } else {
+            metadata.sessionLabel
+        }
         return RateWindowLabels(
             primary: primaryLabel,
             secondary: metadata.weeklyLabel,
@@ -891,7 +953,7 @@ enum CLIRenderer {
             {
                 plan
             } else {
-                plan.capitalized
+                self.nonCodexPlanDisplay(provider: provider, plan: plan)
             }
             lines.append(self.labelValueLine("Plan", value: displayPlan, useColor: context.useColor))
         }
@@ -901,6 +963,13 @@ enum CLIRenderer {
             guard !trimmed.isEmpty else { continue }
             lines.append(self.labelValueLine("Note", value: trimmed, useColor: context.useColor))
         }
+    }
+
+    private static func nonCodexPlanDisplay(provider: UsageProvider, plan: String) -> String {
+        if provider == .gemini || provider == .mimo {
+            return UsageFormatter.cleanPlanName(plan)
+        }
+        return plan.capitalized
     }
 
     // swiftlint:disable:next function_parameter_count
@@ -1078,8 +1147,12 @@ enum CLIRenderer {
     {
         guard kind.supports(provider: provider) else { return nil }
         // Only pace a real session window here; Claude w/o 5-hour data falls a 7-day window into primary.
-        if case .session = kind, let minutes = window.windowMinutes, minutes > 300 { return nil }
-        if provider == .ollama, window.windowMinutes == nil { return nil }
+        if case .session = kind, let minutes = window.windowMinutes, minutes > 300 {
+            return nil
+        }
+        if provider == .ollama, window.windowMinutes == nil {
+            return nil
+        }
         guard window.remainingPercent > 0 else { return nil }
         // workDays applies only to the weekly (10 080-min) window; UsagePace.weekly ignores it for other durations.
         let workDays = kind == .weekly ? weeklyWorkDays : nil
@@ -1179,7 +1252,9 @@ enum CLIRenderer {
         kind: PaceKind,
         now: Date) -> String?
     {
-        if pace.willLastToReset { return self.combinedLastsLabel(for: pace, provider: provider) }
+        if pace.willLastToReset {
+            return self.combinedLastsLabel(for: pace, provider: provider)
+        }
         guard let etaSeconds = pace.etaSeconds else { return nil }
         let etaText = Self.paceDurationText(seconds: etaSeconds, now: now)
         switch kind {
@@ -1209,8 +1284,12 @@ enum CLIRenderer {
     private static func paceDurationText(seconds: TimeInterval, now: Date) -> String {
         let date = now.addingTimeInterval(seconds)
         let countdown = UsageFormatter.resetCountdownDescription(from: date, now: now)
-        if countdown == "now" { return "now" }
-        if countdown.hasPrefix("in ") { return String(countdown.dropFirst(3)) }
+        if countdown == "now" {
+            return "now"
+        }
+        if countdown.hasPrefix("in ") {
+            return String(countdown.dropFirst(3))
+        }
         return countdown
     }
 

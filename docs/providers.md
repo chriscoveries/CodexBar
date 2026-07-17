@@ -8,7 +8,7 @@ read_when:
 
 # Providers
 
-CodexBar currently registers 57 provider IDs. Some companies expose multiple surfaces, such as Codex vs OpenAI API or
+CodexBar currently registers 62 provider IDs. Some companies expose multiple surfaces, such as Codex vs OpenAI API or
 OpenCode vs OpenCode Go, because the auth source and quota shape differ.
 
 ## Fetch strategies (current)
@@ -27,12 +27,12 @@ headers, source selection, provider ordering, and token accounts are stored in `
 | Claude | Admin API key (`api`) when configured; otherwise App Auto: OAuth API (`oauth`) → CLI PTY (`claude`) → Web API (`web`). CLI Auto: Web API (`web`) → CLI PTY (`claude`). |
 | Gemini | OAuth-backed API via Gemini CLI credentials (`api`). |
 | Antigravity | Local LSP/HTTP probe (`local`). |
-| Cursor | Web API via cookies → stored WebKit session (`web`). |
+| Cursor | Web API via cookies → legacy stored session → Cursor.app local auth (`web`). |
 | OpenCode | Web dashboard via cookies (`web`). |
 | OpenCode Go | Web dashboard via cookies (`web`) -> local SQLite usage (`local`) in auto mode; optional workspace ID. |
 | Alibaba Coding Plan | Console RPC via web cookies (auto/manual) with API key fallback (`web`, `api`). |
 | Alibaba Token Plan | Bailian subscription summary API via browser or manual cookies (`web`). |
-| Droid/Factory | Web cookies → stored tokens → local storage → WorkOS cookies (`web`). |
+| Droid/Factory | API key (`FACTORY_API_KEY` / config) → web cookies → stored tokens → local storage → WorkOS cookies (`auto`, `api`, `web`). |
 | Devin | Chrome localStorage session or manual Bearer token → daily and weekly quota API (`web`). |
 | z.ai | API token from config/env → quota API (`api`). |
 | Manus | Browser `session_id` cookie (auto/manual/env) → credits API (`web`). |
@@ -66,15 +66,18 @@ headers, source selection, provider ordering, and token accounts are stored in `
 | Crof | API key from config/env → credit balance + requests quota API (`api`). |
 | Venice | API key from config/env → DIEM/USD balance API (`api`). |
 | Command Code | Web billing API via Command Code session cookies (`web`). |
+| ClinePass | API key from config/env → 5-hour, weekly, and monthly subscription usage limits (`api`). |
 | StepFun | Username/password login or manual Oasis token (`web`). |
 | AWS Bedrock | AWS credentials → Cost Explorer spend/budgets and optional CloudWatch Claude activity (`api`). |
 | Grok | `grok agent stdio` JSON-RPC `x.ai/billing` (`cli`) → grok.com billing gRPC-web via Chrome session cookies (`web`); local `~/.grok/sessions` signals as fallback. |
 | GroqCloud | API key → Prometheus metrics API for request/token/cache-hit rates (`api`). |
 | LLM Proxy | API key + base URL → `/v1/quota-stats` aggregate proxy usage (`api`). |
 | ClawRouter | API key + optional base URL → `/v1/usage` monthly budget, spend, and routed-provider usage (`api`). |
+| Wayfinder | Local gateway URL → `/healthz`, `/v1/savings`, `/router/models`, `/metrics` for health, routing split, savings, and decision latency (`api`). |
 | LiteLLM | API key + base URL → `/key/info`, then `/user/info` or `/team/info` budget usage (`api`). |
 | Deepgram | API key → project discovery and usage breakdown API (`api`). |
 | Chutes | API key from config/env → subscription usage and quota API (`api`). |
+| ZenMux | Management API key from config/env → five-hour and seven-day quota windows plus PAYG balance (`api`). |
 | Zed | Zed editor Keychain session → `cloud.zed.dev/client/users/me` for plan and quota data (`local`). |
 
 ## Codex
@@ -99,6 +102,7 @@ headers, source selection, provider ordering, and token accounts are stored in `
 - Validates the configured deployment with a minimal chat-completions request; it does not expose Azure spend or quota history.
 - Use `AZURE_OPENAI_API_VERSION` to override the API version. Set it to `v1` for Azure's OpenAI-compatible v1 API path.
 - Status: Azure status page link.
+- Details: `docs/azure-openai.md`.
 
 ## Claude
 - Admin API: `sk-ant-admin...` key in Settings/config, token accounts, or `ANTHROPIC_ADMIN_KEY`.
@@ -176,7 +180,8 @@ headers, source selection, provider ordering, and token accounts are stored in `
 
 ## Cursor
 - Web API via browser cookies (`cursor.com` + `cursor.sh`).
-- Fallback: stored WebKit session.
+- Fallbacks: a legacy stored session, then Cursor.app local auth.
+- Add Account and Switch Account open Cursor's authenticator in a supported browser; Switch Account prefers stable account IDs and falls back to normalized email when IDs are unavailable. CodexBar uses the supported system HTTPS handler when possible and otherwise asks the user to choose an eligible supported browser.
 - Status: Statuspage.io (Cursor).
 - Details: `docs/cursor.md`.
 
@@ -211,8 +216,9 @@ headers, source selection, provider ordering, and token accounts are stored in `
 - Details: `docs/alibaba-token-plan.md`.
 
 ## Droid (Factory)
+- API key from `~/.codexbar/config.json` (`providers[].apiKey`), `FACTORY_API_KEY`, or `~/.factory/.env`.
 - Web API via Factory cookies, bearer tokens, and WorkOS refresh tokens.
-- Multiple fallback strategies (cookies → stored tokens → local storage → WorkOS cookies).
+- Auto prefers API when a key is available, then falls back to web strategies.
 - Status: `https://status.factory.ai`.
 - Details: `docs/factory.md`.
 
@@ -299,8 +305,10 @@ headers, source selection, provider ordering, and token accounts are stored in `
 
 ## Synthetic
 - API key from `~/.codexbar/config.json` (`providers[].apiKey`) or `SYNTHETIC_API_KEY`.
-- Shows rolling five-hour, weekly token, search-hourly, and cost/credit quota lanes when present.
-- Status: none yet.
+- The menu card shows rolling five-hour, weekly token, and search-hourly quota lanes when present. The compact menu bar
+  metric uses the five-hour or weekly lane; weekly credit regeneration details appear when returned.
+- External status page: `https://status.synthetic.new` (not linked or auto-polled by CodexBar).
+- Details: `docs/synthetic.md`.
 
 ## OpenRouter
 - API token from `~/.codexbar/config.json` (`providers[].apiKey`) or `OPENROUTER_API_KEY` env var.
@@ -321,6 +329,7 @@ headers, source selection, provider ordering, and token accounts are stored in `
 - Browser session cookie from automatic import, manual header/token, or `PERPLEXITY_SESSION_TOKEN` / `PERPLEXITY_COOKIE`.
 - Tracks recurring credits, bonus/promotional credits, purchased credits, and renewal date when present.
 - Status: `https://status.perplexity.com/` (link only, no auto-polling).
+- Details: `docs/perplexity.md`.
 
 ## Xiaomi MiMo
 - Browser cookies from automatic import or manual `Cookie:` header for `platform.xiaomimimo.com` balance and token-plan endpoints.
@@ -361,6 +370,7 @@ headers, source selection, provider ordering, and token accounts are stored in `
 - The menu bar metric can show either pay-as-you-go API spend or monthly-plan usage; the provider card shows balance when the credits endpoint is available.
 - Resets at end of calendar month.
 - Status: `https://status.mistral.ai` (link only, no auto-polling).
+- Details: `docs/mistral.md`.
 
 ## DeepSeek
 - API key via `DEEPSEEK_API_KEY` / `DEEPSEEK_KEY` env var or DeepSeek token accounts.
@@ -406,11 +416,18 @@ headers, source selection, provider ordering, and token accounts are stored in `
 - Status: none yet.
 - Details: `docs/command-code.md`.
 
+## ClinePass
+- API key from `~/.codexbar/config.json`, `CLINE_API_KEY`, or `CLINEPASS_API_KEY`.
+- Reads 5-hour, weekly, and monthly usage limits from `GET https://api.cline.bot/api/v1/users/me/plan/usage-limits`.
+- ClinePass subscription limits are distinct from Cline pay-as-you-go balance and usage.
+- Status: none yet.
+
 ## Qoder
 - Chrome session cookies from automatic import, or a manual `Cookie:` header/cURL capture on macOS or Linux.
 - Reads big model credit usage from the Qoder account dashboard on `qoder.com` or `qoder.com.cn`.
 - Shows used and total credits plus the usage percentage; invalid cached sessions retry freshly imported cookies.
 - Status: none yet.
+- Details: `docs/qoder.md`.
 
 ## Grok
 - `grok agent stdio` (ACP) JSON-RPC `x.ai/billing` method; requires `grok login` (SuperGrok OAuth/OIDC).
@@ -440,6 +457,20 @@ headers, source selection, provider ordering, and token accounts are stored in `
 - Reads `/v1/usage` for the key policy's monthly budget, spend, request/token totals, and per-provider breakdown.
 - Provider rows are data-driven, so any routed provider returned by ClawRouter is displayed without provider-specific CodexBar code.
 - Details: `docs/clawrouter.md`.
+
+## Wayfinder
+- No credentials: the local gateway's read-only endpoints are unauthenticated on loopback.
+- Defaults to `http://127.0.0.1:8088`; optional config `enterpriseHost` or `WAYFINDER_GATEWAY_URL` overrides it (HTTPS anywhere, plain HTTP for loopback only).
+- Reads `/healthz`, `/router/models`, and `/v1/savings?period=30d` for gateway health, the per-route breakdown by configured name, and savings vs. the highest-cost route; parses `/metrics` best-effort for average decision latency.
+- Read-only: never calls the gateway's chat endpoints, and the polled endpoints return accounting metadata only — no prompt text.
+- Details: `docs/wayfinder.md`.
+
+## sub2api
+- API key from config, a labeled token account, or `SUB2API_API_KEY`; base URL from config `enterpriseHost` or `SUB2API_BASE_URL`.
+- Reads `GET /v1/usage` for key quota, 5-hour/day/week rate limits, subscription limits, wallet balance, and key-scoped request/token/cost totals.
+- Store one labeled token account per sub2api group. Wallet balance is user-scoped and is never summed across keys.
+- Base URLs must use HTTPS, except loopback HTTP for local development.
+- Details: `docs/sub2api.md`.
 
 ## AWS Bedrock
 - AWS credentials from `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and optional `AWS_SESSION_TOKEN`.
