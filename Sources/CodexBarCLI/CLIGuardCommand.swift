@@ -40,6 +40,15 @@ extension CodexBarCLI {
         return (.blocked, 1)
     }
 
+    /// Remaining headroom (`100 - usedPercent`) for a resolved rate window, or `nil` when the window
+    /// is absent or a synthetic placeholder. A synthetic window is a lane the provider did not
+    /// actually report (e.g. Claude with no live five-hour session), so it must not read as free
+    /// headroom and let the gate pass on a phantom metric.
+    static func guardRemainingHeadroom(for window: RateWindow?) -> Double? {
+        guard let window, !window.isSyntheticPlaceholder else { return nil }
+        return 100 - window.usedPercent
+    }
+
     static func runGuard(_ values: ParsedValues) async {
         let output = CLIOutputPreferences.from(values: values)
         let config = Self.loadConfig(output: output)
@@ -122,6 +131,15 @@ extension CodexBarCLI {
             return nil
         }
 
+        // Resolve the configured token account the same way `usage` does, so token-only
+        // providers (e.g. Claude, z.ai, OpenAI) fetch their quota instead of returning unknown.
+        let account: ProviderTokenAccount?
+        do {
+            account = try tokenContext.resolvedAccounts(for: provider).first
+        } catch {
+            return nil
+        }
+
         let browserDetection = BrowserDetection()
         let fetcher = UsageFetcher()
         let claudeFetcher = ClaudeUsageFetcher(browserDetection: browserDetection)
@@ -129,13 +147,13 @@ extension CodexBarCLI {
         let env = tokenContext.environment(
             base: ProcessInfo.processInfo.environment,
             provider: provider,
-            account: nil)
-        let settings = tokenContext.settingsSnapshot(for: provider, account: nil)
+            account: account)
+        let settings = tokenContext.settingsSnapshot(for: provider, account: account)
         let baseSource = tokenContext.preferredSourceMode(for: provider)
         let effectiveSourceMode = tokenContext.effectiveSourceMode(
             base: baseSource,
             provider: provider,
-            account: nil)
+            account: account)
 
         let fetchContext = ProviderFetchContext(
             runtime: .cli,
@@ -149,8 +167,8 @@ extension CodexBarCLI {
             fetcher: tokenContext.fetcher(base: fetcher, provider: provider, env: env),
             claudeFetcher: claudeFetcher,
             browserDetection: browserDetection,
-            selectedTokenAccountID: nil,
-            tokenAccountTokenUpdater: tokenContext.tokenUpdater(for: nil),
+            selectedTokenAccountID: account?.id,
+            tokenAccountTokenUpdater: tokenContext.tokenUpdater(for: account),
             providerManualTokenUpdater: tokenContext.manualTokenUpdater())
 
         let outcome = await ProviderInteractionContext.$current.withValue(.background) {
@@ -160,9 +178,8 @@ extension CodexBarCLI {
         switch outcome.result {
         case let .success(result):
             let usage = result.usage.scoped(to: provider)
-            let rateWindow: RateWindow? = window == .session ? usage.primary : usage.secondary
-            guard let rateWindow else { return nil }
-            return 100 - rateWindow.usedPercent
+            let rateWindow = window == .session ? usage.primary : usage.secondary
+            return Self.guardRemainingHeadroom(for: rateWindow)
         case .failure:
             return nil
         }
