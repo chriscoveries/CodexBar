@@ -119,7 +119,6 @@
 "Display mode" = "顯示模式";
 "Display reset times as absolute clock values instead of countdowns." = "將重置時間顯示為絕對時鐘值，而不是倒數計時。";
 "Done" = "完成";
-"Preview" = "預覽";
 "Effective PATH" = "有效 PATH";
 "Email" = "電子郵件";
 "Enable Merge Icons to configure Overview tab providers." = "啟用「合併圖示」以設定「概覽」標籤中的提供者。";
@@ -406,8 +405,6 @@
 "section_refreshing" = "重新整理";
 "section_alerts" = "提醒";
 "section_celebrations" = "慶祝";
-"confetti_palette_color" = "顏色 %d";
-"confetti_palette_hint" = "輸入 2–3 個 #RRGGBB 值。";
 "section_icon" = "圖示";
 "section_combined_icon" = "合併圖示";
 "section_animation" = "動畫";

@@ -119,7 +119,6 @@
 "Display mode" = "Mode de visualització";
 "Display reset times as absolute clock values instead of countdowns." = "Mostreu les hores de reinici com a valors de rellotge absoluts en comptes de comptes enrere.";
 "Done" = "Fet";
-"Preview" = "Previsualitza";
 "Effective PATH" = "PATH efectiu";
 "Email" = "Correu electrònic";
 "Enable Merge Icons to configure Overview tab providers." = "Activeu Combina les icones per configurar els proveïdors de la pestanya Resum.";
@@ -404,8 +403,6 @@
 "section_refreshing" = "Actualització";
 "section_alerts" = "Avisos";
 "section_celebrations" = "Celebracions";
-"confetti_palette_color" = "Color %d";
-"confetti_palette_hint" = "Introduïu entre 2 i 3 valors #RRGGBB.";
 "section_icon" = "Icona";
 "section_combined_icon" = "Icona combinada";
 "section_animation" = "Animació";

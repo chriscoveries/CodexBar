@@ -116,7 +116,6 @@
 "Display mode" = "Visningsläge";
 "Display reset times as absolute clock values instead of countdowns." = "Visa återställningstider som klockslag i stället för nedräkningar.";
 "Done" = "Klar";
-"Preview" = "Förhandsvisa";
 "Effective PATH" = "Effektiv PATH";
 "Email" = "E-post";
 "Enable Merge Icons to configure Overview tab providers." = "Aktivera Slå ihop ikoner för att konfigurera leverantörer på översiktsfliken.";
@@ -399,8 +398,6 @@
 "section_refreshing" = "Uppdatering";
 "section_alerts" = "Aviseringar";
 "section_celebrations" = "Firanden";
-"confetti_palette_color" = "Färg %d";
-"confetti_palette_hint" = "Ange 2–3 #RRGGBB-värden.";
 "section_icon" = "Ikon";
 "section_combined_icon" = "Kombinerad ikon";
 "section_animation" = "Animering";

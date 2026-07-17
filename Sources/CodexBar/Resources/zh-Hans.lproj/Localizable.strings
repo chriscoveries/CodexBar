@@ -118,7 +118,6 @@
 "Display mode" = "显示模式";
 "Display reset times as absolute clock values instead of countdowns." = "将重置时间显示为绝对时钟值，而不是倒计时。";
 "Done" = "完成";
-"Preview" = "预览";
 "Effective PATH" = "有效 PATH";
 "Email" = "电子邮件";
 "Enable Merge Icons to configure Overview tab providers." = "启用“合并图标”以配置“概览”标签中的提供商。";
@@ -405,8 +404,6 @@
 "section_refreshing" = "刷新";
 "section_alerts" = "提醒";
 "section_celebrations" = "庆祝";
-"confetti_palette_color" = "颜色 %d";
-"confetti_palette_hint" = "输入 2–3 个 #RRGGBB 值。";
 "section_icon" = "图标";
 "section_combined_icon" = "合并图标";
 "section_animation" = "动画";

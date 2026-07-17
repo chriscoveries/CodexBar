@@ -120,7 +120,6 @@
 "Display mode" = "Modalità di visualizzazione";
 "Display reset times as absolute clock values instead of countdowns." = "Mostra gli orari di reset come orari assoluti invece che come conto alla rovescia.";
 "Done" = "Fine";
-"Preview" = "Anteprima";
 "Effective PATH" = "PATH effettivo";
 "Email" = "Email";
 "Enable Merge Icons to configure Overview tab providers." = "Abilita Unisci icone per configurare i provider della scheda Panoramica.";
@@ -405,8 +404,6 @@
 "section_refreshing" = "Aggiornamento";
 "section_alerts" = "Avvisi";
 "section_celebrations" = "Celebrazioni";
-"confetti_palette_color" = "Colore %d";
-"confetti_palette_hint" = "Inserisci 2–3 valori #RRGGBB.";
 "section_icon" = "Icona";
 "section_combined_icon" = "Icona combinata";
 "section_animation" = "Animazione";

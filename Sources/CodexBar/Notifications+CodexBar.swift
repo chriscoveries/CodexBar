@@ -8,20 +8,10 @@ extension Notification.Name {
     static let codexbarDebugSimulateMemoryPressure =
         Notification.Name("com.steipete.codexbar.debug.simulateMemoryPressure")
     #endif
-    static let codexbarConfettiPreviewRequested = Notification.Name("codexbarConfettiPreviewRequested")
     static let codexbarSessionLimitReset = Notification.Name("codexbarSessionLimitReset")
     static let codexbarWeeklyLimitReset = Notification.Name("codexbarWeeklyLimitReset")
     static let codexbarProviderConfigDidChange = Notification.Name("codexbarProviderConfigDidChange")
     static let codexbarQuotaWarningDidPost = Notification.Name("codexbarQuotaWarningDidPost")
-}
-
-@MainActor
-final class ConfettiPreviewEvent: NSObject {
-    let provider: UsageProvider
-
-    init(provider: UsageProvider) {
-        self.provider = provider
-    }
 }
 
 @MainActor

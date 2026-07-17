@@ -17,37 +17,16 @@ public struct ProviderColor: Sendable, Equatable {
         self.green = Double((hex >> 8) & 0xFF) / 255
         self.blue = Double(hex & 0xFF) / 255
     }
-
-    public init?(hexString: String) {
-        let trimmed = hexString.trimmingCharacters(in: .whitespacesAndNewlines)
-        let digits = trimmed.hasPrefix("#") ? String(trimmed.dropFirst()) : trimmed
-        guard digits.count == 6,
-              digits.allSatisfy(\.isHexDigit),
-              let hex = UInt32(digits, radix: 16)
-        else {
-            return nil
-        }
-        self.init(hex: hex)
-    }
-
-    public var hexString: String {
-        let red = min(max(Int((self.red * 255).rounded()), 0), 255)
-        let green = min(max(Int((self.green * 255).rounded()), 0), 255)
-        let blue = min(max(Int((self.blue * 255).rounded()), 0), 255)
-        return String(format: "#%02X%02X%02X", red, green, blue)
-    }
 }
 
 public struct ProviderBranding: Sendable {
-    public static let confettiPaletteCountRange = 2...3
-
     public let iconStyle: IconStyle
     public let iconResourceName: String
     public let color: ProviderColor
     public let confettiPalette: [ProviderColor]
 
-    /// Compatibility fallback for external CodexBarCore clients. Registered provider descriptors must provide
-    /// a curated 2–3-color palette through the designated initializer below.
+    /// Source-compatible fallback for external CodexBarCore clients. Registered descriptors must provide
+    /// a curated palette; registry tests reject this duplicated-color fallback.
     @available(*, deprecated, message: "Provide a curated 2–3-color confettiPalette.")
     public init(iconStyle: IconStyle, iconResourceName: String, color: ProviderColor) {
         self.init(
@@ -63,9 +42,7 @@ public struct ProviderBranding: Sendable {
         color: ProviderColor,
         confettiPalette: [ProviderColor])
     {
-        precondition(
-            Self.confettiPaletteCountRange.contains(confettiPalette.count),
-            "Provider confetti palettes require 2–3 colors.")
+        precondition((2...3).contains(confettiPalette.count), "Provider confetti palettes require 2–3 colors.")
         self.iconStyle = iconStyle
         self.iconResourceName = iconResourceName
         self.color = color

@@ -120,7 +120,6 @@
 "Display mode" = "Mode tampilan";
 "Display reset times as absolute clock values instead of countdowns." = "Tampilkan waktu reset sebagai jam absolut alih-alih hitung mundur.";
 "Done" = "Selesai";
-"Preview" = "Pratinjau";
 "Effective PATH" = "PATH Efektif";
 "Email" = "Email";
 "Enable Merge Icons to configure Overview tab providers." = "Aktifkan Gabung Ikon untuk mengonfigurasi penyedia tab Ikhtisar.";
@@ -405,8 +404,6 @@
 "section_refreshing" = "Penyegaran";
 "section_alerts" = "Peringatan";
 "section_celebrations" = "Perayaan";
-"confetti_palette_color" = "Warna %d";
-"confetti_palette_hint" = "Masukkan 2–3 nilai #RRGGBB.";
 "section_icon" = "Ikon";
 "section_combined_icon" = "Ikon gabungan";
 "section_animation" = "Animasi";

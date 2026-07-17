@@ -114,7 +114,6 @@
 "Display mode" = "Anzeigemodus";
 "Display reset times as absolute clock values instead of countdowns." = "Anzeige der Rücksetzzeiten als absolute Uhrwerte statt als Countdown.";
 "Done" = "Erledigt";
-"Preview" = "Vorschau";
 "Effective PATH" = "Effektiver WEG";
 "Email" = "E-Mail";
 "Enable Merge Icons to configure Overview tab providers." = "Aktivieren Sie \"Symbole zusammenführen\", um Anbieter für die Registerkarte \"Übersicht\" zu konfigurieren.";
@@ -396,8 +395,6 @@
 "section_refreshing" = "Aktualisierung";
 "section_alerts" = "Warnungen";
 "section_celebrations" = "Feiern";
-"confetti_palette_color" = "Farbe %d";
-"confetti_palette_hint" = "Geben Sie 2–3 #RRGGBB-Werte ein.";
 "section_icon" = "Symbol";
 "section_combined_icon" = "Kombiniertes Symbol";
 "section_animation" = "Animation";

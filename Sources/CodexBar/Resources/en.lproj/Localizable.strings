@@ -120,7 +120,6 @@
 "Display mode" = "Display mode";
 "Display reset times as absolute clock values instead of countdowns." = "Display reset times as absolute clock values instead of countdowns.";
 "Done" = "Done";
-"Preview" = "Preview";
 "Effective PATH" = "Effective PATH";
 "Email" = "Email";
 "Enable Merge Icons to configure Overview tab providers." = "Enable Merge Icons to configure Overview tab providers.";
@@ -405,8 +404,6 @@
 "section_refreshing" = "Refreshing";
 "section_alerts" = "Alerts";
 "section_celebrations" = "Celebrations";
-"confetti_palette_color" = "Color %d";
-"confetti_palette_hint" = "Enter 2–3 #RRGGBB values.";
 "section_icon" = "Icon";
 "section_combined_icon" = "Combined icon";
 "section_animation" = "Animation";

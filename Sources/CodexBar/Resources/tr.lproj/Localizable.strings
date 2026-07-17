@@ -120,7 +120,6 @@
 "Display mode" = "Görünüm modu";
 "Display reset times as absolute clock values instead of countdowns." = "Sıfırlama sürelerini geri sayım yerine mutlak saat değerleri olarak göster.";
 "Done" = "Bitti";
-"Preview" = "Önizleme";
 "Effective PATH" = "Etkili PATH";
 "Email" = "E-posta";
 "Enable Merge Icons to configure Overview tab providers." = "Genel Bakış sekmesi sağlayıcılarını yapılandırmak için Simgeleri Birleştir'i etkinleştirin.";
@@ -403,8 +402,6 @@
 "section_refreshing" = "Yenileme";
 "section_alerts" = "Uyarılar";
 "section_celebrations" = "Kutlamalar";
-"confetti_palette_color" = "Renk %d";
-"confetti_palette_hint" = "2–3 adet #RRGGBB değeri girin.";
 "section_icon" = "Simge";
 "section_combined_icon" = "Birleşik simge";
 "section_animation" = "Animasyon";

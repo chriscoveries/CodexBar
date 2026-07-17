@@ -117,7 +117,6 @@
 "Display mode" = "Режим отображения";
 "Display reset times as absolute clock values instead of countdowns." = "Показывать время сброса как точное время, а не обратный отсчёт.";
 "Done" = "Готово";
-"Preview" = "Предпросмотр";
 "Effective PATH" = "Эффективный PATH";
 "Email" = "Email";
 "Enable Merge Icons to configure Overview tab providers." = "Включите «Объединять значки», чтобы настроить провайдеров вкладки «Обзор».";
@@ -401,8 +400,6 @@
 "section_refreshing" = "Обновление";
 "section_alerts" = "Оповещения";
 "section_celebrations" = "Празднования";
-"confetti_palette_color" = "Цвет %d";
-"confetti_palette_hint" = "Введите 2–3 значения #RRGGBB.";
 "section_icon" = "Значок";
 "section_combined_icon" = "Объединённый значок";
 "section_animation" = "Анимация";

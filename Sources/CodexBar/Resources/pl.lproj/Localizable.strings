@@ -120,7 +120,6 @@
 "Display mode" = "Tryb wyświetlania";
 "Display reset times as absolute clock values instead of countdowns." = "Pokazuj czasy resetu jako wartości zegarowe zamiast odliczania.";
 "Done" = "Gotowe";
-"Preview" = "Podgląd";
 "Effective PATH" = "Efektywny PATH";
 "Email" = "E-mail";
 "Enable Merge Icons to configure Overview tab providers." = "Włącz Scal ikony, aby skonfigurować dostawców zakładki Przegląd.";
@@ -405,8 +404,6 @@
 "section_refreshing" = "Odświeżanie";
 "section_alerts" = "Alerty";
 "section_celebrations" = "Świętowanie";
-"confetti_palette_color" = "Kolor %d";
-"confetti_palette_hint" = "Wprowadź 2–3 wartości #RRGGBB.";
 "section_icon" = "Ikona";
 "section_combined_icon" = "Połączona ikona";
 "section_animation" = "Animacja";

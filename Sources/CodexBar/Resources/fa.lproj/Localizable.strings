@@ -120,7 +120,6 @@
 "Display mode" = "حالت نمایش";
 "Display reset times as absolute clock values instead of countdowns." = "زمان بازنشانی را به جای شمارش معکوس، به صورت مقادیر مطلق ساعت نمایش دهید.";
 "Done" = "انجام شد";
-"Preview" = "پیش‌نمایش";
 "Effective PATH" = "PATH مؤثر";
 "Email" = "ایمیل";
 "Enable Merge Icons to configure Overview tab providers." = "فعال سازی Merge Icons برای پیکربندی ارائه دهندگان تب نمای کلی.";
@@ -405,8 +404,6 @@
 "section_refreshing" = "تازه‌سازی";
 "section_alerts" = "هشدارها";
 "section_celebrations" = "جشن‌ها";
-"confetti_palette_color" = "رنگ %d";
-"confetti_palette_hint" = "۲ تا ۳ مقدار #RRGGBB وارد کنید.";
 "section_icon" = "آیکون";
 "section_combined_icon" = "آیکون ترکیبی";
 "section_animation" = "پویانمایی";

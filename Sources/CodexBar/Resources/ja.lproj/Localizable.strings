@@ -116,7 +116,6 @@
 "Display mode" = "表示モード";
 "Display reset times as absolute clock values instead of countdowns." = "リセット時刻をカウントダウンではなく絶対時刻で表示します。";
 "Done" = "完了";
-"Preview" = "プレビュー";
 "Effective PATH" = "有効な PATH";
 "Email" = "メールアドレス";
 "Enable Merge Icons to configure Overview tab providers." = "「アイコンを統合」を有効にすると、概要タブのプロバイダを設定できます。";
@@ -398,8 +397,6 @@
 "section_refreshing" = "更新";
 "section_alerts" = "アラート";
 "section_celebrations" = "お祝い";
-"confetti_palette_color" = "色 %d";
-"confetti_palette_hint" = "#RRGGBB の値を2～3個入力してください。";
 "section_icon" = "アイコン";
 "section_combined_icon" = "統合アイコン";
 "section_animation" = "アニメーション";

@@ -116,7 +116,6 @@
 "Display mode" = "Modo de exibição";
 "Display reset times as absolute clock values instead of countdowns." = "Mostra horários de renovação como horas absolutas, em vez de contagens regressivas.";
 "Done" = "Concluído";
-"Preview" = "Prévia";
 "Effective PATH" = "PATH efetivo";
 "Email" = "E-mail";
 "Enable Merge Icons to configure Overview tab providers." = "Ative Mesclar Ícones para configurar provedores da aba Visão geral.";
@@ -398,8 +397,6 @@
 "section_refreshing" = "Atualização";
 "section_alerts" = "Alertas";
 "section_celebrations" = "Celebrações";
-"confetti_palette_color" = "Cor %d";
-"confetti_palette_hint" = "Insira 2–3 valores #RRGGBB.";
 "section_icon" = "Ícone";
 "section_combined_icon" = "Ícone combinado";
 "section_animation" = "Animação";

@@ -116,7 +116,6 @@
 "Display mode" = "Режим відображення";
 "Display reset times as absolute clock values instead of countdowns." = "Відображення часу скидання як абсолютних значень годинника замість зворотного відліку.";
 "Done" = "Готово";
-"Preview" = "Попередній перегляд";
 "Effective PATH" = "Ефективний ШЛЯХ";
 "Email" = "Ел. пошта";
 "Enable Merge Icons to configure Overview tab providers." = "Увімкніть Merge Icons, щоб налаштувати постачальників вкладок «Огляд».";
@@ -398,8 +397,6 @@
 "section_refreshing" = "Оновлення";
 "section_alerts" = "Сповіщення";
 "section_celebrations" = "Святкування";
-"confetti_palette_color" = "Колір %d";
-"confetti_palette_hint" = "Введіть 2–3 значення #RRGGBB.";
 "section_icon" = "Значок";
 "section_combined_icon" = "Об’єднаний значок";
 "section_animation" = "Анімація";
