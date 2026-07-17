@@ -98,6 +98,152 @@ struct DoubaoUsageSnapshotTests {
 
 struct DoubaoUsageFetcherTests {
     @Test
+    func `coding plan response maps session weekly and monthly windows`() throws {
+        let data = Data(
+            """
+            {
+              "ResponseMetadata": {
+                "Action": "GetCodingPlanUsage",
+                "Version": "2024-01-01",
+                "Service": "ark",
+                "Region": "cn-beijing"
+              },
+              "Result": {
+                "Status": "Running",
+                "UpdateTimestamp": 1782226444,
+                "QuotaUsage": [
+                  {"Level":"session","Percent":0.116,"ResetTimestamp":1782226478},
+                  {"Level":"weekly","Percent":3.182143,"ResetTimestamp":1782662400},
+                  {"Level":"monthly","Percent":7.5730535,"ResetTimestamp":1782403199}
+                ]
+              }
+            }
+            """.utf8)
+
+        let usage = try DoubaoUsageFetcher.decodeCodingPlanUsage(from: data).toUsageSnapshot(
+            updatedAt: Date(timeIntervalSince1970: 0))
+
+        #expect(usage.primary?.usedPercent == 0.116)
+        #expect(usage.primary?.windowMinutes == 300)
+        #expect(usage.primary?.resetsAt == Date(timeIntervalSince1970: 1_782_226_478))
+        #expect(usage.primary?.resetDescription == nil)
+        #expect(usage.secondary?.usedPercent == 3.182143)
+        #expect(usage.secondary?.windowMinutes == 10080)
+        #expect(usage.tertiary?.usedPercent == 7.5730535)
+        #expect(usage.tertiary?.windowMinutes == 43200)
+        #expect(usage.identity?.providerID == .doubao)
+        #expect(usage.identity?.loginMethod == "Running")
+    }
+
+    @Test
+    func `coding plan response ignores missing reset sentinels`() throws {
+        let fallbackUpdatedAt = Date(timeIntervalSince1970: 42)
+        let data = Data(
+            """
+            {
+              "Result": {
+                "Status": "Running",
+                "UpdateTimestamp": 0,
+                "QuotaUsage": [
+                  {"Level":"session","Percent":12.5,"ResetTimestamp":0},
+                  {"Level":"weekly","Percent":24,"ResetTimestamp":-1}
+                ]
+              }
+            }
+            """.utf8)
+
+        let usage = try DoubaoUsageFetcher.decodeCodingPlanUsage(from: data).toUsageSnapshot(
+            updatedAt: fallbackUpdatedAt)
+
+        #expect(usage.updatedAt == fallbackUpdatedAt)
+        #expect(usage.primary?.usedPercent == 12.5)
+        #expect(usage.primary?.resetsAt == nil)
+        #expect(usage.primary?.resetDescription == nil)
+        #expect(usage.secondary?.usedPercent == 24)
+        #expect(usage.secondary?.resetsAt == nil)
+        #expect(usage.secondary?.resetDescription == nil)
+    }
+
+    @Test
+    func `coding plan fetch signs volcengine request`() async throws {
+        let transport = DoubaoScriptedTransport(results: [
+            .rawResponse(
+                statusCode: 200,
+                body: """
+                {
+                  "Result": {
+                    "Status": "Running",
+                    "UpdateTimestamp": 1782226444,
+                    "QuotaUsage": [
+                      {"Level":"session","Percent":12.5,"ResetTimestamp":1782226478}
+                    ]
+                  }
+                }
+                """),
+        ])
+        let credentials = DoubaoCodingPlanCredentials(
+            accessKeyID: "AKLTTEST",
+            secretAccessKey: "secret",
+            region: "cn-beijing")
+        let date = Date(timeIntervalSince1970: 1_781_654_400)
+
+        let snapshot = try await DoubaoUsageFetcher.fetchCodingPlanUsage(
+            credentials: credentials,
+            session: transport,
+            date: date)
+        let request = await transport.lastCapturedRequest()
+
+        #expect(snapshot.toUsageSnapshot().primary?.usedPercent == 12.5)
+        #expect(request?.method == "POST")
+        #expect(request?.url == "https://open.volcengineapi.com/?Action=GetCodingPlanUsage&Version=2024-01-01")
+        #expect(request?.host == "open.volcengineapi.com")
+        #expect(request?.date == "20260617T000000Z")
+        #expect(request?.contentSHA256 ==
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+        #expect(request?.authorization?.contains(
+            "HMAC-SHA256 Credential=AKLTTEST/20260617/cn-beijing/ark/request") == true)
+        #expect(request?.authorization?.contains(
+            "SignedHeaders=content-type;host;x-content-sha256;x-date") == true)
+    }
+
+    @Test
+    func `coding plan fetch surfaces volcengine access denied error`() async {
+        let transport = DoubaoScriptedTransport(results: [
+            .rawResponse(
+                statusCode: 403,
+                body: """
+                {
+                  "ResponseMetadata": {
+                    "Action": "GetCodingPlanUsage",
+                    "Error": {
+                      "CodeN": 100013,
+                      "Code": "AccessDenied",
+                      "Message": "User is not authorized to perform: ark:GetCodingPlanUsage"
+                    }
+                  }
+                }
+                """),
+        ])
+        let credentials = DoubaoCodingPlanCredentials(
+            accessKeyID: "AKLTTEST",
+            secretAccessKey: "secret",
+            region: "cn-beijing")
+
+        await #expect {
+            _ = try await DoubaoUsageFetcher.fetchCodingPlanUsage(
+                credentials: credentials,
+                session: transport,
+                date: Date(timeIntervalSince1970: 1_781_654_400))
+        } throws: { error in
+            guard case let DoubaoUsageError.apiError(code, message) = error else { return false }
+            return code == 403
+                && message.contains("AccessDenied")
+                && message.contains("ark:GetCodingPlanUsage")
+                && !message.contains("bytes")
+        }
+    }
+
+    @Test
     func `arkcli response maps coding plan and agent plan windows`() throws {
         let data = Data(
             """
@@ -150,11 +296,11 @@ struct DoubaoUsageFetcherTests {
         // Agent plan should appear as extra rate windows
         let agentWindows = usage.extraRateWindows ?? []
         #expect(agentWindows.count == 3)
-        #expect(agentWindows[0].title == "Agent 5h")
+        #expect(agentWindows[0].title == "5-hour")
         #expect(agentWindows[0].window.usedPercent == 0)
-        #expect(agentWindows[1].title == "Agent Weekly")
+        #expect(agentWindows[1].title == "Weekly")
         #expect(agentWindows[1].window.usedPercent == 28.7)
-        #expect(agentWindows[2].title == "Agent Monthly")
+        #expect(agentWindows[2].title == "Monthly")
         #expect(agentWindows[2].window.usedPercent == 10.05)
 
         // Update time from coding-plan's updated_at
@@ -190,7 +336,7 @@ struct DoubaoUsageFetcherTests {
     }
 
     @Test
-    func `arkcli response with only agent plan maps agent windows to primary`() throws {
+    func `arkcli response with only agent plan preserves agent window identity`() throws {
         let data = Data(
             """
             {
@@ -211,35 +357,38 @@ struct DoubaoUsageFetcherTests {
         let usage = try DoubaoUsageFetcher.decodeArkcliUsage(from: data).toUsageSnapshot(
             updatedAt: Date(timeIntervalSince1970: 0))
 
-        // With no coding-plan, agent windows become primary/secondary/tertiary
-        #expect(usage.primary?.usedPercent == 5.0)
-        #expect(usage.primary?.windowMinutes == 300)
-        #expect(usage.secondary?.usedPercent == 15.0)
-        #expect(usage.tertiary?.usedPercent == 25.0)
-        // No extra windows since there's no coding-plan to pair with
-        #expect(usage.extraRateWindows == nil || usage.extraRateWindows?.isEmpty == true)
+        #expect(usage.primary == nil)
+        let agentWindows = try #require(usage.extraRateWindows)
+        #expect(agentWindows.map(\.id) == [
+            "doubao-agent-session",
+            "doubao-agent-weekly",
+            "doubao-agent-monthly",
+        ])
+        #expect(agentWindows.map(\.window.usedPercent) == [5.0, 15.0, 25.0])
     }
 
     @Test
-    func `team agent plan product is classified as agent windows`() throws {
+    func `arkcli team-only plans preserve product identities`() throws {
         let data = Data(
             """
             {
               "items": [
                 {
                   "product": "agent-plan-team",
+                  "edition": "team",
                   "subscribed": true,
                   "periods": [
-                    {"label": "5h", "percent": 5.0, "reset_at": "2026-07-16T19:12:07+08:00"},
-                    {"label": "weekly", "percent": 15.0, "reset_at": "2026-07-20T00:00:00+08:00"},
-                    {"label": "monthly", "percent": 25.0, "reset_at": "2026-08-15T23:59:59+08:00"}
+                    {"label": "5h", "percent": 5.0},
+                    {"label": "weekly", "percent": 15.0}
                   ]
                 },
                 {
                   "product": "coding-plan-team",
+                  "edition": "team",
                   "subscribed": true,
                   "periods": [
-                    {"label": "session", "percent": 7.48, "reset_at": "2026-07-16T19:12:07+08:00"}
+                    {"label": "session", "percent": 7.48},
+                    {"label": "monthly", "percent": 25.0}
                   ]
                 }
               ]
@@ -249,13 +398,42 @@ struct DoubaoUsageFetcherTests {
         let usage = try DoubaoUsageFetcher.decodeArkcliUsage(from: data).toUsageSnapshot(
             updatedAt: Date(timeIntervalSince1970: 0))
 
-        // Team Agent Plan becomes primary/secondary/tertiary (no coding-plan windows).
-        #expect(usage.primary?.usedPercent == 5.0)
-        #expect(usage.primary?.windowMinutes == 300)
-        #expect(usage.secondary?.usedPercent == 15.0)
-        #expect(usage.tertiary?.usedPercent == 25.0)
-        // No extra windows when no personal coding-plan is present to pair with.
-        #expect(usage.extraRateWindows == nil || usage.extraRateWindows?.isEmpty == true)
+        #expect(usage.primary == nil)
+        let windows = try #require(usage.extraRateWindows)
+        #expect(windows.map(\.id) == [
+            "doubao-coding-team-session",
+            "doubao-coding-team-monthly",
+            "doubao-agent-team-session",
+            "doubao-agent-team-weekly",
+        ])
+        #expect(windows.map(\.window.usedPercent) == [7.48, 25.0, 5.0, 15.0])
+    }
+
+    @Test
+    func `arkcli mixed personal and team plans keep every bucket`() throws {
+        let data = Data(
+            """
+            {
+              "items": [
+                {"product":"coding-plan","periods":[{"label":"session","percent":1}]},
+                {"product":"coding-plan-team","periods":[{"label":"session","percent":2}]},
+                {"product":"agent-plan","periods":[{"label":"5h","percent":3}]},
+                {"product":"agent-plan-team","periods":[{"label":"5h","percent":4}]}
+              ]
+            }
+            """.utf8)
+
+        let usage = try DoubaoUsageFetcher.decodeArkcliUsage(from: data).toUsageSnapshot(
+            updatedAt: Date(timeIntervalSince1970: 0))
+
+        #expect(usage.primary?.usedPercent == 1)
+        let windows = try #require(usage.extraRateWindows)
+        #expect(windows.map(\.id) == [
+            "doubao-agent-session",
+            "doubao-coding-team-session",
+            "doubao-agent-team-session",
+        ])
+        #expect(windows.map(\.window.usedPercent) == [3, 2, 4])
     }
 
     @Test
@@ -284,9 +462,64 @@ struct DoubaoUsageFetcherTests {
             updatedAt: Date(timeIntervalSince1970: 0))
 
         // The error-only coding item is skipped; the agent item still decodes.
-        #expect(usage.primary?.usedPercent == 5.0)
-        #expect(usage.primary?.windowMinutes == 300)
+        #expect(usage.primary == nil)
+        #expect(usage.extraRateWindows?.first?.window.usedPercent == 5.0)
         #expect(usage.identity?.loginMethod == "subscribed")
+    }
+
+    @Test
+    func `arkcli response with only a failed bucket surfaces its error`() {
+        let data = Data(
+            """
+            {
+              "items": [
+                {
+                  "product": "coding-plan",
+                  "error": "failed to query usage",
+                  "subscribed": false
+                }
+              ]
+            }
+            """.utf8)
+
+        #expect {
+            _ = try DoubaoUsageFetcher.decodeArkcliUsage(from: data)
+        } throws: { error in
+            guard case let DoubaoUsageError.noPlanUsage(message) = error else { return false }
+            return message == "failed to query usage"
+        }
+    }
+
+    @Test
+    func `arkcli response with no plan items is not treated as valid usage`() {
+        #expect {
+            _ = try DoubaoUsageFetcher.decodeArkcliUsage(from: Data(#"{"items":[]}"#.utf8))
+        } throws: { error in
+            guard case DoubaoUsageError.noPlanUsage(nil) = error else { return false }
+            return true
+        }
+    }
+
+    @Test
+    func `arkcli response ignores unrelated product buckets`() {
+        let data = Data(
+            """
+            {
+              "items": [
+                {
+                  "product": "unrelated-plan",
+                  "periods": [{"label": "session", "percent": 99}]
+                }
+              ]
+            }
+            """.utf8)
+
+        #expect {
+            _ = try DoubaoUsageFetcher.decodeArkcliUsage(from: data)
+        } throws: { error in
+            guard case DoubaoUsageError.noPlanUsage(nil) = error else { return false }
+            return true
+        }
     }
 
     @Test
@@ -353,6 +586,58 @@ struct DoubaoUsageFetcherTests {
             guard case DoubaoUsageError.parseFailed = error else { return false }
             return true
         }
+    }
+
+    @Test
+    func `arkcli nonzero login error surfaces authentication guidance`() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codexbar-arkcli-login-\(UUID().uuidString)", isDirectory: true)
+        let executable = root.appendingPathComponent("arkcli")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try """
+        #!/bin/sh
+        printf '%s\n' 'not logged in; run arkcli auth login' >&2
+        exit 1
+        """.write(to: executable, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+
+        await #expect {
+            _ = try await DoubaoUsageFetcher.fetchCodingPlanUsage(
+                environment: ["ARKCLI_PATH": executable.path])
+        } throws: { error in
+            guard case DoubaoUsageError.arkcliAuthenticationRequired = error else { return false }
+            return error.localizedDescription.contains("arkcli auth login")
+        }
+    }
+
+    @Test
+    func `arkcli oversized stdout fails closed before JSON parsing`() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codexbar-arkcli-output-\(UUID().uuidString)", isDirectory: true)
+        let executable = root.appendingPathComponent("arkcli")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try """
+        #!/bin/sh
+        /usr/bin/head -c 300000 /dev/zero
+        """.write(to: executable, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+
+        await #expect {
+            _ = try await DoubaoUsageFetcher.fetchCodingPlanUsage(
+                environment: ["ARKCLI_PATH": executable.path])
+        } throws: { error in
+            guard case DoubaoUsageError.arkcliOutputTooLarge = error else { return false }
+            return true
+        }
+    }
+
+    @Test
+    func `missing arkcli error gives setup guidance`() {
+        let message = DoubaoUsageError.arkcliNotFound.localizedDescription
+        #expect(message.contains("Install arkcli"))
+        #expect(message.contains("arkcli auth login"))
     }
 
     @Test
@@ -469,108 +754,6 @@ struct DoubaoUsageFetcherTests {
             (error as? URLError)?.code == .cancelled
         }
         #expect(await transport.requestCount() == 2)
-    }
-
-    // MARK: - AK/SK signed Coding Plan usage (legacy Volcengine API)
-
-    @Test
-    func `signed coding plan response decodes quota windows`() throws {
-        let data = Data(
-            """
-            {
-              "Result": {
-                "Status": "active",
-                "UpdateTimestamp": 1784191193.0,
-                "QuotaUsage": [
-                  {"Level": "session", "Percent": 7.48, "ResetTimestamp": 1784192000.0},
-                  {"Level": "weekly", "Percent": 2.71, "ResetTimestamp": 1784534400.0},
-                  {"Level": "monthly", "Percent": 1.36, "ResetTimestamp": 1787040000.0}
-                ]
-              }
-            }
-            """.utf8)
-
-        let usage = try DoubaoUsageFetcher.decodeCodingPlanUsage(from: data)
-
-        #expect(usage.status == "active")
-        #expect(usage.updateTime == Date(timeIntervalSince1970: 1_784_191_193))
-        #expect(usage.quotas.count == 3)
-        #expect(usage.quotas[0].level == "session")
-        #expect(usage.quotas[0].percent == 7.48)
-        #expect(usage.quotas[1].level == "weekly")
-        #expect(usage.quotas[1].percent == 2.71)
-        #expect(usage.quotas[2].level == "monthly")
-        #expect(usage.quotas[2].percent == 1.36)
-    }
-
-    @Test
-    func `signed coding plan fetch sends signed request and returns snapshot`() async throws {
-        let body = """
-        {
-          "Result": {
-            "Status": "active",
-            "UpdateTimestamp": 1784191193.0,
-            "QuotaUsage": [
-              {"Level": "session", "Percent": 42.0, "ResetTimestamp": 1784192000.0}
-            ]
-          }
-        }
-        """
-        let transport = DoubaoScriptedTransport(results: [
-            .rawResponse(statusCode: 200, body: body),
-        ])
-        let credentials = DoubaoCodingPlanCredentials(
-            accessKeyID: "AKLTtest",
-            secretAccessKey: "secret123",
-            region: "cn-beijing")
-
-        let snapshot = try await DoubaoUsageFetcher.fetchCodingPlanUsage(
-            credentials: credentials,
-            session: transport,
-            date: Date(timeIntervalSince1970: 1_700_000_000))
-
-        #expect(snapshot.codingPlanUsage != nil)
-        #expect(snapshot.codingPlanUsage?.quotas.first?.percent == 42.0)
-
-        // Verify the signed request headers were set.
-        let captured = await transport.lastCapturedRequest()
-        #expect(captured?.date != nil)
-        #expect(captured?.contentSHA256 != nil)
-        #expect(captured?.authorization?.hasPrefix("HMAC-SHA256 Credential=AKLTtest/") == true)
-        #expect(await transport.requestCount() == 1)
-    }
-
-    @Test
-    func `signed coding plan fetch surfaces non-200 error`() async {
-        let transport = DoubaoScriptedTransport(results: [
-            .rawResponse(
-                statusCode: 403,
-                body: #"{"ResponseMetadata":{"Error":{"Code":"SignatureExpired","Message":"signature expired"}}}"#),
-        ])
-        let credentials = DoubaoCodingPlanCredentials(
-            accessKeyID: "AKLTtest",
-            secretAccessKey: "secret123",
-            region: "cn-beijing")
-
-        await #expect {
-            _ = try await DoubaoUsageFetcher.fetchCodingPlanUsage(
-                credentials: credentials,
-                session: transport)
-        } throws: { error in
-            guard case let DoubaoUsageError.apiError(code, _) = error else { return false }
-            return code == 403
-        }
-        #expect(await transport.requestCount() == 1)
-    }
-
-    @Test
-    func `signed coding plan decode fails on invalid JSON`() {
-        #expect {
-            _ = try DoubaoUsageFetcher.decodeCodingPlanUsage(from: Data("not json".utf8))
-        } throws: { error in
-            guard case DoubaoUsageError.parseFailed = error else { return false }
-            return true
-        }
     }
 }
 

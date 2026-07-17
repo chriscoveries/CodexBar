@@ -18,8 +18,8 @@ struct DoubaoProviderImplementation: ProviderImplementation {
             ProviderSettingsFieldDescriptor(
                 id: "doubao-api-token",
                 title: "API key / Access key ID",
-                subtitle: "Install and authenticate 'arkcli' for Coding/Agent Plan usage (preferred), "
-                    + "or use an Ark API key for rate-limit probing.",
+                subtitle: "Without configured API credentials, install and authenticate 'arkcli' for "
+                    + "Coding/Agent Plan usage. Existing API credentials remain authoritative.",
                 kind: .secure,
                 placeholder: "ark-... or AKLT...",
                 binding: context.stringBinding(\.doubaoAPIToken),

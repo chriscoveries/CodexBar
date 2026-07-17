@@ -77,7 +77,6 @@ public struct DoubaoUsageSnapshot: Sendable {
             mimoUsage: nil,
             openRouterUsage: nil,
             sakanaPayAsYouGo: nil,
-            crossModelUsage: nil,
             clawRouterUsage: nil,
             sub2APIUsage: nil,
             wayfinderUsage: nil,
@@ -127,26 +126,39 @@ public struct DoubaoCodingPlanUsage: Sendable, Equatable {
         let codingSecondary = self.rateWindow(levels: ["weekly", "week"], minutes: 7 * 24 * 60)
         let codingTertiary = self.rateWindow(levels: ["monthly", "month"], minutes: 30 * 24 * 60)
 
-        let agentPrimary = self.rateWindow(
-            levels: ["agent_session", "agent_5-hour", "agent_five_hour", "agent_5h"], minutes: 5 * 60)
-        let agentSecondary = self.rateWindow(levels: ["agent_weekly", "agent_week"], minutes: 7 * 24 * 60)
-        let agentTertiary = self.rateWindow(levels: ["agent_monthly", "agent_month"], minutes: 30 * 24 * 60)
-
-        let primary = codingPrimary ?? agentPrimary
-        let secondary = codingSecondary ?? agentSecondary
-        let tertiary = codingTertiary ?? agentTertiary
-
         var extraRateWindows: [NamedRateWindow] = []
-        // Prefix agent-plan extra windows with "Agent " so the menu section
-        // clearly separates them from the primary Coding Plan rows.
-        if codingPrimary != nil, let a = agentPrimary {
-            extraRateWindows.append(NamedRateWindow(id: "doubao-agent-session", title: "Agent 5h", window: a))
-        }
-        if codingSecondary != nil, let a = agentSecondary {
-            extraRateWindows.append(NamedRateWindow(id: "doubao-agent-weekly", title: "Agent Weekly", window: a))
-        }
-        if codingTertiary != nil, let a = agentTertiary {
-            extraRateWindows.append(NamedRateWindow(id: "doubao-agent-monthly", title: "Agent Monthly", window: a))
+        for plan in [
+            (levelPrefix: "agent_", idPrefix: "doubao-agent"),
+            (levelPrefix: "coding_team_", idPrefix: "doubao-coding-team"),
+            (levelPrefix: "agent_team_", idPrefix: "doubao-agent-team"),
+        ] {
+            let primary = self.rateWindow(
+                levels: [
+                    "\(plan.levelPrefix)session",
+                    "\(plan.levelPrefix)5-hour",
+                    "\(plan.levelPrefix)five_hour",
+                    "\(plan.levelPrefix)5h",
+                ],
+                minutes: 5 * 60)
+            let secondary = self.rateWindow(
+                levels: ["\(plan.levelPrefix)weekly", "\(plan.levelPrefix)week"],
+                minutes: 7 * 24 * 60)
+            let tertiary = self.rateWindow(
+                levels: ["\(plan.levelPrefix)monthly", "\(plan.levelPrefix)month"],
+                minutes: 30 * 24 * 60)
+
+            if let primary {
+                extraRateWindows.append(NamedRateWindow(
+                    id: "\(plan.idPrefix)-session", title: "5-hour", window: primary))
+            }
+            if let secondary {
+                extraRateWindows.append(NamedRateWindow(
+                    id: "\(plan.idPrefix)-weekly", title: "Weekly", window: secondary))
+            }
+            if let tertiary {
+                extraRateWindows.append(NamedRateWindow(
+                    id: "\(plan.idPrefix)-monthly", title: "Monthly", window: tertiary))
+            }
         }
 
         let finalExtraWindows = extraRateWindows.isEmpty ? nil : extraRateWindows
@@ -158,9 +170,9 @@ public struct DoubaoCodingPlanUsage: Sendable, Equatable {
             loginMethod: self.status)
 
         return UsageSnapshot(
-            primary: primary,
-            secondary: secondary,
-            tertiary: tertiary,
+            primary: codingPrimary,
+            secondary: codingSecondary,
+            tertiary: codingTertiary,
             extraRateWindows: finalExtraWindows,
             kiroUsage: nil,
             ampUsage: nil,
@@ -171,7 +183,6 @@ public struct DoubaoCodingPlanUsage: Sendable, Equatable {
             mimoUsage: nil,
             openRouterUsage: nil,
             sakanaPayAsYouGo: nil,
-            crossModelUsage: nil,
             clawRouterUsage: nil,
             sub2APIUsage: nil,
             wayfinderUsage: nil,
@@ -210,6 +221,12 @@ public enum DoubaoUsageError: LocalizedError, Sendable {
     case networkError(String)
     case apiError(Int, String)
     case parseFailed(String)
+    case arkcliNotFound
+    case arkcliAuthenticationRequired
+    case arkcliTimedOut
+    case arkcliOutputTooLarge
+    case arkcliFailed(Int32, String)
+    case noPlanUsage(String?)
 
     public var errorDescription: String? {
         switch self {
@@ -221,6 +238,22 @@ public enum DoubaoUsageError: LocalizedError, Sendable {
             "Doubao API error (\(code)): \(message)"
         case let .parseFailed(message):
             "Failed to parse Doubao response: \(message)"
+        case .arkcliNotFound:
+            "arkcli was not found. Install arkcli, run 'arkcli auth login', or configure Doubao API credentials."
+        case .arkcliAuthenticationRequired:
+            "arkcli is not signed in. Run 'arkcli auth login' and refresh Doubao usage."
+        case .arkcliTimedOut:
+            "arkcli usage timed out. Check arkcli authentication and try again."
+        case .arkcliOutputTooLarge:
+            "arkcli returned too much output. Update arkcli and try again."
+        case let .arkcliFailed(code, message):
+            "arkcli usage failed (\(code)): \(message)"
+        case let .noPlanUsage(message):
+            if let message, !message.isEmpty {
+                "arkcli returned no usable Coding or Agent Plan usage: \(message)"
+            } else {
+                "arkcli returned no active Coding or Agent Plan usage."
+            }
         }
     }
 }
@@ -288,79 +321,6 @@ public struct DoubaoUsageFetcher: Sendable {
     }
 
     public static func fetchCodingPlanUsage(
-        runArkcli: ArkcliRunner? = nil,
-        date: Date = Date()) async throws -> DoubaoUsageSnapshot
-    {
-        let stdoutData: Data = if let runArkcli {
-            try await runArkcli()
-        } else {
-            try await Self.runArkcliUsagePlan()
-        }
-
-        let usage = try Self.decodeArkcliUsage(from: stdoutData, date: date)
-
-        return DoubaoUsageSnapshot(
-            remainingRequests: 0,
-            limitRequests: 0,
-            resetTime: nil,
-            updatedAt: usage.updateTime ?? date,
-            apiKeyValid: true,
-            codingPlanUsage: usage)
-    }
-
-    static func decodeArkcliUsage(from data: Data, date: Date = Date()) throws -> DoubaoCodingPlanUsage {
-        let response: ArkcliUsageResponse
-        do {
-            response = try JSONDecoder().decode(ArkcliUsageResponse.self, from: data)
-        } catch {
-            throw DoubaoUsageError.parseFailed(error.localizedDescription)
-        }
-
-        var allQuotas: [DoubaoCodingPlanUsage.Quota] = []
-        var updateTime: Date?
-        var status: String?
-
-        for item in response.items {
-            // Team plans (both `agent-plan-team` and `coding-plan-team`) are
-            // grouped under the agent windows: the personal Coding Plan slots
-            // are reserved for the individual `coding-plan` subscription so a
-            // team session doesn't preempt a personal 5-hour window.
-            let isAgent = item.product == "agent-plan"
-                || item.product == "agent-plan-team"
-                || item.product == "coding-plan-team"
-            if let updatedAt = item.updatedAt, updatedAt > 0 {
-                // arkcli has shipped `updated_at` as both epoch milliseconds and
-                // epoch seconds across versions/plans; detect the unit by
-                // magnitude so a seconds payload isn't divided into 1970 and a
-                // milliseconds payload isn't multiplied into the far future.
-                // 1e11 seconds ≈ year 5138, well past any real "seconds" value,
-                // and 1e11 milliseconds ≈ 1973, well before any real "ms" value.
-                let seconds = updatedAt >= 1e11 ? updatedAt / 1000 : updatedAt
-                updateTime = updateTime ?? Date(timeIntervalSince1970: seconds)
-            }
-            if item.subscribed == true {
-                status = status ?? "subscribed"
-            }
-            // A per-bucket failure is reported as an item with no `periods`
-            // (often an `error` field). Keep `periods` optional so one failed
-            // product bucket does not reject the entire stdout and hide the
-            // otherwise valid subscribed plan usage.
-            for period in item.periods ?? [] {
-                let level = isAgent ? "agent_" + period.label : period.label
-                let resetTime = period.resetAt.flatMap(Self.parseISO8601)
-                allQuotas.append(DoubaoCodingPlanUsage.Quota(
-                    level: level,
-                    percent: period.percent,
-                    resetTime: resetTime))
-            }
-        }
-
-        return DoubaoCodingPlanUsage(status: status, updateTime: updateTime, quotas: allQuotas)
-    }
-
-    // MARK: - AK/SK signed Coding Plan usage (legacy Volcengine API)
-
-    public static func fetchCodingPlanUsage(
         credentials: DoubaoCodingPlanCredentials,
         session transport: any ProviderHTTPTransport = ProviderHTTPClient.shared,
         date: Date = Date()) async throws -> DoubaoUsageSnapshot
@@ -390,7 +350,7 @@ public struct DoubaoUsageFetcher: Sendable {
             throw DoubaoUsageError.apiError(response.statusCode, summary)
         }
 
-        let codingPlanUsage = try Self.decodeCodingPlanUsage(from: response.data)
+        let codingPlanUsage = try self.decodeCodingPlanUsage(from: response.data)
         return DoubaoUsageSnapshot(
             remainingRequests: 0,
             limitRequests: 0,
@@ -412,11 +372,11 @@ public struct DoubaoUsageFetcher: Sendable {
             DoubaoCodingPlanUsage.Quota(
                 level: quota.level,
                 percent: quota.percent,
-                resetTime: Self.date(fromEpoch: quota.resetTimestamp))
+                resetTime: self.date(fromEpoch: quota.resetTimestamp))
         }
         return DoubaoCodingPlanUsage(
             status: usage.status,
-            updateTime: Self.date(fromEpoch: usage.updateTimestamp),
+            updateTime: self.date(fromEpoch: usage.updateTimestamp),
             quotas: quotas)
     }
 
@@ -425,76 +385,129 @@ public struct DoubaoUsageFetcher: Sendable {
         return Date(timeIntervalSince1970: timestamp)
     }
 
-    private static func runArkcliUsagePlan() async throws -> Data {
-        guard let arkcliPath = findArkcli() else {
-            throw DoubaoUsageError.missingCredentials
+    public static func fetchCodingPlanUsage(
+        runArkcli: ArkcliRunner? = nil,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        date: Date = Date()) async throws -> DoubaoUsageSnapshot
+    {
+        let stdoutData: Data = if let runArkcli {
+            try await runArkcli()
+        } else {
+            try await Self.runArkcliUsagePlan(environment: environment)
         }
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: arkcliPath)
-        process.arguments = ["usage", "plan"]
+        let usage = try Self.decodeArkcliUsage(from: stdoutData, date: date)
 
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-        process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
+        return DoubaoUsageSnapshot(
+            remainingRequests: 0,
+            limitRequests: 0,
+            resetTime: nil,
+            updatedAt: usage.updateTime ?? date,
+            apiKeyValid: true,
+            codingPlanUsage: usage)
+    }
+
+    static func decodeArkcliUsage(from data: Data, date: Date = Date()) throws -> DoubaoCodingPlanUsage {
+        let response: ArkcliUsageResponse
+        do {
+            response = try JSONDecoder().decode(ArkcliUsageResponse.self, from: data)
+        } catch {
+            throw DoubaoUsageError.parseFailed(error.localizedDescription)
+        }
+
+        var allQuotas: [DoubaoCodingPlanUsage.Quota] = []
+        var updateTime: Date?
+        var status: String?
+
+        for item in response.items {
+            let product = item.product.lowercased()
+            let levelPrefix: String? = switch product {
+            case "agent-plan": "agent_"
+            case "coding-plan": ""
+            case "agent-plan-team": "agent_team_"
+            case "coding-plan-team": "coding_team_"
+            default: nil
+            }
+            guard let levelPrefix else { continue }
+            if let updatedAt = item.updatedAt, updatedAt > 0 {
+                // arkcli has shipped `updated_at` as both epoch milliseconds and
+                // epoch seconds across versions/plans; detect the unit by
+                // magnitude so a seconds payload isn't divided into 1970 and a
+                // milliseconds payload isn't multiplied into the far future.
+                // 1e11 seconds ≈ year 5138, well past any real "seconds" value,
+                // and 1e11 milliseconds ≈ 1973, well before any real "ms" value.
+                let seconds = updatedAt >= 1e11 ? updatedAt / 1000 : updatedAt
+                updateTime = updateTime ?? Date(timeIntervalSince1970: seconds)
+            }
+            if item.subscribed == true {
+                status = status ?? "subscribed"
+            }
+            // A per-bucket failure is reported as an item with no `periods`
+            // (often an `error` field). Keep `periods` optional so one failed
+            // product bucket does not reject the entire stdout and hide the
+            // otherwise valid subscribed plan usage.
+            for period in item.periods ?? [] {
+                let level = levelPrefix + period.label
+                let resetTime = period.resetAt.flatMap(Self.parseISO8601)
+                allQuotas.append(DoubaoCodingPlanUsage.Quota(
+                    level: level,
+                    percent: period.percent,
+                    resetTime: resetTime))
+            }
+        }
+
+        guard !allQuotas.isEmpty else {
+            let itemError = response.items.lazy.compactMap(\.error).first { !$0.isEmpty }
+            throw DoubaoUsageError.noPlanUsage(itemError.map { Self.compactText($0) })
+        }
+
+        return DoubaoCodingPlanUsage(status: status, updateTime: updateTime, quotas: allQuotas)
+    }
+
+    private static func runArkcliUsagePlan(environment: [String: String]) async throws -> Data {
+        guard let arkcliPath = BinaryLocator.resolveArkcliBinary(env: environment) else {
+            throw DoubaoUsageError.arkcliNotFound
+        }
 
         do {
-            try process.run()
+            let result = try await SubprocessRunner.run(
+                binary: arkcliPath,
+                arguments: ["usage", "plan"],
+                environment: environment,
+                timeout: 15,
+                label: "doubao arkcli usage plan")
+            var output = BoundedOutputBuffer(maxBytes: 256 * 1024)
+            guard output.append(Data(result.stdout.utf8)) else {
+                throw DoubaoUsageError.arkcliOutputTooLarge
+            }
+            return output.data
+        } catch SubprocessRunnerError.timedOut {
+            throw DoubaoUsageError.arkcliTimedOut
+        } catch let SubprocessRunnerError.nonZeroExit(code, stderr) {
+            let message = Self.compactText(stderr)
+            if Self.isArkcliAuthenticationError(message) {
+                throw DoubaoUsageError.arkcliAuthenticationRequired
+            }
+            throw DoubaoUsageError.arkcliFailed(code, message.isEmpty ? "unknown error" : message)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as DoubaoUsageError {
+            throw error
         } catch {
             throw DoubaoUsageError.networkError("Failed to launch arkcli: \(error.localizedDescription)")
         }
-
-        process.waitUntilExit()
-
-        guard process.terminationStatus == 0 else {
-            let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-            let stderrText = String(data: stderrData, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? "unknown error"
-            throw DoubaoUsageError.apiError(Int(process.terminationStatus), stderrText)
-        }
-
-        return stdoutPipe.fileHandleForReading.readDataToEndOfFile()
     }
 
-    /// Resolves the arkcli executable path from the given environment (or the
-    /// process environment when omitted). Shared by the CLI strategy's
-    /// availability check and the fetcher's process launcher so both use the
-    /// same path resolution logic.
-    static func findArkcli(
-        environment: [String: String] = ProcessInfo.processInfo.environment) -> String?
-    {
-        if let envPath = environment["ARKCLI_PATH"],
-           FileManager.default.isExecutableFile(atPath: envPath)
-        {
-            return envPath
-        }
-
-        let candidates = [
-            "/usr/local/bin/arkcli",
-            "/opt/homebrew/bin/arkcli",
-        ]
-        for path in candidates where FileManager.default.isExecutableFile(atPath: path) {
-            return path
-        }
-        return Self.which("arkcli")
-    }
-
-    private static func which(_ tool: String) -> String? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-        process.arguments = [tool]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        try? process.run()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else { return nil }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        guard let path = String(data: data, encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-            !path.isEmpty
-        else { return nil }
-        return path
+    private static func isArkcliAuthenticationError(_ message: String) -> Bool {
+        let normalized = message.lowercased()
+        return [
+            "not logged in",
+            "not authenticated",
+            "authentication required",
+            "login required",
+            "please login",
+            "please log in",
+        ].contains(where: normalized.contains)
     }
 
     private static func parseISO8601(_ value: String) -> Date? {
@@ -503,11 +516,15 @@ public struct DoubaoUsageFetcher: Sendable {
 
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = formatter.date(from: trimmed) { return date }
+        if let date = formatter.date(from: trimmed) {
+            return date
+        }
 
         let fallback = ISO8601DateFormatter()
         fallback.formatOptions = [.withInternetDateTime]
-        if let date = fallback.date(from: trimmed) { return date }
+        if let date = fallback.date(from: trimmed) {
+            return date
+        }
 
         return nil
     }
@@ -633,7 +650,9 @@ public struct DoubaoUsageFetcher: Sendable {
     }
 
     private static func stringHeader(_ headers: [AnyHashable: Any], _ name: String) -> String? {
-        if let value = headers[name] as? String { return value }
+        if let value = headers[name] as? String {
+            return value
+        }
         for (key, val) in headers {
             if let keyStr = key as? String,
                keyStr.caseInsensitiveCompare(name) == .orderedSame,
@@ -666,14 +685,20 @@ public struct DoubaoUsageFetcher: Sendable {
 
     private static func parseResetTime(_ value: String) -> Date? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty { return nil }
+        if trimmed.isEmpty {
+            return nil
+        }
 
         let isoFormatter = ISO8601DateFormatter()
         isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = isoFormatter.date(from: trimmed) { return date }
+        if let date = isoFormatter.date(from: trimmed) {
+            return date
+        }
         let isoFallback = ISO8601DateFormatter()
         isoFallback.formatOptions = [.withInternetDateTime]
-        if let date = isoFallback.date(from: trimmed) { return date }
+        if let date = isoFallback.date(from: trimmed) {
+            return date
+        }
 
         var seconds: TimeInterval = 0
         let pattern = /(\d+)([dhms])/
@@ -733,12 +758,16 @@ public struct DoubaoUsageFetcher: Sendable {
            let message = error["message"] as? String
         {
             let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty { return Self.compactText(trimmed) }
+            if !trimmed.isEmpty {
+                return Self.compactText(trimmed)
+            }
         }
 
         if let message = json["message"] as? String {
             let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty { return Self.compactText(trimmed) }
+            if !trimmed.isEmpty {
+                return Self.compactText(trimmed)
+            }
         }
 
         return "HTTP \(statusCode) (\(data.count) bytes)."
@@ -749,7 +778,9 @@ public struct DoubaoUsageFetcher: Sendable {
             .components(separatedBy: .newlines)
             .joined(separator: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        if collapsed.count <= maxLength { return collapsed }
+        if collapsed.count <= maxLength {
+            return collapsed
+        }
         let limitIndex = collapsed.index(collapsed.startIndex, offsetBy: maxLength)
         return "\(collapsed[..<limitIndex])..."
     }
@@ -765,12 +796,14 @@ public struct DoubaoUsageFetcher: Sendable {
         let subscribed: Bool?
         let periods: [ArkcliPeriod]?
         let updatedAt: TimeInterval?
+        let error: String?
 
         enum CodingKeys: String, CodingKey {
             case product
             case subscribed
             case periods
             case updatedAt = "updated_at"
+            case error
         }
     }
 

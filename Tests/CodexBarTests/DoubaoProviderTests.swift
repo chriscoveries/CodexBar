@@ -84,10 +84,13 @@ struct DoubaoProviderTests {
     @Test
     func `cli strategy returns usage from arkcli`() async throws {
         let expectedDate = Date(timeIntervalSince1970: 42)
-        let context = Self.makeContext(sourceMode: .cli)
+        let context = Self.makeContext(
+            sourceMode: .cli,
+            environment: ["ARKCLI_PATH": "/trusted/arkcli"])
         let strategy = DoubaoCLIFetchStrategy(
-            cliUsageLoader: {
-                DoubaoUsageSnapshot(
+            cliUsageLoader: { environment in
+                #expect(environment["ARKCLI_PATH"] == "/trusted/arkcli")
+                return DoubaoUsageSnapshot(
                     remainingRequests: 0,
                     limitRequests: 0,
                     resetTime: nil,
@@ -110,21 +113,21 @@ struct DoubaoProviderTests {
     }
 
     @Test
-    func `cli strategy falls back to api in auto mode`() {
+    func `cli strategy does not cross authentication sources on failure`() {
         let context = Self.makeContext(sourceMode: .auto)
         let strategy = DoubaoCLIFetchStrategy(
-            cliUsageLoader: {
+            cliUsageLoader: { _ in
                 throw DoubaoProviderTestError.signedFailed
             })
 
-        #expect(strategy.shouldFallback(on: DoubaoProviderTestError.signedFailed, context: context) == true)
+        #expect(strategy.shouldFallback(on: DoubaoProviderTestError.signedFailed, context: context) == false)
     }
 
     @Test
     func `cli strategy does not fall back in explicit cli mode`() {
         let context = Self.makeContext(sourceMode: .cli)
         let strategy = DoubaoCLIFetchStrategy(
-            cliUsageLoader: {
+            cliUsageLoader: { _ in
                 throw DoubaoProviderTestError.signedFailed
             })
 
@@ -135,7 +138,7 @@ struct DoubaoProviderTests {
     func `cli cancellation does not fall back to api`() {
         let context = Self.makeContext(sourceMode: .auto)
         let strategy = DoubaoCLIFetchStrategy(
-            cliUsageLoader: {
+            cliUsageLoader: { _ in
                 throw CancellationError()
             })
 
@@ -309,15 +312,28 @@ struct DoubaoProviderTests {
     // MARK: - resolveStrategies routing tests
 
     @Test
-    func `auto mode returns cli then api strategies`() async {
+    func `auto mode uses cli when api credentials are absent`() async {
         let context = Self.makeContext(sourceMode: .auto)
         let strategies = await DoubaoProviderDescriptor.resolveStrategies(context: context)
 
-        #expect(strategies.count == 2)
+        #expect(strategies.count == 1)
         #expect(strategies[0].id == "doubao.cli")
         #expect(strategies[0].kind == .cli)
-        #expect(strategies[1].id == "doubao.api")
-        #expect(strategies[1].kind == .apiToken)
+    }
+
+    @Test
+    func `auto mode preserves configured api account over ambient cli`() async {
+        let context = Self.makeContext(
+            sourceMode: .auto,
+            environment: [
+                DoubaoSettingsReader.apiKeyEnvironmentKeys[0]: "ark-configured-account",
+                "ARKCLI_PATH": "/ambient/other-account/arkcli",
+            ])
+        let strategies = await DoubaoProviderDescriptor.resolveStrategies(context: context)
+
+        #expect(strategies.count == 1)
+        #expect(strategies[0].id == "doubao.api")
+        #expect(strategies[0].kind == .apiToken)
     }
 
     @Test
