@@ -1040,12 +1040,6 @@ extension UsageStore {
             if provider == .claude,
                ClaudeStatusProbe.isSubscriptionQuotaUnavailableDescription(error.localizedDescription)
             {
-                if self.shouldPreserveClaudeSubscriptionSnapshotAcrossUnavailableProbe(provider: provider) {
-                    self.errors[provider] = nil
-                    self.knownLimitsAvailabilityByProvider[provider] = .available
-                    self.failureGates[provider]?.reset()
-                    return
-                }
                 // This is a successful answer about quota availability, not a transient probe failure.
                 // Drop prior limits immediately so an Education subscription notice cannot leave stale bars visible.
                 self.snapshots.removeValue(forKey: provider)
@@ -1173,16 +1167,6 @@ extension UsageStore {
             message.contains("cancelled") ||
             message.contains("network connection was lost") ||
             message.contains("not connected to the internet")
-    }
-
-    private func shouldPreserveClaudeSubscriptionSnapshotAcrossUnavailableProbe(provider: UsageProvider) -> Bool {
-        guard provider == .claude,
-              let snapshot = self.snapshots[provider],
-              Self.isSubscriptionPlan(snapshot.loginMethod(for: provider))
-        else {
-            return false
-        }
-        return true
     }
 
     private static func lastAvailableFailedFetchKind(from attempts: [ProviderFetchAttempt]) -> ProviderFetchKind? {

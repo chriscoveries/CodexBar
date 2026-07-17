@@ -54,6 +54,7 @@ public struct ClaudeAccountIdentity: Sendable {
 
 public enum ClaudeStatusProbeError: LocalizedError, Sendable {
     case claudeNotInstalled
+    case authenticationFailed(String)
     case parseFailed(String)
     case timedOut
 
@@ -61,6 +62,8 @@ public enum ClaudeStatusProbeError: LocalizedError, Sendable {
         switch self {
         case .claudeNotInstalled:
             "Claude CLI is not installed or not on PATH."
+        case let .authenticationFailed(message):
+            message
         case let .parseFailed(msg):
             "Could not parse Claude usage: \(msg)"
         case .timedOut:
@@ -198,7 +201,7 @@ extension ClaudeStatusProbe {
                 reason: "usageError: \(usageError)",
                 usage: clean,
                 status: statusText)
-            throw ClaudeStatusProbeError.parseFailed(usageError)
+            throw self.usageProbeError(message: usageError, rawText: clean)
         }
 
         let latestUsagePanel = self.trimToLatestUsagePanel(clean)
@@ -380,7 +383,7 @@ extension ClaudeStatusProbe {
     private static func validateUsageBeforeStatusProbe(_ text: String) throws {
         let clean = TextParsing.stripANSICodes(text)
         if let usageError = self.extractUsageError(text: clean) {
-            throw ClaudeStatusProbeError.parseFailed(usageError)
+            throw self.usageProbeError(message: usageError, rawText: clean)
         }
 
         let latestUsagePanel = self.trimToLatestUsagePanel(clean)
@@ -632,6 +635,32 @@ extension ClaudeStatusProbe {
             return "Claude CLI could not load usage data. Open the CLI and retry `/usage`."
         }
         return nil
+    }
+
+    private static func usageProbeError(message: String, rawText: String) -> ClaudeStatusProbeError {
+        let lower = rawText.lowercased()
+        let authenticationMarkers = [
+            "authentication_error",
+            "permission_error",
+            "token_expired",
+            "oauth account information not found",
+            "does not have access to claude code",
+            "run /login",
+            "api error: 401",
+            "api error: 403",
+            "forbidden",
+            "invalid api key",
+            "invalid_api_key",
+            "invalid credential",
+            "not authenticated",
+            "not authorized",
+            "token revoked",
+            "unauthorized",
+        ]
+        if authenticationMarkers.contains(where: { lower.contains($0) }) {
+            return .authenticationFailed(message)
+        }
+        return .parseFailed(message)
     }
 
     private static func isUsageStillLoading(text: String) -> Bool {

@@ -470,12 +470,37 @@ struct StatusProbeTests {
         do {
             _ = try ClaudeStatusProbe.parse(text: sample)
             #expect(Bool(false), "Parsing should fail for auth error")
-        } catch let ClaudeStatusProbeError.parseFailed(message) {
+        } catch let ClaudeStatusProbeError.authenticationFailed(message) {
             let lower = message.lowercased()
             #expect(lower.contains("token"))
             #expect(lower.contains("login"))
         } catch {
             #expect(Bool(false), "Unexpected error: \(error)")
+        }
+    }
+
+    @Test
+    func `classifies Claude login failures separately from parser failures`() {
+        let failures = [
+            (type: "error", message: "OAuth account information not found in config"),
+            (type: "error", message: "Your account does not have access to Claude Code. Please run /login"),
+            (type: "error", message: "API Error: 401"),
+            (type: "permission_error", message: "API Error: 403"),
+        ]
+
+        for failure in failures {
+            let sample = """
+            Error: Failed to load usage data: \
+            {"error":{"type":"\(failure.type)","message":"\(failure.message)"}}
+            """
+            do {
+                _ = try ClaudeStatusProbe.parse(text: sample)
+                Issue.record("Expected authentication failure for: \(failure.message)")
+            } catch ClaudeStatusProbeError.authenticationFailed {
+                continue
+            } catch {
+                Issue.record("Unexpected error for \(failure.message): \(error)")
+            }
         }
     }
 

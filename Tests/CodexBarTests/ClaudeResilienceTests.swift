@@ -283,7 +283,7 @@ struct ClaudeResilienceTests {
     }
 
     @Test
-    func `repeated CLI parse failures keep prior Claude snapshot while surfacing error`() async throws {
+    func `CLI parse failures keep prior Claude snapshot but authentication loss clears it`() async throws {
         try await ClaudeOAuthCredentialsStore.withIsolatedCredentialsFileTrackingForTesting {
             let tempDir = FileManager.default.temporaryDirectory
                 .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -365,6 +365,36 @@ struct ClaudeResilienceTests {
 
                 #expect(secondResult.updatedAt == prior.updatedAt)
                 #expect(secondResult.error?.localizedCaseInsensitiveContains("Missing Current session") == true)
+
+                try await MainActor.run {
+                    let baseSpec = try #require(store.providerSpecs[.claude])
+                    let descriptor = ProviderDescriptor(
+                        id: .claude,
+                        metadata: baseSpec.descriptor.metadata,
+                        branding: baseSpec.descriptor.branding,
+                        tokenCost: baseSpec.descriptor.tokenCost,
+                        fetchPlan: ProviderFetchPlan(
+                            sourceModes: [.cli],
+                            pipeline: ProviderFetchPipeline { _ in
+                                [CLIAuthenticationFailureFetchStrategy()]
+                            }),
+                        cli: baseSpec.descriptor.cli)
+                    store.providerSpecs[.claude] = ProviderSpec(
+                        style: baseSpec.style,
+                        isEnabled: baseSpec.isEnabled,
+                        descriptor: descriptor,
+                        makeFetchContext: baseSpec.makeFetchContext)
+                }
+
+                await store.refreshProvider(.claude)
+                let authenticationResult = await MainActor.run {
+                    (
+                        hasSnapshot: store.snapshot(for: .claude) != nil,
+                        error: store.error(for: .claude))
+                }
+
+                #expect(!authenticationResult.hasSnapshot)
+                #expect(authenticationResult.error?.localizedCaseInsensitiveContains("token expired") == true)
             }
         }
     }
@@ -1391,6 +1421,24 @@ private struct CLIParseFailureFetchStrategy: ProviderFetchStrategy {
 
     func fetch(_: ProviderFetchContext) async throws -> ProviderFetchResult {
         throw ClaudeStatusProbeError.parseFailed(self.message)
+    }
+
+    func shouldFallback(on _: Error, context _: ProviderFetchContext) -> Bool {
+        false
+    }
+}
+
+private struct CLIAuthenticationFailureFetchStrategy: ProviderFetchStrategy {
+    let id = "test.cli-authentication-failure"
+    let kind: ProviderFetchKind = .cli
+
+    func isAvailable(_: ProviderFetchContext) async -> Bool {
+        true
+    }
+
+    func fetch(_: ProviderFetchContext) async throws -> ProviderFetchResult {
+        throw ClaudeStatusProbeError.authenticationFailed(
+            "Claude CLI token expired. Run `claude login` to refresh.")
     }
 
     func shouldFallback(on _: Error, context _: ProviderFetchContext) -> Bool {
