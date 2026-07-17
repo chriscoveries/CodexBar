@@ -166,6 +166,27 @@ struct CostUsageFetcherUnknownModelPricingTests {
         #expect(breakdown.costUSD == nil)
         #expect(requestCount == 0)
     }
+
+    @Test
+    func `local only fetch skips every pricing network refresh`() async throws {
+        let fixture = try UnknownModelPricingFixture()
+        defer { fixture.environment.cleanup() }
+        let counter = UnknownModelPricingRequestCounter()
+
+        let snapshot = try await CostUsageFetcher.loadTokenSnapshot(
+            provider: .codex,
+            now: fixture.day,
+            allowPricingRefresh: false,
+            refreshPricingInBackground: false,
+            scannerOptions: fixture.options,
+            modelsDevClient: ModelsDevClient(
+                transport: CostUsageFetcherCountingModelsDevTransport(counter: counter)))
+
+        let breakdown = try #require(snapshot.daily.first?.modelBreakdowns?.first)
+        #expect(breakdown.modelName == "gpt-new")
+        #expect(breakdown.costUSD == nil)
+        #expect(await counter.requestCount == 0)
+    }
 }
 
 private struct UnknownModelPricingFixture {

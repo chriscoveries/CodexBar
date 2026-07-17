@@ -1332,7 +1332,7 @@ extension UsageStore {
             return
         }
 
-        guard self.settings.costUsageEnabled else {
+        guard self.settings.isCostUsageEffectivelyEnabled(for: provider) else {
             self.clearTokenSnapshot(for: provider)
             self.tokenErrors[provider] = nil
             self.tokenFailureGates[provider]?.reset()
@@ -1384,11 +1384,8 @@ extension UsageStore {
             .debug("cost usage start provider=\(provider.rawValue) force=\(force)")
 
         do {
-            // Codex cost usage scans local session logs from this machine. That data is
-            // intentionally presented as provider-level local telemetry rather than managed-account
-            // remote state, so managed Codex account selection does not retarget that fetch.
-            // If the UI later needs account-scoped token history, it should label and source that
-            // separately instead of silently changing the meaning of this section.
+            // Codex cost usage scans the explicit token-cost scope: selected managed account by
+            // default, or this Mac's ambient Codex home when the local ledger is enabled.
             let snapshot = try await self.loadTokenUsageSnapshot(
                 provider: provider,
                 force: force,

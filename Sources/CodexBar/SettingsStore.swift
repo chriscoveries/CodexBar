@@ -444,6 +444,8 @@ extension SettingsStore {
         let copilotBudgetExtrasEnabled = userDefaults.object(forKey: "copilotBudgetExtrasEnabled") as? Bool ?? false
         let copilotIconSecondaryWindowIDRaw = Self.loadCopilotIconSecondaryWindowIDRaw(userDefaults: userDefaults)
         let costUsageEnabled = userDefaults.object(forKey: "tokenCostUsageEnabled") as? Bool ?? false
+        let codexLocalSessionCostLedgerEnabled = userDefaults.object(
+            forKey: "codexLocalSessionCostLedgerEnabled") as? Bool ?? false
         let rawCostUsageHistoryDays = userDefaults.object(forKey: "tokenCostUsageHistoryDays") as? Int ?? 30
         let costUsageHistoryDays = max(1, min(365, rawCostUsageHistoryDays))
         let costComparisonPeriodsEnabled = userDefaults.object(
@@ -535,6 +537,7 @@ extension SettingsStore {
             copilotBudgetExtrasEnabled: copilotBudgetExtrasEnabled,
             copilotIconSecondaryWindowIDRaw: copilotIconSecondaryWindowIDRaw,
             costUsageEnabled: costUsageEnabled,
+            codexLocalSessionCostLedgerEnabled: codexLocalSessionCostLedgerEnabled,
             costUsageHistoryDays: costUsageHistoryDays,
             costComparisonPeriodsEnabled: costComparisonPeriodsEnabled,
             costSummaryDisplayStyleRaw: costSummaryDisplayStyleRaw,

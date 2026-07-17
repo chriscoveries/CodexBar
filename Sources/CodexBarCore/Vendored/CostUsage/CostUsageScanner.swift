@@ -885,7 +885,7 @@ enum CostUsageScanner {
             .appendingPathComponent("sessions", isDirectory: true)
     }
 
-    private static func codexSessionsRoots(options: Options) -> [URL] {
+    static func codexSessionsRoots(options: Options) -> [URL] {
         let root = self.defaultCodexSessionsRoot(options: options)
         if let archived = self.codexArchivedSessionsRoot(sessionsRoot: root) {
             return [root, archived]
@@ -1183,7 +1183,7 @@ enum CostUsageScanner {
         return out
     }
 
-    private static func isWithinCodexRoots(fileURL: URL, roots: [URL]) -> Bool {
+    static func isWithinCodexRoots(fileURL: URL, roots: [URL]) -> Bool {
         let filePath = fileURL.standardizedFileURL.path
         return roots.contains { root in
             let rootPath = root.standardizedFileURL.path
