@@ -103,7 +103,7 @@ struct UsageStoreCoverageTests {
         #expect(!invoked.get())
         #expect(store.tokenSnapshot(for: .cursor) == nil)
         #expect(store.tokenError(for: .cursor)?.contains("non-empty Manual cookie header") == true)
-        #expect(store.tokenCostScopeSignature(for: .cursor, historyDays: 30).contains("manual:missing"))
+        #expect(store.tokenSnapshotScopeSignature(for: .cursor).contains("manual:missing"))
     }
 
     @Test
@@ -164,11 +164,13 @@ struct UsageStoreCoverageTests {
             source: .auto,
             credentialFingerprint: "unresolved")
         let revision = store.providerPublicationRevision(for: .cursor)
+        let providerConfigRevision = settings.providerConfigRevision(for: .cursor)
         settings.costUsageHistoryDays = 7
 
         #expect(!store.tokenRefreshPublicationIsCurrent(
             provider: .cursor,
             publicationRevision: revision,
+            providerConfigRevision: providerConfigRevision,
             historyDays: 30,
             costScopeSignature: initialSignature,
             fetchedCredentialScopeFingerprint: fingerprint))
@@ -611,15 +613,20 @@ extension UsageStoreCoverageTests {
     @Test
     func `widget snapshot projects provider derived token usage`() async throws {
         let settings = Self.makeSettingsStore(suite: "UsageStoreCoverageTests-widget-provider-cost")
+        settings.costUsageEnabled = true
         let store = Self.makeUsageStore(settings: settings)
+        let formatter = ISO8601DateFormatter()
+        let updatedAt = try #require(formatter.date(from: "2026-05-26T12:00:00Z"))
+        let startDate = try #require(formatter.date(from: "2026-05-01T00:00:00Z"))
+        let endDate = try #require(formatter.date(from: "2026-05-31T23:59:59Z"))
         let day = MistralDailyUsageBucket(
             day: "2026-05-26",
-            cost: 1.2,
+            cost: 9,
             inputTokens: 10,
             cachedTokens: 0,
             outputTokens: 5,
             models: [])
-        store._setSnapshotForTesting(MistralUsageSnapshot(
+        let providerSnapshot = MistralUsageSnapshot(
             totalCost: 9,
             currency: "eur",
             currencySymbol: "€",
@@ -628,9 +635,14 @@ extension UsageStoreCoverageTests {
             totalCachedTokens: 0,
             modelCount: 1,
             daily: [day],
-            startDate: nil,
-            endDate: nil,
-            updatedAt: Date()).toUsageSnapshot(), provider: .mistral)
+            startDate: startDate,
+            endDate: endDate,
+            updatedAt: updatedAt).toUsageSnapshot()
+        store._setSnapshotForTesting(providerSnapshot, provider: .mistral)
+        let tokenSnapshot = try #require(store.tokenSnapshot(
+            fromProviderSnapshot: providerSnapshot,
+            provider: .mistral))
+        store._setTokenSnapshotForTesting(tokenSnapshot, provider: .mistral)
 
         var widgetSnapshots: [WidgetSnapshot] = []
         store._test_widgetSnapshotSaveOverride = { widgetSnapshots.append($0) }
@@ -972,7 +984,6 @@ extension UsageStoreCoverageTests {
             minimaxCookieStore: InMemoryMiniMaxCookieStore(),
             minimaxAPITokenStore: InMemoryMiniMaxAPITokenStore(),
             kimiTokenStore: InMemoryKimiTokenStore(),
-            kimiK2TokenStore: InMemoryKimiK2TokenStore(),
             augmentCookieStore: InMemoryCookieHeaderStore(),
             ampCookieStore: InMemoryCookieHeaderStore(),
             copilotTokenStore: InMemoryCopilotTokenStore(),

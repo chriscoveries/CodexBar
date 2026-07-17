@@ -341,7 +341,9 @@ struct ProviderSettingsDescriptorTests {
 
         #expect(detailLine == fixture.store.sourceLabel(for: .alibaba))
     }
+}
 
+extension ProviderSettingsDescriptorTests {
     @Test
     func `devin presentation follows store source label`() throws {
         let fixture = try self.makeSettingsFixture(suite: "ProviderSettingsDescriptorTests-devin-presentation")
@@ -853,7 +855,9 @@ extension ProviderSettingsDescriptorTests {
 
         #expect(DeepSeekProviderImplementation().settingsPickers(context: context).isEmpty)
     }
+}
 
+extension ProviderSettingsDescriptorTests {
     private func makeSettingsFixture(
         suite: String,
         environmentBase: [String: String] = [:]) throws -> ProviderSettingsFixture
