@@ -77,7 +77,7 @@ struct CLICookieRefreshTests {
         let service = "com.steipete.codexbar.tests.cookie-refresh.\(UUID().uuidString)"
 
         await KeychainCacheStore.withServiceOverrideForTesting(service) {
-            await KeychainCacheStore.withImplicitTestStoreForTesting {
+            KeychainCacheStore.withImplicitTestStoreForTesting {
                 CookieHeaderCache.store(
                     provider: provider,
                     cookieHeader: "default-test-cookie",
@@ -166,6 +166,75 @@ struct CLICookieRefreshTests {
 
                 #expect(result.status == .failed)
                 #expect(CookieHeaderCache.load(provider: provider)?.cookieHeader == "old-test-cookie")
+            }
+        }
+    }
+
+    @Test
+    func `multiple staged replacements fail before changing persisted cookies`() async {
+        let provider = UsageProvider.opencode
+        let accountScope = CookieHeaderCache.Scope.managedAccount(UUID())
+        let service = "com.steipete.codexbar.tests.cookie-refresh.\(UUID().uuidString)"
+
+        await KeychainCacheStore.withServiceOverrideForTesting(service) {
+            await KeychainCacheStore.withImplicitTestStoreForTesting {
+                CookieHeaderCache.store(
+                    provider: provider,
+                    cookieHeader: "old-default-cookie",
+                    sourceLabel: "Test old default")
+                CookieHeaderCache.store(
+                    provider: provider,
+                    scope: accountScope,
+                    cookieHeader: "old-account-cookie",
+                    sourceLabel: "Test old account")
+
+                let result = await CodexBarCLI.withCookieRefreshCacheSuppressed(
+                    provider: provider,
+                    providerName: "opencode")
+                {
+                    CookieHeaderCache.store(
+                        provider: provider,
+                        cookieHeader: "new-default-cookie",
+                        sourceLabel: "Test new default")
+                    CookieHeaderCache.store(
+                        provider: provider,
+                        scope: accountScope,
+                        cookieHeader: "new-account-cookie",
+                        sourceLabel: "Test new account")
+                    return CookieRefreshResult(provider: "opencode", status: .refreshed, message: "unexpected")
+                }
+
+                #expect(result.status == .failed)
+                #expect(CookieHeaderCache.load(provider: provider)?.cookieHeader == "old-default-cookie")
+                #expect(CookieHeaderCache.load(provider: provider, scope: accountScope)?.cookieHeader ==
+                    "old-account-cookie")
+            }
+        }
+    }
+
+    @Test
+    func `commit detaches the gate before later writes`() async {
+        let provider = UsageProvider.opencode
+        let service = "com.steipete.codexbar.tests.cookie-refresh.\(UUID().uuidString)"
+
+        await KeychainCacheStore.withServiceOverrideForTesting(service) {
+            KeychainCacheStore.withImplicitTestStoreForTesting {
+                guard let gate = CookieHeaderCache.beginRefreshReadSuppression(provider: provider) else {
+                    Issue.record("Expected refresh gate")
+                    return
+                }
+                CookieHeaderCache.store(
+                    provider: provider,
+                    cookieHeader: "committed-cookie",
+                    sourceLabel: "Test committed")
+                #expect(CookieHeaderCache.commitRefreshReadSuppression(gate).committedCount == 1)
+
+                CookieHeaderCache.store(
+                    provider: provider,
+                    cookieHeader: "later-cookie",
+                    sourceLabel: "Test later")
+                CookieHeaderCache.endRefreshReadSuppression(gate)
+                #expect(CookieHeaderCache.load(provider: provider)?.cookieHeader == "later-cookie")
             }
         }
     }

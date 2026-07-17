@@ -1011,33 +1011,32 @@ extension CookieHeaderCache {
         do {
             return try self.withLegacyMutationLock {
                 guard let state = self.refreshReadSuppressionLock.withLock({
-                    self.refreshReadSuppressions[gate.token]
+                    self.refreshReadSuppressions.removeValue(forKey: gate.token)
                 }) else {
                     return CookieRefreshCommitSummary(stagedCount: 0, committedCount: 0, failedCount: 1)
                 }
 
-                var committedCount = 0
-                var failedCount = 0
-                for (key, mutation) in state.stagedMutations {
-                    switch mutation {
-                    case let .store(entry):
-                        if KeychainCacheStore.storeResult(key: key, entry: entry) {
-                            committedCount += 1
-                            self.updateDisplaySnapshot(key: key, entry: entry)
-                            if key == self.key(for: state.provider, scope: nil) {
-                                _ = self.removeLegacyEntry(for: state.provider)
-                            }
-                        } else {
-                            failedCount += 1
-                        }
-                    case .clear:
-                        failedCount += 1
-                    }
+                let stagedCount = state.stagedMutations.count
+                guard stagedCount == 1,
+                      let (key, mutation) = state.stagedMutations.first,
+                      case let .store(entry) = mutation
+                else {
+                    return CookieRefreshCommitSummary(
+                        stagedCount: stagedCount,
+                        committedCount: 0,
+                        failedCount: max(stagedCount, 1))
+                }
+                guard KeychainCacheStore.storeResult(key: key, entry: entry) else {
+                    return CookieRefreshCommitSummary(stagedCount: 1, committedCount: 0, failedCount: 1)
+                }
+                self.updateDisplaySnapshot(key: key, entry: entry)
+                if key == self.key(for: state.provider, scope: nil) {
+                    _ = self.removeLegacyEntry(for: state.provider)
                 }
                 return CookieRefreshCommitSummary(
-                    stagedCount: state.stagedMutations.count,
-                    committedCount: committedCount,
-                    failedCount: failedCount)
+                    stagedCount: 1,
+                    committedCount: 1,
+                    failedCount: 0)
             }
         } catch {
             self.log.error("Cookie refresh commit lock failed: \(error)")
