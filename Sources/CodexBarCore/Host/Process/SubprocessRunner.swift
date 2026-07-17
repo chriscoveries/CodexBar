@@ -179,7 +179,9 @@ public enum SubprocessRunner {
         arguments: [String],
         environment: [String: String],
         timeout: TimeInterval,
-        maxOutputBytes: Int = 1 * 1024 * 1024,
+        // Preserve the legacy bounded-prefix capture when omitted. Structured-output callers can opt into
+        // fail-closed rejection by supplying an explicit limit.
+        maxOutputBytes: Int? = nil,
         standardInput: Any? = nil,
         currentDirectoryURL: URL? = nil,
         acceptsNonZeroExit: Bool = false,
@@ -206,10 +208,10 @@ public enum SubprocessRunner {
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
         process.standardInput = standardInput
-        let normalizedMaxOutputBytes = max(0, maxOutputBytes)
-        let captureMaxBytes = normalizedMaxOutputBytes == Int.max
-            ? Int.max
-            : normalizedMaxOutputBytes + 1
+        let normalizedMaxOutputBytes = maxOutputBytes.map { max(0, $0) }
+        let captureMaxBytes = normalizedMaxOutputBytes.map { limit in
+            limit == Int.max ? Int.max : limit + 1
+        } ?? ProcessPipeCapture.defaultMaxBytes
         let stdoutCapture = ProcessPipeCapture(pipe: stdoutPipe, maxBytes: captureMaxBytes)
         let stderrCapture = ProcessPipeCapture(pipe: stderrPipe, maxBytes: captureMaxBytes)
 
@@ -286,9 +288,9 @@ public enum SubprocessRunner {
             async let stderrData = stderrCapture.finish(timeout: .seconds(1))
             let capturedStdout = await stdoutData
             let capturedStderr = await stderrData
-            guard capturedStdout.count <= normalizedMaxOutputBytes,
-                  capturedStderr.count <= normalizedMaxOutputBytes
-            else {
+            if let normalizedMaxOutputBytes,
+               capturedStdout.count > normalizedMaxOutputBytes || capturedStderr.count > normalizedMaxOutputBytes
+            {
                 self.log.warning(
                     "Subprocess output exceeded memory limit",
                     metadata: ["label": label, "binary": binaryName])
