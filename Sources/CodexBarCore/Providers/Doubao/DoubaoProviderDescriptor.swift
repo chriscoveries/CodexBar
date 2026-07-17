@@ -75,14 +75,12 @@ struct DoubaoAPIFetchStrategy: ProviderFetchStrategy {
     }
 
     func fetch(_ context: ProviderFetchContext) async throws -> ProviderFetchResult {
-        // When the user explicitly selects the API source, go straight to the
-        // Ark API-key probe and skip arkcli entirely: arkcli may be logged into
-        // a different account or only carry SSO plan data the user does not want.
-        if context.sourceMode == .api {
-            let apiKey = ProviderTokenResolver.doubaoToken(environment: context.env)
-            guard let apiKey else {
-                throw DoubaoUsageError.missingCredentials
-            }
+        let apiKey = ProviderTokenResolver.doubaoToken(environment: context.env)
+
+        // Only skip arkcli when the user explicitly selected the API source
+        // *and* actually supplied a key. Without a key we still fall through
+        // to arkcli so SSO users are not blocked by a missing ARK_API_KEY.
+        if context.sourceMode == .api, let apiKey {
             let usage = try await self.arkUsageLoader(apiKey)
             return self.makeResult(usage: usage.toUsageSnapshot(), sourceLabel: "api")
         }
@@ -100,7 +98,6 @@ struct DoubaoAPIFetchStrategy: ProviderFetchStrategy {
         }
 
         // 2) Fall back to Ark API key probe (rate-limit headers)
-        let apiKey = ProviderTokenResolver.doubaoToken(environment: context.env)
         guard let apiKey else {
             throw DoubaoUsageError.missingCredentials
         }
