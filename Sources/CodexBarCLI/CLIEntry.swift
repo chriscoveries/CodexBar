@@ -75,6 +75,8 @@ enum CodexBarCLI {
                 await self.runHooks(path: path, values: invocation.parsedValues)
             case ["cache", "clear"]:
                 self.runCacheClear(invocation.parsedValues)
+            case ["cookie", "refresh"]:
+                self.runCookieRefresh(invocation.parsedValues)
             case ["diagnose"]:
                 let signalMonitor = CLITerminationSignalMonitor { signalNumber in
                     CLITerminationSignalMonitor.terminateActiveHelpersAndReraise(signalNumber)
@@ -228,6 +230,19 @@ enum CodexBarCLI {
                         signature: cacheSignature),
                 ],
                 defaultSubcommandName: "clear"),
+            CommandDescriptor(
+                name: "cookie",
+                abstract: "Cookie management",
+                discussion: nil,
+                signature: CommandSignature(),
+                subcommands: [
+                    CommandDescriptor(
+                        name: "refresh",
+                        abstract: "Re-import browser cookie for a provider",
+                        discussion: "Clears the cached cookie from Keychain and re-imports the current browser session for the specified provider.",
+                        signature: CommandSignature.describe(CookieOptions())),
+                ],
+                defaultSubcommandName: "refresh"),
             CommandDescriptor(
                 name: "diagnose",
                 abstract: "Run provider diagnostic and emit safe JSON export",
