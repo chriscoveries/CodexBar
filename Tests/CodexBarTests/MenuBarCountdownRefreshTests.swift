@@ -514,7 +514,7 @@ struct MenuBarCountdownRefreshTests {
     }
 
     private func expectCustomResetTokenSchedules(
-        _ token: MenuBarLayoutToken,
+        _ layoutElement: MenuBarLayoutToken,
         legacyAbsoluteReset: Bool,
         suiteName: String) throws
     {
@@ -527,7 +527,7 @@ struct MenuBarCountdownRefreshTests {
         settings.menuBarDisplayMode = .percent
         settings.menuBarShowsResetTimeWhenExhausted = false
         settings.resetTimesShowAbsolute = legacyAbsoluteReset
-        settings.setMenuBarLayout(MenuBarLayout(lines: [[.icon, token]]), for: .claude)
+        settings.setMenuBarLayout(MenuBarLayout(lines: [[.icon, layoutElement]]), for: .claude)
 
         let registry = ProviderRegistry.shared
         try settings.setProviderEnabled(
