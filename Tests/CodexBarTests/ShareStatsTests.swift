@@ -1,3 +1,4 @@
+import AppKit
 import CodexBarCore
 import Foundation
 import Testing
@@ -231,6 +232,19 @@ struct ShareStatsTests {
 
         #expect(ShareStatsCardView.size == CGSize(width: 1200, height: 630))
         #expect(data.starts(with: [0x89, 0x50, 0x4E, 0x47]))
+        let bitmap = try #require(NSBitmapImageRep(data: data))
+        #expect(bitmap.pixelsWide == 1200)
+        #expect(bitmap.pixelsHigh == 630)
+        let bytes = try #require(bitmap.bitmapData)
+        let byteCount = bitmap.bytesPerRow * bitmap.pixelsHigh
+        var sampledValues: Set<UInt8> = []
+        for index in stride(from: 0, to: byteCount, by: 97) {
+            sampledValues.insert(bytes[index])
+            if sampledValues.count > 8 {
+                break
+            }
+        }
+        #expect(sampledValues.count > 1)
     }
 
     @Test @MainActor
