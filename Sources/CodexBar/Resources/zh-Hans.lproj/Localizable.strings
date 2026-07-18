@@ -575,6 +575,12 @@
 "agent_sessions_subtitle" = "在菜单中显示本地及通过 SSH 发现的 Codex 和 Claude Code 会话。";
 "agent_sessions_hosts_title" = "其他 SSH 主机";
 "agent_sessions_footer" = "系统会自动发现 tailnet 上的 Mac。本地会话每 30 秒刷新一次；远程主机每 60 秒以及打开菜单时刷新。";
+"agent_session_labels_title" = "会话标签";
+"agent_session_labels_subtitle" = "选择智能体会话的命名方式。";
+"agent_session_label_project" = "项目";
+"agent_session_label_descriptive" = "描述性";
+"agent_session_label_descriptive_and_project" = "描述性 + 项目";
+"agent_session_unknown_project" = "未知项目";
 "section_keyboard_shortcut" = "快捷键";
 "open_menu_shortcut_title" = "打开菜单";
 "open_menu_shortcut_subtitle" = "从任意位置触发菜单栏菜单。";

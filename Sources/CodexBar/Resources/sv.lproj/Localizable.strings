@@ -598,6 +598,12 @@
 "agent_sessions_subtitle" = "Visa lokala och via SSH upptäckta Codex- och Claude Code-sessioner i menyn.";
 "agent_sessions_hosts_title" = "Ytterligare SSH-värdar";
 "agent_sessions_footer" = "Mac-datorer på ditt tailnet upptäcks automatiskt. Lokala sessioner uppdateras var 30:e sekund, fjärrvärdar var 60:e sekund och när menyn öppnas.";
+"agent_session_labels_title" = "Sessionsetiketter";
+"agent_session_labels_subtitle" = "Välj hur agentsessioner ska namnges.";
+"agent_session_label_project" = "Projekt";
+"agent_session_label_descriptive" = "Beskrivande";
+"agent_session_label_descriptive_and_project" = "Beskrivande + projekt";
+"agent_session_unknown_project" = "Okänt projekt";
 
 /* Advanced Pane */
 "section_keyboard_shortcut" = "Kortkommando";

@@ -440,11 +440,19 @@ extension UsageMenuCardView.Model {
                 value: snapshot.last30DaysCostUSD
                     .map { Self.costString($0, currencyCode: snapshot.currencyCode) } ?? "—",
                 emphasis: false),
-            .init(
-                title: tokenHistoryTitle,
-                value: snapshot.last30DaysTokens.map(UsageFormatter.tokenCountString) ?? "—",
-                emphasis: false),
-        ] + Self.costHistoryTrailingKPIs(snapshot: snapshot, latest: latest)
+        ]
+        let tokenHistoryKPI = InlineUsageDashboardModel.KPI(
+            title: tokenHistoryTitle,
+            value: snapshot.last30DaysTokens.map(UsageFormatter.tokenCountString) ?? "—",
+            emphasis: false)
+        let trailingKPIs = Self.costHistoryTrailingKPIs(snapshot: snapshot, latest: latest)
+        if snapshot.last30DaysRequests == nil {
+            kpis.append(contentsOf: trailingKPIs)
+            kpis.append(tokenHistoryKPI)
+        } else {
+            kpis.append(tokenHistoryKPI)
+            kpis.append(contentsOf: trailingKPIs)
+        }
         if provider == .cursor, let meteredCostUSD = snapshot.meteredCostUSD {
             kpis.insert(
                 .init(

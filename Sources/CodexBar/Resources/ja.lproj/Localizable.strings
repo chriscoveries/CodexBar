@@ -596,6 +596,12 @@
 "agent_sessions_subtitle" = "ローカルおよび SSH で検出された Codex と Claude Code のセッションをメニューに表示します。";
 "agent_sessions_hosts_title" = "追加の SSH ホスト";
 "agent_sessions_footer" = "tailnet 上の Mac は自動的に検出されます。ローカルセッションは 30 秒ごと、リモートホストは 60 秒ごと、およびメニューを開いたときに更新されます。";
+"agent_session_labels_title" = "セッションラベル";
+"agent_session_labels_subtitle" = "エージェントセッションの名前の付け方を選択します。";
+"agent_session_label_project" = "プロジェクト";
+"agent_session_label_descriptive" = "説明";
+"agent_session_label_descriptive_and_project" = "説明 + プロジェクト";
+"agent_session_unknown_project" = "不明なプロジェクト";
 
 /* Advanced Pane */
 "section_keyboard_shortcut" = "キーボードショートカット";
