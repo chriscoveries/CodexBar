@@ -605,6 +605,12 @@
 "agent_sessions_subtitle" = "Menüde yerel ve SSH ile keşfedilen Codex ve Claude Code oturumlarını göster.";
 "agent_sessions_hosts_title" = "Ek SSH sunucuları";
 "agent_sessions_footer" = "Tailnet'inizdeki Mac'ler otomatik olarak keşfedilir. Yerel oturumlar 30 saniyede bir; uzak sunucular 60 saniyede bir ve menü açıldığında yenilenir.";
+"agent_session_labels_title" = "Oturum etiketleri";
+"agent_session_labels_subtitle" = "Ajan oturumlarının nasıl adlandırılacağını seçin.";
+"agent_session_label_project" = "Proje";
+"agent_session_label_descriptive" = "Açıklayıcı";
+"agent_session_label_descriptive_and_project" = "Açıklayıcı + proje";
+"agent_session_unknown_project" = "Bilinmeyen proje";
 
 /* Advanced Pane */
 "section_keyboard_shortcut" = "Klavye kısayolu";

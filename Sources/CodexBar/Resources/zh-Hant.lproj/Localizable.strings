@@ -598,6 +598,12 @@
 "agent_sessions_subtitle" = "在選單中顯示本機及透過 SSH 發現的 Codex 和 Claude Code 工作階段。";
 "agent_sessions_hosts_title" = "其他 SSH 主機";
 "agent_sessions_footer" = "系統會自動發現 tailnet 上的 Mac。本機工作階段每 30 秒重新整理一次；遠端主機每 60 秒以及開啟選單時重新整理。";
+"agent_session_labels_title" = "工作階段標籤";
+"agent_session_labels_subtitle" = "選擇 Agent 工作階段的命名方式。";
+"agent_session_label_project" = "專案";
+"agent_session_label_descriptive" = "描述性";
+"agent_session_label_descriptive_and_project" = "描述性 + 專案";
+"agent_session_unknown_project" = "未知專案";
 "section_keyboard_shortcut" = "快速鍵";
 "open_menu_shortcut_title" = "開啟選單";
 "open_menu_shortcut_subtitle" = "從任意位置觸發選單列選單。";

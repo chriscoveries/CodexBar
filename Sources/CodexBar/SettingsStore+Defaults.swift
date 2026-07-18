@@ -972,6 +972,14 @@ extension SettingsStore {
         }
     }
 
+    var agentSessionLabelStyle: AgentSessionLabelStyle {
+        get { AgentSessionLabelStyle(rawValue: self.defaultsState.agentSessionLabelStyleRaw) ?? .project }
+        set {
+            self.defaultsState.agentSessionLabelStyleRaw = newValue.rawValue
+            self.userDefaults.set(newValue.rawValue, forKey: "agentSessionLabelStyle")
+        }
+    }
+
     var agentSessionsManualHosts: String {
         get { self.defaultsState.agentSessionsManualHosts }
         set {

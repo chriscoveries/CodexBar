@@ -193,6 +193,22 @@ struct AgentSessionMenuDescriptorTests {
     }
 
     @Test
+    func `session label style selects project descriptive or combined labels`() {
+        let now = Date(timeIntervalSince1970: 1000)
+        let session = Self.session(
+            id: "local",
+            host: "local-mac",
+            activity: now,
+            sessionName: "Fix Claude reauthorization")
+
+        #expect(Self.actionTitle(for: session, style: .project, now: now).contains("⌘ alpha —"))
+        #expect(Self.actionTitle(for: session, style: .descriptive, now: now)
+            .contains("⌘ Fix Claude reauthorization —"))
+        #expect(Self.actionTitle(for: session, style: .descriptiveAndProject, now: now)
+            .contains("⌘ Fix Claude reauthorization · alpha —"))
+    }
+
+    @Test
     func `remote refresh gate retries changed settings and rejects stale result`() throws {
         var gate = AgentSessionRemoteRefreshGate()
         let initialGenerationCandidate = gate.begin()
@@ -264,7 +280,12 @@ struct AgentSessionMenuDescriptorTests {
         #expect(Self.remotePassCount(for: .settingsChangeDuringFlight) == 2)
     }
 
-    private static func session(id: String, host: String, activity: Date?) -> AgentSession {
+    private static func session(
+        id: String,
+        host: String,
+        activity: Date?,
+        sessionName: String? = nil) -> AgentSession
+    {
         AgentSession(
             id: id,
             provider: .codex,
@@ -273,10 +294,25 @@ struct AgentSessionMenuDescriptorTests {
             pid: 42,
             cwd: "/Users/test/alpha",
             projectName: "alpha",
+            sessionName: sessionName,
             startedAt: nil,
             lastActivityAt: activity,
             transcriptPath: nil,
             host: host)
+    }
+
+    private static func actionTitle(
+        for session: AgentSession,
+        style: AgentSessionLabelStyle,
+        now: Date) -> String
+    {
+        let section = MenuDescriptor.agentSessionsSection(
+            localSessions: [session],
+            remoteHosts: [],
+            labelStyle: style,
+            now: now)
+        guard case let .action(title, _) = section.entries[1] else { return "" }
+        return title
     }
 
     private static func containsAgentSessions(in entries: [MenuDescriptor.Entry]) -> Bool {
