@@ -615,9 +615,6 @@ struct StepFunTokenRefreshTests {
     func `stale cached and env tokens fall back to env login credentials`() async throws {
         CookieHeaderCache.store(provider: .stepfun, cookieHeader: "stale-access...stale-refresh", sourceLabel: "test")
         defer { CookieHeaderCache.clear(provider: .stepfun) }
-        let registeredDeviceID = "registered-device"
-        let anonRefreshToken = try Self.jwt(deviceID: registeredDeviceID)
-        let anonToken = "anon-access...\(anonRefreshToken)"
 
         try await self.withStubProtocol { recorder in
             StepFunStubURLProtocol.handler = { request in
@@ -635,16 +632,15 @@ struct StepFunTokenRefreshTests {
                         body: """
                         {
                             "accessToken": {"raw": "anon-access"},
-                            "refreshToken": {"raw": "\(anonRefreshToken)"}
+                            "refreshToken": {"raw": "anon-refresh"}
                         }
                         """)
                 }
 
                 if path.contains("SignInByPassword") {
-                    #expect(request.value(forHTTPHeaderField: "oasis-webid") == registeredDeviceID)
                     #expect(request.value(forHTTPHeaderField: "Cookie") ==
-                        "Oasis-Token=\(anonToken); " +
-                        "Oasis-Webid=\(registeredDeviceID); " +
+                        "Oasis-Token=anon-access...anon-refresh; " +
+                        "Oasis-Webid=c8a1002d2c457e758785a9979832217c7c0b884c; " +
                         "INGRESSCOOKIE=ingress-cookie")
                     return Self.jsonResponse(
                         for: request,
@@ -703,6 +699,57 @@ struct StepFunTokenRefreshTests {
             #expect(recorder.usageCallCount == 3)
             #expect(recorder.refreshCallCount == 1)
             #expect(CookieHeaderCache.load(provider: .stepfun)?.cookieHeader == "login-access...login-refresh")
+        }
+    }
+
+    @Test
+    func `password login matches web ID to registered device`() async throws {
+        let registeredDeviceID = "registered-device"
+        let anonRefreshToken = try Self.jwt(deviceID: registeredDeviceID)
+        let anonToken = "anon-access...\(anonRefreshToken)"
+
+        try await self.withStubProtocol { _ in
+            StepFunStubURLProtocol.handler = { request in
+                let path = request.url?.path ?? ""
+                if path.isEmpty || path == "/" {
+                    return Self.jsonResponse(
+                        for: request,
+                        body: "{}",
+                        headers: ["Set-Cookie": "INGRESSCOOKIE=ingress-cookie; Path=/"])
+                }
+
+                if path.contains("RegisterDevice") {
+                    return Self.jsonResponse(
+                        for: request,
+                        body: """
+                        {
+                            "accessToken": {"raw": "anon-access"},
+                            "refreshToken": {"raw": "\(anonRefreshToken)"}
+                        }
+                        """)
+                }
+
+                if path.contains("SignInByPassword") {
+                    #expect(request.value(forHTTPHeaderField: "oasis-webid") == registeredDeviceID)
+                    #expect(request.value(forHTTPHeaderField: "Cookie") ==
+                        "Oasis-Token=\(anonToken); " +
+                        "Oasis-Webid=\(registeredDeviceID); " +
+                        "INGRESSCOOKIE=ingress-cookie")
+                    return Self.jsonResponse(
+                        for: request,
+                        body: """
+                        {
+                            "accessToken": {"raw": "login-access"},
+                            "refreshToken": {"raw": "login-refresh"}
+                        }
+                        """)
+                }
+
+                return Self.jsonResponse(for: request, statusCode: 404, body: #"{"error":"unexpected"}"#)
+            }
+
+            let token = try await StepFunUsageFetcher.login(username: "user@example.com", password: "password")
+            #expect(token == "login-access...login-refresh")
         }
     }
 
