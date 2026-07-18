@@ -448,7 +448,7 @@
 "cost_history_days_title" = "نافذة التاريخ: %d أيام";
 "cost_comparison_periods_title" = "إظهار فترات مقارنة أقصر";
 "cost_comparison_periods_subtitle" = "أضف إجماليات 7 و30 و90 يومًا عندما تقع ضمن نافذة التاريخ المحددة. تعيد هذه الإجماليات استخدام الفحص المحلي نفسه.";
-"cost_auto_refresh_info" = "تحديث تلقائي: كل ساعة · وقت الاستراحة: 10m";
+"cost_auto_refresh_info" = "تحديث تلقائي: الفاصل الزمني العام (الحد الأدنى 5 دقائق) · المهلة: 10 دقائق";
 "refresh_interval_title" = "فاصل التحديث";
 "manual_refresh_hint" = "التحديث التلقائي مغلق؛ استخدم أمر التحديث في القائمة.";
 "refresh_on_open_title" = "التحديث عند فتح القائمة";

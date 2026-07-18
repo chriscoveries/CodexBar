@@ -448,7 +448,7 @@
 "cost_history_days_title" = "History window: %d days";
 "cost_comparison_periods_title" = "Show shorter comparison periods";
 "cost_comparison_periods_subtitle" = "Add 7, 30, and 90-day totals when they fit inside the selected history window. These totals reuse the same local scan.";
-"cost_auto_refresh_info" = "Auto-refresh: hourly · Timeout: 10m";
+"cost_auto_refresh_info" = "Auto-refresh: global interval (minimum 5m) · Timeout: 10m";
 "refresh_interval_title" = "Refresh interval";
 "manual_refresh_hint" = "Auto-refresh is off; use the menu's Refresh command.";
 "refresh_on_open_title" = "Refresh when the menu opens";
