@@ -20,12 +20,8 @@ struct SessionEquivalentForecastTests {
     }
 
     @Test
-    func `normalizes partial session burn to a full allowance`() throws {
-        let fixture = Self.historyFixture(samples: [
-            (sessionUsedPercent: 20, weeklyBurnPercent: 2),
-            (sessionUsedPercent: 40, weeklyBurnPercent: 4),
-            (sessionUsedPercent: 100, weeklyBurnPercent: 10),
-        ])
+    func `normalizes aligned partial session observations to a full allowance`() throws {
+        let fixture = Self.alignedPartialHistoryFixture()
 
         let estimate = try #require(SessionEquivalentBurnEstimator.estimate(
             histories: fixture.histories,
@@ -34,6 +30,20 @@ struct SessionEquivalentForecastTests {
 
         #expect(estimate.sampleCount == 3)
         #expect(estimate.medianWeeklyPercentPerWindow == 10)
+    }
+
+    @Test
+    func `rejects partial sessions whose weekly burn cannot be aligned`() {
+        let fixture = Self.historyFixture(samples: [
+            (sessionUsedPercent: 20, weeklyBurnPercent: 2),
+            (sessionUsedPercent: 40, weeklyBurnPercent: 4),
+            (sessionUsedPercent: 60, weeklyBurnPercent: 6),
+        ])
+
+        #expect(SessionEquivalentBurnEstimator.estimate(
+            histories: fixture.histories,
+            currentSessionResetsAt: fixture.currentSessionReset,
+            now: fixture.currentSessionReset.addingTimeInterval(-3600)) == nil)
     }
 
     @Test
@@ -1409,5 +1419,55 @@ extension SessionEquivalentForecastTests {
                 planSeries(name: .weekly, windowMinutes: 10080, entries: weeklyEntries),
             ],
             currentSessionReset: start.addingTimeInterval(Double(samples.count + 1) * duration))
+    }
+
+    private static func alignedPartialHistoryFixture()
+        -> (histories: [PlanUtilizationSeriesHistory], currentSessionReset: Date)
+    {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let duration: TimeInterval = 5 * 3600
+        let weeklyReset = start.addingTimeInterval(7 * 24 * 3600)
+        let fullAllowanceBurn = 10.0
+        var sessionEntries: [PlanUtilizationHistoryEntry] = []
+        var weeklyEntries: [PlanUtilizationHistoryEntry] = []
+        var weeklyUsed = 0.0
+
+        for (index, sessionUsedPercent) in [20.0, 40.0, 100.0].enumerated() {
+            let windowStart = start.addingTimeInterval(Double(index) * duration)
+            let reset = windowStart.addingTimeInterval(duration)
+            let firstSessionUsedPercent = sessionUsedPercent / 4
+            let firstCapturedAt = windowStart.addingTimeInterval(30 * 60)
+            let lastCapturedAt = reset.addingTimeInterval(-30 * 60)
+            let firstWeeklyUsedPercent = weeklyUsed + fullAllowanceBurn * firstSessionUsedPercent / 100
+            let lastWeeklyUsedPercent = weeklyUsed + fullAllowanceBurn * sessionUsedPercent / 100
+
+            sessionEntries.append(planEntry(
+                at: firstCapturedAt,
+                usedPercent: firstSessionUsedPercent,
+                resetsAt: reset))
+            weeklyEntries.append(planEntry(
+                at: firstCapturedAt,
+                usedPercent: firstWeeklyUsedPercent,
+                resetsAt: weeklyReset))
+            sessionEntries.append(planEntry(
+                at: lastCapturedAt,
+                usedPercent: sessionUsedPercent,
+                resetsAt: reset))
+            weeklyEntries.append(planEntry(
+                at: lastCapturedAt,
+                usedPercent: lastWeeklyUsedPercent,
+                resetsAt: weeklyReset))
+            weeklyUsed = lastWeeklyUsedPercent
+        }
+
+        let histories = UsageStore._updatedPlanUtilizationHistoriesForTesting(
+            existingHistories: [],
+            samples: [
+                planSeries(name: .session, windowMinutes: 300, entries: sessionEntries),
+                planSeries(name: .weekly, windowMinutes: 10080, entries: weeklyEntries),
+            ]) ?? []
+        return (
+            histories: histories,
+            currentSessionReset: start.addingTimeInterval(4 * duration))
     }
 }
