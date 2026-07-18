@@ -157,6 +157,12 @@ Packaged synthetic proof (fake `cswap` executable, no real accounts or credentia
 
 ![Stacked claude-swap account cards](screenshots/claude-swap-accounts-synthetic-proof.png)
 
+Model-scoped weekly-window proof (synthetic data, no real accounts or credentials):
+
+| Before | After |
+| --- | --- |
+| ![claude-swap card before scoped windows](screenshots/claude-swap-scoped-before.png) | ![claude-swap card with a Fable scoped weekly window](screenshots/claude-swap-scoped-after.png) |
+
 ## CLI PTY (fallback)
 - Runs `claude` in a PTY session (`ClaudeCLISession`).
 - Default behavior: exit after each probe; Debug → "Keep CLI sessions alive" keeps it running between probes.
