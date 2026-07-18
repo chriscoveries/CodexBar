@@ -208,7 +208,7 @@ extension CodexBarCLI {
 
     private static func costEstimateHint(provider: UsageProvider) -> String {
         provider == .codex
-            ? "Estimated from token usage · not a subscription bill"
+            ? "Not a subscription bill or plan value · local usage × public API prices"
             : UsageFormatter.costEstimateHint(provider: provider)
     }
 

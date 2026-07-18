@@ -97,7 +97,7 @@ struct CLICostTests {
         #expect(output.contains("  - client-a: $2.25 · 2K tokens"))
         #expect(output.contains("/Users/test/.codex/worktrees/abcd/client-a"))
         #expect(output.contains("Unknown project: $2.49 · 2K tokens"))
-        #expect(output.contains("Estimated from token usage · not a subscription bill"))
+        #expect(output.contains("Not a subscription bill or plan value · local usage × public API prices"))
     }
 
     @Test
