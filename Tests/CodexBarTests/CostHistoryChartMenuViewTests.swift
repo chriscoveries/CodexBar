@@ -6,6 +6,14 @@ import Testing
 @MainActor
 struct CostHistoryChartMenuViewTests {
     @Test
+    func `Codex chart explains that its token estimate is not a subscription bill`() {
+        #expect(
+            CostHistoryChartMenuView.estimateDisclaimer(provider: .codex)
+                == "Estimated from token usage · not a subscription bill")
+        #expect(CostHistoryChartMenuView.estimateDisclaimer(provider: .claude) == nil)
+    }
+
+    @Test
     @MainActor
     func `model breakdown keeps every item behind a bounded scrolling viewport`() {
         let breakdown = (1...6).map { index in
