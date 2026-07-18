@@ -652,7 +652,7 @@ extension StatusItemController {
         guard let model = self.menuCardModel(for: context.selectedProvider) else { return false }
         let renderedModel = self.menuCardRefreshMonitor.model(for: model.provider, fallback: model)
         if context.openAIContext.hasOpenAIWebMenuItems ||
-            self.hasProviderNativeCostHistorySubmenu(provider: context.currentProvider)
+            self.requiresSectionedMenuForProviderDerivedCost(provider: context.currentProvider)
         {
             let webItems = OpenAIWebMenuItems(
                 hasUsageBreakdown: context.openAIContext.hasUsageBreakdown,
@@ -1577,7 +1577,14 @@ extension StatusItemController {
         provider == .openai && self.tokenSnapshotForCostHistorySubmenu(provider: provider)?.daily.isEmpty == false
     }
 
-    private func hasProviderNativeCostHistorySubmenu(provider: UsageProvider) -> Bool {
+    /// Unlike `makeUsageSubmenu`'s and `tokenCostMenuSectionEnabled`'s provider checks, this one
+    /// intentionally reuses `tokenCostRequiresProviderSnapshot`: any provider whose cost is
+    /// sourced by projecting a snapshot field (rather than the CostUsageFetcher pipeline) can only
+    /// render that cost through `addMenuCardSections`'s sectioned layout, so the two concepts are
+    /// genuinely coupled here, not coincidentally aliased. The name is deliberately broader than
+    /// "top-pane submenu" — opencodego satisfies this via its collapsible "Cost" row, not a
+    /// provider-native top-pane submenu like openai/mistral.
+    private func requiresSectionedMenuForProviderDerivedCost(provider: UsageProvider) -> Bool {
         UsageStore.tokenCostRequiresProviderSnapshot(provider) &&
             self.tokenSnapshotForCostHistorySubmenu(provider: provider)?.daily.isEmpty == false
     }
