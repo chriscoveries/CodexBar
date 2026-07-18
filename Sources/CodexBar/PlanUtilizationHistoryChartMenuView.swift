@@ -250,7 +250,7 @@ struct PlanUtilizationHistoryChartMenuView: View {
         case .codex:
             if snapshot.primary != nil { names.insert(.session) }
             if snapshot.secondary != nil { names.insert(.weekly) }
-        case .claude:
+        case .claude, .opencodego:
             if snapshot.primary != nil { names.insert(.session) }
             if snapshot.secondary != nil { names.insert(.weekly) }
             if snapshot.tertiary != nil,

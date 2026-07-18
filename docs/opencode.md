@@ -30,3 +30,8 @@ read_when:
 - Cached cookies: Keychain cache `com.steipete.codexbar.cache` (account `cookie.opencode`, source + timestamp). Browser
   import only runs when the cached cookie fails.
 - OpenCode Go auto mode tries web usage first, then derives quota windows from local `opencode-go` assistant costs.
+- OpenCode Go cost history chart: `opencode.ai` has no daily-granularity endpoint, so per-day cost/request buckets
+  always come from the local `opencode-go` assistant costs in `opencode.db`, keyed by device-local calendar day. The
+  web usage strategy best-effort merges this local daily history alongside its server-sourced rolling/weekly percents
+  (`OpenCodeGoProviderDescriptor.enrichingWithLocalDaily`), so the chart still renders even when the web session
+  succeeds before the local fallback strategy would otherwise run.

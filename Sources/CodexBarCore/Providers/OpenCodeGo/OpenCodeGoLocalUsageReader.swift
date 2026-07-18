@@ -46,7 +46,7 @@ public struct OpenCodeGoLocalUsageReader: Sendable {
         self.databaseURL = databaseURL
     }
 
-    public func fetch(now: Date = Date()) throws -> OpenCodeGoUsageSnapshot {
+    public func fetch(now: Date = Date(), historyDays: Int = 30) throws -> OpenCodeGoUsageSnapshot {
         let hasAuth = Self.hasAuthKey(at: self.authURL)
         guard FileManager.default.fileExists(atPath: self.databaseURL.path) else {
             if hasAuth {
@@ -62,7 +62,16 @@ public struct OpenCodeGoLocalUsageReader: Sendable {
         guard !rows.isEmpty else {
             throw OpenCodeGoLocalUsageError.historyUnavailable("no local usage rows")
         }
-        return Self.snapshot(rows: rows, now: now)
+        return Self.snapshot(rows: rows, now: now, historyDays: historyDays)
+    }
+
+    /// Best-effort daily cost history, independent of `fetch()`'s window-percentage flow. The
+    /// opencode.ai web API has no daily-granularity endpoint, so the web fetch strategy calls this
+    /// to enrich its rolling/weekly percentages (server-authoritative) with local per-day cost
+    /// (device-only). Returns an empty array rather than throwing when local history is unavailable.
+    public func fetchDaily(now: Date = Date(), historyDays: Int = 30) -> [CostUsageDailyReport.Entry] {
+        guard let rows = try? self.readRows() else { return [] }
+        return Self.dailyEntries(rows: rows, now: now, historyDays: historyDays)
     }
 
     private func readRows() throws -> [UsageRow] {
@@ -96,7 +105,8 @@ public struct OpenCodeGoLocalUsageReader: Sendable {
             let createdMs = sqlite3_column_int64(stmt, 0)
             let cost = sqlite3_column_double(stmt, 1)
             guard createdMs > 0, cost >= 0, cost.isFinite else { continue }
-            rows.append(UsageRow(createdMs: createdMs, cost: cost))
+            let messageID = sqlite3_column_text(stmt, 2).map { String(cString: $0) } ?? ""
+            rows.append(UsageRow(createdMs: createdMs, cost: cost, messageID: messageID))
         }
         return rows
     }
@@ -122,7 +132,8 @@ public struct OpenCodeGoLocalUsageReader: Sendable {
     private static let messageUsageSQL = """
         SELECT
           CAST(COALESCE(json_extract(data, '$.time.created'), time_created) AS INTEGER) AS createdMs,
-          CAST(json_extract(data, '$.cost') AS REAL) AS cost
+          CAST(json_extract(data, '$.cost') AS REAL) AS cost,
+          id AS messageID
         FROM message
         WHERE json_valid(data)
           AND json_extract(data, '$.providerID') = 'opencode-go'
@@ -142,13 +153,14 @@ public struct OpenCodeGoLocalUsageReader: Sendable {
             AND json_extract(data, '$.role') = 'assistant'
             AND json_type(data, '$.cost') IN ('integer', 'real')
         )
-        SELECT createdMs, cost
+        SELECT createdMs, cost, messageID
         FROM message_costs
         UNION ALL
         SELECT
           CAST(COALESCE(json_extract(p.data, '$.time.created'), p.time_created, m.time_created) AS INTEGER)
             AS createdMs,
-          CAST(json_extract(p.data, '$.cost') AS REAL) AS cost
+          CAST(json_extract(p.data, '$.cost') AS REAL) AS cost,
+          p.message_id AS messageID
         FROM part p
         JOIN message m ON m.id = p.message_id
         WHERE json_valid(p.data)
@@ -167,6 +179,10 @@ public struct OpenCodeGoLocalUsageReader: Sendable {
     private struct UsageRow {
         let createdMs: Int64
         let cost: Double
+        /// Distinguishes distinct assistant turns so daily requestCount doesn't overcount a single
+        /// message whose cost is spread across multiple step-finish parts (messageAndPartUsageSQL's
+        /// per-part UNION ALL branch emits one row per part for such messages).
+        let messageID: String
     }
 
     private static func hasAuthKey(at url: URL) -> Bool {
@@ -180,7 +196,7 @@ public struct OpenCodeGoLocalUsageReader: Sendable {
         return !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    private static func snapshot(rows: [UsageRow], now: Date) -> OpenCodeGoUsageSnapshot {
+    private static func snapshot(rows: [UsageRow], now: Date, historyDays: Int) -> OpenCodeGoUsageSnapshot {
         let nowMs = Int64(now.timeIntervalSince1970 * 1000)
         let sessionStart = nowMs - Int64(Self.fiveHours * 1000)
         let weekStart = self.startOfUTCWeek(now: now).timeIntervalSince1970 * 1000
@@ -189,25 +205,103 @@ public struct OpenCodeGoLocalUsageReader: Sendable {
         let earliestMs = rows.map(\.createdMs).min()
         let monthBounds = self.monthBounds(now: now, anchorMs: earliestMs)
 
-        let sessionCost = self.sum(rows: rows, startMs: sessionStart, endMs: nowMs)
-        let weeklyCost = self.sum(rows: rows, startMs: weekStartMs, endMs: weekEndMs)
-        let monthlyCost = self.sum(rows: rows, startMs: monthBounds.startMs, endMs: monthBounds.endMs)
+        // Single pass over `rows` for all three window sums plus the oldest-in-session timestamp,
+        // rather than four separate full scans (one per window plus one for the reset countdown).
+        let windows = RowAggregateWindows(
+            sessionStartMs: sessionStart,
+            nowMs: nowMs,
+            weekStartMs: weekStartMs,
+            weekEndMs: weekEndMs,
+            monthStartMs: monthBounds.startMs,
+            monthEndMs: monthBounds.endMs)
+        let aggregates = self.aggregate(rows: rows, windows: windows)
+        let oldestSessionMs = aggregates.oldestSessionMs ?? nowMs
+        let rollingResetInSec = max(0, Int((oldestSessionMs + Int64(Self.fiveHours * 1000) - nowMs) / 1000))
 
         return OpenCodeGoUsageSnapshot(
             hasMonthlyUsage: true,
-            rollingUsagePercent: self.percent(used: sessionCost, limit: self.limits.session),
-            weeklyUsagePercent: self.percent(used: weeklyCost, limit: self.limits.weekly),
-            monthlyUsagePercent: self.percent(used: monthlyCost, limit: self.limits.monthly),
-            rollingResetInSec: self.rollingReset(rows: rows, nowMs: nowMs),
+            rollingUsagePercent: self.percent(used: aggregates.sessionCost, limit: self.limits.session),
+            weeklyUsagePercent: self.percent(used: aggregates.weeklyCost, limit: self.limits.weekly),
+            monthlyUsagePercent: self.percent(used: aggregates.monthlyCost, limit: self.limits.monthly),
+            rollingResetInSec: rollingResetInSec,
             weeklyResetInSec: max(0, Int((weekEndMs - nowMs) / 1000)),
             monthlyResetInSec: max(0, Int((monthBounds.endMs - nowMs) / 1000)),
+            daily: self.dailyEntries(rows: rows, now: now, historyDays: historyDays),
             updatedAt: now)
     }
 
-    private static func sum(rows: [UsageRow], startMs: Int64, endMs: Int64) -> Double {
-        rows.reduce(0) { total, row in
-            guard row.createdMs >= startMs, row.createdMs < endMs else { return total }
-            return total + row.cost
+    private struct RowAggregateWindows {
+        let sessionStartMs: Int64
+        let nowMs: Int64
+        let weekStartMs: Int64
+        let weekEndMs: Int64
+        let monthStartMs: Int64
+        let monthEndMs: Int64
+    }
+
+    private struct RowAggregates {
+        var sessionCost: Double = 0
+        var weeklyCost: Double = 0
+        var monthlyCost: Double = 0
+        var oldestSessionMs: Int64?
+    }
+
+    private static func aggregate(rows: [UsageRow], windows: RowAggregateWindows) -> RowAggregates {
+        var result = RowAggregates()
+        for row in rows {
+            if row.createdMs >= windows.sessionStartMs, row.createdMs < windows.nowMs {
+                result.sessionCost += row.cost
+                if result.oldestSessionMs.map({ row.createdMs < $0 }) ?? true {
+                    result.oldestSessionMs = row.createdMs
+                }
+            }
+            if row.createdMs >= windows.weekStartMs, row.createdMs < windows.weekEndMs {
+                result.weeklyCost += row.cost
+            }
+            if row.createdMs >= windows.monthStartMs, row.createdMs < windows.monthEndMs {
+                result.monthlyCost += row.cost
+            }
+        }
+        return result
+    }
+
+    /// Buckets local `opencode-go` message costs into calendar-day entries (device local time,
+    /// matching how Codex/Claude cost history is keyed) so the cost history chart can render a
+    /// per-day bar chart the same way it does for those providers.
+    private static func dailyEntries(
+        rows: [UsageRow],
+        now: Date,
+        historyDays: Int) -> [CostUsageDailyReport.Entry]
+    {
+        let clampedHistoryDays = max(1, min(365, historyDays))
+        let calendar = Calendar.current
+        guard let since = calendar.date(byAdding: .day, value: -(clampedHistoryDays - 1), to: now) else {
+            return []
+        }
+        let sinceStartOfDay = calendar.startOfDay(for: since)
+
+        var totals: [String: (cost: Double, messageIDs: Set<String>)] = [:]
+        for row in rows {
+            let date = Date(timeIntervalSince1970: TimeInterval(row.createdMs) / 1000)
+            guard date >= sinceStartOfDay, date <= now else { continue }
+            let key = CostUsageScanner.CostUsageDayRange.dayKey(from: date)
+            var bucket = totals[key] ?? (cost: 0, messageIDs: [])
+            bucket.cost += row.cost
+            bucket.messageIDs.insert(row.messageID)
+            totals[key] = bucket
+        }
+
+        return totals.keys.sorted().compactMap { key in
+            guard let bucket = totals[key] else { return nil }
+            return CostUsageDailyReport.Entry(
+                date: key,
+                inputTokens: nil,
+                outputTokens: nil,
+                totalTokens: nil,
+                requestCount: bucket.messageIDs.count,
+                costUSD: bucket.cost,
+                modelsUsed: nil,
+                modelBreakdowns: nil)
         }
     }
 
@@ -215,15 +309,6 @@ public struct OpenCodeGoLocalUsageReader: Sendable {
         guard used.isFinite, limit > 0 else { return 0 }
         let value = max(0, min(100, used / limit * 100))
         return (value * 10).rounded() / 10
-    }
-
-    private static func rollingReset(rows: [UsageRow], nowMs: Int64) -> Int {
-        let sessionStart = nowMs - Int64(Self.fiveHours * 1000)
-        let oldest = rows
-            .filter { $0.createdMs >= sessionStart && $0.createdMs < nowMs }
-            .map(\.createdMs)
-            .min() ?? nowMs
-        return max(0, Int((oldest + Int64(Self.fiveHours * 1000) - nowMs) / 1000))
     }
 
     private static func startOfUTCWeek(now: Date) -> Date {
@@ -316,8 +401,12 @@ public struct OpenCodeGoLocalUsageReader: Sendable {
     public init(homeDirectory _: URL = FileManager.default.homeDirectoryForCurrentUser) {}
     public init(authURL _: URL, databaseURL _: URL) {}
 
-    public func fetch(now _: Date = Date()) throws -> OpenCodeGoUsageSnapshot {
+    public func fetch(now _: Date = Date(), historyDays _: Int = 30) throws -> OpenCodeGoUsageSnapshot {
         throw OpenCodeGoLocalUsageError.notSupported
+    }
+
+    public func fetchDaily(now _: Date = Date(), historyDays _: Int = 30) -> [CostUsageDailyReport.Entry] {
+        []
     }
 }
 

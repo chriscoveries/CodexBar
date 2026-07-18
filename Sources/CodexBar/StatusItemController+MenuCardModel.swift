@@ -161,7 +161,11 @@ extension StatusItemController {
             tokenCostUsageEnabled: self.settings.isCostUsageEffectivelyEnabled(for: target),
             codexLocalSessionCostLedgerEnabled: self.settings.codexLocalSessionCostLedgerEnabled,
             tokenCostInlineDashboardEnabled: self.settings.costSummaryShowsInlineDashboard(for: target),
-            tokenCostMenuSectionEnabled: !UsageStore.tokenCostRequiresProviderSnapshot(target) &&
+            // Providers whose cost history already surfaces via the inline dashboard or a
+            // dedicated top-pane submenu (openai/mistral) skip the generic "Cost" row; other
+            // `tokenCostRequiresProviderSnapshot` providers (e.g. opencodego) show real rate-limit
+            // bars in the top pane instead and need the dedicated row to surface cost at all.
+            tokenCostMenuSectionEnabled: !UsageMenuCardView.Model.usesProviderCostHistoryAsPrimaryDashboard(target) &&
                 self.settings.costSummaryShowsSubmenu(for: target),
             costComparisonPeriodsEnabled: self.settings.costComparisonPeriodsEnabled,
             showOptionalCreditsAndExtraUsage: self.settings.showOptionalCreditsAndExtraUsage,

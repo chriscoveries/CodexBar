@@ -33,8 +33,10 @@ public enum OpenCodeGoProviderDescriptor {
                     ProviderColor(hex: 0xCFCECD),
                 ]),
             tokenCost: ProviderTokenCostConfig(
-                supportsTokenCost: false,
-                noDataMessage: { "OpenCode Go cost summary is not supported." }),
+                supportsTokenCost: true,
+                noDataMessage: {
+                    "No OpenCode Go local usage history found in ~/.local/share/opencode/opencode.db."
+                }),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .web],
                 pipeline: ProviderFetchPipeline(resolveStrategies: self.resolveStrategies)),
@@ -74,7 +76,7 @@ struct OpenCodeGoLocalUsageFetchStrategy: ProviderFetchStrategy {
     }
 
     private func snapshot(context: ProviderFetchContext) async throws -> OpenCodeGoUsageSnapshot {
-        let snapshot = try OpenCodeGoLocalUsageReader().fetch()
+        let snapshot = try OpenCodeGoLocalUsageReader().fetch(historyDays: context.costUsageHistoryDays)
         guard context.includeOptionalUsage,
               context.settings?.opencodego?.cookieSource != .off
         else {
@@ -138,7 +140,7 @@ struct OpenCodeGoUsageFetchStrategy: ProviderFetchStrategy {
                 workspaceIDOverride: workspaceOverride,
                 includeZenBalance: context.includeOptionalUsage)
             return self.makeResult(
-                usage: snapshot.toUsageSnapshot(),
+                usage: Self.enrichedUsageSnapshot(snapshot, context: context),
                 sourceLabel: "web")
         } catch OpenCodeGoUsageError.invalidCredentials where cookieSource != .manual {
             #if os(macOS)
@@ -150,12 +152,29 @@ struct OpenCodeGoUsageFetchStrategy: ProviderFetchStrategy {
                 workspaceIDOverride: workspaceOverride,
                 includeZenBalance: context.includeOptionalUsage)
             return self.makeResult(
-                usage: snapshot.toUsageSnapshot(),
+                usage: Self.enrichedUsageSnapshot(snapshot, context: context),
                 sourceLabel: "web")
             #else
             throw OpenCodeGoUsageError.invalidCredentials
             #endif
         }
+    }
+
+    /// opencode.ai's web usage endpoint has no daily-granularity data, so the cost history chart
+    /// would stay empty for auto-mode users whose web session succeeds before the local fallback
+    /// ever runs. Best-effort blend in the on-device per-day cost history here instead — but only
+    /// when the local strategy could also have run in this source mode. Explicit `.web` mode
+    /// deliberately excludes `OpenCodeGoLocalUsageFetchStrategy` from the pipeline (see
+    /// `resolveStrategies`), so honor that choice here too rather than silently reading the local
+    /// database anyway.
+    private static func enrichedUsageSnapshot(
+        _ snapshot: OpenCodeGoUsageSnapshot,
+        context: ProviderFetchContext) -> UsageSnapshot
+    {
+        guard context.sourceMode != .web else { return snapshot.toUsageSnapshot() }
+        let daily = OpenCodeGoLocalUsageReader().fetchDaily(historyDays: context.costUsageHistoryDays)
+        guard !daily.isEmpty else { return snapshot.toUsageSnapshot() }
+        return snapshot.withDaily(daily).toUsageSnapshot()
     }
 
     func shouldFallback(on error: Error, context: ProviderFetchContext) -> Bool {

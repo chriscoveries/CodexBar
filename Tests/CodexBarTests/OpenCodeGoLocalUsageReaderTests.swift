@@ -38,6 +38,54 @@ struct OpenCodeGoLocalUsageReaderTests {
     }
 
     @Test
+    func `builds daily cost history buckets within the requested window`() throws {
+        let env = try Self.makeEnvironment()
+        defer { try? FileManager.default.removeItem(at: env.root) }
+
+        try Self.writeAuth(to: env.authURL)
+        try Self.createDatabase(at: env.databaseURL)
+        // Noon UTC keeps these on the same calendar day across every real-world timezone offset.
+        try Self.insertMessage(
+            databaseURL: env.databaseURL,
+            createdMs: Self.ms("2026-03-06T12:00:00.000Z"),
+            cost: 3.0)
+        try Self.insertMessage(
+            databaseURL: env.databaseURL,
+            createdMs: Self.ms("2026-03-06T13:00:00.000Z"),
+            cost: 1.5)
+        try Self.insertMessage(
+            databaseURL: env.databaseURL,
+            createdMs: Self.ms("2026-03-05T12:00:00.000Z"),
+            cost: 6.0)
+        try Self.insertMessage(
+            databaseURL: env.databaseURL,
+            createdMs: Self.ms("2026-01-01T12:00:00.000Z"),
+            cost: 100.0)
+
+        let reader = OpenCodeGoLocalUsageReader(authURL: env.authURL, databaseURL: env.databaseURL)
+        let now = Date(timeIntervalSince1970: TimeInterval(Self.ms("2026-03-06T15:00:00.000Z")) / 1000)
+        let snapshot = try reader.fetch(now: now, historyDays: 30)
+
+        #expect(snapshot.daily.map(\.date) == ["2026-03-05", "2026-03-06"])
+        #expect(snapshot.daily.first?.costUSD == 6.0)
+        #expect(snapshot.daily.first?.requestCount == 1)
+        #expect(snapshot.daily.last?.costUSD == 4.5)
+        #expect(snapshot.daily.last?.requestCount == 2)
+
+        let daily = reader.fetchDaily(now: now, historyDays: 30)
+        #expect(daily.map(\.date) == snapshot.daily.map(\.date))
+    }
+
+    @Test
+    func `fetchDaily returns no entries when local history is unavailable`() throws {
+        let env = try Self.makeEnvironment()
+        defer { try? FileManager.default.removeItem(at: env.root) }
+
+        let reader = OpenCodeGoLocalUsageReader(authURL: env.authURL, databaseURL: env.databaseURL)
+        #expect(reader.fetchDaily().isEmpty)
+    }
+
+    @Test
     func `auth without history falls through to web strategy`() throws {
         let env = try Self.makeEnvironment()
         defer { try? FileManager.default.removeItem(at: env.root) }
@@ -140,6 +188,39 @@ struct OpenCodeGoLocalUsageReaderTests {
         #expect(snapshot.rollingUsagePercent == 25)
         #expect(snapshot.weeklyUsagePercent == 10)
         #expect(snapshot.monthlyUsagePercent == 5)
+    }
+
+    @Test
+    func `daily request count counts messages not step finish part rows`() throws {
+        let env = try Self.makeEnvironment()
+        defer { try? FileManager.default.removeItem(at: env.root) }
+
+        try Self.writeAuth(to: env.authURL)
+        try Self.createDatabase(at: env.databaseURL)
+        // One assistant turn with no message-level cost, costed via two separate step-finish
+        // parts (e.g. a multi-tool-call turn). This must still count as a single request.
+        let messageID = try Self.insertMessage(
+            databaseURL: env.databaseURL,
+            createdMs: Self.ms("2026-03-06T11:00:00.000Z"),
+            cost: nil)
+        try Self.insertStepFinishPart(
+            databaseURL: env.databaseURL,
+            messageID: messageID,
+            createdMs: Self.ms("2026-03-06T11:00:00.000Z"),
+            cost: 1.0)
+        try Self.insertStepFinishPart(
+            databaseURL: env.databaseURL,
+            messageID: messageID,
+            createdMs: Self.ms("2026-03-06T11:05:00.000Z"),
+            cost: 2.0)
+
+        let reader = OpenCodeGoLocalUsageReader(authURL: env.authURL, databaseURL: env.databaseURL)
+        let now = Date(timeIntervalSince1970: TimeInterval(Self.ms("2026-03-06T15:00:00.000Z")) / 1000)
+        let snapshot = try reader.fetch(now: now, historyDays: 30)
+
+        #expect(snapshot.daily.count == 1)
+        #expect(snapshot.daily.first?.costUSD == 3.0)
+        #expect(snapshot.daily.first?.requestCount == 1)
     }
 
     @Test

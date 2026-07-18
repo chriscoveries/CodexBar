@@ -1476,7 +1476,11 @@ extension StatusItemController {
         if provider == .openai {
             return self.makeOpenAIAPIUsageSubmenu(provider: provider, width: width)
         }
-        if UsageStore.tokenCostRequiresProviderSnapshot(provider) {
+        // Mistral's top usage pane has no rate-limit bars of its own, so its cost history hangs
+        // off this row instead. Other `tokenCostRequiresProviderSnapshot` providers (e.g.
+        // opencodego) show real rate-limit bars here and get their own "Cost" row instead
+        // (see `makeCostMenuCardItem`), matching Codex/Claude's structure.
+        if provider == .mistral {
             return self.makeCostHistorySubmenu(provider: provider, width: width)
         }
         if provider == .zai {

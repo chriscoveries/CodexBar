@@ -14,7 +14,7 @@ extension UsageStore {
 
     func supportsPlanUtilizationHistory(for provider: UsageProvider) -> Bool {
         switch provider {
-        case .codex, .claude, .antigravity:
+        case .codex, .claude, .antigravity, .opencodego:
             true
         default:
             if self.planUtilizationHistory[provider]?.isEmpty == false {
@@ -338,7 +338,7 @@ extension UsageStore {
 
     private func shouldRecordPlanUtilizationHistory(for provider: UsageProvider) -> Bool {
         switch provider {
-        case .codex, .claude, .antigravity:
+        case .codex, .claude, .antigravity, .opencodego:
             true
         default:
             self.settings.historicalTrackingEnabled
@@ -574,7 +574,7 @@ extension UsageStore {
             for lane in projection.planUtilizationLanes {
                 appendWindow(lane.window, name: lane.role)
             }
-        case .claude:
+        case .claude, .opencodego:
             appendWindow(snapshot.primary, name: .session)
             appendWindow(snapshot.secondary, name: .weekly)
             appendWindow(snapshot.tertiary, name: .opus)
