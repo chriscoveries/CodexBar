@@ -1262,6 +1262,10 @@
 "By subscription" = "Por suscripción";
 "No model-level history" = "No hay historial por modelo";
 "Daily estimated spend" = "Gasto diario estimado";
+"≈%d full 5h windows of weekly left · %d windows until reset" = "≈%d ventanas completas de 5 h de cuota semanal · %d ventanas hasta el reinicio";
+"Weekly cannot run out before reset at this pace" = "La cuota semanal no puede agotarse antes del reinicio a este ritmo";
+"Weekly can run out ≈%d windows early" = "La cuota semanal puede agotarse ≈%d ventanas antes";
+"Estimated: %@" = "Estimación: %@";
 "Coding Plan" = "Plan de programación";
 "Agent Plan" = "Plan de agente";
 "Team" = "Equipo";

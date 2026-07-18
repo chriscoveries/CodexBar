@@ -1268,6 +1268,10 @@
 "By subscription" = "By subscription";
 "No model-level history" = "No model-level history";
 "Daily estimated spend" = "Daily estimated spend";
+"≈%d full 5h windows of weekly left · %d windows until reset" = "≈%d full 5h windows of weekly left · %d windows until reset";
+"Weekly cannot run out before reset at this pace" = "Weekly cannot run out before reset at this pace";
+"Weekly can run out ≈%d windows early" = "Weekly can run out ≈%d windows early";
+"Estimated: %@" = "Estimated: %@";
 "Coding Plan" = "Coding Plan";
 "Agent Plan" = "Agent Plan";
 "Team" = "Team";
