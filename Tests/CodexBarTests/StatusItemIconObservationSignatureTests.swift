@@ -251,10 +251,10 @@ struct StatusItemIconObservationSignatureTests {
     }
 
     @Test(arguments: [MenuBarLayoutToken.costToday, .cost30d])
-    func `custom cost token changes the store icon observation signature`(token: MenuBarLayoutToken) {
+    func `custom cost token changes the store icon observation signature`(layoutToken: MenuBarLayoutToken) {
         let (_, store, controller) = self.makeController(
-            suiteName: "StatusItemIconObservationSignatureTests-custom-cost-\(token)",
-            menuBarLayout: MenuBarLayout(lines: [[token]]))
+            suiteName: "StatusItemIconObservationSignatureTests-custom-cost-\(layoutToken)",
+            menuBarLayout: MenuBarLayout(lines: [[layoutToken]]))
         defer { controller.releaseStatusItemsForTesting() }
 
         let baseline = controller.storeIconObservationSignature()
