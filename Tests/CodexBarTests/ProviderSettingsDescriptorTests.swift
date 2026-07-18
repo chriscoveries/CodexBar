@@ -1,10 +1,11 @@
-import CodexBarCore
 import Foundation
 import SwiftUI
 import Testing
 @testable import CodexBar
+@testable import CodexBarCore
 
 @MainActor
+@Suite(.serialized)
 struct ProviderSettingsDescriptorTests {
     @Test
     func `toggle I ds are unique across providers`() throws {
@@ -48,6 +49,151 @@ struct ProviderSettingsDescriptorTests {
         #expect(project.subtitle.contains(OpenAIAPISettingsReader.projectIDEnvironmentKey))
         #expect(fixture.settings.openAIAPIProjectID == "proj_abc")
         #expect(fixture.settings.providerConfig(for: .openai)?.sanitizedWorkspaceID == "proj_abc")
+    }
+
+    @Test
+    func `open code cookie refresh commits replacement through user initiated gate`() async throws {
+        let fixture = try self.makeSettingsFixture(suite: "ProviderSettingsDescriptorTests-opencode-refresh")
+        let context = fixture.settingsContext(provider: .opencode)
+        let picker = try #require(OpenCodeProviderImplementation().settingsPickers(context: context).first)
+        let action = try #require(picker.trailingActions.first)
+        let service = "com.steipete.codexbar.tests.settings-cookie-refresh.\(UUID().uuidString)"
+        var observedInteraction: ProviderInteraction?
+
+        #expect(action.title == "Refresh")
+        #expect(action.isVisible?() == true)
+
+        await KeychainCacheStore.withServiceOverrideForTesting(service) {
+            await KeychainCacheStore.withImplicitTestStoreForTesting {
+                CookieHeaderCache.store(
+                    provider: .opencode,
+                    cookieHeader: "old-test-cookie",
+                    sourceLabel: "Test old")
+                fixture.store._test_providerRefreshOverride = { provider in
+                    observedInteraction = ProviderInteractionContext.current
+                    CookieHeaderCache.store(
+                        provider: provider,
+                        cookieHeader: "new-test-cookie",
+                        sourceLabel: "Test new")
+                    fixture.store.snapshots[provider] = UsageSnapshot(
+                        primary: nil,
+                        secondary: nil,
+                        updatedAt: Date())
+                    fixture.store.lastSourceLabels[provider] = "web"
+                }
+                defer { fixture.store._test_providerRefreshOverride = nil }
+
+                await action.perform()
+
+                #expect(observedInteraction == .userInitiated)
+                #expect(CookieHeaderCache.load(provider: .opencode)?.cookieHeader == "new-test-cookie")
+                #expect(picker.trailingText?()?.contains("Test new") == true)
+            }
+        }
+    }
+
+    @Test
+    func `open code go cookie refresh rejects local fallback cookie`() async throws {
+        let fixture = try self.makeSettingsFixture(suite: "ProviderSettingsDescriptorTests-opencodego-validation")
+        let context = fixture.settingsContext(provider: .opencodego)
+        let picker = try #require(OpenCodeGoProviderImplementation().settingsPickers(context: context).first)
+        let action = try #require(picker.trailingActions.first)
+        let service = "com.steipete.codexbar.tests.settings-cookie-validation.\(UUID().uuidString)"
+
+        await KeychainCacheStore.withServiceOverrideForTesting(service) {
+            await KeychainCacheStore.withImplicitTestStoreForTesting {
+                CookieHeaderCache.store(
+                    provider: .opencodego,
+                    cookieHeader: "old-test-cookie",
+                    sourceLabel: "Test old")
+                fixture.store._test_providerRefreshOverride = { provider in
+                    CookieHeaderCache.store(
+                        provider: provider,
+                        cookieHeader: "invalid-test-cookie",
+                        sourceLabel: "Test invalid")
+                    fixture.store.snapshots[provider] = UsageSnapshot(
+                        primary: nil,
+                        secondary: nil,
+                        updatedAt: Date())
+                    fixture.store.lastSourceLabels[provider] = "local"
+                }
+                defer { fixture.store._test_providerRefreshOverride = nil }
+
+                await action.perform()
+
+                #expect(CookieHeaderCache.load(provider: .opencodego)?.cookieHeader == "old-test-cookie")
+                #expect(picker.trailingText?() == L("Failed"))
+            }
+        }
+    }
+
+    @Test
+    func `open code cookie refresh rejects missing validation snapshot`() async throws {
+        let fixture = try self.makeSettingsFixture(suite: "ProviderSettingsDescriptorTests-opencode-validation")
+        let context = fixture.settingsContext(provider: .opencode)
+        let picker = try #require(OpenCodeProviderImplementation().settingsPickers(context: context).first)
+        let action = try #require(picker.trailingActions.first)
+        let service = "com.steipete.codexbar.tests.settings-cookie-missing-snapshot.\(UUID().uuidString)"
+        fixture.store.snapshots[.opencode] = UsageSnapshot(
+            primary: nil,
+            secondary: nil,
+            updatedAt: Date())
+        fixture.store.lastSourceLabels[.opencode] = "web"
+
+        await KeychainCacheStore.withServiceOverrideForTesting(service) {
+            await KeychainCacheStore.withImplicitTestStoreForTesting {
+                CookieHeaderCache.store(
+                    provider: .opencode,
+                    cookieHeader: "old-test-cookie",
+                    sourceLabel: "Test old")
+                fixture.store._test_providerRefreshOverride = { provider in
+                    CookieHeaderCache.store(
+                        provider: provider,
+                        cookieHeader: "unvalidated-test-cookie",
+                        sourceLabel: "Test unvalidated")
+                    fixture.store.snapshots.removeValue(forKey: provider)
+                }
+                defer { fixture.store._test_providerRefreshOverride = nil }
+
+                await action.perform()
+
+                #expect(CookieHeaderCache.load(provider: .opencode)?.cookieHeader == "old-test-cookie")
+                #expect(picker.trailingText?() == L("Failed"))
+            }
+        }
+    }
+
+    @Test
+    func `open code cookie refresh respects denial cooldown and preserves cookie`() async throws {
+        let fixture = try self.makeSettingsFixture(suite: "ProviderSettingsDescriptorTests-opencode-cooldown")
+        let context = fixture.settingsContext(provider: .opencode)
+        let picker = try #require(OpenCodeProviderImplementation().settingsPickers(context: context).first)
+        let action = try #require(picker.trailingActions.first)
+        let service = "com.steipete.codexbar.tests.settings-cookie-cooldown.\(UUID().uuidString)"
+        var cooldownRespected = false
+
+        BrowserCookieAccessGate.resetForTesting()
+        BrowserCookieAccessGate.recordDenied(for: .chrome)
+        defer { BrowserCookieAccessGate.resetForTesting() }
+
+        await KeychainCacheStore.withServiceOverrideForTesting(service) {
+            await KeychainCacheStore.withImplicitTestStoreForTesting {
+                CookieHeaderCache.store(
+                    provider: .opencode,
+                    cookieHeader: "old-test-cookie",
+                    sourceLabel: "Test old")
+                fixture.store._test_providerRefreshOverride = { _ in
+                    cooldownRespected = !BrowserCookieAccessGate.shouldAttempt(.chrome)
+                }
+                defer { fixture.store._test_providerRefreshOverride = nil }
+
+                await action.perform()
+
+                #expect(cooldownRespected)
+                #expect(CookieHeaderCache.load(provider: .opencode)?.cookieHeader == "old-test-cookie")
+                #expect(picker.trailingText?() == L("Failed"))
+            }
+        }
     }
 
     @Test
