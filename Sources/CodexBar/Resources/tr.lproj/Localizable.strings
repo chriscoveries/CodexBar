@@ -780,6 +780,7 @@
 "Today" = "Bugün";
 "Today tokens" = "Bugünkü jetonlar";
 "30d cost" = "30 günlük maliyet";
+"%@ cost" = "%@ maliyeti";
 "30d tokens" = "30 günlük jetonlar";
 "Latest tokens" = "Son jetonlar";
 "Top model" = "En çok kullanılan model";

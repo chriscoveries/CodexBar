@@ -227,6 +227,7 @@ struct InlineCostHistoryDashboardLabelTests {
 
         let dashboard = try #require(model.inlineUsageDashboard)
         #expect(dashboard.currencyCode == "USD")
+        #expect(dashboard.accessibilityLabel == "Codex: 30d cost")
         #expect(dashboard.kpis.map(\.title) == [
             "Today",
             "30d",
@@ -237,6 +238,38 @@ struct InlineCostHistoryDashboardLabelTests {
             "Top model: test-model",
             "Estimated from token usage · not a subscription bill",
         ])
+
+        let japaneseAccessibilityLabels = CodexBarLocalizationOverride.$appLanguage.withValue("ja") {
+            [7, 30].map { historyDays in
+                UsageMenuCardView.Model.make(.init(
+                    provider: .codex,
+                    metadata: metadata,
+                    snapshot: UsageSnapshot(primary: nil, secondary: nil, updatedAt: now),
+                    credits: nil,
+                    creditsError: nil,
+                    dashboard: nil,
+                    dashboardError: nil,
+                    tokenSnapshot: CostUsageTokenSnapshot(
+                        sessionTokens: 275,
+                        sessionCostUSD: 0.25,
+                        last30DaysTokens: 425,
+                        last30DaysCostUSD: 0.37,
+                        historyDays: historyDays,
+                        daily: tokenSnapshot.daily,
+                        updatedAt: now),
+                    tokenError: nil,
+                    account: AccountInfo(email: nil, plan: nil),
+                    isRefreshing: false,
+                    lastError: nil,
+                    usageBarsShowUsed: false,
+                    resetTimeDisplayStyle: .countdown,
+                    tokenCostUsageEnabled: true,
+                    showOptionalCreditsAndExtraUsage: true,
+                    hidePersonalInfo: false,
+                    now: now)).inlineUsageDashboard?.accessibilityLabel
+            }
+        }
+        #expect(japaneseAccessibilityLabels == ["Codex: 過去7日間のコスト", "Codex: 過去30日間のコスト"])
     }
 
     @Test

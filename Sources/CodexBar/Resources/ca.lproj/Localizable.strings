@@ -819,6 +819,7 @@
 "Today" = "Avui";
 "Today tokens" = "Tokens d'avui";
 "30d cost" = "Cost 30 d";
+"%@ cost" = "Cost %@";
 "30d tokens" = "Tokens 30 d";
 "Latest tokens" = "Tokens recents";
 "Top model" = "Model principal";

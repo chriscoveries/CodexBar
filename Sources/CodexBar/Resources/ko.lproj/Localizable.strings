@@ -749,6 +749,7 @@
 "Today" = "오늘";
 "Today tokens" = "오늘 토큰";
 "30d cost" = "30일 비용";
+"%@ cost" = "%@ 비용";
 "30d tokens" = "30일 토큰";
 "Latest tokens" = "최근 토큰";
 "Top model" = "상위 모델";

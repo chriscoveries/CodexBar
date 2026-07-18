@@ -99,7 +99,7 @@ extension StatusItemController {
     }
 
     static func costMenuTooltipLines(
-        provider: UsageProvider,
+        provider _: UsageProvider,
         tokenUsage: UsageMenuCardView.Model.TokenUsageSection?) -> [String]
     {
         let lines = [
@@ -109,7 +109,7 @@ extension StatusItemController {
         ]
             .compactMap(\.self)
             + (tokenUsage?.comparisonLines ?? [])
-            + [provider == .codex ? nil : tokenUsage?.hintLine, tokenUsage?.errorLine].compactMap(\.self)
+            + [tokenUsage?.hintLine, tokenUsage?.errorLine].compactMap(\.self)
         return lines.filter { !$0.isEmpty }
     }
 
@@ -126,10 +126,11 @@ extension StatusItemController {
         ]
             .compactMap(\.self)
             + (tokenUsage?.comparisonLines ?? [])
+            + [provider == .codex ? tokenUsage?.hintLine : nil].compactMap(\.self)
             + [tokenUsage?.errorLine].compactMap(\.self))
             .filter { !$0.isEmpty }
         guard primaryLines.isEmpty else { return primaryLines }
-        return [provider == .codex ? nil : tokenUsage?.hintLine]
+        return [tokenUsage?.hintLine]
             .compactMap(\.self)
             .filter { !$0.isEmpty }
     }

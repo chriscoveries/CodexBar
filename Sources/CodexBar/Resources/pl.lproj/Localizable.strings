@@ -786,6 +786,7 @@
 "Today" = "Dziś";
 "Today tokens" = "Dzisiejsze tokeny";
 "30d cost" = "Koszt 30 dni";
+"%@ cost" = "Koszt %@";
 "30d tokens" = "Tokeny 30 dni";
 "Latest tokens" = "Najnowsze tokeny";
 "Top model" = "Najlepszy model";

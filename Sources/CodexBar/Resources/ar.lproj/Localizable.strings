@@ -784,6 +784,7 @@
 "Today" = "اليوم";
 "Today tokens" = "الرموز اليوم";
 "30d cost" = "تكلفة 30d";
+"%@ cost" = "تكلفة %@";
 "30d tokens" = "رموز 30d";
 "Latest tokens" = "أحدث الرموز";
 "Top model" = "أفضل موديل";

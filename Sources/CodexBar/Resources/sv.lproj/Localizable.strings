@@ -777,6 +777,7 @@
 "Today" = "Idag";
 "Today tokens" = "Token idag";
 "30d cost" = "Kostnad 30 d";
+"%@ cost" = "Kostnad %@";
 "30d tokens" = "Token 30 d";
 "Latest tokens" = "Senaste token";
 "Top model" = "Toppmodell";

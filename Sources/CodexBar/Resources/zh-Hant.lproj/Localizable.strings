@@ -815,6 +815,7 @@
 "Today" = "今天";
 "Today tokens" = "今日 token";
 "30d cost" = "近 30 天費用";
+"%@ cost" = "%@費用";
 "30d tokens" = "近 30 天 token";
 "Latest tokens" = "最新 token";
 "Top model" = "主要模型";

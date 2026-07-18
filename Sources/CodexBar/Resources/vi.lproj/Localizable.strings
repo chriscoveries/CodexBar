@@ -774,6 +774,7 @@
 "Today" = "Hôm nay";
 "Today tokens" = "Mã thông báo hôm nay";
 "30d cost" = "giá 30d";
+"%@ cost" = "giá %@";
 "30d tokens" = "mã thông báo 30d";
 "Latest tokens" = "Mã thông báo mới nhất";
 "Top model" = "Mô hình hàng đầu";

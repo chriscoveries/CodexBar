@@ -784,6 +784,7 @@
 "Today" = "Today";
 "Today tokens" = "Today tokens";
 "30d cost" = "30d cost";
+"%@ cost" = "%@ cost";
 "30d tokens" = "30d tokens";
 "Latest tokens" = "Latest tokens";
 "Top model" = "Top model";

@@ -48,6 +48,7 @@ struct StatusMenuCostMenuCardTests {
         #expect(visibleLines == [
             "Today: $74.83 - 87M tokens",
             "Last 30 days: $4,279.64 - 5.7B tokens",
+            "Costs are estimated from local usage.",
             "Cost refresh failed.",
         ])
 
@@ -56,6 +57,7 @@ struct StatusMenuCostMenuCardTests {
             visibleDetailLines: visibleLines)
         #expect(fallbackTitle.string.contains("Today: $74.83 - 87M tokens"))
         #expect(fallbackTitle.string.contains("Last 30 days: $4,279.64 - 5.7B tokens"))
+        #expect(fallbackTitle.string.contains("Costs are estimated from local usage."))
         #expect(fallbackTitle.string.contains("Cost refresh failed."))
     }
 
@@ -71,6 +73,7 @@ struct StatusMenuCostMenuCardTests {
         #expect(StatusItemController.costMenuTooltipLines(provider: .codex, tokenUsage: tokenUsage) == [
             "Today: $1.00",
             "Last 30 days: $9.00",
+            "Costs are estimated from local usage.",
             "Cost refresh failed.",
         ])
         #expect(StatusItemController.costMenuTooltipLines(provider: .claude, tokenUsage: tokenUsage) == [

@@ -776,6 +776,7 @@
 "Today" = "Heute";
 "Today tokens" = "Heute Token";
 "30d cost" = "30 Tage Kosten";
+"%@ cost" = "%@ Kosten";
 "30d tokens" = "30d-Token";
 "Latest tokens" = "Neueste Token";
 "Top model" = "Topmodell";

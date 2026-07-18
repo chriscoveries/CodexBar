@@ -778,6 +778,7 @@
 "Today" = "Vandaag";
 "Today tokens" = "Vandaag tokens";
 "30d cost" = "30d kosten";
+"%@ cost" = "%@ kosten";
 "30d tokens" = "30d-tokens";
 "Latest tokens" = "Nieuwste tokens";
 "Top model" = "Topmodel";

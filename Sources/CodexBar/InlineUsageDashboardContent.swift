@@ -385,8 +385,13 @@ extension UsageMenuCardView.Model {
                 : historyDays == 30
                 ? L("30d requests")
                 : String(format: L("%@ requests"), String(format: L("Last %d days"), historyDays)))
-        let periodLabel = snapshot.historyLabel?.lowercased()
-            ?? (historyDays == 1 ? "today" : "\(historyDays) day")
+        let accessibilityCostLabel: String = if let historyLabel = snapshot.historyLabel {
+            L("%@ cost", historyLabel)
+        } else if historyDays == 30 {
+            L("30d cost")
+        } else {
+            L("%@ cost", historyDays == 1 ? L("Today") : String(format: L("Last %d days"), historyDays))
+        }
         let points = snapshot.daily.suffix(historyDays).compactMap { entry -> InlineUsageDashboardModel.Point? in
             guard let cost = entry.costUSD else { return nil }
             return InlineUsageDashboardModel.Point(
@@ -425,7 +430,10 @@ extension UsageMenuCardView.Model {
             }
         }
         let providerName = ProviderDefaults.metadata[provider]?.displayName ?? provider.rawValue
-        let accessibilityLabel = "\(providerName) \(periodLabel) cost trend"
+        let accessibilityLabel = L(
+            "%@: %@",
+            providerName,
+            accessibilityCostLabel)
         var kpis = [
             InlineUsageDashboardModel.KPI(
                 title: usesLatestPrimary ? L("Latest") : L("Today"),

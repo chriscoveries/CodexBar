@@ -775,6 +775,7 @@
 "Today" = "今日";
 "Today tokens" = "今日のトークン";
 "30d cost" = "過去30日間のコスト";
+"%@ cost" = "%@のコスト";
 "30d tokens" = "過去30日間のトークン";
 "Latest tokens" = "最新のトークン";
 "Top model" = "最多使用モデル";
