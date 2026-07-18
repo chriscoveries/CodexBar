@@ -600,6 +600,12 @@
 "agent_sessions_subtitle" = "Показывать в меню локальные и обнаруженные по SSH сеансы Codex и Claude Code.";
 "agent_sessions_hosts_title" = "Дополнительные SSH-хосты";
 "agent_sessions_footer" = "Компьютеры Mac в вашей сети tailnet обнаруживаются автоматически. Локальные сеансы обновляются каждые 30 секунд, удалённые хосты — каждые 60 секунд и при открытии меню.";
+"agent_session_labels_title" = "Названия сеансов";
+"agent_session_labels_subtitle" = "Выберите, как называть сеансы агентов.";
+"agent_session_label_project" = "Проект";
+"agent_session_label_descriptive" = "Описательное";
+"agent_session_label_descriptive_and_project" = "Описательное + проект";
+"agent_session_unknown_project" = "Неизвестный проект";
 
 /* Advanced Pane */
 "section_keyboard_shortcut" = "Сочетание клавиш";

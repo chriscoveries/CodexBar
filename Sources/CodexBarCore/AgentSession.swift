@@ -25,6 +25,7 @@ public struct AgentSession: Codable, Equatable, Sendable, Identifiable {
     public var pid: Int32?
     public var cwd: String?
     public var projectName: String?
+    public var sessionName: String?
     public var startedAt: Date?
     public var lastActivityAt: Date?
     public var transcriptPath: String?
@@ -38,6 +39,7 @@ public struct AgentSession: Codable, Equatable, Sendable, Identifiable {
         pid: Int32?,
         cwd: String?,
         projectName: String?,
+        sessionName: String? = nil,
         startedAt: Date?,
         lastActivityAt: Date?,
         transcriptPath: String?,
@@ -50,6 +52,7 @@ public struct AgentSession: Codable, Equatable, Sendable, Identifiable {
         self.pid = pid
         self.cwd = cwd
         self.projectName = projectName
+        self.sessionName = sessionName
         self.startedAt = startedAt
         self.lastActivityAt = lastActivityAt
         self.transcriptPath = transcriptPath
@@ -496,12 +499,23 @@ public struct CodexRolloutMetadata: Equatable, Sendable {
     public let cwd: String?
     public let originator: String?
     public let source: String?
+    public let agentPath: String?
+    public let isGuardian: Bool
 
-    public init(sessionID: String, cwd: String?, originator: String?, source: String?) {
+    public init(
+        sessionID: String,
+        cwd: String?,
+        originator: String?,
+        source: String?,
+        agentPath: String? = nil,
+        isGuardian: Bool = false)
+    {
         self.sessionID = sessionID
         self.cwd = cwd
         self.originator = originator
         self.source = source
+        self.agentPath = agentPath
+        self.isGuardian = isGuardian
     }
 
     public var sessionSource: AgentSession.Source {
@@ -519,6 +533,73 @@ public struct CodexRolloutMetadata: Equatable, Sendable {
         }
         return .unknown
     }
+
+    public func descriptiveName(threadMetadata: CodexThreadMetadata?) -> String? {
+        if self.isGuardian {
+            return "Approval review"
+        }
+        if let agentPath = threadMetadata?.agentPath ?? self.agentPath,
+           let name = AgentSessionNameFormatter.agentPath(agentPath)
+        {
+            return name
+        }
+        return threadMetadata?.title.flatMap { AgentSessionNameFormatter.title($0) }
+    }
+}
+
+private enum AgentSessionNameFormatter {
+    private static let uppercaseWords: Set<String> = [
+        "ai", "api", "ci", "cli", "db", "pr", "qa", "seo", "sql", "ui", "ux",
+    ]
+
+    static func agentPath(_ path: String) -> String? {
+        guard let component = path.split(separator: "/").last else { return nil }
+        var normalized = ""
+        var previous: Character?
+        for character in component {
+            if character == "_" || character == "-" {
+                if !normalized.hasSuffix(" ") {
+                    normalized.append(" ")
+                }
+                previous = nil
+                continue
+            }
+            if let previous,
+               (character.isNumber && !previous.isNumber) ||
+               (character.isLetter && previous.isNumber) ||
+               (character.isUppercase && previous.isLowercase)
+            {
+                normalized.append(" ")
+            }
+            normalized.append(character)
+            previous = character
+        }
+
+        let words = normalized.split(whereSeparator: \ .isWhitespace).map(String.init)
+        guard !words.isEmpty else { return nil }
+        return words.enumerated().map { index, word in
+            let lowercase = word.lowercased()
+            if self.uppercaseWords.contains(lowercase) {
+                return lowercase.uppercased()
+            }
+            return index == 0 ? word.prefix(1).uppercased() + word.dropFirst() : lowercase
+        }.joined(separator: " ")
+    }
+
+    static func title(_ title: String, maximumLength: Int = 64) -> String? {
+        let lines = title
+            .split(whereSeparator: \ .isNewline)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard let line = lines.first(where: { !$0.hasPrefix("/") }) ?? lines.first else { return nil }
+        if line.hasPrefix("/"), let command = self.agentPath(String(line.dropFirst())) {
+            return command
+        }
+
+        let compact = line.split(whereSeparator: \ .isWhitespace).joined(separator: " ")
+        guard compact.count > maximumLength else { return compact }
+        return compact.prefix(maximumLength - 1).trimmingCharacters(in: .whitespacesAndNewlines) + "…"
+    }
 }
 
 public enum CodexRolloutFirstLineParser {
@@ -529,11 +610,16 @@ public enum CodexRolloutFirstLineParser {
               let payload = object["payload"] as? [String: Any],
               let sessionID = (payload["session_id"] as? String) ?? (payload["id"] as? String)
         else { return nil }
+        let sourceObject = payload["source"] as? [String: Any]
+        let subagent = sourceObject?["subagent"] as? [String: Any]
+        let threadSpawn = subagent?["thread_spawn"] as? [String: Any]
         return CodexRolloutMetadata(
             sessionID: sessionID,
             cwd: payload["cwd"] as? String,
             originator: payload["originator"] as? String,
-            source: payload["source"] as? String)
+            source: payload["source"] as? String,
+            agentPath: (payload["agent_path"] as? String) ?? (threadSpawn?["agent_path"] as? String),
+            isGuardian: (subagent?["other"] as? String)?.lowercased() == "guardian")
     }
 
     public static func read(from url: URL) -> CodexRolloutMetadata? {

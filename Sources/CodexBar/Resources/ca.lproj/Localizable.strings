@@ -583,6 +583,12 @@
 "agent_sessions_subtitle" = "Mostreu al menú les sessions locals i descobertes per SSH de Codex i Claude Code.";
 "agent_sessions_hosts_title" = "Amfitrions SSH addicionals";
 "agent_sessions_footer" = "Els Mac de la vostra tailnet es descobreixen automàticament. Les sessions locals s'actualitzen cada 30 segons; els amfitrions remots, cada 60 segons i quan s'obre el menú.";
+"agent_session_labels_title" = "Etiquetes de sessió";
+"agent_session_labels_subtitle" = "Trieu com s'anomenen les sessions d'agents.";
+"agent_session_label_project" = "Projecte";
+"agent_session_label_descriptive" = "Descriptiva";
+"agent_session_label_descriptive_and_project" = "Descriptiva + projecte";
+"agent_session_unknown_project" = "Projecte desconegut";
 
 /* Advanced Pane */
 "section_keyboard_shortcut" = "Drecera de teclat";

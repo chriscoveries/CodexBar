@@ -591,6 +591,12 @@
 "agent_sessions_subtitle" = "Muestra en el menú las sesiones de Codex y Claude Code locales y detectadas mediante SSH.";
 "agent_sessions_hosts_title" = "Hosts SSH adicionales";
 "agent_sessions_footer" = "Los Mac de tu tailnet se detectan automáticamente. Las sesiones locales se actualizan cada 30 segundos; los hosts remotos, cada 60 segundos y al abrir el menú.";
+"agent_session_labels_title" = "Etiquetas de sesión";
+"agent_session_labels_subtitle" = "Elige cómo se nombran las sesiones de agentes.";
+"agent_session_label_project" = "Proyecto";
+"agent_session_label_descriptive" = "Descriptiva";
+"agent_session_label_descriptive_and_project" = "Descriptiva + proyecto";
+"agent_session_unknown_project" = "Proyecto desconocido";
 
 /* Advanced Pane */
 "section_keyboard_shortcut" = "Atajo de teclado";

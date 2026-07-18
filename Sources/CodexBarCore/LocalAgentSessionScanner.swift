@@ -36,6 +36,7 @@ public struct LocalAgentSessionScanner: Sendable {
         let now: Date
         let codexAppServerPresent: Bool
         let includeFileOnlySessions: Bool
+        let threadMetadata: [String: CodexThreadMetadata]
     }
 
     public let config: SessionScanConfig
@@ -93,6 +94,9 @@ public struct LocalAgentSessionScanner: Sendable {
             return cwdByPID[process.pid]
         }
         let homeDirectory = URL(fileURLWithPath: environment["HOME"] ?? NSHomeDirectory(), isDirectory: true)
+        let codexHomeDirectory = URL(
+            fileURLWithPath: environment["CODEX_HOME"] ?? homeDirectory.appendingPathComponent(".codex").path,
+            isDirectory: true)
         let host = ProcessInfo.processInfo.hostName
         var directoryBudget = DirectoryMetadataScanBudget(
             maxEntryCount: self.config.maxDirectoryEntryCount,
@@ -104,13 +108,16 @@ public struct LocalAgentSessionScanner: Sendable {
         let rollouts: [Rollout] = if includeFileOnlySessions || !codexCWDs.isEmpty {
             self.codexRollouts(
                 now: now,
-                environment: environment,
-                homeDirectory: homeDirectory,
+                codexHomeDirectory: codexHomeDirectory,
                 matchingCWDs: includeFileOnlySessions ? nil : codexCWDs,
                 directoryBudget: &directoryBudget)
         } else {
             []
         }
+        let threadMetadata = Self.codexThreadMetadata(
+            rollouts: rollouts,
+            codexHomeDirectory: codexHomeDirectory,
+            environment: environment)
         return self.sessions(
             processes: processes,
             cwdByPID: cwdByPID,
@@ -120,7 +127,8 @@ public struct LocalAgentSessionScanner: Sendable {
                 host: host,
                 now: now,
                 codexAppServerPresent: codexAppServerPresent,
-                includeFileOnlySessions: includeFileOnlySessions),
+                includeFileOnlySessions: includeFileOnlySessions,
+                threadMetadata: threadMetadata),
             directoryBudget: &directoryBudget)
     }
 
@@ -129,6 +137,43 @@ public struct LocalAgentSessionScanner: Sendable {
         includeFileOnlySessions: Bool) -> Bool
     {
         hasAgentProcesses || includeFileOnlySessions
+    }
+
+    private static func codexThreadMetadata(
+        rollouts: [Rollout],
+        codexHomeDirectory: URL,
+        environment: [String: String])
+        -> [String: CodexThreadMetadata]
+    {
+        let sessionIDs = Set(rollouts.map(\.metadata.sessionID))
+        let indexedNames = CodexThreadMetadataReader.indexedThreadNames(
+            codexHomeDirectory: codexHomeDirectory,
+            sessionIDs: sessionIDs)
+        var groups: [String: (reader: CodexThreadMetadataReader, sessionIDs: Set<String>)] = [:]
+        for rollout in rollouts {
+            let resolvedWorkingDirectory = rollout.metadata.cwd.map {
+                URL(fileURLWithPath: $0, isDirectory: true).standardizedFileURL
+            }
+            let reader = CodexThreadMetadataReader(
+                codexHomeDirectory: codexHomeDirectory,
+                environment: environment,
+                resolvedWorkingDirectory: resolvedWorkingDirectory)
+            let key = reader.databaseURL.path
+            if var group = groups[key] {
+                group.sessionIDs.insert(rollout.metadata.sessionID)
+                groups[key] = group
+            } else {
+                groups[key] = (reader, [rollout.metadata.sessionID])
+            }
+        }
+
+        var metadata: [String: CodexThreadMetadata] = [:]
+        for group in groups.values {
+            metadata.merge(group.reader.metadata(for: group.sessionIDs, indexedNames: indexedNames)) { _, latest in
+                latest
+            }
+        }
+        return metadata
     }
 
     private func sessions(
@@ -156,6 +201,10 @@ public struct LocalAgentSessionScanner: Sendable {
             processes: claudeProcesses,
             cwdByPID: cwdByPID,
             transcriptsByCWD: claudeTranscriptsByCWD)
+        let codexProcesses = processes.filter { AgentPSOutputParser.provider(for: $0) == .codex }
+        let codexDescriptiveNamePIDs = AgentSessionCorrelation.unambiguousProcessIDs(
+            processes: codexProcesses,
+            cwdByPID: cwdByPID)
 
         for process in processes {
             guard let provider = AgentPSOutputParser.provider(for: process) else { continue }
@@ -198,6 +247,10 @@ public struct LocalAgentSessionScanner: Sendable {
                     pid: process.pid,
                     cwd: cwd ?? rollout?.metadata.cwd,
                     projectName: Self.projectName(cwd ?? rollout?.metadata.cwd),
+                    sessionName: codexDescriptiveNamePIDs.contains(process.pid)
+                        ? rollout?.metadata.descriptiveName(
+                            threadMetadata: rollout.flatMap { context.threadMetadata[$0.metadata.sessionID] })
+                        : nil,
                     startedAt: process.startedAt,
                     lastActivityAt: rollout?.modifiedAt,
                     transcriptPath: rollout?.url.path,
@@ -216,6 +269,8 @@ public struct LocalAgentSessionScanner: Sendable {
                 config: self.config,
                 now: context.now)
             else { continue }
+            session.sessionName = rollout.metadata.descriptiveName(
+                threadMetadata: context.threadMetadata[rollout.metadata.sessionID])
             session.source = AgentSessionCorrelation.fileOnlyCodexSource(
                 metadataSource: session.source,
                 appServerPresent: context.codexAppServerPresent)
@@ -276,15 +331,11 @@ public struct LocalAgentSessionScanner: Sendable {
 
     private func codexRollouts(
         now: Date,
-        environment: [String: String],
-        homeDirectory: URL,
+        codexHomeDirectory: URL,
         matchingCWDs: [String]?,
         directoryBudget: inout DirectoryMetadataScanBudget) -> [Rollout]
     {
-        let root = URL(
-            fileURLWithPath: environment["CODEX_HOME"] ?? homeDirectory.appendingPathComponent(".codex").path,
-            isDirectory: true)
-            .appendingPathComponent("sessions", isDirectory: true)
+        let root = codexHomeDirectory.appendingPathComponent("sessions", isDirectory: true)
         let calendar = Calendar(identifier: .gregorian)
         let days = [now, calendar.date(byAdding: .day, value: -1, to: now)].compactMap(\.self)
         let formatter = DateFormatter()
