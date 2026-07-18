@@ -758,6 +758,104 @@ extension SessionEquivalentForecastTests {
 
     @MainActor
     @Test
+    func `generic history migration rejects a different legacy pair identity`() async {
+        let store = UsageStorePlanUtilizationTests.makeStore()
+        store.settings.historicalTrackingEnabled = true
+        let now = Date(timeIntervalSince1970: 1_900_000_000)
+        store.planUtilizationHistory[.zai] = PlanUtilizationHistoryBuckets(unscoped: [
+            planSeries(
+                name: .session,
+                windowMinutes: 300,
+                entries: [planEntry(at: now.addingTimeInterval(-3600), usedPercent: 10)]),
+            planSeries(
+                name: .weekly,
+                windowMinutes: 10080,
+                entries: [planEntry(at: now.addingTimeInterval(-3600), usedPercent: 30)]),
+        ])
+        store.settings.userDefaults.set(
+            ["zai|\(UsageStore.planUtilizationUnscopedPreferredKey)": "legacy-pair"],
+            forKey: UsageStore.legacySessionEquivalentHistoryIdentityDefaultsKey)
+        let snapshot = UsageSnapshot(
+            primary: RateWindow(
+                usedPercent: 20,
+                windowMinutes: 300,
+                resetsAt: now.addingTimeInterval(3600),
+                resetDescription: nil),
+            secondary: RateWindow(
+                usedPercent: 40,
+                windowMinutes: 10080,
+                resetsAt: now.addingTimeInterval(3 * 24 * 3600),
+                resetDescription: nil),
+            updatedAt: now)
+
+        await store.recordPlanUtilizationHistorySample(provider: .zai, snapshot: snapshot, now: now)
+
+        let histories = store.planUtilizationHistory(for: .zai)
+        #expect(findSeries(histories, name: .session, windowMinutes: 300)?.entries.map(\.usedPercent) == [20])
+        #expect(findSeries(histories, name: .weekly, windowMinutes: 10080)?.entries.map(\.usedPercent) == [40])
+    }
+
+    @MainActor
+    @Test
+    func `generic legacy identity protects history during an incomplete first refresh`() async throws {
+        let store = UsageStorePlanUtilizationTests.makeStore()
+        store.settings.historicalTrackingEnabled = true
+        let now = Date(timeIntervalSince1970: 1_900_000_000)
+        let complete = UsageSnapshot(
+            primary: RateWindow(
+                usedPercent: 20,
+                windowMinutes: 300,
+                resetsAt: now.addingTimeInterval(3600),
+                resetDescription: nil),
+            secondary: RateWindow(
+                usedPercent: 40,
+                windowMinutes: 10080,
+                resetsAt: now.addingTimeInterval(3 * 24 * 3600),
+                resetDescription: nil),
+            updatedAt: now)
+        let identity = try #require(store.sessionEquivalentWindows(
+            provider: .zai,
+            snapshot: complete)?.historyIdentity)
+        store.planUtilizationHistory[.zai] = PlanUtilizationHistoryBuckets(unscoped: [
+            planSeries(
+                name: .session,
+                windowMinutes: 300,
+                entries: [planEntry(at: now.addingTimeInterval(-3600), usedPercent: 10)]),
+            planSeries(
+                name: .weekly,
+                windowMinutes: 10080,
+                entries: [planEntry(at: now.addingTimeInterval(-3600), usedPercent: 30)]),
+        ])
+        store.settings.userDefaults.set(
+            ["zai|\(UsageStore.planUtilizationUnscopedPreferredKey)": identity],
+            forKey: UsageStore.legacySessionEquivalentHistoryIdentityDefaultsKey)
+        #expect(store.sessionEquivalentHistoryIdentityMatches(
+            provider: .zai,
+            accountKey: nil,
+            historyIdentity: identity))
+        let incomplete = UsageSnapshot(
+            primary: RateWindow(
+                usedPercent: 50,
+                windowMinutes: 300,
+                resetsAt: now.addingTimeInterval(2 * 3600),
+                resetDescription: nil),
+            secondary: nil,
+            updatedAt: now.addingTimeInterval(3600))
+
+        await store.recordPlanUtilizationHistorySample(
+            provider: .zai,
+            snapshot: incomplete,
+            now: incomplete.updatedAt)
+
+        let histories = store.planUtilizationHistory(for: .zai)
+        #expect(findSeries(histories, name: .session, windowMinutes: 300)?.entries.map(\.usedPercent) == [10])
+        #expect(findSeries(histories, name: .weekly, windowMinutes: 10080)?.entries.map(\.usedPercent) == [30])
+        #expect(store.planUtilizationHistory[.zai]?
+            .sessionEquivalentWindowPairIdentity(for: nil) == identity)
+    }
+
+    @MainActor
+    @Test
     func `generic named history resets when session window identity changes`() async throws {
         let store = UsageStorePlanUtilizationTests.makeStore()
         store.settings.historicalTrackingEnabled = true
@@ -854,6 +952,9 @@ extension SessionEquivalentForecastTests {
             provider: .zai,
             accountKey: nil,
             historyIdentity: firstIdentity))
+        store.settings.userDefaults.set(
+            ["zai|\(UsageStore.planUtilizationUnscopedPreferredKey)": firstIdentity],
+            forKey: UsageStore.legacySessionEquivalentHistoryIdentityDefaultsKey)
 
         await store.recordPlanUtilizationHistorySample(provider: .zai, snapshot: snapshot, now: now)
         #expect(!store.sessionEquivalentHistoryIdentityMatches(
@@ -861,15 +962,77 @@ extension SessionEquivalentForecastTests {
             accountKey: nil,
             historyIdentity: firstIdentity))
         let ambiguousHistories = store.planUtilizationHistory(for: .zai)
-        #expect(findSeries(
-            ambiguousHistories,
-            name: .weekly,
-            windowMinutes: 10080)?.entries.last?.usedPercent == 40)
+        #expect(findSeries(ambiguousHistories, name: .session, windowMinutes: 300) == nil)
+        #expect(findSeries(ambiguousHistories, name: .weekly, windowMinutes: 10080) == nil)
+
+        let incomplete = UsageSnapshot(
+            primary: RateWindow(
+                usedPercent: 25,
+                windowMinutes: 300,
+                resetsAt: now.addingTimeInterval(2 * 3600),
+                resetDescription: nil),
+            secondary: nil,
+            updatedAt: now.addingTimeInterval(1800))
+        await store.recordPlanUtilizationHistorySample(
+            provider: .zai,
+            snapshot: incomplete,
+            now: incomplete.updatedAt)
+        #expect(store.planUtilizationHistory(for: .zai).isEmpty)
+        #expect(!store.sessionEquivalentHistoryIdentityMatches(
+            provider: .zai,
+            accountKey: nil,
+            historyIdentity: firstIdentity))
 
         let restored = exactSnapshot(usedPercent: 30, at: now.addingTimeInterval(3600))
         await store.recordPlanUtilizationHistorySample(provider: .zai, snapshot: restored, now: restored.updatedAt)
         let histories = store.planUtilizationHistory(for: .zai)
         #expect(findSeries(histories, name: .session, windowMinutes: 300)?.entries.map(\.usedPercent) == [30])
+        #expect(findSeries(histories, name: .weekly, windowMinutes: 10080)?.entries.map(\.usedPercent) == [40])
+    }
+
+    @MainActor
+    @Test
+    func `generic weekly ambiguity clears both sides of prior pair history`() async {
+        let store = UsageStorePlanUtilizationTests.makeStore()
+        store.settings.historicalTrackingEnabled = true
+        let now = Date(timeIntervalSince1970: 1_900_000_000)
+        let session = RateWindow(
+            usedPercent: 20,
+            windowMinutes: 300,
+            resetsAt: now.addingTimeInterval(3600),
+            resetDescription: nil)
+
+        func snapshot(weeklyWindows: [(String, Double)], at date: Date) -> UsageSnapshot {
+            UsageSnapshot(
+                primary: session,
+                secondary: nil,
+                extraRateWindows: weeklyWindows.map { id, usedPercent in
+                    NamedRateWindow(
+                        id: id,
+                        title: "Weekly",
+                        window: RateWindow(
+                            usedPercent: usedPercent,
+                            windowMinutes: 10080,
+                            resetsAt: date.addingTimeInterval(3 * 24 * 3600),
+                            resetDescription: nil))
+                },
+                updatedAt: date)
+        }
+
+        let exact = snapshot(weeklyWindows: [("family-a-weekly", 40)], at: now)
+        await store.recordPlanUtilizationHistorySample(provider: .zai, snapshot: exact, now: exact.updatedAt)
+
+        let ambiguous = snapshot(
+            weeklyWindows: [("family-a-weekly", 45), ("family-b-weekly", 60)],
+            at: now.addingTimeInterval(3600))
+        await store.recordPlanUtilizationHistorySample(
+            provider: .zai,
+            snapshot: ambiguous,
+            now: ambiguous.updatedAt)
+
+        let histories = store.planUtilizationHistory(for: .zai)
+        #expect(findSeries(histories, name: .session, windowMinutes: 300) == nil)
+        #expect(findSeries(histories, name: .weekly, windowMinutes: 10080) == nil)
     }
 
     @MainActor

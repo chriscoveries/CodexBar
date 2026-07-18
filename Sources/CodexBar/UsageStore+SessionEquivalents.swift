@@ -19,7 +19,7 @@ enum SessionEquivalentWindowPairResolution {
 }
 
 extension UsageStore {
-    nonisolated static let sessionEquivalentHistoryIdentityDefaultsKey =
+    nonisolated static let legacySessionEquivalentHistoryIdentityDefaultsKey =
         "SessionEquivalentHistoryWindowPairsV2"
 
     func planUtilizationWeeklyWindow(provider: UsageProvider, snapshot: UsageSnapshot) -> RateWindow? {
@@ -113,17 +113,18 @@ extension UsageStore {
     {
         guard ![UsageProvider.codex, .claude, .antigravity].contains(provider) else { return true }
         guard let historyIdentity else { return false }
-        let identityKey = Self.sessionEquivalentHistoryIdentityKey(provider: provider, accountKey: accountKey)
-        let identities = self.settings.userDefaults.dictionary(
-            forKey: Self.sessionEquivalentHistoryIdentityDefaultsKey) as? [String: String]
-        return identities?[identityKey] == historyIdentity
+        let persistedIdentity = self.planUtilizationHistory[provider]?
+            .sessionEquivalentWindowPairIdentity(for: accountKey)
+        return (persistedIdentity ?? self.legacySessionEquivalentHistoryIdentity(
+            provider: provider,
+            accountKey: accountKey)) == historyIdentity
     }
 
-    nonisolated static func sessionEquivalentHistoryIdentityKey(
-        provider: UsageProvider,
-        accountKey: String?) -> String
-    {
-        "\(provider.rawValue)|\(accountKey ?? self.planUtilizationUnscopedPreferredKey)"
+    func legacySessionEquivalentHistoryIdentity(provider: UsageProvider, accountKey: String?) -> String? {
+        let identityKey = "\(provider.rawValue)|\(accountKey ?? Self.planUtilizationUnscopedPreferredKey)"
+        let identities = self.settings.userDefaults.dictionary(
+            forKey: Self.legacySessionEquivalentHistoryIdentityDefaultsKey) as? [String: String]
+        return identities?[identityKey]
     }
 
     func planUtilizationSessionWindow(provider: UsageProvider, snapshot: UsageSnapshot) -> RateWindow? {

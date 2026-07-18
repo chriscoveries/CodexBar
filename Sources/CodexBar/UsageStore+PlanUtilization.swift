@@ -313,35 +313,37 @@ extension UsageStore {
                 histories.removeAll { $0.name == .weekly }
             }
             if ![UsageProvider.codex, .claude, .antigravity].contains(provider) {
-                let identityKey = Self.sessionEquivalentHistoryIdentityKey(
-                    provider: provider,
-                    accountKey: accountKey)
-                var identities = self.settings.userDefaults.dictionary(
-                    forKey: Self.sessionEquivalentHistoryIdentityDefaultsKey) as? [String: String] ?? [:]
-                var identitiesChanged = false
                 switch Self.genericSessionEquivalentWindowPairResolution(snapshot: snapshot) {
                 case let .resolved(_, _, _, resolvedIdentity):
-                    let previousIdentity = identities[identityKey]
+                    let persistedIdentity = providerBuckets.sessionEquivalentWindowPairIdentity(for: accountKey)
+                    let previousIdentity = persistedIdentity ?? self.legacySessionEquivalentHistoryIdentity(
+                        provider: provider,
+                        accountKey: accountKey)
+                    if persistedIdentity == nil, let previousIdentity {
+                        providerBuckets.setSessionEquivalentWindowPairIdentity(previousIdentity, for: accountKey)
+                    }
                     guard previousIdentity != resolvedIdentity else { break }
                     histories.removeAll {
                         $0.name == .session || (previousIdentity != nil && $0.name == .weekly)
                     }
-                    identities[identityKey] = resolvedIdentity
-                    identitiesChanged = true
+                    providerBuckets.setSessionEquivalentWindowPairIdentity(resolvedIdentity, for: accountKey)
                 case .incomplete:
-                    if identities[identityKey] != nil {
+                    let persistedIdentity = providerBuckets.sessionEquivalentWindowPairIdentity(for: accountKey)
+                    let previousIdentity = persistedIdentity ?? self.legacySessionEquivalentHistoryIdentity(
+                        provider: provider,
+                        accountKey: accountKey)
+                    if persistedIdentity == nil, let previousIdentity {
+                        providerBuckets.setSessionEquivalentWindowPairIdentity(previousIdentity, for: accountKey)
+                    }
+                    if previousIdentity != nil {
                         samplesToPersist.removeAll { $0.name == .session || $0.name == .weekly }
                     }
                 case .ambiguous:
-                    samplesToPersist.removeAll { $0.name == .session }
-                    identitiesChanged = identities.removeValue(forKey: identityKey) != nil
+                    histories.removeAll { $0.name == .session || $0.name == .weekly }
+                    samplesToPersist.removeAll { $0.name == .session || $0.name == .weekly }
+                    providerBuckets.invalidateSessionEquivalentWindowPairIdentity(for: accountKey)
                 }
-                if identitiesChanged {
-                    self.settings.userDefaults.set(
-                        identities,
-                        forKey: Self.sessionEquivalentHistoryIdentityDefaultsKey)
-                    self.sessionEquivalentBurnCache.removeValue(forKey: provider)
-                }
+                self.sessionEquivalentBurnCache.removeValue(forKey: provider)
             }
 
             let updatedHistories = Self.updatedPlanUtilizationHistories(
@@ -635,7 +637,7 @@ extension UsageStore {
                 appendWindow(self.planUtilizationSessionWindow(provider: provider, snapshot: snapshot), name: .session)
                 appendWindow(self.planUtilizationWeeklyWindow(provider: provider, snapshot: snapshot), name: .weekly)
             case .ambiguous:
-                appendWindow(self.planUtilizationWeeklyWindow(provider: provider, snapshot: snapshot), name: .weekly)
+                break
             }
         }
 

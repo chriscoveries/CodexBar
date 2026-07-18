@@ -1076,7 +1076,7 @@ struct UsageStorePlanUtilizationTests {
             .appendingPathComponent("com.steipete.codexbar", isDirectory: true)
             .appendingPathComponent("history", isDirectory: true)
         let store = PlanUtilizationHistoryStore(directoryURL: directoryURL)
-        let buckets = PlanUtilizationHistoryBuckets(
+        var buckets = PlanUtilizationHistoryBuckets(
             preferredAccountKey: "alice",
             unscoped: [
                 planSeries(name: .session, windowMinutes: 300, entries: [
@@ -1093,11 +1093,28 @@ struct UsageStorePlanUtilizationTests {
                     ]),
                 ],
             ])
+        buckets.setSessionEquivalentWindowPairIdentity("session:standard|weekly:standard", for: "alice")
 
         store.save([.codex: buckets])
         let loaded = store.load()
 
         #expect(loaded == [.codex: buckets])
+    }
+
+    @Test
+    func `store persists an invalidated pair identity without histories`() {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let directoryURL = root
+            .appendingPathComponent("com.steipete.codexbar", isDirectory: true)
+            .appendingPathComponent("history", isDirectory: true)
+        let store = PlanUtilizationHistoryStore(directoryURL: directoryURL)
+        var buckets = PlanUtilizationHistoryBuckets()
+        buckets.invalidateSessionEquivalentWindowPairIdentity(for: nil)
+
+        store.save([.zai: buckets])
+
+        #expect(store.load() == [.zai: buckets])
     }
 }
 
