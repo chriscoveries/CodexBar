@@ -638,6 +638,10 @@ struct StepFunTokenRefreshTests {
                 }
 
                 if path.contains("SignInByPassword") {
+                    #expect(request.value(forHTTPHeaderField: "Cookie") ==
+                        "Oasis-Token=anon-access...anon-refresh; " +
+                        "Oasis-Webid=c8a1002d2c457e758785a9979832217c7c0b884c; " +
+                        "INGRESSCOOKIE=ingress-cookie")
                     return Self.jsonResponse(
                         for: request,
                         body: """
