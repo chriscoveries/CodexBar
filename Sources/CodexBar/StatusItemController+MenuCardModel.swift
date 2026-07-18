@@ -161,11 +161,15 @@ extension StatusItemController {
             tokenCostUsageEnabled: self.settings.isCostUsageEffectivelyEnabled(for: target),
             codexLocalSessionCostLedgerEnabled: self.settings.codexLocalSessionCostLedgerEnabled,
             tokenCostInlineDashboardEnabled: self.settings.costSummaryShowsInlineDashboard(for: target),
-            // Providers whose cost history already surfaces via the inline dashboard or a
-            // dedicated top-pane submenu (openai/mistral) skip the generic "Cost" row; other
-            // `tokenCostRequiresProviderSnapshot` providers (e.g. opencodego) show real rate-limit
-            // bars in the top pane instead and need the dedicated row to surface cost at all.
-            tokenCostMenuSectionEnabled: !UsageMenuCardView.Model.usesProviderCostHistoryAsPrimaryDashboard(target) &&
+            // openai/mistral's cost history always surfaces via the inline dashboard or a
+            // dedicated top-pane submenu (see `makeUsageSubmenu`), so they skip the generic
+            // "Cost" row. This must stay an explicit provider check rather than reusing
+            // `usesProviderCostHistoryAsPrimaryDashboard` (or `tokenCostRequiresProviderSnapshot`):
+            // both of those sets are shared with unrelated concerns (inline-dashboard eligibility,
+            // provider-derived snapshot sourcing) and gain members for reasons that have nothing to
+            // do with whether this row should show, silently disabling the Cost row for those
+            // providers too (e.g. groq's addition to the inline-dashboard set previously did this).
+            tokenCostMenuSectionEnabled: target != .mistral && target != .openai &&
                 self.settings.costSummaryShowsSubmenu(for: target),
             costComparisonPeriodsEnabled: self.settings.costComparisonPeriodsEnabled,
             showOptionalCreditsAndExtraUsage: self.settings.showOptionalCreditsAndExtraUsage,
