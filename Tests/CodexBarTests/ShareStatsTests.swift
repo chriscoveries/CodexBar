@@ -235,16 +235,23 @@ struct ShareStatsTests {
         let bitmap = try #require(NSBitmapImageRep(data: data))
         #expect(bitmap.pixelsWide == 1200)
         #expect(bitmap.pixelsHigh == 630)
-        let bytes = try #require(bitmap.bitmapData)
-        let byteCount = bitmap.bytesPerRow * bitmap.pixelsHigh
-        var sampledValues: Set<UInt8> = []
-        for index in stride(from: 0, to: byteCount, by: 97) {
-            sampledValues.insert(bytes[index])
-            if sampledValues.count > 8 {
+        var sampledRGB: Set<UInt32> = []
+        for y in stride(from: 0, to: bitmap.pixelsHigh, by: 19) {
+            for x in stride(from: 0, to: bitmap.pixelsWide, by: 23) {
+                guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { continue }
+                let red = UInt32((color.redComponent * 255).rounded())
+                let green = UInt32((color.greenComponent * 255).rounded())
+                let blue = UInt32((color.blueComponent * 255).rounded())
+                sampledRGB.insert((red << 16) | (green << 8) | blue)
+                if sampledRGB.count > 8 {
+                    break
+                }
+            }
+            if sampledRGB.count > 8 {
                 break
             }
         }
-        #expect(sampledValues.count > 1)
+        #expect(sampledRGB.count > 1)
     }
 
     @Test @MainActor

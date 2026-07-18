@@ -5,14 +5,25 @@ import SwiftUI
 enum ShareStatsRenderer {
     static func pngData(for payload: ShareStatsPayload) -> Data? {
         let size = ShareStatsCardView.size
-        let renderer = ImageRenderer(content: ShareStatsCardView(payload: payload))
-        renderer.proposedSize = ProposedViewSize(width: size.width, height: size.height)
-        renderer.scale = 1
-        renderer.isOpaque = true
-        guard let image = renderer.cgImage else { return nil }
+        let view = NSHostingView(rootView: ShareStatsCardView(payload: payload))
+        view.frame = CGRect(origin: .zero, size: size)
+        view.layoutSubtreeIfNeeded()
 
-        let representation = NSBitmapImageRep(cgImage: image)
+        guard let representation = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: Int(size.width),
+            pixelsHigh: Int(size.height),
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: 0,
+            bitsPerPixel: 0)
+        else { return nil }
         representation.size = size
+        guard let context = NSGraphicsContext(bitmapImageRep: representation) else { return nil }
+        view.displayIgnoringOpacity(view.bounds, in: context)
         return representation.representation(using: .png, properties: [:])
     }
 
