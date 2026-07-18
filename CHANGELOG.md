@@ -2,9 +2,6 @@
 
 ## 0.44.1 — Unreleased
 
-### Added
-- Cost usage: include OMP session logs from `~/.omp/agent/sessions` alongside compatible pi sessions.
-
 ### Fixed
 - Menu Bar settings: remove the Layout editor's container-wide focus ring while preserving keyboard access to its tokens and controls.
 
