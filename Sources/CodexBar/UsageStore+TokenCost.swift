@@ -408,7 +408,8 @@ extension UsageStore {
             // `opencodegoUsage.daily` empty; a non-nil-but-dataless projection would still
             // surface a Cost row whose history submenu has nothing to render.
             snapshot?.opencodegoUsage.flatMap { usage in
-                usage.daily.isEmpty ? nil : usage.toCostUsageTokenSnapshot(historyDays: self.settings.costUsageHistoryDays)
+                usage.daily.isEmpty ? nil : usage
+                    .toCostUsageTokenSnapshot(historyDays: self.settings.costUsageHistoryDays)
             }
         default:
             nil
