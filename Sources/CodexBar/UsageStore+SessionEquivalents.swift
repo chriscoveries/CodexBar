@@ -18,9 +18,16 @@ enum SessionEquivalentWindowPairResolution {
     }
 }
 
+struct SessionEquivalentWindowComponent {
+    let window: RateWindow
+    let namedID: String?
+    let historyIdentity: String
+}
+
 extension UsageStore {
     nonisolated static let legacySessionEquivalentHistoryIdentityDefaultsKey =
         "SessionEquivalentHistoryWindowPairsV2"
+    private nonisolated static let unresolvedSessionEquivalentComponentIdentity = "__unresolved__"
 
     func planUtilizationWeeklyWindow(provider: UsageProvider, snapshot: UsageSnapshot) -> RateWindow? {
         if provider == .antigravity {
@@ -97,6 +104,12 @@ extension UsageStore {
         else {
             return .incomplete
         }
+        guard Self.hasCanonicalSessionEquivalentRelationship(
+            sessionIdentity: sessionIdentity,
+            weeklyIdentity: weeklyIdentity)
+        else {
+            return .ambiguous
+        }
         return .resolved(
             session: sessionWindow,
             weekly: weeklyWindow,
@@ -104,6 +117,59 @@ extension UsageStore {
             historyIdentity: Self.sessionEquivalentPairIdentity(
                 session: sessionIdentity,
                 weekly: weeklyIdentity))
+    }
+
+    nonisolated static func genericSessionEquivalentWindowComponents(snapshot: UsageSnapshot)
+        -> (session: SessionEquivalentWindowComponent?, weekly: SessionEquivalentWindowComponent?)
+    {
+        func component(_ resolution: SessionEquivalentWindowResolution) -> SessionEquivalentWindowComponent? {
+            guard case let .resolved(window, namedID, identity) = resolution else { return nil }
+            return SessionEquivalentWindowComponent(window: window, namedID: namedID, historyIdentity: identity)
+        }
+
+        return (
+            session: component(Self.sessionEquivalentWindowResolution(
+                snapshot: snapshot,
+                windowMinutes: Self.sessionWindowMinutes)),
+            weekly: component(Self.sessionEquivalentWindowResolution(
+                snapshot: snapshot,
+                windowMinutes: Self.weeklyWindowMinutes)))
+    }
+
+    nonisolated static func sessionEquivalentPairComponents(from identity: String)
+        -> (session: String, weekly: String)?
+    {
+        let bytes = Array(identity.utf8)
+        var offset = 0
+
+        func parseComponent() -> String? {
+            let lengthStart = offset
+            while offset < bytes.count, bytes[offset] >= 48, bytes[offset] <= 57 {
+                offset += 1
+            }
+            guard offset > lengthStart,
+                  offset < bytes.count,
+                  bytes[offset] == 35,
+                  let lengthText = String(bytes: bytes[lengthStart..<offset], encoding: .utf8),
+                  let length = Int(lengthText)
+            else {
+                return nil
+            }
+            offset += 1
+            guard length >= 0, length <= bytes.count - offset else { return nil }
+            let endOffset = offset + length
+            let componentBytes = bytes[offset..<endOffset]
+            offset = endOffset
+            return String(bytes: componentBytes, encoding: .utf8)
+        }
+
+        guard let session = parseComponent(),
+              let weekly = parseComponent(),
+              offset == bytes.count
+        else {
+            return nil
+        }
+        return (session, weekly)
     }
 
     func sessionEquivalentHistoryIdentityMatches(
@@ -125,6 +191,118 @@ extension UsageStore {
         let identities = self.settings.userDefaults.dictionary(
             forKey: Self.legacySessionEquivalentHistoryIdentityDefaultsKey) as? [String: String]
         return identities?[identityKey]
+    }
+
+    func reconcileGenericSessionEquivalentHistory(
+        scope: (provider: UsageProvider, accountKey: String?),
+        snapshot: UsageSnapshot,
+        providerBuckets: inout PlanUtilizationHistoryBuckets,
+        histories: inout [PlanUtilizationSeriesHistory],
+        samples: inout [PlanUtilizationSeriesSample])
+    {
+        var previousIdentity = self.genericSessionEquivalentPreviousIdentity(
+            provider: scope.provider,
+            accountKey: scope.accountKey,
+            providerBuckets: &providerBuckets)
+        switch Self.genericSessionEquivalentWindowPairResolution(snapshot: snapshot) {
+        case let .resolved(_, _, _, resolvedIdentity):
+            Self.reconcileResolvedGenericSessionEquivalentIdentity(
+                previousIdentity: previousIdentity,
+                resolvedIdentity: resolvedIdentity,
+                accountKey: scope.accountKey,
+                providerBuckets: &providerBuckets,
+                histories: &histories)
+        case .incomplete:
+            let currentWeeklyIdentity = Self.genericSessionEquivalentWindowComponents(snapshot: snapshot)
+                .weekly?.historyIdentity
+            if previousIdentity == nil, let currentWeeklyIdentity {
+                previousIdentity = Self.sessionEquivalentPairIdentity(
+                    session: Self.unresolvedSessionEquivalentComponentIdentity,
+                    weekly: currentWeeklyIdentity)
+                providerBuckets.setSessionEquivalentWindowPairIdentity(previousIdentity, for: scope.accountKey)
+            }
+            let previousComponents = previousIdentity.flatMap(Self.sessionEquivalentPairComponents(from:))
+            if previousComponents?.session == Self.unresolvedSessionEquivalentComponentIdentity,
+               previousComponents?.weekly == currentWeeklyIdentity
+            {
+                samples.removeAll { $0.name == .session }
+            } else if previousIdentity != nil {
+                samples.removeAll { $0.name == .session || $0.name == .weekly }
+            }
+        case .ambiguous:
+            let currentWeeklyIdentity = Self.genericSessionEquivalentWindowComponents(snapshot: snapshot)
+                .weekly?.historyIdentity
+            if previousIdentity == nil, let currentWeeklyIdentity {
+                previousIdentity = Self.sessionEquivalentPairIdentity(
+                    session: Self.unresolvedSessionEquivalentComponentIdentity,
+                    weekly: currentWeeklyIdentity)
+                providerBuckets.setSessionEquivalentWindowPairIdentity(previousIdentity, for: scope.accountKey)
+            }
+            Self.reconcileAmbiguousGenericSessionEquivalentSamples(
+                previousIdentity: previousIdentity,
+                snapshot: snapshot,
+                samples: &samples)
+        }
+    }
+
+    private func genericSessionEquivalentPreviousIdentity(
+        provider: UsageProvider,
+        accountKey: String?,
+        providerBuckets: inout PlanUtilizationHistoryBuckets) -> String?
+    {
+        let persistedIdentity = providerBuckets.sessionEquivalentWindowPairIdentity(for: accountKey)
+        let previousIdentity = persistedIdentity ?? self.legacySessionEquivalentHistoryIdentity(
+            provider: provider,
+            accountKey: accountKey)
+        if persistedIdentity == nil, let previousIdentity {
+            providerBuckets.setSessionEquivalentWindowPairIdentity(previousIdentity, for: accountKey)
+        }
+        return previousIdentity
+    }
+
+    private nonisolated static func reconcileResolvedGenericSessionEquivalentIdentity(
+        previousIdentity: String?,
+        resolvedIdentity: String,
+        accountKey: String?,
+        providerBuckets: inout PlanUtilizationHistoryBuckets,
+        histories: inout [PlanUtilizationSeriesHistory])
+    {
+        guard previousIdentity != resolvedIdentity else { return }
+        if let previousIdentity,
+           let previousComponents = sessionEquivalentPairComponents(from: previousIdentity),
+           let resolvedComponents = sessionEquivalentPairComponents(from: resolvedIdentity)
+        {
+            histories.removeAll {
+                ($0.name == .session && previousComponents.session != resolvedComponents.session)
+                    || ($0.name == .weekly && previousComponents.weekly != resolvedComponents.weekly)
+            }
+        } else if previousIdentity != nil {
+            histories.removeAll { $0.name == .session || $0.name == .weekly }
+        } else {
+            histories.removeAll { $0.name == .session }
+        }
+        providerBuckets.setSessionEquivalentWindowPairIdentity(resolvedIdentity, for: accountKey)
+    }
+
+    private nonisolated static func reconcileAmbiguousGenericSessionEquivalentSamples(
+        previousIdentity: String?,
+        snapshot: UsageSnapshot,
+        samples: inout [PlanUtilizationSeriesSample])
+    {
+        let currentWeeklyIdentity = Self.genericSessionEquivalentWindowComponents(snapshot: snapshot)
+            .weekly?.historyIdentity
+        let previousWeeklyIdentity = previousIdentity.flatMap {
+            Self.sessionEquivalentPairComponents(from: $0)?.weekly
+        }
+        samples.removeAll { sample in
+            if sample.name == .session {
+                return true
+            }
+            if sample.name == .weekly, previousIdentity != nil {
+                return previousWeeklyIdentity == nil || previousWeeklyIdentity != currentWeeklyIdentity
+            }
+            return false
+        }
     }
 
     func planUtilizationSessionWindow(provider: UsageProvider, snapshot: UsageSnapshot) -> RateWindow? {
@@ -197,6 +375,35 @@ extension UsageStore {
 
     private nonisolated static func sessionEquivalentPairIdentity(session: String, weekly: String) -> String {
         "\(session.utf8.count)#\(session)\(weekly.utf8.count)#\(weekly)"
+    }
+
+    private nonisolated static func hasCanonicalSessionEquivalentRelationship(
+        sessionIdentity: String,
+        weeklyIdentity: String) -> Bool
+    {
+        if sessionIdentity.hasPrefix("standard:"), weeklyIdentity.hasPrefix("standard:") {
+            return true
+        }
+        guard sessionIdentity.hasPrefix("named:"), weeklyIdentity.hasPrefix("named:") else { return false }
+        let sessionID = String(sessionIdentity.dropFirst("named:".count))
+        let weeklyID = String(weeklyIdentity.dropFirst("named:".count))
+        guard let sessionFamily = Self.sessionEquivalentFamily(
+            id: sessionID,
+            suffixes: ["-session", "_session", " session", "-5h", "_5h", " 5h"]),
+            let weeklyFamily = Self.sessionEquivalentFamily(
+                id: weeklyID,
+                suffixes: ["-weekly", "_weekly", " weekly"])
+        else {
+            return false
+        }
+        return sessionFamily == weeklyFamily
+    }
+
+    private nonisolated static func sessionEquivalentFamily(id: String, suffixes: [String]) -> String? {
+        let normalized = id.lowercased()
+        guard let suffix = suffixes.first(where: { normalized.hasSuffix($0) }) else { return nil }
+        let family = normalized.dropLast(suffix.count)
+        return family.isEmpty ? nil : String(family)
     }
 
     private nonisolated static func antigravityQuotaFamilyKey(_ id: String) -> String {

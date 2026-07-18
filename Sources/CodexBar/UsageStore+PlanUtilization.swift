@@ -39,7 +39,7 @@ extension UsageStore {
         let windowMinutes: Int
     }
 
-    private struct PlanUtilizationSeriesSample {
+    struct PlanUtilizationSeriesSample {
         let name: PlanUtilizationSeriesName
         let windowMinutes: Int
         let entry: PlanUtilizationHistoryEntry
@@ -310,34 +310,12 @@ extension UsageStore {
                 histories.removeAll { $0.name == .weekly }
             }
             if ![UsageProvider.codex, .claude, .antigravity].contains(provider) {
-                switch Self.genericSessionEquivalentWindowPairResolution(snapshot: snapshot) {
-                case let .resolved(_, _, _, resolvedIdentity):
-                    let persistedIdentity = providerBuckets.sessionEquivalentWindowPairIdentity(for: accountKey)
-                    let previousIdentity = persistedIdentity ?? self.legacySessionEquivalentHistoryIdentity(
-                        provider: provider,
-                        accountKey: accountKey)
-                    if persistedIdentity == nil, let previousIdentity {
-                        providerBuckets.setSessionEquivalentWindowPairIdentity(previousIdentity, for: accountKey)
-                    }
-                    guard previousIdentity != resolvedIdentity else { break }
-                    histories.removeAll {
-                        $0.name == .session || (previousIdentity != nil && $0.name == .weekly)
-                    }
-                    providerBuckets.setSessionEquivalentWindowPairIdentity(resolvedIdentity, for: accountKey)
-                case .incomplete:
-                    let persistedIdentity = providerBuckets.sessionEquivalentWindowPairIdentity(for: accountKey)
-                    let previousIdentity = persistedIdentity ?? self.legacySessionEquivalentHistoryIdentity(
-                        provider: provider,
-                        accountKey: accountKey)
-                    if persistedIdentity == nil, let previousIdentity {
-                        providerBuckets.setSessionEquivalentWindowPairIdentity(previousIdentity, for: accountKey)
-                    }
-                    if previousIdentity != nil {
-                        samplesToPersist.removeAll { $0.name == .session || $0.name == .weekly }
-                    }
-                case .ambiguous:
-                    samplesToPersist.removeAll { $0.name == .session || $0.name == .weekly }
-                }
+                self.reconcileGenericSessionEquivalentHistory(
+                    scope: (provider, accountKey),
+                    snapshot: snapshot,
+                    providerBuckets: &providerBuckets,
+                    histories: &histories,
+                    samples: &samplesToPersist)
                 self.sessionEquivalentBurnCache.removeValue(forKey: provider)
             }
 
@@ -624,15 +602,14 @@ extension UsageStore {
                 }
             }
         default:
+            let components = Self.genericSessionEquivalentWindowComponents(snapshot: snapshot)
             switch Self.genericSessionEquivalentWindowPairResolution(snapshot: snapshot) {
             case let .resolved(session, weekly, _, _):
                 appendWindow(session, name: .session)
                 appendWindow(weekly, name: .weekly)
-            case .incomplete:
-                appendWindow(self.planUtilizationSessionWindow(provider: provider, snapshot: snapshot), name: .session)
-                appendWindow(self.planUtilizationWeeklyWindow(provider: provider, snapshot: snapshot), name: .weekly)
-            case .ambiguous:
-                break
+            case .incomplete, .ambiguous:
+                appendWindow(components.session?.window, name: .session)
+                appendWindow(components.weekly?.window, name: .weekly)
             }
         }
 
