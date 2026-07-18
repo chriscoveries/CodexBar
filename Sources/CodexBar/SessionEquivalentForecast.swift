@@ -252,7 +252,9 @@ enum SessionEquivalentBurnEstimator {
             }
             let burn = end.usedPercent - start.usedPercent
             guard burn.isFinite, burn > 0 else { continue }
-            burns.append(burn)
+            let fullAllowanceBurn = 100 * burn / group.maximumUsedPercent
+            guard fullAllowanceBurn.isFinite, fullAllowanceBurn > 0 else { continue }
+            burns.append(fullAllowanceBurn)
         }
 
         guard burns.count >= Self.minimumSampleCount else { return nil }

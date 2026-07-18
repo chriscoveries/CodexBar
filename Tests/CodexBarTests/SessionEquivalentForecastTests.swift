@@ -20,6 +20,23 @@ struct SessionEquivalentForecastTests {
     }
 
     @Test
+    func `normalizes partial session burn to a full allowance`() throws {
+        let fixture = Self.historyFixture(samples: [
+            (sessionUsedPercent: 20, weeklyBurnPercent: 2),
+            (sessionUsedPercent: 40, weeklyBurnPercent: 4),
+            (sessionUsedPercent: 100, weeklyBurnPercent: 10),
+        ])
+
+        let estimate = try #require(SessionEquivalentBurnEstimator.estimate(
+            histories: fixture.histories,
+            currentSessionResetsAt: fixture.currentSessionReset,
+            now: fixture.currentSessionReset.addingTimeInterval(-3600)))
+
+        #expect(estimate.sampleCount == 3)
+        #expect(estimate.medianWeeklyPercentPerWindow == 10)
+    }
+
+    @Test
     func `requires three completed windows with measurable burn`() {
         let fixture = Self.historyFixture(burns: [8, 12])
 
@@ -1354,6 +1371,15 @@ extension SessionEquivalentForecastTests {
     private static func historyFixture(burns: [Double])
         -> (histories: [PlanUtilizationSeriesHistory], currentSessionReset: Date)
     {
+        self.historyFixture(samples: burns.map {
+            (sessionUsedPercent: 100, weeklyBurnPercent: $0)
+        })
+    }
+
+    private static func historyFixture(
+        samples: [(sessionUsedPercent: Double, weeklyBurnPercent: Double)])
+        -> (histories: [PlanUtilizationSeriesHistory], currentSessionReset: Date)
+    {
         let start = Date(timeIntervalSince1970: 1_800_000_000)
         let duration: TimeInterval = 5 * 3600
         let weeklyReset = start.addingTimeInterval(7 * 24 * 3600)
@@ -1361,19 +1387,19 @@ extension SessionEquivalentForecastTests {
         var weeklyEntries: [PlanUtilizationHistoryEntry] = []
         var weeklyUsed = 0.0
 
-        for (index, burn) in burns.enumerated() {
+        for (index, sample) in samples.enumerated() {
             let windowStart = start.addingTimeInterval(Double(index) * duration)
             let reset = windowStart.addingTimeInterval(duration)
             sessionEntries.append(planEntry(
                 at: windowStart.addingTimeInterval(30 * 60),
-                usedPercent: 20,
+                usedPercent: min(20, sample.sessionUsedPercent),
                 resetsAt: reset))
             sessionEntries.append(planEntry(
                 at: reset.addingTimeInterval(-30 * 60),
-                usedPercent: 100,
+                usedPercent: sample.sessionUsedPercent,
                 resetsAt: reset))
             weeklyEntries.append(planEntry(at: windowStart, usedPercent: weeklyUsed, resetsAt: weeklyReset))
-            weeklyUsed += burn
+            weeklyUsed += sample.weeklyBurnPercent
             weeklyEntries.append(planEntry(at: reset, usedPercent: weeklyUsed, resetsAt: weeklyReset))
         }
 
@@ -1382,6 +1408,6 @@ extension SessionEquivalentForecastTests {
                 planSeries(name: .session, windowMinutes: 300, entries: sessionEntries),
                 planSeries(name: .weekly, windowMinutes: 10080, entries: weeklyEntries),
             ],
-            currentSessionReset: start.addingTimeInterval(Double(burns.count + 1) * duration))
+            currentSessionReset: start.addingTimeInterval(Double(samples.count + 1) * duration))
     }
 }
