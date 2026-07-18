@@ -110,16 +110,19 @@ struct InlineCostHistoryDashboardLabelTests {
         }
 
         let oneDay = makeModel(historyDays: 1)
-        #expect(oneDay.inlineUsageDashboard?.kpis[1].title == "Today")
-        #expect(oneDay.inlineUsageDashboard?.kpis[2].title == "Today tokens")
+        #expect(oneDay.inlineUsageDashboard?.kpis.map(\.title) == [
+            "Today", "Today", "Latest tokens", "Today tokens",
+        ])
 
         let sevenDays = makeModel(historyDays: 7)
-        #expect(sevenDays.inlineUsageDashboard?.kpis[1].title == "Last 7 days Cost")
-        #expect(sevenDays.inlineUsageDashboard?.kpis[2].title == "Last 7 days tokens")
+        #expect(sevenDays.inlineUsageDashboard?.kpis.map(\.title) == [
+            "Today", "Last 7 days Cost", "Latest tokens", "Last 7 days tokens",
+        ])
 
         let thirtyDays = makeModel(historyDays: 30)
-        #expect(thirtyDays.inlineUsageDashboard?.kpis[1].title == "30d cost")
-        #expect(thirtyDays.inlineUsageDashboard?.kpis[2].title == "30d tokens")
+        #expect(thirtyDays.inlineUsageDashboard?.kpis.map(\.title) == [
+            "Today", "30d cost", "Latest tokens", "30d tokens",
+        ])
     }
 
     @Test
@@ -167,8 +170,9 @@ struct InlineCostHistoryDashboardLabelTests {
             hidePersonalInfo: false,
             now: now))
 
-        #expect(model.inlineUsageDashboard?.kpis[1].title == "This month")
-        #expect(model.inlineUsageDashboard?.kpis[2].title == "This month tokens")
+        #expect(model.inlineUsageDashboard?.kpis.map(\.title) == [
+            "Today", "This month", "Latest tokens", "This month tokens",
+        ])
     }
 
     @Test
@@ -218,8 +222,12 @@ struct InlineCostHistoryDashboardLabelTests {
 
         let dashboard = try #require(model.inlineUsageDashboard)
         #expect(dashboard.currencyCode == "USD")
-        #expect(dashboard.kpis[0].title == "Today · API-equivalent estimate")
-        #expect(dashboard.kpis[1].title == "30d · API-equivalent estimate")
+        #expect(dashboard.kpis.map(\.title) == [
+            "Today · API-equivalent estimate",
+            "30d · API-equivalent estimate",
+            "Latest tokens",
+            "30d tokens",
+        ])
         #expect(dashboard.detailLines.contains("not a subscription bill or plan value"))
         #expect(dashboard.detailLines.contains(
             "Local usage × public API prices · not a subscription bill or plan value"))
