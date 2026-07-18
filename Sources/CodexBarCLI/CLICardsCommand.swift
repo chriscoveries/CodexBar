@@ -196,9 +196,7 @@ extension CodexBarCLI {
                             command: command)
                     }
                 })
-            if result.exitCode != .success {
-                exitCode = result.exitCode
-            }
+            if result.exitCode != .success { exitCode = result.exitCode }
             cards.append(contentsOf: result.cards)
             failures.append(contentsOf: result.cardFailures)
         }
