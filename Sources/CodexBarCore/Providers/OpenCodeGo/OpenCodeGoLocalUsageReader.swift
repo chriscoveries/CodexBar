@@ -65,15 +65,6 @@ public struct OpenCodeGoLocalUsageReader: Sendable {
         return Self.snapshot(rows: rows, now: now, historyDays: historyDays)
     }
 
-    /// Best-effort daily cost history, independent of `fetch()`'s window-percentage flow. The
-    /// opencode.ai web API has no daily-granularity endpoint, so the web fetch strategy calls this
-    /// to enrich its rolling/weekly percentages (server-authoritative) with local per-day cost
-    /// (device-only). Returns an empty array rather than throwing when local history is unavailable.
-    public func fetchDaily(now: Date = Date(), historyDays: Int = 30) -> [CostUsageDailyReport.Entry] {
-        guard let rows = try? self.readRows() else { return [] }
-        return Self.dailyEntries(rows: rows, now: now, historyDays: historyDays)
-    }
-
     private func readRows() throws -> [UsageRow] {
         var db: OpaquePointer?
         guard sqlite3_open_v2(self.databaseURL.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
@@ -404,10 +395,6 @@ public struct OpenCodeGoLocalUsageReader: Sendable {
 
     public func fetch(now _: Date = Date(), historyDays _: Int = 30) throws -> OpenCodeGoUsageSnapshot {
         throw OpenCodeGoLocalUsageError.notSupported
-    }
-
-    public func fetchDaily(now _: Date = Date(), historyDays _: Int = 30) -> [CostUsageDailyReport.Entry] {
-        []
     }
 }
 

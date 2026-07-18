@@ -140,7 +140,7 @@ struct OpenCodeGoUsageFetchStrategy: ProviderFetchStrategy {
                 workspaceIDOverride: workspaceOverride,
                 includeZenBalance: context.includeOptionalUsage)
             return self.makeResult(
-                usage: Self.enrichedUsageSnapshot(snapshot, context: context),
+                usage: snapshot.toUsageSnapshot(),
                 sourceLabel: "web")
         } catch OpenCodeGoUsageError.invalidCredentials where cookieSource != .manual {
             #if os(macOS)
@@ -152,29 +152,12 @@ struct OpenCodeGoUsageFetchStrategy: ProviderFetchStrategy {
                 workspaceIDOverride: workspaceOverride,
                 includeZenBalance: context.includeOptionalUsage)
             return self.makeResult(
-                usage: Self.enrichedUsageSnapshot(snapshot, context: context),
+                usage: snapshot.toUsageSnapshot(),
                 sourceLabel: "web")
             #else
             throw OpenCodeGoUsageError.invalidCredentials
             #endif
         }
-    }
-
-    /// opencode.ai's web usage endpoint has no daily-granularity data, so the cost history chart
-    /// would stay empty for auto-mode users whose web session succeeds before the local fallback
-    /// ever runs. Best-effort blend in the on-device per-day cost history here instead — but only
-    /// when the local strategy could also have run in this source mode. Explicit `.web` mode
-    /// deliberately excludes `OpenCodeGoLocalUsageFetchStrategy` from the pipeline (see
-    /// `resolveStrategies`), so honor that choice here too rather than silently reading the local
-    /// database anyway.
-    private static func enrichedUsageSnapshot(
-        _ snapshot: OpenCodeGoUsageSnapshot,
-        context: ProviderFetchContext) -> UsageSnapshot
-    {
-        guard context.sourceMode != .web else { return snapshot.toUsageSnapshot() }
-        let daily = OpenCodeGoLocalUsageReader().fetchDaily(historyDays: context.costUsageHistoryDays)
-        guard !daily.isEmpty else { return snapshot.toUsageSnapshot() }
-        return snapshot.withDaily(daily).toUsageSnapshot()
     }
 
     func shouldFallback(on error: Error, context: ProviderFetchContext) -> Bool {

@@ -574,10 +574,14 @@ extension UsageStore {
             for lane in projection.planUtilizationLanes {
                 appendWindow(lane.window, name: lane.role)
             }
-        case .claude, .opencodego:
+        case .claude:
             appendWindow(snapshot.primary, name: .session)
             appendWindow(snapshot.secondary, name: .weekly)
             appendWindow(snapshot.tertiary, name: .opus)
+        case .opencodego:
+            appendWindow(snapshot.primary, name: .session)
+            appendWindow(snapshot.secondary, name: .weekly)
+            appendWindow(snapshot.tertiary, name: .monthly)
         case .antigravity:
             if forSessionEquivalents {
                 guard let windows = self.sessionEquivalentWindows(provider: provider, snapshot: snapshot) else {

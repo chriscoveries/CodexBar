@@ -75,18 +75,6 @@ struct OpenCodeGoLocalUsageReaderTests {
         #expect(snapshot.daily.first?.requestCount == 1)
         #expect(snapshot.daily.last?.costUSD == 4.5)
         #expect(snapshot.daily.last?.requestCount == 2)
-
-        let daily = reader.fetchDaily(now: now, historyDays: 30)
-        #expect(daily.map(\.date) == snapshot.daily.map(\.date))
-    }
-
-    @Test
-    func `fetchDaily returns no entries when local history is unavailable`() throws {
-        let env = try Self.makeEnvironment()
-        defer { try? FileManager.default.removeItem(at: env.root) }
-
-        let reader = OpenCodeGoLocalUsageReader(authURL: env.authURL, databaseURL: env.databaseURL)
-        #expect(reader.fetchDaily().isEmpty)
     }
 
     @Test

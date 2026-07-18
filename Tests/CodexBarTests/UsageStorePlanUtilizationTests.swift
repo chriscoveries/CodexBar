@@ -200,7 +200,7 @@ struct UsageStorePlanUtilizationTests {
 
     @MainActor
     @Test
-    func `opencodego history tabs include the monthly window as opus series`() {
+    func `opencodego history tabs include the monthly series`() {
         let histories = [
             planSeries(name: .session, windowMinutes: 300, entries: [
                 planEntry(at: Date(timeIntervalSince1970: 1_700_000_000), usedPercent: 12),
@@ -208,7 +208,7 @@ struct UsageStorePlanUtilizationTests {
             planSeries(name: .weekly, windowMinutes: 10080, entries: [
                 planEntry(at: Date(timeIntervalSince1970: 1_700_086_400), usedPercent: 57),
             ]),
-            planSeries(name: .opus, windowMinutes: 43200, entries: [
+            planSeries(name: .monthly, windowMinutes: 43200, entries: [
                 planEntry(at: Date(timeIntervalSince1970: 1_700_086_400), usedPercent: 34),
             ]),
         ]
@@ -224,7 +224,7 @@ struct UsageStorePlanUtilizationTests {
             provider: .opencodego,
             snapshot: snapshot)
 
-        #expect(model.visibleSeries == ["session:300", "weekly:10080", "opus:43200"])
+        #expect(model.visibleSeries == ["session:300", "weekly:10080", "monthly:43200"])
         #expect(model.selectedSeries == "session:300")
     }
 
@@ -812,7 +812,7 @@ struct UsageStorePlanUtilizationTests {
 
     @MainActor
     @Test
-    func `record plan history stores opencodego monthly window as opus series`() async {
+    func `record plan history stores opencodego monthly series`() async {
         let store = Self.makeStore()
         // historicalTrackingEnabled defaults to false; opencodego must still record, like codex/claude.
         let snapshot = UsageSnapshot(
@@ -835,7 +835,7 @@ struct UsageStorePlanUtilizationTests {
         let histories = store.planUtilizationHistory(for: .opencodego)
         #expect(findSeries(histories, name: .session, windowMinutes: 300)?.entries.last?.usedPercent == 12)
         #expect(findSeries(histories, name: .weekly, windowMinutes: 10080)?.entries.last?.usedPercent == 57)
-        #expect(findSeries(histories, name: .opus, windowMinutes: 43200)?.entries.last?.usedPercent == 34)
+        #expect(findSeries(histories, name: .monthly, windowMinutes: 43200)?.entries.last?.usedPercent == 34)
     }
 
     @MainActor
