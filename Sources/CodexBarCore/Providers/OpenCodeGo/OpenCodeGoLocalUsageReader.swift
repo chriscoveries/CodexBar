@@ -96,7 +96,9 @@ public struct OpenCodeGoLocalUsageReader: Sendable {
         var rows: [UsageRow] = []
         while true {
             let step = sqlite3_step(stmt)
-            if step == SQLITE_DONE { break }
+            if step == SQLITE_DONE {
+                break
+            }
             guard step == SQLITE_ROW else {
                 let message = db.flatMap { String(cString: sqlite3_errmsg($0)) } ?? "unknown error"
                 throw OpenCodeGoLocalUsageError.sqliteFailed(message)
@@ -105,8 +107,8 @@ public struct OpenCodeGoLocalUsageReader: Sendable {
             let createdMs = sqlite3_column_int64(stmt, 0)
             let cost = sqlite3_column_double(stmt, 1)
             guard createdMs > 0, cost >= 0, cost.isFinite else { continue }
-            let messageID = sqlite3_column_text(stmt, 2).map { String(cString: $0) } ?? ""
-            rows.append(UsageRow(createdMs: createdMs, cost: cost, messageID: messageID))
+            let requestCount = max(1, Int(sqlite3_column_int64(stmt, 2)))
+            rows.append(UsageRow(createdMs: createdMs, cost: cost, requestCount: requestCount))
         }
         return rows
     }
@@ -133,7 +135,7 @@ public struct OpenCodeGoLocalUsageReader: Sendable {
         SELECT
           CAST(COALESCE(json_extract(data, '$.time.created'), time_created) AS INTEGER) AS createdMs,
           CAST(json_extract(data, '$.cost') AS REAL) AS cost,
-          id AS messageID
+          1 AS requestCount
         FROM message
         WHERE json_valid(data)
           AND json_extract(data, '$.providerID') = 'opencode-go'
@@ -142,47 +144,46 @@ public struct OpenCodeGoLocalUsageReader: Sendable {
     """
 
     private static let messageAndPartUsageSQL = """
-        WITH message_costs AS (
+        WITH provider_messages AS (
           SELECT
             id AS messageID,
             CAST(COALESCE(json_extract(data, '$.time.created'), time_created) AS INTEGER) AS createdMs,
-            CAST(json_extract(data, '$.cost') AS REAL) AS cost
+            CAST(json_extract(data, '$.cost') AS REAL) AS cost,
+            json_type(data, '$.cost') IN ('integer', 'real') AS hasCost
           FROM message
           WHERE json_valid(data)
             AND json_extract(data, '$.providerID') = 'opencode-go'
             AND json_extract(data, '$.role') = 'assistant'
-            AND json_type(data, '$.cost') IN ('integer', 'real')
         )
-        SELECT createdMs, cost, messageID
-        FROM message_costs
-        UNION ALL
         SELECT
-          CAST(COALESCE(json_extract(p.data, '$.time.created'), p.time_created, m.time_created) AS INTEGER)
+          CAST(COALESCE(json_extract(p.data, '$.time.created'), p.time_created, m.createdMs) AS INTEGER)
             AS createdMs,
           CAST(json_extract(p.data, '$.cost') AS REAL) AS cost,
-          p.message_id AS messageID
+          1 AS requestCount
         FROM part p
-        JOIN message m ON m.id = p.message_id
+        JOIN provider_messages m ON m.messageID = p.message_id
         WHERE json_valid(p.data)
-          AND json_valid(m.data)
           AND json_extract(p.data, '$.type') = 'step-finish'
           AND json_type(p.data, '$.cost') IN ('integer', 'real')
-          AND json_extract(m.data, '$.providerID') = 'opencode-go'
-          AND json_extract(m.data, '$.role') = 'assistant'
+        UNION ALL
+        SELECT createdMs, cost, 1 AS requestCount
+        FROM provider_messages m
+        WHERE hasCost
           AND NOT EXISTS (
             SELECT 1
-            FROM message_costs
-            WHERE message_costs.messageID = p.message_id
+            FROM part p
+            WHERE p.message_id = m.messageID
+              AND json_valid(p.data)
+              AND json_extract(p.data, '$.type') = 'step-finish'
+              AND json_type(p.data, '$.cost') IN ('integer', 'real')
           )
     """
 
     private struct UsageRow {
         let createdMs: Int64
         let cost: Double
-        /// Distinguishes distinct assistant turns so daily requestCount doesn't overcount a single
-        /// message whose cost is spread across multiple step-finish parts (messageAndPartUsageSQL's
-        /// per-part UNION ALL branch emits one row per part for such messages).
-        let messageID: String
+        /// One provider invocation per step-finish part; message-only databases fall back to one.
+        let requestCount: Int
     }
 
     private static func hasAuthKey(at url: URL) -> Bool {
@@ -280,14 +281,14 @@ public struct OpenCodeGoLocalUsageReader: Sendable {
         }
         let sinceStartOfDay = calendar.startOfDay(for: since)
 
-        var totals: [String: (cost: Double, messageIDs: Set<String>)] = [:]
+        var totals: [String: (cost: Double, requestCount: Int)] = [:]
         for row in rows {
             let date = Date(timeIntervalSince1970: TimeInterval(row.createdMs) / 1000)
             guard date >= sinceStartOfDay, date <= now else { continue }
             let key = CostUsageScanner.CostUsageDayRange.dayKey(from: date)
-            var bucket = totals[key] ?? (cost: 0, messageIDs: [])
+            var bucket = totals[key] ?? (cost: 0, requestCount: 0)
             bucket.cost += row.cost
-            bucket.messageIDs.insert(row.messageID)
+            bucket.requestCount += row.requestCount
             totals[key] = bucket
         }
 
@@ -298,7 +299,7 @@ public struct OpenCodeGoLocalUsageReader: Sendable {
                 inputTokens: nil,
                 outputTokens: nil,
                 totalTokens: nil,
-                requestCount: bucket.messageIDs.count,
+                requestCount: bucket.requestCount,
                 costUSD: bucket.cost,
                 modelsUsed: nil,
                 modelBreakdowns: nil)
