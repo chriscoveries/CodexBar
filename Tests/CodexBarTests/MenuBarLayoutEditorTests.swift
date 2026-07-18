@@ -1,5 +1,7 @@
+import CoreTransferable
 import Foundation
 import Testing
+import UniformTypeIdentifiers
 @testable import CodexBar
 
 struct MenuBarLayoutEditorTests {
@@ -136,5 +138,20 @@ struct MenuBarLayoutEditorTests {
 
         let data = try JSONEncoder().encode(payload)
         #expect(try JSONDecoder().decode(MenuBarLayoutDragItem.self, from: data) == payload)
+    }
+
+    @Test
+    @available(macOS 15.2, *)
+    func `palette drag transfer representation round trips`() async throws {
+        let payload = MenuBarLayoutDragItem.palette(.percent(window: .weekly))
+
+        #expect(MenuBarLayoutDragItem.exportedContentTypes() == [.codexBarMenuLayoutItem])
+        #expect(MenuBarLayoutDragItem.importedContentTypes() == [.codexBarMenuLayoutItem])
+
+        let data = try await payload.exported(as: .codexBarMenuLayoutItem)
+        let decoded = try await MenuBarLayoutDragItem(
+            importing: data,
+            contentType: .codexBarMenuLayoutItem)
+        #expect(decoded == payload)
     }
 }
