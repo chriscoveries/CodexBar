@@ -35,7 +35,7 @@ enum ProviderCookieRefreshAction {
 
     static func refresh(
         provider: UsageProvider,
-        operation: () async -> Void) async -> Outcome
+        operation: () async -> Bool) async -> Outcome
     {
         await ProviderInteractionContext.$current.withValue(.userInitiated) {
             guard let gate = CookieHeaderCache.beginRefreshReadSuppression(provider: provider) else {
@@ -43,8 +43,8 @@ enum ProviderCookieRefreshAction {
             }
             defer { CookieHeaderCache.endRefreshReadSuppression(gate) }
 
-            await operation()
-            guard !Task.isCancelled else { return .failed }
+            let validated = await operation()
+            guard validated, !Task.isCancelled else { return .failed }
 
             let commit = CookieHeaderCache.commitRefreshReadSuppression(gate)
             guard commit.stagedCount > 0,
@@ -57,8 +57,14 @@ enum ProviderCookieRefreshAction {
 
     private static func perform(provider: UsageProvider, context: ProviderSettingsContext) async {
         context.setStatusText(self.statusID(provider), L("Refreshing"))
+        let previousUpdatedAt = context.store.snapshot(for: provider)?.updatedAt
         let outcome = await self.refresh(provider: provider) {
             await context.store.refreshProvider(provider, allowDisabled: true)
+            guard context.store.error(for: provider) == nil,
+                  context.store.lastSourceLabels[provider] == "web",
+                  let updatedAt = context.store.snapshot(for: provider)?.updatedAt
+            else { return false }
+            return previousUpdatedAt.map { updatedAt != $0 } ?? true
         }
         context.setStatusText(self.statusID(provider), outcome == .refreshed ? nil : L("Failed"))
     }
