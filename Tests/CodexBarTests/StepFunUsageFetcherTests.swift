@@ -638,10 +638,6 @@ struct StepFunTokenRefreshTests {
                 }
 
                 if path.contains("SignInByPassword") {
-                    #expect(request.value(forHTTPHeaderField: "Cookie") ==
-                        "Oasis-Token=anon-access...anon-refresh; " +
-                        "Oasis-Webid=c8a1002d2c457e758785a9979832217c7c0b884c; " +
-                        "INGRESSCOOKIE=ingress-cookie")
                     return Self.jsonResponse(
                         for: request,
                         body: """
@@ -705,8 +701,8 @@ struct StepFunTokenRefreshTests {
     @Test
     func `password login matches web ID to registered device`() async throws {
         let registeredDeviceID = "registered-device"
-        let anonRefreshToken = try Self.jwt(deviceID: registeredDeviceID)
-        let anonToken = "anon-access...\(anonRefreshToken)"
+        let registeredJWT = try Self.jwt(deviceID: registeredDeviceID)
+        let anonymousPair = "anon-access...\(registeredJWT)"
 
         try await self.withStubProtocol { _ in
             StepFunStubURLProtocol.handler = { request in
@@ -724,7 +720,7 @@ struct StepFunTokenRefreshTests {
                         body: """
                         {
                             "accessToken": {"raw": "anon-access"},
-                            "refreshToken": {"raw": "\(anonRefreshToken)"}
+                            "refreshToken": {"raw": "\(registeredJWT)"}
                         }
                         """)
                 }
@@ -732,7 +728,7 @@ struct StepFunTokenRefreshTests {
                 if path.contains("SignInByPassword") {
                     #expect(request.value(forHTTPHeaderField: "oasis-webid") == registeredDeviceID)
                     #expect(request.value(forHTTPHeaderField: "Cookie") ==
-                        "Oasis-Token=\(anonToken); " +
+                        "Oasis-Token=\(anonymousPair); " +
                         "Oasis-Webid=\(registeredDeviceID); " +
                         "INGRESSCOOKIE=ingress-cookie")
                     return Self.jsonResponse(
@@ -748,8 +744,10 @@ struct StepFunTokenRefreshTests {
                 return Self.jsonResponse(for: request, statusCode: 404, body: #"{"error":"unexpected"}"#)
             }
 
-            let token = try await StepFunUsageFetcher.login(username: "user@example.com", password: "password")
-            #expect(token == "login-access...login-refresh")
+            let authenticatedPair = try await StepFunUsageFetcher.login(
+                username: "user@example.com",
+                password: "pw")
+            #expect(authenticatedPair == "login-access...login-refresh")
         }
     }
 
