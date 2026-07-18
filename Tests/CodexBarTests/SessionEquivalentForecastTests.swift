@@ -266,7 +266,7 @@ struct SessionEquivalentForecastTests {
             weeklyUsedPercent: 95))
 
         #expect(detail.verdictText == "Weekly can run out ≈1 window early")
-        #expect(detail.numberText == "≈1 full 5h window of weekly left · 0 windows until reset")
+        #expect(detail.numberText == "≈0 full 5h windows of weekly left · 0 windows until reset")
     }
 
     @Test
