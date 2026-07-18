@@ -1271,6 +1271,9 @@
 "Weekly cannot run out before reset at this pace" = "Kuota mingguan tidak dapat habis sebelum reset dengan laju ini";
 "Weekly can run out ≈%d windows early" = "Kuota mingguan dapat habis ≈%d jendela lebih awal";
 "Estimated: %@" = "Perkiraan: %@";
+"Coding Plan" = "Paket Coding";
+"Agent Plan" = "Paket Agen";
+"Team" = "Tim";
 
 /* Menu bar layout editor */
 "menu_bar_layout_title" = "Tata letak";

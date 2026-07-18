@@ -1271,6 +1271,9 @@
 "Weekly cannot run out before reset at this pace" = "با این روند، سهم هفتگی پیش از بازنشانی تمام نمی‌شود";
 "Weekly can run out ≈%d windows early" = "سهم هفتگی ممکن است حدود %d بازه زودتر تمام شود";
 "Estimated: %@" = "برآوردی: %@";
+"Coding Plan" = "طرح کدنویسی";
+"Agent Plan" = "طرح عامل";
+"Team" = "تیم";
 
 /* Menu bar layout editor */
 "menu_bar_layout_title" = "چیدمان";

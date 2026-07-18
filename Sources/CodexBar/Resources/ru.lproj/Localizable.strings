@@ -1269,6 +1269,9 @@
 "Weekly cannot run out before reset at this pace" = "При таком темпе недельный лимит не может закончиться до сброса";
 "Weekly can run out ≈%d windows early" = "Недельный лимит может закончиться на ≈%d окон раньше";
 "Estimated: %@" = "Оценка: %@";
+"Coding Plan" = "План программирования";
+"Agent Plan" = "План агента";
+"Team" = "Команда";
 
 /* Menu bar layout editor */
 "menu_bar_layout_title" = "Компоновка";

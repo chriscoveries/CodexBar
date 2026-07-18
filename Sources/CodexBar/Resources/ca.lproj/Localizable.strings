@@ -1270,6 +1270,9 @@
 "Weekly cannot run out before reset at this pace" = "La quota setmanal no es pot esgotar abans del reinici a aquest ritme";
 "Weekly can run out ≈%d windows early" = "La quota setmanal es pot esgotar ≈%d finestres abans";
 "Estimated: %@" = "Estimació: %@";
+"Coding Plan" = "Pla de programació";
+"Agent Plan" = "Pla d'agent";
+"Team" = "Equip";
 
 /* Menu bar layout editor */
 "menu_bar_layout_title" = "Disposició";

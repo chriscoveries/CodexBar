@@ -1268,6 +1268,9 @@
 "Weekly cannot run out before reset at this pace" = "Das Wochenlimit kann bei diesem Tempo nicht vor dem Reset aufgebraucht sein";
 "Weekly can run out ≈%d windows early" = "Das Wochenlimit kann ≈%d Fenster früher aufgebraucht sein";
 "Estimated: %@" = "Geschätzt: %@";
+"Coding Plan" = "Coding-Plan";
+"Agent Plan" = "Agentenplan";
+"Team" = "Team";
 
 /* Menu bar layout editor */
 "menu_bar_layout_title" = "Layout";

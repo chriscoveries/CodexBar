@@ -1268,6 +1268,9 @@
 "Weekly cannot run out before reset at this pace" = "このペースではリセット前に週間枠を使い切れません";
 "Weekly can run out ≈%d windows early" = "週間枠は約%dウィンドウ早く使い切る可能性があります";
 "Estimated: %@" = "推定：%@";
+"Coding Plan" = "コーディングプラン";
+"Agent Plan" = "エージェントプラン";
+"Team" = "チーム";
 
 /* Menu bar layout editor */
 "menu_bar_layout_title" = "レイアウト";

@@ -1271,6 +1271,9 @@
 "Weekly cannot run out before reset at this pace" = "ด้วยอัตรานี้ โควตารายสัปดาห์จะไม่หมดก่อนรีเซ็ต";
 "Weekly can run out ≈%d windows early" = "โควตารายสัปดาห์อาจหมดเร็วขึ้น ≈%d ช่วง";
 "Estimated: %@" = "โดยประมาณ: %@";
+"Coding Plan" = "แผนการเขียนโค้ด";
+"Agent Plan" = "แผนเอเจนต์";
+"Team" = "ทีม";
 
 /* Menu bar layout editor */
 "menu_bar_layout_title" = "เค้าโครง";

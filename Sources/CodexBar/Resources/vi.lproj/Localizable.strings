@@ -1268,6 +1268,9 @@
 "Weekly cannot run out before reset at this pace" = "Với tốc độ này, hạn mức tuần không thể hết trước khi đặt lại";
 "Weekly can run out ≈%d windows early" = "Hạn mức tuần có thể hết sớm ≈%d cửa sổ";
 "Estimated: %@" = "Ước tính: %@";
+"Coding Plan" = "Gói lập trình";
+"Agent Plan" = "Gói tác nhân";
+"Team" = "Nhóm";
 
 /* Menu bar layout editor */
 "menu_bar_layout_title" = "Bố cục";

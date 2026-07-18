@@ -1269,6 +1269,9 @@
 "Weekly cannot run out before reset at this pace" = "Bu hızda haftalık kota sıfırlamadan önce tükenemez";
 "Weekly can run out ≈%d windows early" = "Haftalık kota ≈%d pencere erken tükenebilir";
 "Estimated: %@" = "Tahmini: %@";
+"Coding Plan" = "Kodlama Planı";
+"Agent Plan" = "Ajan Planı";
+"Team" = "Ekip";
 
 /* Menu bar layout editor */
 "menu_bar_layout_title" = "Düzen";
