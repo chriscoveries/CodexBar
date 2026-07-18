@@ -1,8 +1,6 @@
 import Foundation
-#if canImport(Glibc)
+#if os(Linux)
 import Glibc
-#elseif canImport(Musl)
-import Musl
 #endif
 
 package final class ProcessPipeCapture: @unchecked Sendable {
