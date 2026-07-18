@@ -615,6 +615,9 @@ struct StepFunTokenRefreshTests {
     func `stale cached and env tokens fall back to env login credentials`() async throws {
         CookieHeaderCache.store(provider: .stepfun, cookieHeader: "stale-access...stale-refresh", sourceLabel: "test")
         defer { CookieHeaderCache.clear(provider: .stepfun) }
+        let registeredDeviceID = "registered-device"
+        let anonRefreshToken = try Self.jwt(deviceID: registeredDeviceID)
+        let anonToken = "anon-access...\(anonRefreshToken)"
 
         try await self.withStubProtocol { recorder in
             StepFunStubURLProtocol.handler = { request in
@@ -632,15 +635,16 @@ struct StepFunTokenRefreshTests {
                         body: """
                         {
                             "accessToken": {"raw": "anon-access"},
-                            "refreshToken": {"raw": "anon-refresh"}
+                            "refreshToken": {"raw": "\(anonRefreshToken)"}
                         }
                         """)
                 }
 
                 if path.contains("SignInByPassword") {
+                    #expect(request.value(forHTTPHeaderField: "oasis-webid") == registeredDeviceID)
                     #expect(request.value(forHTTPHeaderField: "Cookie") ==
-                        "Oasis-Token=anon-access...anon-refresh; " +
-                        "Oasis-Webid=c8a1002d2c457e758785a9979832217c7c0b884c; " +
+                        "Oasis-Token=\(anonToken); " +
+                        "Oasis-Webid=\(registeredDeviceID); " +
                         "INGRESSCOOKIE=ingress-cookie")
                     return Self.jsonResponse(
                         for: request,
@@ -880,6 +884,15 @@ struct StepFunTokenRefreshTests {
                 "weekly_usage_reset_time": "1777899600"
             }
             """)
+    }
+
+    private static func jwt(deviceID: String) throws -> String {
+        let payload = try JSONSerialization.data(withJSONObject: ["device_id": deviceID])
+        let encodedPayload = payload.base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+        return "header.\(encodedPayload).signature"
     }
 
     private static func jsonResponse(

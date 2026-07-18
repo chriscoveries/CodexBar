@@ -531,6 +531,7 @@ public struct StepFunUsageFetcher: Sendable {
             request.setValue(value, forHTTPHeaderField: key)
         }
         let webid = Self.webID(forToken: anonToken)
+        request.setValue(webid, forHTTPHeaderField: "oasis-webid")
         request.setValue(
             "Oasis-Token=\(anonToken); Oasis-Webid=\(webid); INGRESSCOOKIE=\(ingressCookie)",
             forHTTPHeaderField: "Cookie")
