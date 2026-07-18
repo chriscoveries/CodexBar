@@ -175,7 +175,6 @@ struct MenuBarLayoutEditor: View {
 
     @State private var scope: MenuBarLayoutEditorScope = .all
     @State private var selectedPosition: MenuBarLayoutPosition?
-    @FocusState private var editorFocused: Bool
 
     private var layout: MenuBarLayout {
         switch self.scope {
@@ -285,8 +284,6 @@ struct MenuBarLayoutEditor: View {
             self.displayOptions
         }
         .padding(.vertical, 4)
-        .focusable()
-        .focused(self.$editorFocused)
         .onDeleteCommand {
             self.removeSelectedToken()
         }
@@ -406,7 +403,6 @@ struct MenuBarLayoutEditor: View {
                     let position = MenuBarLayoutPosition(line: lineIndex, index: index)
                     Button {
                         self.selectedPosition = position
-                        self.editorFocused = true
                     } label: {
                         MenuBarLayoutChipLabel(
                             title: token.editorLabel,
@@ -414,6 +410,11 @@ struct MenuBarLayoutEditor: View {
                             isSelected: self.selectedPosition == position)
                     }
                     .buttonStyle(.plain)
+                    .focusable()
+                    .onKeyPress(keys: [.space, .return], phases: [.down]) { _ in
+                        self.selectedPosition = position
+                        return .handled
+                    }
                     .draggable(MenuBarLayoutDragItem.placed(token, at: position, in: self.layout))
                     .dropDestination(for: MenuBarLayoutDragItem.self) { items, _ in
                         self.insert(items.first, at: position)
@@ -494,6 +495,11 @@ struct MenuBarLayoutEditor: View {
                             isSelected: false)
                     }
                     .buttonStyle(.plain)
+                    .focusable()
+                    .onKeyPress(keys: [.space, .return], phases: [.down]) { _ in
+                        self.write(MenuBarLayoutEditorMutations.append(token, to: self.layout))
+                        return .handled
+                    }
                     .draggable(MenuBarLayoutDragItem.palette(token))
                     .accessibilityLabel(token.editorAccessibilityLabel)
                     .accessibilityHint(L("menu_bar_layout_palette_hint"))
@@ -508,6 +514,11 @@ struct MenuBarLayoutEditor: View {
                             isSelected: false)
                     }
                     .buttonStyle(.plain)
+                    .focusable()
+                    .onKeyPress(keys: [.space, .return], phases: [.down]) { _ in
+                        self.write(MenuBarLayoutEditorMutations.addLineBreak(to: self.layout))
+                        return .handled
+                    }
                     .draggable(MenuBarLayoutDragItem.lineBreak)
                     .disabled(self.layout.lines.count == 2)
                     .accessibilityLabel(L("menu_bar_layout_token_line_break"))
