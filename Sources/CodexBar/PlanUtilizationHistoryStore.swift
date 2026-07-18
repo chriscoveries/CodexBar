@@ -124,6 +124,28 @@ struct PlanUtilizationHistoryBuckets: Equatable, Sendable {
         self.sessionEquivalentWindowPairIdentities[Self.identityKey(for: accountKey)] = Self.invalidatedIdentity
     }
 
+    mutating func moveSessionEquivalentWindowPairIdentity(
+        from sourceAccountKey: String?,
+        to targetAccountKey: String?)
+    {
+        let sourceKey = Self.identityKey(for: sourceAccountKey)
+        let targetKey = Self.identityKey(for: targetAccountKey)
+        guard sourceKey != targetKey,
+              let sourceIdentity = self.sessionEquivalentWindowPairIdentities[sourceKey]
+        else {
+            return
+        }
+
+        if let targetIdentity = self.sessionEquivalentWindowPairIdentities[targetKey],
+           targetIdentity != sourceIdentity
+        {
+            self.sessionEquivalentWindowPairIdentities[targetKey] = Self.invalidatedIdentity
+        } else {
+            self.sessionEquivalentWindowPairIdentities[targetKey] = sourceIdentity
+        }
+        self.sessionEquivalentWindowPairIdentities.removeValue(forKey: sourceKey)
+    }
+
     var isEmpty: Bool {
         self.unscoped.isEmpty && self.accounts.values.allSatisfy(\.isEmpty)
     }

@@ -265,10 +265,7 @@ extension UsageStore {
                 samples: detectorSamples)
         }
 
-        let shouldInvalidateAmbiguousSessionEquivalentPair =
-            ![UsageProvider.codex, .claude, .antigravity].contains(provider)
-            && Self.genericSessionEquivalentWindowPairResolution(snapshot: snapshot).isAmbiguous
-        guard !samples.isEmpty || shouldInvalidateAmbiguousSessionEquivalentPair else { return }
+        guard !samples.isEmpty else { return }
         guard self.shouldRecordPlanUtilizationHistory(for: provider) else { return }
         guard !self.shouldDeferClaudePlanUtilizationHistory(provider: provider) else { return }
 
@@ -339,9 +336,7 @@ extension UsageStore {
                         samplesToPersist.removeAll { $0.name == .session || $0.name == .weekly }
                     }
                 case .ambiguous:
-                    histories.removeAll { $0.name == .session || $0.name == .weekly }
                     samplesToPersist.removeAll { $0.name == .session || $0.name == .weekly }
-                    providerBuckets.invalidateSessionEquivalentWindowPairIdentity(for: accountKey)
                 }
                 self.sessionEquivalentBurnCache.removeValue(forKey: provider)
             }
@@ -1358,6 +1353,9 @@ extension UsageStore {
         ])
         providerBuckets.setHistories(mergedHistory, for: accountKey)
         providerBuckets.setHistories([], for: nil)
+        if ![UsageProvider.codex, .claude, .antigravity].contains(provider) {
+            providerBuckets.moveSessionEquivalentWindowPairIdentity(from: nil, to: accountKey)
+        }
     }
 
     private func stickyPlanUtilizationAccountKey(
