@@ -742,9 +742,7 @@
 "not_found" = "Không tìm thấy";
 
 /* Cost estimation */
-"cost_header_estimated" = "Chi phí (ước tính)";
 "cost_estimate_hint" = "Ước tính từ nhật ký cục bộ · có thể khác với hóa đơn của bạn";
-"codex_api_estimate_header" = "Chi phí dựa trên token";
 "codex_api_estimate_hint" = "Ước tính từ mức sử dụng token · không phải hóa đơn đăng ký";
 "cost_data_explanation" = "Chi phí có thể do nhà cung cấp báo cáo hoặc được ước tính từ mức sử dụng token theo giá API công khai. Các ước tính không phải phí đăng ký.";
 "No JetBrains IDE with AI Assistant detected. Install a JetBrains IDE and enable AI Assistant." = "Không phát hiện thấy IDE JetBrains nào có Trợ lý AI. Cài đặt JetBrains IDE và bật Trợ lý AI.";

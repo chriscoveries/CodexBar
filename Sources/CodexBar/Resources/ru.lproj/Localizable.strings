@@ -747,9 +747,7 @@
 "not_found" = "Не найден";
 
 /* Cost estimation */
-"cost_header_estimated" = "Стоимость (оценочная)";
 "cost_estimate_hint" = "Оценка на основе локальных журналов · может отличаться от суммы в счёте.";
-"codex_api_estimate_header" = "Стоимость на основе токенов";
 "codex_api_estimate_hint" = "Расчёт по использованию токенов · не счёт за подписку";
 "cost_data_explanation" = "Расходы могут быть предоставлены провайдером или рассчитаны по использованию токенов на основе общедоступных цен API. Оценки не являются платой за подписку.";
 "No JetBrains IDE with AI Assistant detected. Install a JetBrains IDE and enable AI Assistant." = "JetBrains IDE с включённым AI Assistant не обнаружена. Установите JetBrains IDE и включите AI Assistant.";

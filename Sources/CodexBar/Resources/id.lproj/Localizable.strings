@@ -754,9 +754,7 @@
 "not_found" = "Tidak ditemukan";
 
 /* Cost estimation */
-"cost_header_estimated" = "Biaya (perkiraan)";
 "cost_estimate_hint" = "Diperkirakan dari log lokal · mungkin berbeda dari tagihan Anda";
-"codex_api_estimate_header" = "Biaya berbasis token";
 "codex_api_estimate_hint" = "Diperkirakan dari penggunaan token · bukan tagihan langganan";
 "cost_data_explanation" = "Biaya dapat dilaporkan oleh penyedia atau diperkirakan dari penggunaan token dengan harga API publik. Estimasi bukan biaya langganan.";
 "No JetBrains IDE with AI Assistant detected. Install a JetBrains IDE and enable AI Assistant." = "Tidak ada JetBrains IDE dengan AI Assistant terdeteksi. Pasang JetBrains IDE dan aktifkan AI Assistant.";

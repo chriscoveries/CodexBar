@@ -189,8 +189,8 @@ extension UsageMenuCardView.Model {
         return lines.isEmpty ? nil : lines.joined(separator: "\n")
     }
 
-    static func tokenUsageHeader(provider: UsageProvider) -> String {
-        provider == .codex ? L("codex_api_estimate_header") : L("cost_header_estimated")
+    static func tokenUsageHeader(provider _: UsageProvider) -> String {
+        L("Cost")
     }
 
     static func tokenUsageHintLines(provider: UsageProvider) -> [String] {

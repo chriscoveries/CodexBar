@@ -743,9 +743,7 @@
 "not_found" = "見つかりません";
 
 /* Cost estimation */
-"cost_header_estimated" = "コスト（推定）";
 "cost_estimate_hint" = "ローカルログからの推定値 · 請求額と異なる場合があります";
-"codex_api_estimate_header" = "トークンベースのコスト";
 "codex_api_estimate_hint" = "トークン使用量からの見積もり · サブスクリプションの請求額ではありません";
 "cost_data_explanation" = "コストはプロバイダーから報告される場合と、トークン使用量を公開 API 価格で換算して見積もられる場合があります。見積もりはサブスクリプション料金ではありません。";
 "No JetBrains IDE with AI Assistant detected. Install a JetBrains IDE and enable AI Assistant." = "AI Assistant 対応の JetBrains IDE が検出されませんでした。JetBrains IDE をインストールし、AI Assistant を有効にしてください。";

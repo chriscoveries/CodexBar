@@ -27,9 +27,9 @@ struct StatusMenuCostMenuCardTests {
             hasSubmenu: true) == [])
 
         let fallbackTitle = StatusItemController.costMenuFallbackAttributedTitle(
-            title: "Token-based cost",
+            title: "Cost",
             visibleDetailLines: visibleLines)
-        #expect(fallbackTitle.string == "Token-based cost")
+        #expect(fallbackTitle.string == "Cost")
     }
 
     @Test
@@ -52,7 +52,7 @@ struct StatusMenuCostMenuCardTests {
         ])
 
         let fallbackTitle = StatusItemController.costMenuFallbackAttributedTitle(
-            title: "Token-based cost",
+            title: "Cost",
             visibleDetailLines: visibleLines)
         #expect(fallbackTitle.string.contains("Today: $74.83 - 87M tokens"))
         #expect(fallbackTitle.string.contains("Last 30 days: $4,279.64 - 5.7B tokens"))
@@ -154,14 +154,15 @@ struct StatusMenuCostMenuCardTests {
 
         #expect(view is any MenuCardMeasuring)
         #expect(abs(view.frame.width - width) <= 0.5)
-        #expect(item.title == "Token-based cost")
+        #expect(item.title == "Cost")
         #expect(item.toolTip?.contains("$52,431.09") == true)
         #expect(item.submenu == nil)
     }
 
     @Test
-    func `cost menu title distinguishes token based Codex cost from provider reported cost`() {
-        #expect(StatusItemController.costMenuTitleForProvider(.codex) == "Token-based cost")
+    func `cost menu title stays consistent across providers`() {
+        #expect(StatusItemController.costMenuTitleForProvider(.codex) == "Cost")
+        #expect(StatusItemController.costMenuTitleForProvider(.claude) == "Cost")
         #expect(StatusItemController.costMenuTitleForProvider(.mistral) == "Cost")
     }
 

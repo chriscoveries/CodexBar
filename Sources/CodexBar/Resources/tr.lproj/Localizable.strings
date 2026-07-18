@@ -748,9 +748,7 @@
 "not_found" = "Bulunamadı";
 
 /* Cost estimation */
-"cost_header_estimated" = "Maliyet (tahmini)";
 "cost_estimate_hint" = "Yerel günlüklerden tahmini · faturanızdan farklı olabilir";
-"codex_api_estimate_header" = "Token tabanlı maliyet";
 "codex_api_estimate_hint" = "Token kullanımından tahmin edilmiştir · abonelik faturası değildir";
 "cost_data_explanation" = "Maliyetler sağlayıcı tarafından bildirilebilir veya herkese açık API fiyatlarıyla token kullanımından tahmin edilebilir. Tahminler abonelik ücreti değildir.";
 "No JetBrains IDE with AI Assistant detected. Install a JetBrains IDE and enable AI Assistant." = "AI Asistan içeren JetBrains IDE algılanmadı. Bir JetBrains IDE kurun ve AI Asistan'ı etkinleştirin.";

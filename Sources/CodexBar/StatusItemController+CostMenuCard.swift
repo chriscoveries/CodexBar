@@ -33,8 +33,8 @@ extension StatusItemController {
         L("Cost")
     }
 
-    static func costMenuTitleForProvider(_ provider: UsageProvider) -> String {
-        provider == .codex ? L("codex_api_estimate_header") : self.costMenuTitle
+    static func costMenuTitleForProvider(_: UsageProvider) -> String {
+        self.costMenuTitle
     }
 
     func makeCostMenuCardItem(

@@ -754,9 +754,7 @@
 "not_found" = "Non trovato";
 
 /* Cost estimation */
-"cost_header_estimated" = "Costo (stimato)";
 "cost_estimate_hint" = "Stimato dai log locali · può differire dalla fattura";
-"codex_api_estimate_header" = "Costo basato sui token";
 "codex_api_estimate_hint" = "Stimato dall’utilizzo dei token · non è una fattura di abbonamento";
 "cost_data_explanation" = "I costi possono essere comunicati dal fornitore o stimati dall’utilizzo dei token ai prezzi API pubblici. Le stime non sono addebiti di abbonamento.";
 "No JetBrains IDE with AI Assistant detected. Install a JetBrains IDE and enable AI Assistant." = "Nessun IDE JetBrains con AI Assistant rilevato. Installa un IDE JetBrains e abilita AI Assistant.";

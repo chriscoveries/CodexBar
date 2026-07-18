@@ -752,9 +752,7 @@
 "not_found" = "ไม่พบ";
 
 /* Cost estimation */
-"cost_header_estimated" = "ต้นทุน (โดยประมาณ)";
 "cost_estimate_hint" = "ประมาณการจากบันทึกท้องถิ่น · อาจแตกต่างจากใบเรียกเก็บเงินของคุณ";
-"codex_api_estimate_header" = "ค่าใช้จ่ายจากโทเค็น";
 "codex_api_estimate_hint" = "ประมาณจากการใช้โทเค็น · ไม่ใช่ใบเรียกเก็บค่าสมัครสมาชิก";
 "cost_data_explanation" = "ค่าใช้จ่ายอาจรายงานโดยผู้ให้บริการหรือประมาณจากการใช้โทเค็นตามราคา API สาธารณะ ค่าประมาณไม่ใช่ค่าบริการสมาชิก";
 "No JetBrains IDE with AI Assistant detected. Install a JetBrains IDE and enable AI Assistant." = "ตรวจไม่พบ JetBrains IDE ที่มี AI Assistant ติดตั้ง JetBrains IDE และเปิดใช้งาน AI Assistant";

@@ -719,9 +719,7 @@
 "not_found" = "Non atopado";
 
 /* Cost estimation */
-"cost_header_estimated" = "Custo (estimado)";
 "cost_estimate_hint" = "Estimado a partir de rexistros locais · pode diferir da túa factura";
-"codex_api_estimate_header" = "Custo baseado en tokens";
 "codex_api_estimate_hint" = "Estimado a partir do uso de tokens · non é unha factura de subscrición";
 "cost_data_explanation" = "Os custos poden ser comunicados polo provedor ou estimados a partir do uso de tokens cos prezos públicos da API. As estimacións non son cargos de subscrición.";
 

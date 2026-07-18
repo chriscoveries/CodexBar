@@ -425,12 +425,7 @@ extension UsageMenuCardView.Model {
             }
         }
         let providerName = ProviderDefaults.metadata[provider]?.displayName ?? provider.rawValue
-        let codexEstimateHeader = L("codex_api_estimate_header")
-        let accessibilityLabel = if provider == .codex {
-            "\(providerName) \(periodLabel) \(codexEstimateHeader) trend"
-        } else {
-            "\(providerName) \(periodLabel) cost trend"
-        }
+        let accessibilityLabel = "\(providerName) \(periodLabel) cost trend"
         var kpis = [
             InlineUsageDashboardModel.KPI(
                 title: usesLatestPrimary ? L("Latest") : L("Today"),
