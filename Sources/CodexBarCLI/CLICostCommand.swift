@@ -139,7 +139,7 @@ extension CodexBarCLI {
     {
         let name = ProviderDescriptorRegistry.descriptor(for: provider).metadata.displayName
         let title = provider == .codex
-            ? "\(name) token-based cost"
+            ? "\(name) API-equivalent estimate (not billed)"
             : "\(name) Cost (API-rate estimate)"
         let header = Self.costHeaderLine(title, useColor: useColor)
         if groupBy == .project, provider == .codex {

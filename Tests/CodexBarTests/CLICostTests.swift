@@ -89,7 +89,7 @@ struct CLICostTests {
             .replacingOccurrences(of: "\u{00A0}", with: " ")
             .replacingOccurrences(of: "$ ", with: "$")
 
-        #expect(output.contains("Codex token-based cost"))
+        #expect(output.contains("Codex API-equivalent estimate (not billed)"))
         #expect(output.contains("Projects (Last 30 days):"))
         #expect(output.contains("client-a: $7.50 · 7K tokens"))
         #expect(output.contains("/work/client-a"))
