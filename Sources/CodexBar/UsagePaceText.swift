@@ -44,11 +44,11 @@ enum UsagePaceText {
             displayedEstimate,
             forecast.windowsUntilReset)
         let verdictText: String
-        if forecast.estimatedWindowsToExhaustWeekly >= Double(forecast.windowsUntilReset) {
+        if forecast.estimatedWindowsToExhaustWeekly >= forecast.availableWindowsUntilReset {
             verdictText = L("Weekly cannot run out before reset at this pace")
         } else {
             let windowsEarly = Self.boundedWindowCount(
-                Double(forecast.windowsUntilReset) - forecast.estimatedWindowsToExhaustWeekly)
+                forecast.availableWindowsUntilReset - forecast.estimatedWindowsToExhaustWeekly)
             verdictText = String.localizedStringWithFormat(
                 L("Weekly can run out ≈%d windows early"),
                 max(1, windowsEarly))

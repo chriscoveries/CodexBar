@@ -321,8 +321,11 @@ extension UsageStore {
                 var identitiesChanged = false
                 switch Self.genericSessionEquivalentWindowPairResolution(snapshot: snapshot) {
                 case let .resolved(_, _, _, resolvedIdentity):
-                    guard identities[identityKey] != resolvedIdentity else { break }
-                    histories.removeAll { $0.name == .session || $0.name == .weekly }
+                    let previousIdentity = identities[identityKey]
+                    guard previousIdentity != resolvedIdentity else { break }
+                    histories.removeAll {
+                        $0.name == .session || (previousIdentity != nil && $0.name == .weekly)
+                    }
                     identities[identityKey] = resolvedIdentity
                     identitiesChanged = true
                 case .incomplete:

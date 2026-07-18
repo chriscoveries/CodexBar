@@ -13,6 +13,7 @@ struct SessionEquivalentForecast: Equatable, Sendable {
 
     let estimatedWindowsToExhaustWeekly: Double
     let windowsUntilReset: Int
+    let availableWindowsUntilReset: Double
     let sampleCount: Int
     let weeklyResetsAt: Date
     let weeklyUsedPercent: Double
@@ -21,6 +22,7 @@ struct SessionEquivalentForecast: Equatable, Sendable {
     init(
         estimatedWindowsToExhaustWeekly: Double,
         windowsUntilReset: Int,
+        availableWindowsUntilReset: Double? = nil,
         sampleCount: Int,
         weeklyResetsAt: Date,
         weeklyUsedPercent: Double,
@@ -28,6 +30,7 @@ struct SessionEquivalentForecast: Equatable, Sendable {
     {
         self.estimatedWindowsToExhaustWeekly = estimatedWindowsToExhaustWeekly
         self.windowsUntilReset = windowsUntilReset
+        self.availableWindowsUntilReset = availableWindowsUntilReset ?? Double(windowsUntilReset)
         self.sampleCount = sampleCount
         self.weeklyResetsAt = weeklyResetsAt
         self.weeklyUsedPercent = weeklyUsedPercent
@@ -84,11 +87,13 @@ struct SessionEquivalentForecast: Equatable, Sendable {
             workDays: workDays,
             calendar: calendar)
         guard remainingSeconds >= 0 else { return nil }
-        let windowsUntilReset = Int(floor(remainingSeconds / sessionSeconds))
+        let availableWindowsUntilReset = remainingSeconds / sessionSeconds
+        let windowsUntilReset = Int(floor(availableWindowsUntilReset))
 
         return Self(
             estimatedWindowsToExhaustWeekly: estimatedWindows,
             windowsUntilReset: windowsUntilReset,
+            availableWindowsUntilReset: availableWindowsUntilReset,
             sampleCount: burnEstimate.sampleCount,
             weeklyResetsAt: weeklyResetsAt,
             weeklyUsedPercent: weeklyWindow.usedPercent,
