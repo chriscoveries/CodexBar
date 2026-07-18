@@ -605,6 +605,12 @@
 "agent_sessions_subtitle" = "إظهار جلسات Codex وClaude Code المحلية والمكتشفة عبر SSH في القائمة.";
 "agent_sessions_hosts_title" = "مضيفو SSH إضافيون";
 "agent_sessions_footer" = "يتم اكتشاف أجهزة Mac على شبكة tailnet تلقائيًا. يتم تحديث الجلسات المحلية كل 30 ثانية؛ والمضيفون البعيدون كل 60 ثانية وعند فتح القائمة.";
+"agent_session_labels_title" = "تسميات الجلسات";
+"agent_session_labels_subtitle" = "اختر كيفية تسمية جلسات الوكلاء.";
+"agent_session_label_project" = "المشروع";
+"agent_session_label_descriptive" = "وصفي";
+"agent_session_label_descriptive_and_project" = "وصفي + المشروع";
+"agent_session_unknown_project" = "مشروع غير معروف";
 
 /* Advanced Pane */
 "section_keyboard_shortcut" = "اختصار لوحة المفاتيح";

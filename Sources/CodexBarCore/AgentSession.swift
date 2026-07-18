@@ -618,7 +618,7 @@ public enum CodexRolloutFirstLineParser {
             cwd: payload["cwd"] as? String,
             originator: payload["originator"] as? String,
             source: payload["source"] as? String,
-            agentPath: threadSpawn?["agent_path"] as? String,
+            agentPath: (payload["agent_path"] as? String) ?? (threadSpawn?["agent_path"] as? String),
             isGuardian: (subagent?["other"] as? String)?.lowercased() == "guardian")
     }
 

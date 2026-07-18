@@ -80,8 +80,8 @@ struct MenuPane: View {
                     options: MenuSettingsMenuOptions.agentSessionLabelStyles,
                     label: {
                         SettingsRowLabel(
-                            L("Session labels"),
-                            subtitle: L("Choose how agent sessions are named."))
+                            L("agent_session_labels_title"),
+                            subtitle: L("agent_session_labels_subtitle"))
                     },
                     optionLabel: { style in
                         Text(style.label)

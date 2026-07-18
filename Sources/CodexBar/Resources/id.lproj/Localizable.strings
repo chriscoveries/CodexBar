@@ -607,6 +607,12 @@
 "agent_sessions_subtitle" = "Tampilkan sesi Codex dan Claude Code lokal serta yang ditemukan melalui SSH di menu.";
 "agent_sessions_hosts_title" = "Host SSH tambahan";
 "agent_sessions_footer" = "Mac di tailnet Anda ditemukan secara otomatis. Sesi lokal disegarkan setiap 30 detik; host jarak jauh setiap 60 detik dan saat menu dibuka.";
+"agent_session_labels_title" = "Label sesi";
+"agent_session_labels_subtitle" = "Pilih cara penamaan sesi agen.";
+"agent_session_label_project" = "Proyek";
+"agent_session_label_descriptive" = "Deskriptif";
+"agent_session_label_descriptive_and_project" = "Deskriptif + proyek";
+"agent_session_unknown_project" = "Proyek tidak dikenal";
 
 /* Advanced Pane */
 "section_keyboard_shortcut" = "Pintasan keyboard";

@@ -605,6 +605,12 @@
 "agent_sessions_subtitle" = "Show local and SSH-discovered Codex and Claude Code sessions in the menu.";
 "agent_sessions_hosts_title" = "Additional SSH hosts";
 "agent_sessions_footer" = "Macs on your tailnet are discovered automatically. Local sessions refresh every 30 seconds; remote hosts every 60 seconds and when the menu opens.";
+"agent_session_labels_title" = "Session labels";
+"agent_session_labels_subtitle" = "Choose how agent sessions are named.";
+"agent_session_label_project" = "Project";
+"agent_session_label_descriptive" = "Descriptive";
+"agent_session_label_descriptive_and_project" = "Descriptive + project";
+"agent_session_unknown_project" = "Unknown project";
 
 /* Advanced Pane */
 "section_keyboard_shortcut" = "Keyboard shortcut";

@@ -595,6 +595,12 @@
 "agent_sessions_subtitle" = "Hiển thị các phiên Codex và Claude Code cục bộ cùng các phiên được phát hiện qua SSH trong menu.";
 "agent_sessions_hosts_title" = "Máy chủ SSH bổ sung";
 "agent_sessions_footer" = "Các máy Mac trên tailnet của bạn được tự động phát hiện. Các phiên cục bộ được làm mới 30 giây một lần; các máy chủ từ xa được làm mới 60 giây một lần và khi menu mở.";
+"agent_session_labels_title" = "Nhãn phiên";
+"agent_session_labels_subtitle" = "Chọn cách đặt tên cho các phiên tác nhân.";
+"agent_session_label_project" = "Dự án";
+"agent_session_label_descriptive" = "Mô tả";
+"agent_session_label_descriptive_and_project" = "Mô tả + dự án";
+"agent_session_unknown_project" = "Dự án không xác định";
 
 /* Advanced Pane */
 "section_keyboard_shortcut" = "Phím tắt";

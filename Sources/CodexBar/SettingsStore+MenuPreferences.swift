@@ -90,9 +90,9 @@ enum AgentSessionLabelStyle: String, CaseIterable {
 
     var label: String {
         switch self {
-        case .project: L("Project")
-        case .descriptive: L("Descriptive")
-        case .descriptiveAndProject: L("Descriptive + project")
+        case .project: L("agent_session_label_project")
+        case .descriptive: L("agent_session_label_descriptive")
+        case .descriptiveAndProject: L("agent_session_label_descriptive_and_project")
         }
     }
 
@@ -101,12 +101,12 @@ enum AgentSessionLabelStyle: String, CaseIterable {
         let descriptive = session.sessionName?.trimmingCharacters(in: .whitespacesAndNewlines)
         switch self {
         case .project:
-            return project?.nilIfEmpty ?? L("Unknown project")
+            return project?.nilIfEmpty ?? L("agent_session_unknown_project")
         case .descriptive:
-            return descriptive?.nilIfEmpty ?? project?.nilIfEmpty ?? L("Unknown project")
+            return descriptive?.nilIfEmpty ?? project?.nilIfEmpty ?? L("agent_session_unknown_project")
         case .descriptiveAndProject:
             guard let descriptive = descriptive?.nilIfEmpty else {
-                return project?.nilIfEmpty ?? L("Unknown project")
+                return project?.nilIfEmpty ?? L("agent_session_unknown_project")
             }
             guard let project = project?.nilIfEmpty,
                   descriptive.caseInsensitiveCompare(project) != .orderedSame

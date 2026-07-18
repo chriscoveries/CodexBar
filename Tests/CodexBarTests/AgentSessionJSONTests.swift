@@ -30,5 +30,12 @@ struct AgentSessionJSONTests {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         #expect(try decoder.decode([AgentSession].self, from: data) == [session])
+
+        var legacyObject = try #require(object.first)
+        legacyObject.removeValue(forKey: "sessionName")
+        let legacyData = try JSONSerialization.data(withJSONObject: [legacyObject])
+        let legacySession = try #require(decoder.decode([AgentSession].self, from: legacyData).first)
+        #expect(legacySession.sessionName == nil)
+        #expect(legacySession.id == session.id)
     }
 }

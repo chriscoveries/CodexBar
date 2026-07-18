@@ -36,6 +36,7 @@ public struct LocalAgentSessionScanner: Sendable {
         let now: Date
         let codexAppServerPresent: Bool
         let includeFileOnlySessions: Bool
+        let threadMetadata: [String: CodexThreadMetadata]
     }
 
     public let config: SessionScanConfig
@@ -113,19 +114,21 @@ public struct LocalAgentSessionScanner: Sendable {
         } else {
             []
         }
-        let threadMetadata = CodexThreadMetadataReader(codexHomeDirectory: codexHomeDirectory)
-            .metadata(for: Set(rollouts.map(\.metadata.sessionID)))
+        let threadMetadata = Self.codexThreadMetadata(
+            rollouts: rollouts,
+            codexHomeDirectory: codexHomeDirectory,
+            environment: environment)
         return self.sessions(
             processes: processes,
             cwdByPID: cwdByPID,
             rollouts: rollouts,
-            threadMetadata: threadMetadata,
             context: ScanContext(
                 homeDirectory: homeDirectory,
                 host: host,
                 now: now,
                 codexAppServerPresent: codexAppServerPresent,
-                includeFileOnlySessions: includeFileOnlySessions),
+                includeFileOnlySessions: includeFileOnlySessions,
+                threadMetadata: threadMetadata),
             directoryBudget: &directoryBudget)
     }
 
@@ -136,11 +139,47 @@ public struct LocalAgentSessionScanner: Sendable {
         hasAgentProcesses || includeFileOnlySessions
     }
 
+    private static func codexThreadMetadata(
+        rollouts: [Rollout],
+        codexHomeDirectory: URL,
+        environment: [String: String])
+        -> [String: CodexThreadMetadata]
+    {
+        let sessionIDs = Set(rollouts.map(\.metadata.sessionID))
+        let indexedNames = CodexThreadMetadataReader.indexedThreadNames(
+            codexHomeDirectory: codexHomeDirectory,
+            sessionIDs: sessionIDs)
+        var groups: [String: (reader: CodexThreadMetadataReader, sessionIDs: Set<String>)] = [:]
+        for rollout in rollouts {
+            let resolvedWorkingDirectory = rollout.metadata.cwd.map {
+                URL(fileURLWithPath: $0, isDirectory: true).standardizedFileURL
+            }
+            let reader = CodexThreadMetadataReader(
+                codexHomeDirectory: codexHomeDirectory,
+                environment: environment,
+                resolvedWorkingDirectory: resolvedWorkingDirectory)
+            let key = reader.databaseURL.path
+            if var group = groups[key] {
+                group.sessionIDs.insert(rollout.metadata.sessionID)
+                groups[key] = group
+            } else {
+                groups[key] = (reader, [rollout.metadata.sessionID])
+            }
+        }
+
+        var metadata: [String: CodexThreadMetadata] = [:]
+        for group in groups.values {
+            metadata.merge(group.reader.metadata(for: group.sessionIDs, indexedNames: indexedNames)) { _, latest in
+                latest
+            }
+        }
+        return metadata
+    }
+
     private func sessions(
         processes: [AgentProcessRecord],
         cwdByPID: [Int32: String],
         rollouts: [Rollout],
-        threadMetadata: [String: CodexThreadMetadata],
         context: ScanContext,
         directoryBudget: inout DirectoryMetadataScanBudget) -> [AgentSession]
     {
@@ -210,7 +249,7 @@ public struct LocalAgentSessionScanner: Sendable {
                     projectName: Self.projectName(cwd ?? rollout?.metadata.cwd),
                     sessionName: codexDescriptiveNamePIDs.contains(process.pid)
                         ? rollout?.metadata.descriptiveName(
-                            threadMetadata: rollout.flatMap { threadMetadata[$0.metadata.sessionID] })
+                            threadMetadata: rollout.flatMap { context.threadMetadata[$0.metadata.sessionID] })
                         : nil,
                     startedAt: process.startedAt,
                     lastActivityAt: rollout?.modifiedAt,
@@ -231,7 +270,7 @@ public struct LocalAgentSessionScanner: Sendable {
                 now: context.now)
             else { continue }
             session.sessionName = rollout.metadata.descriptiveName(
-                threadMetadata: threadMetadata[rollout.metadata.sessionID])
+                threadMetadata: context.threadMetadata[rollout.metadata.sessionID])
             session.source = AgentSessionCorrelation.fileOnlyCodexSource(
                 metadataSource: session.source,
                 appServerPresent: context.codexAppServerPresent)

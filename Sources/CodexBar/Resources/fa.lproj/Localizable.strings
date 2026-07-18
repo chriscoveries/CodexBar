@@ -605,6 +605,12 @@
 "agent_sessions_subtitle" = "جلسات محلی و جلسات Codex و Claude Code یافته‌شده از طریق SSH را در منو نمایش دهید.";
 "agent_sessions_hosts_title" = "میزبان‌های SSH اضافی";
 "agent_sessions_footer" = "مک‌های موجود در tailnet شما به‌طور خودکار شناسایی می‌شوند. جلسات محلی هر ۳۰ ثانیه و میزبان‌های راه دور هر ۶۰ ثانیه و هنگام باز شدن منو تازه‌سازی می‌شوند.";
+"agent_session_labels_title" = "برچسب‌های جلسه";
+"agent_session_labels_subtitle" = "نحوه نام‌گذاری جلسات عامل را انتخاب کنید.";
+"agent_session_label_project" = "پروژه";
+"agent_session_label_descriptive" = "توصیفی";
+"agent_session_label_descriptive_and_project" = "توصیفی + پروژه";
+"agent_session_unknown_project" = "پروژه ناشناخته";
 
 /* Advanced Pane */
 "section_keyboard_shortcut" = "میانبر کیبورد";
