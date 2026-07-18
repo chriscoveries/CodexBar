@@ -89,7 +89,7 @@ struct CLICostTests {
             .replacingOccurrences(of: "\u{00A0}", with: " ")
             .replacingOccurrences(of: "$ ", with: "$")
 
-        #expect(output.contains("Codex API-equivalent estimate (not billed)"))
+        #expect(output.contains("Codex token-based cost"))
         #expect(output.contains("Projects (Last 30 days):"))
         #expect(output.contains("client-a: $7.50 · 7K tokens"))
         #expect(output.contains("/work/client-a"))
@@ -97,7 +97,7 @@ struct CLICostTests {
         #expect(output.contains("  - client-a: $2.25 · 2K tokens"))
         #expect(output.contains("/Users/test/.codex/worktrees/abcd/client-a"))
         #expect(output.contains("Unknown project: $2.49 · 2K tokens"))
-        #expect(output.contains("Not a subscription bill or plan value · local usage × public API prices"))
+        #expect(output.contains("Estimated from token usage · not a subscription bill"))
     }
 
     @Test

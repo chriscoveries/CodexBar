@@ -43,7 +43,7 @@ extension StatusItemController {
         width: CGFloat) -> NSMenuItem
     {
         let title = Self.costMenuTitleForProvider(model.provider)
-        let tooltipLines = Self.costMenuTooltipLines(tokenUsage: model.tokenUsage)
+        let tooltipLines = Self.costMenuTooltipLines(provider: model.provider, tokenUsage: model.tokenUsage)
         let visibleDetailLines = Self.costMenuVisibleDetailLines(
             provider: model.provider,
             tokenUsage: model.tokenUsage,
@@ -98,7 +98,10 @@ extension StatusItemController {
         return item
     }
 
-    static func costMenuTooltipLines(tokenUsage: UsageMenuCardView.Model.TokenUsageSection?) -> [String] {
+    static func costMenuTooltipLines(
+        provider: UsageProvider,
+        tokenUsage: UsageMenuCardView.Model.TokenUsageSection?) -> [String]
+    {
         let lines = [
             tokenUsage?.sessionLine,
             tokenUsage?.monthLine,
@@ -106,7 +109,7 @@ extension StatusItemController {
         ]
             .compactMap(\.self)
             + (tokenUsage?.comparisonLines ?? [])
-            + [tokenUsage?.hintLine, tokenUsage?.errorLine].compactMap(\.self)
+            + [provider == .codex ? nil : tokenUsage?.hintLine, tokenUsage?.errorLine].compactMap(\.self)
         return lines.filter { !$0.isEmpty }
     }
 
@@ -115,16 +118,7 @@ extension StatusItemController {
         tokenUsage: UsageMenuCardView.Model.TokenUsageSection?,
         hasSubmenu: Bool) -> [String]
     {
-        // A submenu hides the regular detail rows, so retain the provenance hint on the parent
-        // item. Otherwise Codex's API-equivalent estimate can be opened as a chart labelled as
-        // cost with no visible non-billing disclaimer.
-        guard !hasSubmenu else {
-            guard provider == .codex else { return [] }
-            return tokenUsage?.hintLine?
-                .split(separator: "\n")
-                .map(String.init)
-                .filter { !$0.isEmpty } ?? []
-        }
+        guard !hasSubmenu else { return [] }
         let primaryLines = ([
             tokenUsage?.sessionLine,
             tokenUsage?.monthLine,
@@ -135,7 +129,7 @@ extension StatusItemController {
             + [tokenUsage?.errorLine].compactMap(\.self))
             .filter { !$0.isEmpty }
         guard primaryLines.isEmpty else { return primaryLines }
-        return [tokenUsage?.hintLine]
+        return [provider == .codex ? nil : tokenUsage?.hintLine]
             .compactMap(\.self)
             .filter { !$0.isEmpty }
     }

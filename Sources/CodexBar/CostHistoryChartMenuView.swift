@@ -235,13 +235,6 @@ struct CostHistoryChartMenuView: View {
             }
 
             if let total = self.totalCostUSD {
-                if let disclaimer = Self.estimateDisclaimer(provider: self.provider) {
-                    Text(disclaimer)
-                        .font(.caption2)
-                        .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
                 Text(String(
                     format: L("Est. total (%@): %@"),
                     self.windowLabel ?? Self.windowLabel(days: self.historyDays),
@@ -295,10 +288,6 @@ struct CostHistoryChartMenuView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, Self.verticalPadding)
         .frame(minWidth: self.width, maxWidth: .infinity, alignment: .top)
-    }
-
-    static func estimateDisclaimer(provider: UsageProvider) -> String? {
-        provider == .codex ? L("codex_api_estimate_not_billed") : nil
     }
 
     private struct Model {

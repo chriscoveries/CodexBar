@@ -139,7 +139,7 @@ extension CodexBarCLI {
     {
         let name = ProviderDescriptorRegistry.descriptor(for: provider).metadata.displayName
         let title = provider == .codex
-            ? "\(name) API-equivalent estimate (not billed)"
+            ? "\(name) token-based cost"
             : "\(name) Cost (API-rate estimate)"
         let header = Self.costHeaderLine(title, useColor: useColor)
         if groupBy == .project, provider == .codex {
@@ -208,7 +208,7 @@ extension CodexBarCLI {
 
     private static func costEstimateHint(provider: UsageProvider) -> String {
         provider == .codex
-            ? "Not a subscription bill or plan value · local usage × public API prices"
+            ? "Estimated from token usage · not a subscription bill"
             : UsageFormatter.costEstimateHint(provider: provider)
     }
 

@@ -436,7 +436,7 @@ private struct TokenUsageSectionContent: View {
                     .font(self.lineFont)
                     .lineLimit(1)
             }
-            if let hint = self.tokenUsage.hintLine, !hint.isEmpty {
+            if self.provider != .codex, let hint = self.tokenUsage.hintLine, !hint.isEmpty {
                 Text(hint)
                     .font(.footnote)
                     .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))

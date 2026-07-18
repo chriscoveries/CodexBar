@@ -192,8 +192,13 @@ struct InlineCostHistoryDashboardLabelTests {
                     outputTokens: 75,
                     totalTokens: 275,
                     costUSD: 0.25,
-                    modelsUsed: nil,
-                    modelBreakdowns: nil),
+                    modelsUsed: ["test-model"],
+                    modelBreakdowns: [
+                        CostUsageDailyReport.ModelBreakdown(
+                            modelName: "test-model",
+                            costUSD: 0.25,
+                            totalTokens: 275),
+                    ]),
             ],
             updatedAt: now)
 
@@ -223,14 +228,15 @@ struct InlineCostHistoryDashboardLabelTests {
         let dashboard = try #require(model.inlineUsageDashboard)
         #expect(dashboard.currencyCode == "USD")
         #expect(dashboard.kpis.map(\.title) == [
-            "Today · API-equivalent estimate",
-            "30d · API-equivalent estimate",
+            "Today",
+            "30d",
             "Latest tokens",
             "30d tokens",
         ])
-        #expect(dashboard.detailLines.contains("not a subscription bill or plan value"))
-        #expect(dashboard.detailLines.contains(
-            "Local usage × public API prices · not a subscription bill or plan value"))
+        #expect(dashboard.detailLines == [
+            "Top model: test-model",
+            "Estimated from token usage · not a subscription bill",
+        ])
     }
 
     @Test
