@@ -1263,6 +1263,9 @@
 "By subscription" = "Per abonnement";
 "No model-level history" = "Geen geschiedenis op modelniveau";
 "Daily estimated spend" = "Geschatte dagelijkse uitgaven";
+"Coding Plan" = "Codeerplan";
+"Agent Plan" = "Agentplan";
+"Team" = "Team";
 
 /* Menu bar layout editor */
 "menu_bar_layout_title" = "Indeling";

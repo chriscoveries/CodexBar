@@ -1266,6 +1266,9 @@
 "By subscription" = "Per subscripció";
 "No model-level history" = "Sense historial per model";
 "Daily estimated spend" = "Despesa diària estimada";
+"Coding Plan" = "Pla de programació";
+"Agent Plan" = "Pla d'agent";
+"Team" = "Equip";
 
 /* Menu bar layout editor */
 "menu_bar_layout_title" = "Disposició";

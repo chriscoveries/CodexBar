@@ -1231,6 +1231,9 @@
 "By subscription" = "구독별";
 "No model-level history" = "모델별 내역이 없습니다";
 "Daily estimated spend" = "일별 예상 지출";
+"Coding Plan" = "코딩 요금제";
+"Agent Plan" = "에이전트 요금제";
+"Team" = "팀";
 
 /* Menu bar layout editor */
 "menu_bar_layout_title" = "레이아웃";

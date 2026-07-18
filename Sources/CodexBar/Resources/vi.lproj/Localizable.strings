@@ -1264,6 +1264,9 @@
 "By subscription" = "Theo gói đăng ký";
 "No model-level history" = "Không có lịch sử theo mô hình";
 "Daily estimated spend" = "Chi tiêu ước tính hằng ngày";
+"Coding Plan" = "Gói lập trình";
+"Agent Plan" = "Gói tác nhân";
+"Team" = "Nhóm";
 
 /* Menu bar layout editor */
 "menu_bar_layout_title" = "Bố cục";

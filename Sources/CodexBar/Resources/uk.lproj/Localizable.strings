@@ -1263,6 +1263,9 @@
 "By subscription" = "За підписками";
 "No model-level history" = "Немає історії за моделями";
 "Daily estimated spend" = "Орієнтовні щоденні витрати";
+"Coding Plan" = "План кодування";
+"Agent Plan" = "План агента";
+"Team" = "Команда";
 
 /* Menu bar layout editor */
 "menu_bar_layout_title" = "Компонування";

@@ -1267,6 +1267,9 @@
 "By subscription" = "Per abbonamento";
 "No model-level history" = "Nessuna cronologia a livello di modello";
 "Daily estimated spend" = "Spesa giornaliera stimata";
+"Coding Plan" = "Piano di codifica";
+"Agent Plan" = "Piano agente";
+"Team" = "Squadra";
 
 /* Menu bar layout editor */
 "menu_bar_layout_title" = "Disposizione";

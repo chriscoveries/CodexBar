@@ -1265,6 +1265,9 @@
 "By subscription" = "Aboneliğe göre";
 "No model-level history" = "Model düzeyinde geçmiş yok";
 "Daily estimated spend" = "Günlük tahmini harcama";
+"Coding Plan" = "Kodlama Planı";
+"Agent Plan" = "Ajan Planı";
+"Team" = "Ekip";
 
 /* Menu bar layout editor */
 "menu_bar_layout_title" = "Düzen";

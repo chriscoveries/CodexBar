@@ -1264,6 +1264,9 @@
 "By subscription" = "サブスクリプション別";
 "No model-level history" = "モデル別の履歴はありません";
 "Daily estimated spend" = "日別推定支出";
+"Coding Plan" = "コーディングプラン";
+"Agent Plan" = "エージェントプラン";
+"Team" = "チーム";
 
 /* Menu bar layout editor */
 "menu_bar_layout_title" = "レイアウト";

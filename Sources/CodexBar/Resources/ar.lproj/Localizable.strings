@@ -1267,6 +1267,9 @@
 "By subscription" = "حسب الاشتراك";
 "No model-level history" = "لا يوجد سجل على مستوى النموذج";
 "Daily estimated spend" = "الإنفاق اليومي التقديري";
+"Coding Plan" = "خطة البرمجة";
+"Agent Plan" = "خطة الوكيل";
+"Team" = "فريق";
 
 /* Menu bar layout editor */
 "menu_bar_layout_title" = "التخطيط";

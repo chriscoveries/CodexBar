@@ -1268,6 +1268,9 @@
 "By subscription" = "By subscription";
 "No model-level history" = "No model-level history";
 "Daily estimated spend" = "Daily estimated spend";
+"Coding Plan" = "Coding Plan";
+"Agent Plan" = "Agent Plan";
+"Team" = "Team";
 
 /* Menu bar layout editor */
 "menu_bar_layout_title" = "Layout";

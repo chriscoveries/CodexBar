@@ -1294,6 +1294,9 @@
 "By subscription" = "依訂閱";
 "No model-level history" = "尚無模型層級歷史";
 "Daily estimated spend" = "每日預估支出";
+"Coding Plan" = "程式設計方案";
+"Agent Plan" = "智慧體方案";
+"Team" = "團隊";
 
 /* Menu bar layout editor */
 "menu_bar_layout_title" = "佈局";

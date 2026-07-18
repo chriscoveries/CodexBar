@@ -1267,6 +1267,9 @@
 "By subscription" = "بر اساس اشتراک";
 "No model-level history" = "تاریخچه‌ای در سطح مدل وجود ندارد";
 "Daily estimated spend" = "برآورد هزینه روزانه";
+"Coding Plan" = "طرح کدنویسی";
+"Agent Plan" = "طرح عامل";
+"Team" = "تیم";
 
 /* Menu bar layout editor */
 "menu_bar_layout_title" = "چیدمان";
