@@ -787,8 +787,11 @@ extension ProviderSettingsDescriptorTests {
     }
 
     @Test
-    func `deepseek detailed usage runs only for the active api token account`() throws {
+    func `deepseek detailed usage requires cost extras and active api token account`() throws {
         let fixture = try self.makeSettingsFixture(suite: "ProviderSettingsDescriptorTests-deepseek-account-usage")
+        fixture.settings.showOptionalCreditsAndExtraUsage = true
+        fixture.settings.costSummaryOption = .inlineSummary
+        #expect(fixture.settings.costSummaryShowsInlineDashboard(for: .deepseek))
         fixture.settings.addTokenAccount(provider: .deepseek, label: "Personal", token: "token-1")
         fixture.settings.addTokenAccount(provider: .deepseek, label: "Work", token: "token-2")
         let accounts = fixture.settings.tokenAccounts(for: .deepseek)
@@ -803,6 +806,30 @@ extension ProviderSettingsDescriptorTests {
             provider: .deepseek,
             settings: fixture.settings,
             override: TokenAccountOverride(provider: .deepseek, account: inactive)))
+        fixture.settings.costSummaryOption = .costSubmenu
+        #expect(fixture.settings.costSummaryShowsInlineDashboard(for: .deepseek))
+        #expect(ProviderTokenAccountSelection.shouldIncludeOptionalUsage(
+            provider: .deepseek,
+            settings: fixture.settings,
+            override: TokenAccountOverride(provider: .deepseek, account: active)))
+        fixture.settings.costSummaryOption = .both
+        #expect(fixture.settings.costSummaryShowsInlineDashboard(for: .deepseek))
+        fixture.settings.costSummaryOption = .off
+        #expect(!fixture.settings.costSummaryShowsInlineDashboard(for: .deepseek))
+        #expect(!ProviderTokenAccountSelection.shouldIncludeOptionalUsage(
+            provider: .deepseek,
+            settings: fixture.settings,
+            override: TokenAccountOverride(provider: .deepseek, account: active)))
+        fixture.settings.showOptionalCreditsAndExtraUsage = false
+        #expect(!ProviderTokenAccountSelection.shouldIncludeOptionalUsage(
+            provider: .codex,
+            settings: fixture.settings,
+            override: nil))
+        fixture.settings.costSummaryOption = .inlineSummary
+        #expect(!ProviderTokenAccountSelection.shouldIncludeOptionalUsage(
+            provider: .deepseek,
+            settings: fixture.settings,
+            override: TokenAccountOverride(provider: .deepseek, account: active)))
     }
 
     @Test
