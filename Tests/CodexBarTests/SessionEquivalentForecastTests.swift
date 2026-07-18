@@ -455,6 +455,50 @@ struct SessionEquivalentForecastTests {
         #expect(weeklyMetric.sessionEquivalentDetail?.verdictText == "Weekly can run out ≈5 windows early")
     }
 
+    @MainActor
+    @Test
+    func `Claude scoped weekly window cannot use all model history`() throws {
+        let store = UsageStorePlanUtilizationTests.makeStore()
+        let fixture = Self.historyFixture(burns: [4, 8, 6])
+        store.planUtilizationHistory[.claude] = PlanUtilizationHistoryBuckets(unscoped: fixture.histories)
+        let now = fixture.currentSessionReset.addingTimeInterval(-3600)
+        let session = RateWindow(
+            usedPercent: 20,
+            windowMinutes: 300,
+            resetsAt: fixture.currentSessionReset,
+            resetDescription: nil)
+        let scopedOnly = UsageSnapshot(
+            primary: session,
+            secondary: nil,
+            extraRateWindows: [
+                NamedRateWindow(
+                    id: "claude-weekly-scoped-fable",
+                    title: "Fable weekly",
+                    window: RateWindow(
+                        usedPercent: 60,
+                        windowMinutes: 10080,
+                        resetsAt: now.addingTimeInterval(2 * 24 * 3600),
+                        resetDescription: nil)),
+            ],
+            updatedAt: now)
+
+        #expect(store.sessionEquivalentWindows(provider: .claude, snapshot: scopedOnly) == nil)
+
+        let allModelsWeekly = RateWindow(
+            usedPercent: 40,
+            windowMinutes: 10080,
+            resetsAt: now.addingTimeInterval(2 * 24 * 3600),
+            resetDescription: nil)
+        let complete = UsageSnapshot(
+            primary: session,
+            secondary: allModelsWeekly,
+            extraRateWindows: scopedOnly.extraRateWindows,
+            updatedAt: now)
+        let resolved = try #require(store.sessionEquivalentWindows(provider: .claude, snapshot: complete))
+        #expect(resolved.weekly == allModelsWeekly)
+        #expect(resolved.weeklyWindowID == nil)
+    }
+
     @Test
     func `named provider metric requires the selected weekly window identity`() {
         let weekly = RateWindow(

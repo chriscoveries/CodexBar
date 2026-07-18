@@ -60,6 +60,18 @@ extension UsageStore {
         if provider == .antigravity {
             return Self.antigravitySessionEquivalentWindows(snapshot: snapshot)
         }
+        if provider == .claude {
+            guard let session = snapshot.primary,
+                  session.windowMinutes.map({ PlanUtilizationSeriesName.session.canonicalWindowMinutes($0) })
+                  == Self.sessionWindowMinutes,
+                  let weekly = snapshot.secondary,
+                  weekly.windowMinutes.map({ PlanUtilizationSeriesName.weekly.canonicalWindowMinutes($0) })
+                  == Self.weeklyWindowMinutes
+            else {
+                return nil
+            }
+            return (session, weekly, nil, nil)
+        }
         guard case let .resolved(session, weekly, weeklyWindowID, historyIdentity) =
             Self.genericSessionEquivalentWindowPairResolution(snapshot: snapshot)
         else {
