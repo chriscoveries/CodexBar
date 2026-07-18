@@ -69,6 +69,7 @@ extension UsageStore {
                 self.probeLogs = [:]
                 guard self.startupBehavior.automaticallyStartsBackgroundWork else { return }
                 self.startTimer()
+                self.startTokenTimer()
                 self.updateProviderRuntimes()
                 let enabledNow = Set(self.settings.enabledProvidersOrdered(
                     metadataByProvider: self.providerMetadata))
@@ -367,7 +368,22 @@ final class UsageStore {
     @ObservationIgnored private var hasCompletedInitialRefresh: Bool = false
     @ObservationIgnored private let providerAvailabilityCacheTTL: TimeInterval = 1
     @ObservationIgnored let accountInfoCacheTTL: TimeInterval = 30
-    @ObservationIgnored let tokenFetchTTL: TimeInterval = 60 * 60
+    /// Token scans can cause an additional widget snapshot publication. Keep the shortest automatic
+    /// cadence at five minutes so one- and two-minute provider refreshes do not exhaust WidgetKit's
+    /// reload budget or repeatedly traverse large local histories.
+    static let minimumTokenFetchTTL: TimeInterval = 5 * 60
+
+    var tokenFetchTTL: TimeInterval? {
+        Self.tokenFetchTTL(for: self.settings.refreshFrequency)
+    }
+
+    static func tokenFetchTTL(for frequency: RefreshFrequency) -> TimeInterval? {
+        let interval = frequency.usesAdaptivePolicy
+            ? AdaptiveRefreshPolicy.nominalIntervalForHeuristics
+            : frequency.seconds
+        return interval.map { max($0, Self.minimumTokenFetchTTL) }
+    }
+
     @ObservationIgnored let tokenFetchTimeout: TimeInterval = 10 * 60
     @ObservationIgnored let startupBehavior: StartupBehavior
     @ObservationIgnored let planUtilizationPersistenceCoordinator: PlanUtilizationHistoryPersistenceCoordinator

@@ -450,7 +450,7 @@
 "cost_history_days_title" = "Finestra storica: %d giorni";
 "cost_comparison_periods_title" = "Mostra periodi di confronto più brevi";
 "cost_comparison_periods_subtitle" = "Aggiungi i totali di 7, 30 e 90 giorni quando rientrano nell'intervallo di cronologia selezionato. Questi totali riutilizzano la stessa scansione locale.";
-"cost_auto_refresh_info" = "Aggiornamento automatico: ogni ora · Timeout: 10 min";
+"cost_auto_refresh_info" = "Aggiornamento automatico: intervallo globale (minimo 5 min) · Timeout: 10 min";
 "refresh_interval_title" = "Intervallo di aggiornamento";
 "manual_refresh_hint" = "Aggiornamento automatico disattivato; usa il comando Aggiorna nel menu.";
 "refresh_on_open_title" = "Aggiorna all'apertura del menu";
