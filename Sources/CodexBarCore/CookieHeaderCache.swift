@@ -801,6 +801,7 @@ public enum CookieHeaderCache {
 
     static func withLegacyBaseURLOverrideForTesting<T>(
         _ url: URL?,
+        isolation _: isolated (any Actor)? = #isolation,
         operation: () async throws -> T) async rethrows -> T
     {
         try await self.$taskLegacyBaseURLOverride.withValue(url) {
