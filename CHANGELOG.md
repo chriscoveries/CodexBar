@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.45.1 — Unreleased
+## 0.45.1 — 2026-07-19
 
 ### Added
 - Claude: show per-model weekly claude-swap usage windows from schema-v1 account listings (#2310). Thanks @AlexGodard!
