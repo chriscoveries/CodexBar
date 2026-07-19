@@ -34,11 +34,11 @@ struct OpenCodeGoProviderStrategyTests {
     }
 
     @Test
-    func `auto source prefers web before local fallback`() async {
+    func `auto source prefers local history before web fallback`() async {
         let descriptor = OpenCodeGoProviderDescriptor.makeDescriptor()
         let strategies = await descriptor.fetchPlan.pipeline.resolveStrategies(self.makeContext())
 
-        #expect(strategies.map(\.id) == ["opencodego.web", "opencodego.local"])
+        #expect(strategies.map(\.id) == ["opencodego.local", "opencodego.web"])
     }
 
     @Test
@@ -50,7 +50,22 @@ struct OpenCodeGoProviderStrategyTests {
     }
 
     @Test
-    func `web strategy falls back to local only for auth setup failures in auto mode`() {
+    func `local strategy falls through to web when local history is unavailable`() {
+        let strategy = OpenCodeGoLocalUsageFetchStrategy()
+        let context = self.makeContext()
+
+        #expect(strategy.shouldFallback(on: OpenCodeGoLocalUsageError.notDetected, context: context))
+        #expect(strategy.shouldFallback(
+            on: OpenCodeGoLocalUsageError.historyUnavailable("database not found"),
+            context: context))
+        #expect(strategy.shouldFallback(
+            on: OpenCodeGoLocalUsageError.sqliteFailed("database is locked"),
+            context: context))
+        #expect(!strategy.shouldFallback(on: OpenCodeGoUsageError.networkError("timeout"), context: context))
+    }
+
+    @Test
+    func `web strategy falls through only for auth setup failures in auto mode`() {
         let strategy = OpenCodeGoUsageFetchStrategy()
         let autoContext = self.makeContext()
         let webContext = self.makeContext(sourceMode: .web)

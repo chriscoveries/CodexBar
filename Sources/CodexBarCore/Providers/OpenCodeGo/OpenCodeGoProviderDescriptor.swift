@@ -50,8 +50,8 @@ public enum OpenCodeGoProviderDescriptor {
             return [OpenCodeGoUsageFetchStrategy()]
         }
         return [
-            OpenCodeGoUsageFetchStrategy(),
             OpenCodeGoLocalUsageFetchStrategy(),
+            OpenCodeGoUsageFetchStrategy(),
         ]
     }
 }
