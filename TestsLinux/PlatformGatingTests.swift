@@ -85,7 +85,7 @@ struct PlatformGatingTests {
         #endif
     }
 
-    @Test(arguments: [ProviderSourceMode.auto, .cli])
+    @Test(.serialized, arguments: [ProviderSourceMode.auto, .cli])
     func `Claude CLI runtime skips logged out interactive fallback`(sourceMode: ProviderSourceMode) async throws {
         #if os(Linux)
         let invocationLog = FileManager.default.temporaryDirectory
