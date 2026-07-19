@@ -169,6 +169,101 @@ struct ZoomMateCookieCacheTests {
     }
 
     @Test
+    func `auto mode continues past a rejected Chrome profile`() async throws {
+        KeychainCacheStore.setTestStoreForTesting(true)
+        defer {
+            CookieHeaderCache.clear(provider: .zoommate)
+            KeychainCacheStore.setTestStoreForTesting(false)
+        }
+
+        let rejectedHeader = "_zm_ssid=fake-rejected-session"
+        let validHeader = "_zm_ssid=fake-valid-session"
+        let jwt = Self.makeJWT()
+        let sessions = [
+            ZoomMateCookieImporter.SessionInfo(
+                cookieHeader: rejectedHeader,
+                sourceLabel: "Chrome Profile 1"),
+            ZoomMateCookieImporter.SessionInfo(
+                cookieHeader: validHeader,
+                sourceLabel: "Chrome Profile 2"),
+        ]
+        let stub = ProviderHTTPTransportStub { request in
+            let cookieHeader = request.value(forHTTPHeaderField: "Cookie")
+            if cookieHeader == rejectedHeader {
+                let response = HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: 401,
+                    httpVersion: nil,
+                    headerFields: nil)!
+                return (Data("{}".utf8), response)
+            }
+
+            #expect(cookieHeader == validHeader)
+            let body = "{\"success\": true, \"data\": {\"nak\": \"\(jwt)\"}}"
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil)!
+            return (Data(body.utf8), response)
+        }
+
+        let context = try await ZoomMateUsageFetcher.requestContext(
+            forCookieSessions: sessions,
+            cache: ZoomMateBearerTokenCache(),
+            timeout: 1,
+            transport: stub,
+            logger: nil)
+
+        #expect(context.authorization == "Bearer \(jwt)")
+        #expect(context.headers["Cookie"] == validHeader)
+        #expect(await stub.requests().count == 2)
+        let cached = try #require(CookieHeaderCache.load(provider: .zoommate))
+        #expect(cached.cookieHeader == validHeader)
+        #expect(cached.sourceLabel == "Chrome Profile 2")
+    }
+
+    @Test
+    func `auto mode does not hide a parse failure behind another Chrome profile`() async throws {
+        KeychainCacheStore.setTestStoreForTesting(true)
+        defer {
+            CookieHeaderCache.clear(provider: .zoommate)
+            KeychainCacheStore.setTestStoreForTesting(false)
+        }
+
+        let sessions = [
+            ZoomMateCookieImporter.SessionInfo(
+                cookieHeader: "_zm_ssid=fake-malformed-response-session",
+                sourceLabel: "Chrome Profile 1"),
+            ZoomMateCookieImporter.SessionInfo(
+                cookieHeader: "_zm_ssid=fake-unused-session",
+                sourceLabel: "Chrome Profile 2"),
+        ]
+        let stub = ProviderHTTPTransportStub { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil)!
+            return (Data("{\"success\": true, \"data\": {}}".utf8), response)
+        }
+
+        await #expect {
+            _ = try await ZoomMateUsageFetcher.requestContext(
+                forCookieSessions: sessions,
+                cache: ZoomMateBearerTokenCache(),
+                timeout: 1,
+                transport: stub,
+                logger: nil)
+        } throws: { error in
+            guard case ZoomMateUsageError.parseFailed = error else { return false }
+            return true
+        }
+        #expect(await stub.requests().count == 1)
+        #expect(CookieHeaderCache.load(provider: .zoommate) == nil)
+    }
+
+    @Test
     func `failed mint persists nothing`() async throws {
         KeychainCacheStore.setTestStoreForTesting(true)
         defer {

@@ -293,13 +293,11 @@ public struct ZoomMateUsageFetcher: Sendable {
                 logger: logger)
         }
 
-        let session = try ZoomMateCookieImporter.importSession(
+        let sessions = try ZoomMateCookieImporter.importSessions(
             browserDetection: self.browserDetection,
             logger: logger)
-        logger?("[zoommate] Using cookies from \(session.sourceLabel)")
         return try await Self.requestContext(
-            forCookieHeader: session.cookieHeader,
-            persistingValidatedHeaderAs: session.sourceLabel,
+            forCookieSessions: sessions,
             cache: cache,
             timeout: timeout,
             transport: transport,
@@ -310,6 +308,36 @@ public struct ZoomMateUsageFetcher: Sendable {
     }
 
     #if os(macOS)
+    /// Tries browser cookie profiles in import order, advancing only when the login bootstrap
+    /// explicitly rejects a candidate. Network and parse failures surface immediately rather than
+    /// being hidden by another profile. Only the first successfully minted session is persisted.
+    static func requestContext(
+        forCookieSessions sessions: [ZoomMateCookieImporter.SessionInfo],
+        cache: ZoomMateBearerTokenCache = .shared,
+        timeout: TimeInterval,
+        transport: any ProviderHTTPTransport = ProviderHTTPClient.shared,
+        logger: (@Sendable (String) -> Void)?) async throws -> RequestContext
+    {
+        guard !sessions.isEmpty else { throw ZoomMateUsageError.noSession }
+
+        for session in sessions {
+            logger?("[zoommate] Trying cookies from \(session.sourceLabel)")
+            do {
+                return try await self.requestContext(
+                    forCookieHeader: session.cookieHeader,
+                    persistingValidatedHeaderAs: session.sourceLabel,
+                    cache: cache,
+                    timeout: timeout,
+                    transport: transport,
+                    logger: logger)
+            } catch ZoomMateUsageError.invalidCredentials {
+                logger?("[zoommate] Cookie session from \(session.sourceLabel) was rejected")
+            }
+        }
+
+        throw ZoomMateUsageError.invalidCredentials
+    }
+
     /// Builds the `.auto` request context for a cookie session: reuses or mints the bearer JWT
     /// and, when `sourceLabel` is non-nil (a fresh browser import), persists the now-validated
     /// cookie header through `CookieHeaderCache`. The successful mint is the validation —

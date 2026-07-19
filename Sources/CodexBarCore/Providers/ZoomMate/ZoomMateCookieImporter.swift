@@ -38,8 +38,16 @@ public enum ZoomMateCookieImporter {
         browserDetection: BrowserDetection,
         logger: (@Sendable (String) -> Void)? = nil) throws -> SessionInfo
     {
+        try self.importSessions(browserDetection: browserDetection, logger: logger)[0]
+    }
+
+    public static func importSessions(
+        browserDetection: BrowserDetection,
+        logger: (@Sendable (String) -> Void)? = nil) throws -> [SessionInfo]
+    {
         let log: @Sendable (String) -> Void = { msg in logger?("[zoommate-cookie] \(msg)") }
         let installed = zoomMateCookieImportOrder.cookieImportCandidates(using: browserDetection)
+        var sessions: [SessionInfo] = []
 
         for browserSource in installed {
             do {
@@ -54,7 +62,7 @@ public enum ZoomMateCookieImporter {
                     guard !cookies.isEmpty else { continue }
                     log("\(source.label): found \(cookies.count) matching cookies")
                     let header = cookies.map { "\($0.name)=\($0.value)" }.joined(separator: "; ")
-                    return SessionInfo(cookieHeader: header, sourceLabel: source.label)
+                    sessions.append(SessionInfo(cookieHeader: header, sourceLabel: source.label))
                 }
             } catch {
                 BrowserCookieAccessGate.recordIfNeeded(error)
@@ -62,7 +70,8 @@ public enum ZoomMateCookieImporter {
             }
         }
 
-        throw ZoomMateUsageError.noSession
+        guard !sessions.isEmpty else { throw ZoomMateUsageError.noSession }
+        return sessions
     }
 
     /// Whether a browser would attach a cookie scoped to `cookieDomain` to a request to one of
