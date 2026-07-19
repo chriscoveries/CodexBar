@@ -17,9 +17,13 @@ struct OpenCodeGoProviderStrategyTests {
         }
     }
 
-    private func makeContext(sourceMode: ProviderSourceMode = .auto) -> ProviderFetchContext {
-        let env: [String: String] = [:]
-        return ProviderFetchContext(
+    private func makeContext(
+        sourceMode: ProviderSourceMode = .auto,
+        env: [String: String] = [:],
+        settings: ProviderSettingsSnapshot? = nil,
+        selectedTokenAccountID: UUID? = nil) -> ProviderFetchContext
+    {
+        ProviderFetchContext(
             runtime: .app,
             sourceMode: sourceMode,
             includeCredits: false,
@@ -27,18 +31,63 @@ struct OpenCodeGoProviderStrategyTests {
             webDebugDumpHTML: false,
             verbose: false,
             env: env,
-            settings: nil,
+            settings: settings,
             fetcher: UsageFetcher(environment: env),
             claudeFetcher: StubClaudeFetcher(),
-            browserDetection: BrowserDetection(cacheTTL: 0))
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            selectedTokenAccountID: selectedTokenAccountID)
     }
 
     @Test
-    func `auto source prefers local history before web fallback`() async {
+    func `unscoped auto source prefers local history before web fallback`() async {
         let descriptor = OpenCodeGoProviderDescriptor.makeDescriptor()
         let strategies = await descriptor.fetchPlan.pipeline.resolveStrategies(self.makeContext())
 
         #expect(strategies.map(\.id) == ["opencodego.local", "opencodego.web"])
+    }
+
+    @Test
+    func `auto source tries web before local for selected token accounts`() async {
+        let descriptor = OpenCodeGoProviderDescriptor.makeDescriptor()
+        let strategies = await descriptor.fetchPlan.pipeline.resolveStrategies(
+            self.makeContext(selectedTokenAccountID: UUID()))
+
+        #expect(strategies.map(\.id) == ["opencodego.web", "opencodego.local"])
+    }
+
+    @Test
+    func `auto source tries web before local for manual cookies`() async {
+        let descriptor = OpenCodeGoProviderDescriptor.makeDescriptor()
+        let settings = ProviderSettingsSnapshot.make(opencodego: .init(
+            cookieSource: .manual,
+            manualCookieHeader: "auth=selected",
+            workspaceID: nil))
+        let strategies = await descriptor.fetchPlan.pipeline.resolveStrategies(
+            self.makeContext(settings: settings))
+
+        #expect(strategies.map(\.id) == ["opencodego.web", "opencodego.local"])
+    }
+
+    @Test
+    func `auto source tries web before local for configured workspaces`() async {
+        let descriptor = OpenCodeGoProviderDescriptor.makeDescriptor()
+        let settings = ProviderSettingsSnapshot.make(opencodego: .init(
+            cookieSource: .auto,
+            manualCookieHeader: nil,
+            workspaceID: "wrk_team"))
+        let strategies = await descriptor.fetchPlan.pipeline.resolveStrategies(
+            self.makeContext(settings: settings))
+
+        #expect(strategies.map(\.id) == ["opencodego.web", "opencodego.local"])
+    }
+
+    @Test
+    func `auto source tries web before local for environment workspaces`() async {
+        let descriptor = OpenCodeGoProviderDescriptor.makeDescriptor()
+        let strategies = await descriptor.fetchPlan.pipeline.resolveStrategies(
+            self.makeContext(env: ["CODEXBAR_OPENCODEGO_WORKSPACE_ID": "wrk_env"]))
+
+        #expect(strategies.map(\.id) == ["opencodego.web", "opencodego.local"])
     }
 
     @Test
