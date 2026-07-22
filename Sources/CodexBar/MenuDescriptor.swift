@@ -237,7 +237,7 @@ struct MenuDescriptor {
                 let primaryDescriptionIsDetail = provider == .warp || provider == .kilo || provider == .abacus ||
                     provider == .deepseek || provider == .deepinfra || provider == .neuralwatt ||
                     provider == .azureopenai || provider == .mimo || provider == .qoder || provider == .sub2api ||
-                    provider == .chutes
+                    provider == .crof || provider == .chutes
                 let primaryWindow = if primaryDescriptionIsDetail {
                     // Some providers use resetDescription for non-reset detail
                     // (e.g., "Unlimited", "X/Y credits"). Avoid rendering it as a "Resets ..." line.
@@ -260,13 +260,6 @@ struct MenuDescriptor {
                    !primaryDetail.isEmpty
                 {
                     entries.append(.text(primaryDetail, .secondary))
-                }
-                if provider == .crof,
-                   primary.resetsAt != nil,
-                   let detail = primary.resetDescription?.trimmingCharacters(in: .whitespacesAndNewlines),
-                   !detail.isEmpty
-                {
-                    entries.append(.text(detail, .secondary))
                 }
                 if provider == .abacus,
                    let pace = store.weeklyPace(provider: provider, window: primary)
