@@ -150,7 +150,7 @@ struct StatusItemControllerMenuTests {
     }
 
     @Test
-    func `claude switcher still surfaces remaining scoped weekly carve outs`() {
+    func `claude switcher keeps account weekly even when scoped carve out remains`() {
         let session = RateWindow(
             usedPercent: 20,
             windowMinutes: 5 * 60,
@@ -180,7 +180,7 @@ struct StatusItemControllerMenuTests {
             snapshot: snapshot,
             showUsed: false)
 
-        #expect(percent == 15)
+        #expect(percent == 60)
     }
 
     @Test
