@@ -776,6 +776,7 @@ struct ClaudeMenuCardCostTests {
                 limit: 20,
                 currencyCode: "USD",
                 period: "Monthly cap",
+                balance: 100,
                 updatedAt: now),
             updatedAt: now,
             identity: nil)
@@ -801,6 +802,7 @@ struct ClaudeMenuCardCostTests {
             now: now))
 
         #expect(model.providerCost?.spendLine == "Monthly cap: $5.00 / $20.00")
+        #expect(model.providerCost?.balanceLine == "Balance: $100.00")
     }
 }
 

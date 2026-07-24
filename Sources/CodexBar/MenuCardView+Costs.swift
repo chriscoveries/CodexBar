@@ -345,6 +345,15 @@ extension UsageMenuCardView.Model {
                 percentLine: nil)
         }
 
+        if provider == .claude, let balance = cost.balance, cost.limit <= 0 {
+            let value = UsageFormatter.currencyString(balance, currencyCode: cost.currencyCode)
+            return ProviderCostSection(
+                title: L("Extra usage"),
+                percentUsed: nil,
+                spendLine: "\(L("Balance")): \(value)",
+                percentLine: nil)
+        }
+
         if provider == .openai || provider == .claude || provider == .litellm || provider == .aiand,
            cost.limit <= 0
         {
@@ -406,6 +415,9 @@ extension UsageMenuCardView.Model {
             percentUsed: percentUsed,
             spendLine: "\(periodLabel): \(used) / \(limit)",
             percentLine: String(format: L("%.0f%% used"), min(100, max(0, percentUsed))),
+            balanceLine: cost.balance.map {
+                "\(L("Balance")): \(UsageFormatter.currencyString($0, currencyCode: cost.currencyCode))"
+            },
             personalSpendLine: personalSpendLine)
     }
 
