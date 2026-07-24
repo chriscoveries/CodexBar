@@ -29,6 +29,7 @@ struct ClaudeWebRecoveryMenuTests {
         source: ClaudeUsageDataSource,
         cookieSource: ProviderCookieSource = .auto,
         selectedSessionKey: Bool = false,
+        authenticatedAccountEmail: String? = nil,
         attempts: [ProviderFetchAttempt] = []) -> [(String, MenuDescriptor.MenuAction)]
     {
         let settings = self.makeSettings()
@@ -42,6 +43,19 @@ struct ClaudeWebRecoveryMenuTests {
             fetcher: fetcher,
             browserDetection: BrowserDetection(cacheTTL: 0),
             settings: settings)
+        if let authenticatedAccountEmail {
+            store._setSnapshotForTesting(
+                UsageSnapshot(
+                    primary: nil,
+                    secondary: nil,
+                    updatedAt: Date(),
+                    identity: ProviderIdentitySnapshot(
+                        providerID: .claude,
+                        accountEmail: authenticatedAccountEmail,
+                        accountOrganization: nil,
+                        loginMethod: "Claude Pro")),
+                provider: .claude)
+        }
         store.errors[.claude] = error
         store.lastFetchAttempts[.claude] = attempts
 
@@ -69,6 +83,18 @@ struct ClaudeWebRecoveryMenuTests {
             $0.0 == "使用 Claude Code 登入…" && $0.1 == .switchAccount(.claude)
         })
         #expect(!actions.contains { $0.0 == "Add Account..." })
+    }
+
+    @Test
+    func `authenticated Claude account shows switch action instead of sign in`() {
+        let actions = self.actions(
+            source: .auto,
+            authenticatedAccountEmail: "claude@example.com")
+
+        #expect(actions.contains {
+            $0.0 == "Switch Account..." && $0.1 == .switchAccount(.claude)
+        })
+        #expect(!actions.contains { $0.0 == "Sign in with Claude Code..." })
     }
 
     @Test
