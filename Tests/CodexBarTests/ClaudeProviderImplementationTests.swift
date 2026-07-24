@@ -16,10 +16,10 @@ struct ClaudeProviderImplementationTests {
                 resetsAt: nil,
                 resetDescription: nil),
             providerCost: ProviderCostSnapshot(
-                used: 0,
-                limit: 0,
+                used: 5,
+                limit: 20,
                 currencyCode: "USD",
-                period: "Extra usage",
+                period: "Monthly cap",
                 balance: 100,
                 updatedAt: now),
             updatedAt: now)
@@ -39,7 +39,7 @@ struct ClaudeProviderImplementationTests {
             Issue.record("Expected Claude prepaid balance menu text")
             return
         }
-        #expect(title == "Extra usage balance: $100.00")
+        #expect(title == "Credits: $100.00")
         #expect(style == .primary)
         #expect(visibleEntries.count == 1)
     }

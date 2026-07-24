@@ -119,6 +119,49 @@ struct ClaudeWebCookieRenewalTests {
     }
 
     @Test
+    func `balance enrichment preserves extra usage cost from usage response`() async throws {
+        let paths = RequestHeaderLog()
+        try await self.withClaudeWebStub { request in
+            let url = try #require(request.url)
+            paths.append(url.path)
+            switch url.path {
+            case "/api/organizations/org-123/usage":
+                return Self.jsonResponse(
+                    url: url,
+                    body: """
+                    {
+                      "five_hour": { "utilization": 11 },
+                      "extra_usage": {
+                        "is_enabled": true,
+                        "monthly_limit": 10000,
+                        "used_credits": 42,
+                        "currency": "USD"
+                      }
+                    }
+                    """,
+                    setCookie: nil)
+            case "/api/organizations/org-123/prepaid/credits":
+                return Self.jsonResponse(
+                    url: url,
+                    body: #"{"amount":9958,"currency":"USD"}"#,
+                    setCookie: nil)
+            default:
+                return try Self.response(for: request, setCookie: nil)
+            }
+        } operation: {
+            let usage = try await ClaudeWebAPIFetcher.fetchUsage(
+                cookieHeader: "sessionKey=sk-ant-manual-token",
+                includeUsageDetails: false,
+                includePrepaidBalance: true)
+
+            #expect(usage.extraUsageCost?.used == 0.42)
+            #expect(usage.extraUsageCost?.limit == 100)
+            #expect(usage.extraUsageCost?.balance == 99.58)
+            #expect(!paths.values.contains("/api/organizations/org-123/overage_spend_limit"))
+        }
+    }
+
+    @Test
     func `web fetch skips prepaid credits when optional usage is disabled`() async throws {
         let paths = RequestHeaderLog()
         try await self.withClaudeWebStub { request in

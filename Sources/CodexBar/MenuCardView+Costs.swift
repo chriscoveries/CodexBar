@@ -2,18 +2,27 @@ import CodexBarCore
 import Foundation
 
 extension UsageMenuCardView.Model.ProviderCostSection {
+    enum Presentation: Equatable {
+        case detail
+        case inlineValue
+    }
+
     init(
         title: String,
         percentUsed: Double?,
         spendLine: String,
-        percentLine: String?)
+        percentLine: String?,
+        presentation: Presentation = .detail,
+        showsInProviderDetails: Bool = true)
     {
         self.init(
             title: title,
             percentUsed: percentUsed,
             spendLine: spendLine,
             percentLine: percentLine,
-            personalSpendLine: nil)
+            personalSpendLine: nil,
+            presentation: presentation,
+            showsInProviderDetails: showsInProviderDetails)
     }
 }
 
@@ -301,7 +310,8 @@ extension UsageMenuCardView.Model {
 
     static func providerCostSection(
         provider: UsageProvider,
-        cost: ProviderCostSnapshot?) -> ProviderCostSection?
+        cost: ProviderCostSnapshot?,
+        isClaudeAdminAPI: Bool = false) -> ProviderCostSection?
     {
         if provider == .manus {
             return nil
@@ -345,16 +355,29 @@ extension UsageMenuCardView.Model {
                 percentLine: nil)
         }
 
-        if provider == .claude, let balance = cost.balance, cost.limit <= 0 {
+        if provider == .claude {
+            if isClaudeAdminAPI {
+                let spend = UsageFormatter.currencyString(cost.used, currencyCode: cost.currencyCode)
+                let periodLabel = Self.localizedPeriodLabel(cost.period ?? "Last 30 days")
+                return ProviderCostSection(
+                    title: L("API spend"),
+                    percentUsed: nil,
+                    spendLine: "\(periodLabel): \(spend)",
+                    percentLine: nil)
+            }
+
+            guard let balance = cost.balance else { return nil }
             let value = UsageFormatter.currencyString(balance, currencyCode: cost.currencyCode)
             return ProviderCostSection(
-                title: L("Extra usage"),
+                title: L("Credits"),
                 percentUsed: nil,
-                spendLine: "\(L("Balance")): \(value)",
-                percentLine: nil)
+                spendLine: value,
+                percentLine: nil,
+                presentation: .inlineValue,
+                showsInProviderDetails: false)
         }
 
-        if provider == .openai || provider == .claude || provider == .litellm || provider == .aiand,
+        if provider == .openai || provider == .litellm || provider == .aiand,
            cost.limit <= 0
         {
             let spend = UsageFormatter.currencyString(cost.used, currencyCode: cost.currencyCode)
@@ -415,9 +438,6 @@ extension UsageMenuCardView.Model {
             percentUsed: percentUsed,
             spendLine: "\(periodLabel): \(used) / \(limit)",
             percentLine: String(format: L("%.0f%% used"), min(100, max(0, percentUsed))),
-            balanceLine: cost.balance.map {
-                "\(L("Balance")): \(UsageFormatter.currencyString($0, currencyCode: cost.currencyCode))"
-            },
             personalSpendLine: personalSpendLine)
     }
 

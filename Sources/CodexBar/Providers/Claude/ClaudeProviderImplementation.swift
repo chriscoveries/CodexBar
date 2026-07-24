@@ -281,17 +281,11 @@ struct ClaudeProviderImplementation: ProviderImplementation {
 
         if let cost = context.snapshot?.providerCost,
            context.settings.showOptionalCreditsAndExtraUsage,
-           cost.currencyCode != "Quota"
+           cost.currencyCode != "Quota",
+           let balance = cost.balance
         {
-            if let balance = cost.balance {
-                let value = UsageFormatter.currencyString(balance, currencyCode: cost.currencyCode)
-                entries.append(.text(L("Extra usage balance: %@", value), .primary))
-            }
-            let used = UsageFormatter.currencyString(cost.used, currencyCode: cost.currencyCode)
-            let limit = UsageFormatter.currencyString(cost.limit, currencyCode: cost.currencyCode)
-            if cost.limit > 0 {
-                entries.append(.text(String(format: L("extra_usage_format"), used, limit), .primary))
-            }
+            let value = UsageFormatter.currencyString(balance, currencyCode: cost.currencyCode)
+            entries.append(.text("\(L("Credits")): \(value)", .primary))
         }
     }
 

@@ -366,9 +366,6 @@ extension ClaudeWebAPIFetcher {
             logger: log,
             renewalTracker: renewalTracker)
         usage.accountOrganizationID = organization.id
-        if !options.includeUsageDetails {
-            usage.extraUsageCost = nil
-        }
         if options.includeUsageDetails,
            usage.extraUsageCost == nil,
            let extra = try await ClaudeWebExtraUsageCost.fetch(
