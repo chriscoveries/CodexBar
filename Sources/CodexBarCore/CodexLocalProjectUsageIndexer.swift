@@ -50,9 +50,12 @@ enum CodexLocalProjectUsageIndexer {
         progress: (@Sendable (CodexLocalProjectUsageIndexProgress) -> Void)? = nil,
         checkCancellation: CostUsageScanner.CancellationCheck? = nil) throws -> CodexLocalProjectUsageSnapshot
     {
+        let refreshSignpost = CodexModelsTelemetry.begin("IndexRefresh")
+        defer { CodexModelsTelemetry.end("IndexRefresh", id: refreshSignpost) }
         let clampedHistoryDays = max(1, min(365, historyDays))
         let until = now
         let since = Calendar.current.date(byAdding: .day, value: -(clampedHistoryDays - 1), to: now) ?? now
+        let comparisonSince = self.modelsAnalyticsScanStart(since: since, until: until)
         var scannerOptions = options.scannerOptions
         if forceRefresh {
             scannerOptions.refreshMinIntervalSeconds = 0
@@ -61,7 +64,7 @@ enum CodexLocalProjectUsageIndexer {
         progress?(CodexLocalProjectUsageIndexProgress(phase: .scanningLogs))
         _ = try CostUsageScanner.loadDailyReportCancellable(
             provider: .codex,
-            since: since,
+            since: comparisonSince,
             until: until,
             now: now,
             options: scannerOptions,
@@ -82,6 +85,7 @@ enum CodexLocalProjectUsageIndexer {
                 cache: cache,
                 catalog: catalogResult.isComplete ? catalog : nil)
             {
+                CodexModelsTelemetry.cacheHit(historyDays: clampedHistoryDays)
                 return snapshot
             }
         }
@@ -236,7 +240,7 @@ enum CodexLocalProjectUsageIndexer {
         }
         let projects = rawProjects
 
-        return CodexLocalProjectUsageSnapshot(
+        return try CodexLocalProjectUsageSnapshot(
             updatedAt: now,
             historyDays: clampedHistoryDays,
             scopeSignature: scopeSignature,
@@ -248,17 +252,54 @@ enum CodexLocalProjectUsageIndexer {
             sessions: sessions,
             modelBreakdowns: self.globalModelBreakdowns(from: sessionBuckets.values),
             daily: self.dailyPoints(from: cache.files.values, range: range),
-            sourceStatus: sourceStatus)
+            sourceStatus: sourceStatus,
+            modelsAnalytics: self.modelsAnalyticsPayload(
+                context: ModelsAnalyticsContext(
+                    currentBuckets: sessionBuckets,
+                    cache: cache,
+                    catalog: catalog,
+                    projects: projects,
+                    sourceStatus: sourceStatus),
+                window: ModelsAnalyticsWindow(
+                    since: since,
+                    until: until,
+                    historyDays: clampedHistoryDays,
+                    generatedAt: now),
+                identity: ModelsAnalyticsIdentity(
+                    scopeSignature: scopeSignature,
+                    rootsFingerprint: rootsFingerprint),
+                checkCancellation: checkCancellation))
     }
 }
 
 extension CodexLocalProjectUsageIndexer {
+    fileprivate struct ModelsAnalyticsContext {
+        let currentBuckets: [String: SessionBucket]
+        let cache: CostUsageCache
+        let catalog: CodexThreadCatalog
+        let projects: [CodexLocalProjectUsage]
+        let sourceStatus: CodexLocalProjectUsageSourceStatus
+    }
+
+    fileprivate struct ModelsAnalyticsWindow {
+        let since: Date
+        let until: Date
+        let historyDays: Int
+        let generatedAt: Date
+    }
+
+    fileprivate struct ModelsAnalyticsIdentity {
+        let scopeSignature: String
+        let rootsFingerprint: [String: Int64]
+    }
+
     fileprivate struct FileTotals {
         var totals: CodexLocalUsageTotals
         var costNanos: Int64?
         var unknownCostTokens: Int
         var modelTotals: [String: ModelTotals]
         var dailyTotals: [String: DailyTotals]
+        var modelDailyTotals: [String: [String: ModelDailyTotals]]
         var topModel: String?
     }
 
@@ -275,6 +316,14 @@ extension CodexLocalProjectUsageIndexer {
         var unknownCostTokens: Int
     }
 
+    fileprivate struct ModelDailyTotals {
+        var inputTokens: Int
+        var cachedInputTokens: Int
+        var outputTokens: Int
+        var costNanos: Int64?
+        var unknownCostTokens: Int
+    }
+
     fileprivate struct SessionBucket {
         var id: String
         var projectId: String
@@ -287,6 +336,9 @@ extension CodexLocalProjectUsageIndexer {
         var catalogModel: String?
         var modelTotals: [String: ModelTotals]
         var dailyTotals: [String: DailyTotals]
+        var modelDailyTotals: [String: [String: ModelDailyTotals]]
+        var usageRows: [CostUsageScanner.CodexUsageRow]
+        var hasCompleteEventRows: Bool
         var total: CodexLocalUsageTotals
         var costNanos: Int64?
         var unknownCostTokens: Int
@@ -317,6 +369,8 @@ extension CodexLocalProjectUsageIndexer {
         var catalogModel: String?
         var model: String?
         var fileTotals: FileTotals
+        var usageRows: [CostUsageScanner.CodexUsageRow]
+        var hasCompleteEventRows: Bool
     }
 
     fileprivate static func sessionBuckets(
@@ -374,7 +428,17 @@ extension CodexLocalProjectUsageIndexer {
                     latest: latest,
                     catalogModel: catalogEntry?.model,
                     model: model,
-                    fileTotals: fileTotals))
+                    fileTotals: fileTotals,
+                    usageRows: (usage.codexRows ?? []).filter {
+                        CostUsageScanner.CostUsageDayRange.isInRange(
+                            dayKey: $0.day,
+                            since: range.sinceKey,
+                            until: range.untilKey)
+                    },
+                    hasCompleteEventRows: usage.days.isEmpty || !(usage.codexRows?.isEmpty ?? true)
+                        &&
+                        (usage.codexRows?
+                            .allSatisfy { $0.eventIndex != nil && $0.timestampUnixMs != nil } ?? false)))
             self.reportProgressIfNeeded(
                 progress,
                 processedFiles: offset + 1,
@@ -420,6 +484,9 @@ extension CodexLocalProjectUsageIndexer {
             catalogModel: input.catalogModel,
             modelTotals: [:],
             dailyTotals: [:],
+            modelDailyTotals: [:],
+            usageRows: [],
+            hasCompleteEventRows: true,
             total: .empty,
             costNanos: nil,
             unknownCostTokens: 0)
@@ -434,6 +501,8 @@ extension CodexLocalProjectUsageIndexer {
         bucket.startedAt = self.earlier(bucket.startedAt, input.started)
         bucket.latestActivity = self.later(bucket.latestActivity, input.latest)
         bucket.total = bucket.total.adding(input.fileTotals.totals)
+        bucket.usageRows.append(contentsOf: input.usageRows)
+        bucket.hasCompleteEventRows = bucket.hasCompleteEventRows && input.hasCompleteEventRows
         bucket.costNanos = self.addCost(bucket.costNanos, input.fileTotals.costNanos)
         bucket.unknownCostTokens += input.fileTotals.unknownCostTokens
         for (modelName, totals) in input.fileTotals.modelTotals {
@@ -441,6 +510,11 @@ extension CodexLocalProjectUsageIndexer {
         }
         for (day, totals) in input.fileTotals.dailyTotals {
             self.mergeDailyTotals(&bucket.dailyTotals, day: day, totals: totals)
+        }
+        for (day, models) in input.fileTotals.modelDailyTotals {
+            for (model, totals) in models {
+                self.mergeModelDailyTotals(&bucket.modelDailyTotals, day: day, model: model, totals: totals)
+            }
         }
         if let model = input.model, !model.isEmpty, bucket.modelTotals[model] == nil {
             bucket.modelTotals[model] = ModelTotals(totalTokens: 0, costNanos: nil, unknownCostTokens: 0)
@@ -475,6 +549,7 @@ extension CodexLocalProjectUsageIndexer {
         var unknownCostTokens = 0
         var modelTotals: [String: ModelTotals] = [:]
         var dailyTotals: [String: DailyTotals] = [:]
+        var modelDailyTotals: [String: [String: ModelDailyTotals]] = [:]
 
         for (day, models) in usage.days where CostUsageScanner.CostUsageDayRange
             .isInRange(dayKey: day, since: range.sinceKey, until: range.untilKey)
@@ -506,6 +581,16 @@ extension CodexLocalProjectUsageIndexer {
                         cachedInputTokens: min(modelCached, modelInput),
                         costNanos: modelCostNanos,
                         unknownCostTokens: modelUnknownCostTokens))
+                self.mergeModelDailyTotals(
+                    &modelDailyTotals,
+                    day: day,
+                    model: model,
+                    totals: ModelDailyTotals(
+                        inputTokens: modelInput,
+                        cachedInputTokens: min(modelCached, modelInput),
+                        outputTokens: modelOutput,
+                        costNanos: modelCostNanos,
+                        unknownCostTokens: modelUnknownCostTokens))
             }
         }
 
@@ -521,7 +606,244 @@ extension CodexLocalProjectUsageIndexer {
             unknownCostTokens: unknownCostTokens,
             modelTotals: modelTotals,
             dailyTotals: dailyTotals,
+            modelDailyTotals: modelDailyTotals,
             topModel: self.topModel(from: modelTotals))
+    }
+
+    static func modelsAnalyticsPeriods(
+        since: Date,
+        until: Date,
+        calendar: Calendar = .current) -> CodexModelsAnalyticsPeriods
+    {
+        let currentStart = calendar.startOfDay(for: since)
+        let currentEnd = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: until)) ?? until
+        let current = DateInterval(start: currentStart, end: currentEnd)
+        let previousEnd = current.start
+        let previousStart = previousEnd.addingTimeInterval(-current.duration)
+        return CodexModelsAnalyticsPeriods(
+            current: current,
+            previous: DateInterval(start: previousStart, end: previousEnd))
+    }
+
+    static func modelsAnalyticsScanStart(
+        since: Date,
+        until: Date,
+        calendar: Calendar = .current) -> Date
+    {
+        let periods = self.modelsAnalyticsPeriods(since: since, until: until, calendar: calendar)
+        return calendar.startOfDay(for: periods.previous.start)
+    }
+
+    fileprivate static func modelsAnalyticsPayload(
+        context: ModelsAnalyticsContext,
+        window: ModelsAnalyticsWindow,
+        identity: ModelsAnalyticsIdentity,
+        checkCancellation: CostUsageScanner.CancellationCheck?) throws -> CodexModelsAnalyticsPayload
+    {
+        let aggregationSignpost = CodexModelsTelemetry.begin("SnapshotAggregation")
+        defer { CodexModelsTelemetry.end("SnapshotAggregation", id: aggregationSignpost) }
+        let periods = self.modelsAnalyticsPeriods(since: window.since, until: window.until)
+        let previousInterval = periods.previous
+        let previousRange = CostUsageScanner.CostUsageDayRange(
+            since: previousInterval.start,
+            until: previousInterval.end.addingTimeInterval(-1))
+        let previousBuckets = try self.sessionBuckets(
+            from: context.cache,
+            range: previousRange,
+            catalog: context.catalog,
+            progress: nil,
+            checkCancellation: checkCancellation).sessionBuckets
+        let currentFragments = self.analyticsFragments(from: context.currentBuckets.values)
+        let previousFragments = self.analyticsFragments(from: previousBuckets.values)
+        let currentBucketsByProject = Dictionary(grouping: context.currentBuckets.values, by: \.projectId)
+        let previousBucketsByProject = Dictionary(grouping: previousBuckets.values, by: \.projectId)
+        let currentFragmentsByProject = Dictionary(grouping: currentFragments, by: \.workspaceID)
+        let previousFragmentsByProject = Dictionary(grouping: previousFragments, by: \.workspaceID)
+        let revisionParts = identity.rootsFingerprint.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
+        let indexRevision = ([
+            identity.scopeSignature,
+            context.cache.producerKey ?? "",
+            context.cache.codexPricingKey ?? "",
+        ] + revisionParts)
+            .joined(separator: "|")
+        let builder = CodexModelsAnalyticsBuilder()
+        let source = CodexModelsAnalyticsSource(current: currentFragments, previous: previousFragments)
+        let revision = CodexModelsAnalyticsRevision(generatedAt: window.generatedAt, indexRevision: indexRevision)
+        // Catalog failures can make workspace attribution incomplete, while aggregate-only
+        // cache rows cannot prove exact timestamp-boundary coverage. Treat either condition
+        // conservatively so an observed partial period is never presented as a full comparison.
+        let metadataIsComplete = context.sourceStatus == .complete
+        let currentIsComplete = metadataIsComplete
+            && context.currentBuckets.values.allSatisfy(\.hasCompleteEventRows)
+        let previousIsComplete = metadataIsComplete
+            && previousBuckets.values.allSatisfy(\.hasCompleteEventRows)
+        let all = builder.build(CodexModelsAnalyticsRequest(
+            source: source,
+            scopeID: nil,
+            periods: periods,
+            revision: revision,
+            legacy: self.legacyBaseline(
+                current: Array(context.currentBuckets.values),
+                previous: Array(previousBuckets.values)),
+            currentIsComplete: currentIsComplete,
+            previousIsComplete: previousIsComplete))
+
+        let workspaces = Dictionary(uniqueKeysWithValues: context.projects.map { project in
+            let projectBuckets = currentBucketsByProject[project.id] ?? []
+            let previousProjectBuckets = previousBucketsByProject[project.id] ?? []
+            let currentProjectIsComplete = metadataIsComplete
+                && projectBuckets.allSatisfy(\.hasCompleteEventRows)
+            let previousProjectIsComplete = metadataIsComplete
+                && previousProjectBuckets.allSatisfy(\.hasCompleteEventRows)
+            return (
+                project.id,
+                builder.build(CodexModelsAnalyticsRequest(
+                    source: CodexModelsAnalyticsSource(
+                        current: currentFragmentsByProject[project.id] ?? [],
+                        previous: previousFragmentsByProject[project.id] ?? []),
+                    scopeID: project.id,
+                    periods: periods,
+                    revision: revision,
+                    legacy: self.legacyBaseline(
+                        current: Array(projectBuckets),
+                        previous: Array(previousProjectBuckets)),
+                    currentIsComplete: currentProjectIsComplete,
+                    previousIsComplete: previousProjectIsComplete)))
+        })
+        CodexModelsTelemetry.parity(
+            dimensions: all.diagnostics.mismatchDimensions ?? [],
+            rowCount: all.rows.count)
+        return CodexModelsAnalyticsPayload(allWorkspaces: all, workspaces: workspaces)
+    }
+
+    fileprivate static func legacyBaseline(
+        current: [SessionBucket],
+        previous: [SessionBucket]) -> CodexModelsLegacyBaseline
+    {
+        struct LegacyModelAggregates {
+            var tokens: Int64 = 0
+            var costNanos: Int64?
+            var unpricedTokens: Int64 = 0
+            var sessionIDs: Set<String> = []
+        }
+
+        struct LegacyAggregates {
+            let tokens: Int64
+            let cost: Decimal
+            let pricedTokens: Int64
+            let unpricedTokens: Int64
+            let modelIDs: [String]
+            let topModelID: String?
+            let sessionReferences: Int
+            let models: [CodexModelsLegacyModelBaseline]
+        }
+
+        func aggregates(_ buckets: [SessionBucket]) -> LegacyAggregates {
+            let tokens = Int64(buckets.reduce(0) { $0 + ($1.total.totalTokens ?? 0) })
+            let costNanos = buckets.reduce(Int64.zero) { $0 + ($1.costNanos ?? 0) }
+            let unpricedTokens = Int64(buckets.reduce(0) { $0 + $1.unknownCostTokens })
+            var models: [String: LegacyModelAggregates] = [:]
+            for bucket in buckets {
+                for (model, totals) in bucket.modelTotals {
+                    guard totals.totalTokens > 0 else { continue }
+                    let canonical = CostUsagePricing.normalizeCodexModel(
+                        model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+                    var values = models[canonical, default: LegacyModelAggregates()]
+                    values.tokens += Int64(totals.totalTokens)
+                    values.costNanos = self.addCost(values.costNanos, totals.costNanos)
+                    values.unpricedTokens += Int64(totals.unknownCostTokens)
+                    values.sessionIDs.insert(bucket.id)
+                    models[canonical] = values
+                }
+            }
+            let modelIDs = models.keys.sorted()
+            let topModelID = models.max {
+                if $0.value.tokens != $1.value.tokens { return $0.value.tokens < $1.value.tokens }
+                return $0.key > $1.key
+            }?.key
+            let modelBaselines = models.sorted { $0.key < $1.key }.map { modelID, values in
+                CodexModelsLegacyModelBaseline(
+                    modelID: modelID,
+                    totalTokens: values.tokens,
+                    knownCost: values.costNanos.map { Decimal($0) / 1_000_000_000 },
+                    pricedTokens: max(0, values.tokens - values.unpricedTokens),
+                    unpricedTokens: values.unpricedTokens,
+                    sessionReferences: values.sessionIDs.count)
+            }
+            return LegacyAggregates(
+                tokens: tokens,
+                cost: Decimal(costNanos) / 1_000_000_000,
+                pricedTokens: max(0, tokens - unpricedTokens),
+                unpricedTokens: unpricedTokens,
+                modelIDs: modelIDs,
+                topModelID: topModelID,
+                sessionReferences: models.values.reduce(0) { $0 + $1.sessionIDs.count },
+                models: modelBaselines)
+        }
+
+        let currentValues = aggregates(current)
+        let previousValues = aggregates(previous)
+        return CodexModelsLegacyBaseline(
+            totalTokens: currentValues.tokens,
+            modelIDs: currentValues.modelIDs,
+            knownCost: currentValues.cost,
+            pricedTokens: currentValues.pricedTokens,
+            unpricedTokens: currentValues.unpricedTokens,
+            activeModelCount: currentValues.modelIDs.count,
+            topModelID: currentValues.topModelID,
+            sessionReferenceTotal: currentValues.sessionReferences,
+            previousTotalTokens: previousValues.tokens,
+            previousKnownCost: previousValues.cost,
+            previousUnpricedTokens: previousValues.unpricedTokens,
+            previousSessionReferenceTotal: previousValues.sessionReferences,
+            currentModels: currentValues.models,
+            previousModels: previousValues.models)
+    }
+
+    fileprivate static func analyticsFragments(
+        from buckets: Dictionary<String, SessionBucket>.Values) -> [CodexModelsUsageFragment]
+    {
+        buckets.flatMap { bucket in
+            if bucket.hasCompleteEventRows, !bucket.usageRows.isEmpty {
+                return bucket.usageRows.compactMap { row -> CodexModelsUsageFragment? in
+                    guard let timestampUnixMs = row.timestampUnixMs else { return nil }
+                    let timestamp = Date(timeIntervalSince1970: Double(timestampUnixMs) / 1000)
+                    let day = Calendar.current.startOfDay(for: timestamp)
+                    let inputTokens = max(0, row.input)
+                    let outputTokens = max(0, row.output)
+                    let totalTokens = Int64(inputTokens + outputTokens)
+                    return CodexModelsUsageFragment(
+                        workspaceID: bucket.projectId,
+                        sessionID: bucket.id,
+                        day: day,
+                        timestamp: timestamp,
+                        rawModelID: row.rawModel ?? row.model,
+                        inputTokens: Int64(inputTokens),
+                        cachedInputTokens: Int64(max(0, row.cached)),
+                        outputTokens: Int64(outputTokens),
+                        reasoningTokens: row.reasoning.map(Int64.init),
+                        costNanos: row.knownCostNanos,
+                        unpricedTokens: row.unpricedTokens.map(Int64.init)
+                            ?? (row.knownCostNanos == nil ? totalTokens : 0))
+                }
+            }
+            return bucket.modelDailyTotals.flatMap { day, models -> [CodexModelsUsageFragment] in
+                guard let date = CostUsageDateParser.parse(day) else { return [] }
+                return models.map { model, totals in
+                    CodexModelsUsageFragment(
+                        workspaceID: bucket.projectId,
+                        sessionID: bucket.id,
+                        day: date,
+                        rawModelID: model,
+                        inputTokens: Int64(totals.inputTokens),
+                        cachedInputTokens: Int64(totals.cachedInputTokens),
+                        outputTokens: Int64(totals.outputTokens),
+                        reasoningTokens: nil,
+                        costNanos: totals.costNanos,
+                        unpricedTokens: Int64(totals.unknownCostTokens))
+                }
+            }
+        }
     }
 
     fileprivate static func metadata(
@@ -700,6 +1022,26 @@ extension CodexLocalProjectUsageIndexer {
         current.costNanos = self.addCost(current.costNanos, totals.costNanos)
         current.unknownCostTokens += totals.unknownCostTokens
         dailyTotals[day] = current
+    }
+
+    fileprivate static func mergeModelDailyTotals(
+        _ modelDailyTotals: inout [String: [String: ModelDailyTotals]],
+        day: String,
+        model: String,
+        totals: ModelDailyTotals)
+    {
+        var current = modelDailyTotals[day]?[model] ?? ModelDailyTotals(
+            inputTokens: 0,
+            cachedInputTokens: 0,
+            outputTokens: 0,
+            costNanos: nil,
+            unknownCostTokens: 0)
+        current.inputTokens += totals.inputTokens
+        current.cachedInputTokens += totals.cachedInputTokens
+        current.outputTokens += totals.outputTokens
+        current.costNanos = self.addCost(current.costNanos, totals.costNanos)
+        current.unknownCostTokens += totals.unknownCostTokens
+        modelDailyTotals[day, default: [:]][model] = current
     }
 
     fileprivate static func mergeModelTotals(

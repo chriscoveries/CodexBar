@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 
 #if canImport(SQLite3)
@@ -7,12 +6,65 @@ import SQLite3
 import CSQLite3
 #endif
 
+// swiftlint:disable type_body_length
 /// CodexBar-owned persistence for local Workspaces attribution. This database
 /// never attaches to or writes Codex's state database; it only imports typed
 /// catalog/cache values after those sources have been read successfully.
 struct CodexWorkspaceUsageSidecar: Sendable {
-    private static let schemaVersion = 2
+    private static let schemaVersion = 5
+    private static let snapshotPayloadFormatVersion = 3
     private let cacheRoot: URL?
+
+    private struct RolloutSourceIdentity: Equatable {
+        let mtimeUnixMs: Int64
+        let size: Int64
+        let parsedBytes: Int64
+        let sessionID: String
+        let producerKey: String
+        let pricingKey: String
+        let contentFingerprint: String
+
+        init(
+            mtimeUnixMs: Int64,
+            size: Int64,
+            parsedBytes: Int64,
+            sessionID: String,
+            producerKey: String,
+            pricingKey: String,
+            contentFingerprint: String)
+        {
+            self.mtimeUnixMs = mtimeUnixMs
+            self.size = size
+            self.parsedBytes = parsedBytes
+            self.sessionID = sessionID
+            self.producerKey = producerKey
+            self.pricingKey = pricingKey
+            self.contentFingerprint = contentFingerprint
+        }
+
+        init(usage: CostUsageFileUsage, cache: CostUsageCache) {
+            self.mtimeUnixMs = usage.mtimeUnixMs
+            self.size = usage.size
+            self.parsedBytes = usage.parsedBytes ?? -1
+            self.sessionID = usage.codexSession?.sessionId ?? usage.sessionId ?? ""
+            self.producerKey = cache.producerKey ?? ""
+            self.pricingKey = cache.codexPricingKey ?? ""
+            self.contentFingerprint = usage.codexWorkspaceUsageFingerprintValue()
+        }
+
+        var legacyFingerprint: String {
+            [
+                "version=3",
+                "mtime=\(self.mtimeUnixMs)",
+                "size=\(self.size)",
+                "parsed=\(self.parsedBytes)",
+                "session=\(self.sessionID)",
+                "producer=\(self.producerKey)",
+                "pricing=\(self.pricingKey)",
+                "content=\(self.contentFingerprint)",
+            ].joined(separator: "|")
+        }
+    }
 
     init(cacheRoot: URL? = nil) {
         self.cacheRoot = cacheRoot
@@ -28,13 +80,17 @@ struct CodexWorkspaceUsageSidecar: Sendable {
         #if canImport(SQLite3) || canImport(CSQLite3)
         guard let db = self.open(readOnly: true) else { return nil }
         defer { sqlite3_close(db) }
+        let hasPayloadFormatVersion = Self.hasColumn("payload_format_version", in: "snapshot_payloads", db: db)
+        let payloadFormatColumn = hasPayloadFormatVersion
+            ? ",\n               snapshot_payloads.payload_format_version"
+            : ""
         let sql = """
         SELECT snapshot_payloads.payload,
                index_state.roots_fingerprint,
                index_state.catalog_fingerprint,
                index_state.cache_producer_key,
                index_state.pricing_key,
-               index_state.cache_fingerprint
+               index_state.cache_fingerprint\(payloadFormatColumn)
         FROM snapshot_payloads
         JOIN index_state ON index_state.scope_signature = snapshot_payloads.scope_signature
         WHERE snapshot_payloads.scope_signature = ?
@@ -52,15 +108,17 @@ struct CodexWorkspaceUsageSidecar: Sendable {
         else { return nil }
         let length = Int(sqlite3_column_bytes(statement, 0))
         let data = Data(bytes: bytes, count: length)
-        guard let snapshot = try? JSONDecoder.codexLocalProjectUsage.decode(
-            CodexLocalProjectUsageSnapshot.self,
-            from: data)
+        let payloadFormatVersion = hasPayloadFormatVersion ? Int(sqlite3_column_int(statement, 6)) : 1
+        guard payloadFormatVersion == Self.snapshotPayloadFormatVersion,
+              let snapshot = try? JSONDecoder.codexLocalProjectUsageSidecar.decode(
+                  CodexLocalProjectUsageSnapshot.self,
+                  from: data)
         else { return nil }
         // Snapshots written before project-level detail was persisted can still
         // contain valid totals, but cannot render a selected project's chart or
         // sessions. Keep the sidecar's normalized rows and rebuild only this
         // presentation payload on the next background refresh.
-        guard snapshot.hasInspectorDetail else { return nil }
+        guard snapshot.hasInspectorDetail, snapshot.modelsAnalytics != nil else { return nil }
         if let rootsFingerprint {
             guard let rootsBytes = sqlite3_column_blob(statement, 1) else { return nil }
             let rootsLength = Int(sqlite3_column_bytes(statement, 1))
@@ -214,6 +272,43 @@ struct CodexWorkspaceUsageSidecar: Sendable {
                 model: model)
             cache.files[path] = usage
         }
+        let eventSQL = """
+        SELECT e.rollout_path, e.day, e.canonical_model, e.raw_model, e.turn_id, e.event_index,
+               e.timestamp_ms, e.input_tokens, e.cached_input_tokens, e.output_tokens,
+               e.known_cost_nanos, e.unpriced_tokens, e.pricing_model, e.pricing_mode,
+               e.reasoning_tokens
+        FROM usage_events e
+        JOIN usage_rollouts r ON r.rollout_path = e.rollout_path
+        WHERE r.is_present = 1 AND r.event_detail_complete = 1
+        ORDER BY e.rollout_path, e.event_index
+        """
+        guard let eventStatement = Self.prepare(db, eventSQL) else { throw SidecarError.statementFailed }
+        defer { sqlite3_finalize(eventStatement) }
+        while sqlite3_step(eventStatement) == SQLITE_ROW {
+            guard let path = Self.columnString(eventStatement, at: 0),
+                  var usage = cache.files[path],
+                  let day = Self.columnString(eventStatement, at: 1),
+                  let canonicalModel = Self.columnString(eventStatement, at: 2)
+            else { continue }
+            var rows = usage.codexRows ?? []
+            rows.append(CostUsageScanner.CodexUsageRow(
+                day: day,
+                model: canonicalModel,
+                rawModel: Self.columnString(eventStatement, at: 3),
+                turnID: Self.columnString(eventStatement, at: 4),
+                eventIndex: Self.columnInt64(eventStatement, at: 5).map(Int.init),
+                timestampUnixMs: Self.columnInt64(eventStatement, at: 6),
+                input: Int(sqlite3_column_int64(eventStatement, 7)),
+                cached: Int(sqlite3_column_int64(eventStatement, 8)),
+                output: Int(sqlite3_column_int64(eventStatement, 9)),
+                reasoning: Self.columnInt64(eventStatement, at: 14).map(Int.init),
+                knownCostNanos: Self.columnInt64(eventStatement, at: 10),
+                unpricedTokens: Self.columnInt64(eventStatement, at: 11).map(Int.init),
+                pricingModel: Self.columnString(eventStatement, at: 12),
+                pricingMode: Self.columnString(eventStatement, at: 13)))
+            usage.codexRows = rows
+            cache.files[path] = usage
+        }
         return cache
         #else
         _ = roots
@@ -249,6 +344,14 @@ struct CodexWorkspaceUsageSidecar: Sendable {
             return nil
         }
         sqlite3_busy_timeout(db, 250)
+        if !readOnly {
+            guard sqlite3_exec(db, "PRAGMA journal_mode = WAL", nil, nil, nil) == SQLITE_OK,
+                  sqlite3_exec(db, "PRAGMA synchronous = NORMAL", nil, nil, nil) == SQLITE_OK
+            else {
+                sqlite3_close(db)
+                return nil
+            }
+        }
         return db
     }
 
@@ -290,6 +393,14 @@ struct CodexWorkspaceUsageSidecar: Sendable {
             project_path TEXT,
             canonical_project_path TEXT,
             forked_from_id TEXT,
+            source_mtime_ms INTEGER,
+            source_size INTEGER,
+            source_parsed_bytes INTEGER,
+            source_session_id TEXT,
+            source_producer_key TEXT,
+            source_pricing_key TEXT,
+            content_fingerprint TEXT,
+            event_detail_complete INTEGER NOT NULL DEFAULT 0,
             is_present INTEGER NOT NULL DEFAULT 1,
             last_seen_generation TEXT NOT NULL
         );
@@ -308,11 +419,30 @@ struct CodexWorkspaceUsageSidecar: Sendable {
             priority_surcharge_nanos INTEGER,
             PRIMARY KEY (rollout_path, day, model)
         );
+        CREATE TABLE IF NOT EXISTS usage_events (
+            rollout_path TEXT NOT NULL,
+            event_index INTEGER NOT NULL,
+            timestamp_ms INTEGER NOT NULL,
+            day TEXT NOT NULL,
+            canonical_model TEXT NOT NULL,
+            raw_model TEXT,
+            turn_id TEXT,
+            input_tokens INTEGER NOT NULL,
+            cached_input_tokens INTEGER NOT NULL,
+            output_tokens INTEGER NOT NULL,
+            known_cost_nanos INTEGER,
+            unpriced_tokens INTEGER NOT NULL,
+            pricing_model TEXT,
+            pricing_mode TEXT,
+            reasoning_tokens INTEGER,
+            PRIMARY KEY (rollout_path, event_index)
+        );
         CREATE TABLE IF NOT EXISTS snapshot_payloads (
             scope_signature TEXT NOT NULL,
             history_days INTEGER NOT NULL,
             updated_at_ms INTEGER NOT NULL,
             is_complete INTEGER NOT NULL,
+            payload_format_version INTEGER NOT NULL DEFAULT 1,
             payload BLOB NOT NULL,
             PRIMARY KEY (scope_signature, history_days)
         );
@@ -326,10 +456,44 @@ struct CodexWorkspaceUsageSidecar: Sendable {
             last_success_ms INTEGER NOT NULL
         );
         CREATE INDEX IF NOT EXISTS usage_daily_rollout_day ON usage_daily (rollout_path, day);
+        CREATE INDEX IF NOT EXISTS usage_events_timestamp ON usage_events (timestamp_ms);
+        CREATE INDEX IF NOT EXISTS usage_events_model_timestamp ON usage_events (canonical_model, timestamp_ms);
+        CREATE INDEX IF NOT EXISTS usage_events_turn ON usage_events (turn_id);
         CREATE INDEX IF NOT EXISTS usage_rollouts_session ON usage_rollouts (session_id);
+        CREATE INDEX IF NOT EXISTS catalog_threads_rollout ON catalog_threads (rollout_path);
         """)
         if current > 0, current < 2 {
             try Self.execute(db, "ALTER TABLE index_state ADD COLUMN cache_fingerprint TEXT")
+        }
+        if current > 0, current < 3 {
+            try Self.execute(
+                db,
+                "ALTER TABLE usage_rollouts ADD COLUMN event_detail_complete INTEGER NOT NULL DEFAULT 0")
+        }
+        if current > 0, current < 4,
+           !Self.hasColumn("reasoning_tokens", in: "usage_events", db: db)
+        {
+            try Self.execute(db, "ALTER TABLE usage_events ADD COLUMN reasoning_tokens INTEGER")
+        }
+        if current > 0, current < 5 {
+            let additions = [
+                ("source_mtime_ms", "INTEGER"),
+                ("source_size", "INTEGER"),
+                ("source_parsed_bytes", "INTEGER"),
+                ("source_session_id", "TEXT"),
+                ("source_producer_key", "TEXT"),
+                ("source_pricing_key", "TEXT"),
+                ("content_fingerprint", "TEXT"),
+            ]
+            for (column, type) in additions where !Self.hasColumn(column, in: "usage_rollouts", db: db) {
+                try Self.execute(db, "ALTER TABLE usage_rollouts ADD COLUMN \(column) \(type)")
+            }
+            if !Self.hasColumn("payload_format_version", in: "snapshot_payloads", db: db) {
+                try Self.execute(
+                    db,
+                    "ALTER TABLE snapshot_payloads ADD COLUMN payload_format_version INTEGER NOT NULL DEFAULT 1")
+            }
+            try Self.execute(db, "CREATE INDEX IF NOT EXISTS catalog_threads_rollout ON catalog_threads (rollout_path)")
         }
         try Self.execute(db, "PRAGMA user_version = \(Self.schemaVersion)")
     }
@@ -386,25 +550,32 @@ struct CodexWorkspaceUsageSidecar: Sendable {
         generation: String,
         db: OpaquePointer?) throws
     {
+        let existing = try Self.existingRolloutSourceIdentities(db: db)
+        guard let touchStatement = Self.prepare(
+            db,
+            "UPDATE usage_rollouts SET is_present = 1, last_seen_generation = ? WHERE rollout_path = ?")
+        else { throw SidecarError.statementFailed }
+        defer { sqlite3_finalize(touchStatement) }
+
         for (path, usage) in cache.files {
-            let fingerprint = Self.rolloutFingerprint(usage, cache: cache)
-            let existing = Self.rolloutFingerprint(path: path, db: db)
-            if existing == fingerprint {
-                try Self.touchRollout(path: path, generation: generation, db: db)
+            let identity = RolloutSourceIdentity(usage: usage, cache: cache)
+            if existing[path] == identity {
+                try Self.touchRollout(path: path, generation: generation, statement: touchStatement)
                 continue
             }
             let catalogEntry = catalog.entry(
                 sessionId: usage.codexSession?.sessionId ?? usage.sessionId,
                 rolloutPath: path)
-            try Self.deleteDaily(path: path, db: db)
+            try Self.deleteUsage(path: path, db: db)
             try Self.upsertRollout(
                 path: path,
                 usage: usage,
                 catalogEntry: catalogEntry,
-                fingerprint: fingerprint,
+                identity: identity,
                 generation: generation,
                 db: db)
             try Self.insertDaily(path: path, usage: usage, db: db)
+            try Self.insertEvents(path: path, usage: usage, db: db)
         }
     }
 
@@ -425,13 +596,15 @@ struct CodexWorkspaceUsageSidecar: Sendable {
         rootsFingerprint: [String: Int64],
         db: OpaquePointer?) throws
     {
-        let data = try JSONEncoder.codexLocalProjectUsage.encode(snapshot)
+        let data = try JSONEncoder.codexLocalProjectUsageSidecar.encode(snapshot)
         let sql = """
-        INSERT INTO snapshot_payloads (scope_signature, history_days, updated_at_ms, is_complete, payload)
-        VALUES (?, ?, ?, 1, ?)
+        INSERT INTO snapshot_payloads (
+            scope_signature, history_days, updated_at_ms, is_complete, payload_format_version, payload
+        ) VALUES (?, ?, ?, 1, ?, ?)
         ON CONFLICT(scope_signature, history_days) DO UPDATE SET
             updated_at_ms = excluded.updated_at_ms,
             is_complete = 1,
+            payload_format_version = excluded.payload_format_version,
             payload = excluded.payload
         """
         guard let statement = Self.prepare(db, sql) else { throw SidecarError.statementFailed }
@@ -439,7 +612,8 @@ struct CodexWorkspaceUsageSidecar: Sendable {
         Self.bind(snapshot.scopeSignature, to: statement, at: 1)
         sqlite3_bind_int64(statement, 2, Int64(snapshot.historyDays))
         sqlite3_bind_int64(statement, 3, Int64((snapshot.updatedAt.timeIntervalSince1970 * 1000).rounded()))
-        Self.bind(data, to: statement, at: 4)
+        sqlite3_bind_int(statement, 4, Int32(Self.snapshotPayloadFormatVersion))
+        Self.bind(data, to: statement, at: 5)
         guard sqlite3_step(statement) == SQLITE_DONE else { throw SidecarError.writeFailed }
 
         let stateSQL = """
@@ -474,7 +648,7 @@ struct CodexWorkspaceUsageSidecar: Sendable {
         path: String,
         usage: CostUsageFileUsage,
         catalogEntry: CodexThreadCatalogEntry?,
-        fingerprint: String,
+        identity: RolloutSourceIdentity,
         generation: String,
         db: OpaquePointer?) throws
     {
@@ -482,8 +656,10 @@ struct CodexWorkspaceUsageSidecar: Sendable {
         let sql = """
         INSERT INTO usage_rollouts (
             rollout_path, fingerprint, session_id, cwd, title, started_at_ms, latest_activity_ms, last_model,
-            project_path, canonical_project_path, forked_from_id, is_present, last_seen_generation
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+            project_path, canonical_project_path, forked_from_id,
+            source_mtime_ms, source_size, source_parsed_bytes, source_session_id, source_producer_key,
+            source_pricing_key, content_fingerprint, event_detail_complete, is_present, last_seen_generation
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
         ON CONFLICT(rollout_path) DO UPDATE SET
             fingerprint = excluded.fingerprint,
             session_id = COALESCE(excluded.session_id, usage_rollouts.session_id),
@@ -495,13 +671,21 @@ struct CodexWorkspaceUsageSidecar: Sendable {
             project_path = COALESCE(excluded.project_path, usage_rollouts.project_path),
             canonical_project_path = COALESCE(excluded.canonical_project_path, usage_rollouts.canonical_project_path),
             forked_from_id = COALESCE(excluded.forked_from_id, usage_rollouts.forked_from_id),
+            source_mtime_ms = excluded.source_mtime_ms,
+            source_size = excluded.source_size,
+            source_parsed_bytes = excluded.source_parsed_bytes,
+            source_session_id = excluded.source_session_id,
+            source_producer_key = excluded.source_producer_key,
+            source_pricing_key = excluded.source_pricing_key,
+            content_fingerprint = excluded.content_fingerprint,
+            event_detail_complete = excluded.event_detail_complete,
             is_present = 1,
             last_seen_generation = excluded.last_seen_generation
         """
         guard let statement = Self.prepare(db, sql) else { throw SidecarError.statementFailed }
         defer { sqlite3_finalize(statement) }
         Self.bind(path, to: statement, at: 1)
-        Self.bind(fingerprint, to: statement, at: 2)
+        Self.bind(identity.legacyFingerprint, to: statement, at: 2)
         Self.bind(catalogEntry?.id ?? session?.sessionId ?? usage.sessionId, to: statement, at: 3)
         Self.bind(catalogEntry?.cwd ?? session?.cwd, to: statement, at: 4)
         Self.bind(catalogEntry?.title ?? session?.title, to: statement, at: 5)
@@ -514,7 +698,15 @@ struct CodexWorkspaceUsageSidecar: Sendable {
             catalogEntry == nil ? session?.forkedFromId ?? usage.forkedFromId : usage.forkedFromId,
             to: statement,
             at: 11)
-        Self.bind(generation, to: statement, at: 12)
+        sqlite3_bind_int64(statement, 12, identity.mtimeUnixMs)
+        sqlite3_bind_int64(statement, 13, identity.size)
+        sqlite3_bind_int64(statement, 14, identity.parsedBytes)
+        Self.bind(identity.sessionID, to: statement, at: 15)
+        Self.bind(identity.producerKey, to: statement, at: 16)
+        Self.bind(identity.pricingKey, to: statement, at: 17)
+        Self.bind(identity.contentFingerprint, to: statement, at: 18)
+        sqlite3_bind_int(statement, 19, Self.hasCompleteEventDetail(usage) ? 1 : 0)
+        Self.bind(generation, to: statement, at: 20)
         guard sqlite3_step(statement) == SQLITE_DONE else { throw SidecarError.writeFailed }
     }
 
@@ -548,58 +740,98 @@ struct CodexWorkspaceUsageSidecar: Sendable {
         }
     }
 
-    private static func deleteDaily(path: String, db: OpaquePointer?) throws {
-        guard let statement = prepare(db, "DELETE FROM usage_daily WHERE rollout_path = ?")
-        else { throw SidecarError.statementFailed }
+    private static func insertEvents(path: String, usage: CostUsageFileUsage, db: OpaquePointer?) throws {
+        guard self.hasCompleteEventDetail(usage), let rows = usage.codexRows else { return }
+        let sql = """
+        INSERT INTO usage_events (
+            rollout_path, event_index, timestamp_ms, day, canonical_model, raw_model, turn_id,
+            input_tokens, cached_input_tokens, output_tokens, known_cost_nanos, unpriced_tokens,
+            pricing_model, pricing_mode, reasoning_tokens
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """
+        guard let statement = Self.prepare(db, sql) else { throw SidecarError.statementFailed }
         defer { sqlite3_finalize(statement) }
-        Self.bind(path, to: statement, at: 1)
+        for row in rows {
+            guard let eventIndex = row.eventIndex, let timestampUnixMs = row.timestampUnixMs else { continue }
+            sqlite3_reset(statement)
+            sqlite3_clear_bindings(statement)
+            Self.bind(path, to: statement, at: 1)
+            sqlite3_bind_int64(statement, 2, Int64(eventIndex))
+            sqlite3_bind_int64(statement, 3, timestampUnixMs)
+            Self.bind(row.day, to: statement, at: 4)
+            Self.bind(row.model, to: statement, at: 5)
+            Self.bind(row.rawModel, to: statement, at: 6)
+            Self.bind(row.turnID, to: statement, at: 7)
+            sqlite3_bind_int64(statement, 8, Int64(max(0, row.input)))
+            sqlite3_bind_int64(statement, 9, Int64(max(0, row.cached)))
+            sqlite3_bind_int64(statement, 10, Int64(max(0, row.output)))
+            Self.bind(row.knownCostNanos, to: statement, at: 11)
+            sqlite3_bind_int64(statement, 12, Int64(max(0, row.unpricedTokens ?? 0)))
+            Self.bind(row.pricingModel, to: statement, at: 13)
+            Self.bind(row.pricingMode, to: statement, at: 14)
+            Self.bind(row.reasoning.map(Int64.init), to: statement, at: 15)
+            guard sqlite3_step(statement) == SQLITE_DONE else { throw SidecarError.writeFailed }
+        }
+    }
+
+    private static func deleteUsage(path: String, db: OpaquePointer?) throws {
+        for table in ["usage_daily", "usage_events"] {
+            guard let statement = prepare(db, "DELETE FROM \(table) WHERE rollout_path = ?")
+            else { throw SidecarError.statementFailed }
+            defer { sqlite3_finalize(statement) }
+            Self.bind(path, to: statement, at: 1)
+            guard sqlite3_step(statement) == SQLITE_DONE else { throw SidecarError.writeFailed }
+        }
+    }
+
+    private static func hasCompleteEventDetail(_ usage: CostUsageFileUsage) -> Bool {
+        guard let rows = usage.codexRows, !rows.isEmpty else { return usage.days.isEmpty }
+        return rows.allSatisfy { $0.eventIndex != nil && $0.timestampUnixMs != nil }
+    }
+
+    private static func touchRollout(path: String, generation: String, statement: OpaquePointer?) throws {
+        sqlite3_reset(statement)
+        sqlite3_clear_bindings(statement)
+        self.bind(generation, to: statement, at: 1)
+        self.bind(path, to: statement, at: 2)
         guard sqlite3_step(statement) == SQLITE_DONE else { throw SidecarError.writeFailed }
     }
 
-    private static func touchRollout(path: String, generation: String, db: OpaquePointer?) throws {
+    private static func existingRolloutSourceIdentities(
+        db: OpaquePointer?) throws -> [String: RolloutSourceIdentity]
+    {
         guard let statement = prepare(
             db,
-            "UPDATE usage_rollouts SET is_present = 1, last_seen_generation = ? WHERE rollout_path = ?")
+            """
+            SELECT rollout_path, source_mtime_ms, source_size, source_parsed_bytes, source_session_id,
+                   source_producer_key, source_pricing_key, content_fingerprint
+            FROM usage_rollouts
+            WHERE event_detail_complete = 1
+            """)
         else { throw SidecarError.statementFailed }
         defer { sqlite3_finalize(statement) }
-        Self.bind(generation, to: statement, at: 1)
-        Self.bind(path, to: statement, at: 2)
-        guard sqlite3_step(statement) == SQLITE_DONE else { throw SidecarError.writeFailed }
-    }
-
-    private static func rolloutFingerprint(path: String, db: OpaquePointer?) -> String? {
-        guard let statement = prepare(db, "SELECT fingerprint FROM usage_rollouts WHERE rollout_path = ?")
-        else { return nil }
-        defer { sqlite3_finalize(statement) }
-        Self.bind(path, to: statement, at: 1)
-        guard sqlite3_step(statement) == SQLITE_ROW,
-              let value = sqlite3_column_text(statement, 0)
-        else { return nil }
-        return String(cString: value)
-    }
-
-    private static func rolloutFingerprint(_ usage: CostUsageFileUsage, cache: CostUsageCache) -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        let contentDigest = (try? encoder.encode(usage)).map { data in
-            SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-        } ?? "unavailable"
-        return [
-            "version=2",
-            "mtime=\(usage.mtimeUnixMs)",
-            "size=\(usage.size)",
-            "parsed=\(usage.parsedBytes ?? -1)",
-            "session=\(usage.codexSession?.sessionId ?? usage.sessionId ?? "")",
-            "producer=\(cache.producerKey ?? "")",
-            "pricing=\(cache.codexPricingKey ?? "")",
-            "content=\(contentDigest)",
-        ].joined(separator: "|")
+        var identities: [String: RolloutSourceIdentity] = [:]
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard let path = Self.columnString(statement, at: 0),
+                  let contentFingerprint = Self.columnString(statement, at: 7)
+            else { continue }
+            identities[path] = RolloutSourceIdentity(
+                mtimeUnixMs: Self.columnInt64(statement, at: 1) ?? Int64.min,
+                size: Self.columnInt64(statement, at: 2) ?? Int64.min,
+                parsedBytes: Self.columnInt64(statement, at: 3) ?? Int64.min,
+                sessionID: Self.columnString(statement, at: 4) ?? "",
+                producerKey: Self.columnString(statement, at: 5) ?? "",
+                pricingKey: Self.columnString(statement, at: 6) ?? "",
+                contentFingerprint: contentFingerprint)
+        }
+        return identities
     }
 
     private static func cacheFingerprint(_ cache: CostUsageCache) -> String {
         var hash: UInt64 = 14_695_981_039_346_656_037
         for (path, usage) in cache.files.sorted(by: { $0.key < $1.key }) {
-            for byte in "\(path)|\(Self.rolloutFingerprint(usage, cache: cache))\n".utf8 {
+            let identity = RolloutSourceIdentity(usage: usage, cache: cache)
+            for byte in "\(path)|\(identity.legacyFingerprint)\n".utf8 {
                 hash ^= UInt64(byte)
                 hash &*= 1_099_511_628_211
             }
@@ -731,6 +963,17 @@ struct CodexWorkspaceUsageSidecar: Sendable {
         return sqlite3_column_int(statement, 0)
     }
 
+    private static func hasColumn(_ column: String, in table: String, db: OpaquePointer?) -> Bool {
+        guard let statement = self.prepare(db, "PRAGMA table_info(\(table))") else { return false }
+        defer { sqlite3_finalize(statement) }
+        while sqlite3_step(statement) == SQLITE_ROW {
+            if self.columnString(statement, at: 1) == column {
+                return true
+            }
+        }
+        return false
+    }
+
     private static let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
     private enum SidecarError: Error {
@@ -741,3 +984,5 @@ struct CodexWorkspaceUsageSidecar: Sendable {
     }
     #endif
 }
+
+// swiftlint:enable type_body_length

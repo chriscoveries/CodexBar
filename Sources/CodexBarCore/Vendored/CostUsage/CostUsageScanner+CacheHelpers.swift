@@ -1,3 +1,5 @@
+// swiftlint:disable file_length
+
 import Foundation
 #if canImport(Musl)
 import Musl
@@ -426,8 +428,59 @@ extension CostUsageScanner {
             splitMaps.priorityTokens)
         updated.codexCostCacheComplete = true
         updated.codexTurnIDs = Self.mergeCodexTurnIDs(usage.codexTurnIDs, rows: migratedRows)
-        updated.codexRows = rows
-        return updated
+        updated.codexRows = Self.codexRowsWithPricingAudit(
+            rows,
+            priorityTurns: priorityTurns,
+            modelsDevCatalog: modelsDevCatalog,
+            modelsDevCacheRoot: modelsDevCacheRoot)
+        return updated.refreshingCodexWorkspaceUsageFingerprint()
+    }
+
+    static func codexRowsWithPricingAudit(
+        _ rows: [CodexUsageRow],
+        priorityTurns: [String: CodexPriorityTurnMetadata],
+        modelsDevCatalog: ModelsDevCatalog?,
+        modelsDevCacheRoot: URL?) -> [CodexUsageRow]
+    {
+        rows.map { row in
+            let priorityMetadata = row.turnID.flatMap { priorityTurns[$0] }
+            let pricedModel = priorityMetadata.map { Self.codexPriorityPricingModel(for: row, priorityMetadata: $0) }
+                ?? row.model
+            let baseCost = CostUsagePricing.codexCostUSD(
+                model: pricedModel,
+                inputTokens: row.input,
+                cachedInputTokens: row.cached,
+                outputTokens: row.output,
+                modelsDevCatalog: modelsDevCatalog,
+                modelsDevCacheRoot: modelsDevCacheRoot)
+            let exactCost: Double? = if priorityMetadata != nil,
+                                        let priorityCost = CostUsagePricing.codexPriorityCostUSD(
+                                            model: pricedModel,
+                                            inputTokens: row.input,
+                                            cachedInputTokens: row.cached,
+                                            outputTokens: row.output)
+            {
+                max(priorityCost, baseCost ?? priorityCost)
+            } else {
+                baseCost
+            }
+            let totalTokens = max(0, row.input) + max(0, row.output)
+            return CodexUsageRow(
+                day: row.day,
+                model: row.model,
+                rawModel: row.rawModel,
+                turnID: row.turnID,
+                eventIndex: row.eventIndex,
+                timestampUnixMs: row.timestampUnixMs,
+                input: row.input,
+                cached: row.cached,
+                output: row.output,
+                reasoning: row.reasoning,
+                knownCostNanos: exactCost.map { Int64(($0 * Self.costScale).rounded()) },
+                unpricedTokens: exactCost == nil ? totalTokens : 0,
+                pricingModel: pricedModel,
+                pricingMode: priorityMetadata == nil ? "standard" : "priority")
+        }
     }
 
     static func codexMergedCostMap(
@@ -743,6 +796,7 @@ extension CostUsageScanner {
                 splitMaps.priorityTokens),
             codexTurnIDs: Self.mergeCodexTurnIDs(nil, rows: rows),
             codexRows: rows)
+            .refreshingCodexWorkspaceUsageFingerprint()
     }
 
     static func mergeCostMaps(
@@ -966,6 +1020,7 @@ extension CostUsageScanner {
         return !(Set(cached.codexTurnIDs ?? []).isDisjoint(with: context.changedPriorityTurnIDs))
     }
 
+    // swiftlint:disable:next function_body_length
     static func appendCodexFileIncrementIfPossible(
         input: CodexFileScanInput,
         context: CodexFileScanContext,
@@ -1122,7 +1177,12 @@ extension CostUsageScanner {
                 migratedCached.codexPriorityTokens,
                 splitMaps.priorityTokens),
             codexTurnIDs: Self.mergeCodexTurnIDs(migratedCached.codexTurnIDs, rows: uniqueRows),
-            codexRows: Self.mergeCodexRows(retainedCachedRows, rows: uniqueRows, sessionId: sessionId))
+            codexRows: Self.codexRowsWithPricingAudit(
+                Self.mergeCodexRows(retainedCachedRows, rows: uniqueRows, sessionId: sessionId) ?? [],
+                priorityTurns: context.resources.priorityTurns,
+                modelsDevCatalog: context.resources.modelsDevCatalog,
+                modelsDevCacheRoot: context.resources.modelsDevCacheRoot))
+            .refreshingCodexWorkspaceUsageFingerprint()
         Self.rememberScannedCodexFile(
             input: input,
             session: CodexScannedSession(id: sessionId, days: mergedDays),
@@ -1256,7 +1316,12 @@ extension CostUsageScanner {
                 : Self.mergeCodexTurnIDs(migratedCached?.codexTurnIDs, rows: uniqueRows),
             codexRows: context.dropDeferredCodexRows
                 ? nil
-                : Self.mergeCodexRows(migratedCached?.codexRows, rows: uniqueRows, sessionId: sessionId))
+                : Self.codexRowsWithPricingAudit(
+                    Self.mergeCodexRows(migratedCached?.codexRows, rows: uniqueRows, sessionId: sessionId) ?? [],
+                    priorityTurns: context.resources.priorityTurns,
+                    modelsDevCatalog: context.resources.modelsDevCatalog,
+                    modelsDevCacheRoot: context.resources.modelsDevCacheRoot))
+            .refreshingCodexWorkspaceUsageFingerprint()
         Self.applyFileDays(cache: &cache, fileDays: cache.files[input.metadata.path]?.days ?? [:], sign: 1)
         Self.rememberScannedCodexFile(
             input: input,

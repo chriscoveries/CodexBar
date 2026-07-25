@@ -26,6 +26,7 @@ public enum CostUsageError: LocalizedError, Sendable {
     }
 }
 
+// swiftlint:disable:next type_body_length
 public struct CostUsageFetcher: Sendable {
     package struct CachedCodexTokenSnapshotResult: Sendable {
         package let snapshot: CostUsageTokenSnapshot

@@ -67,12 +67,24 @@ extension JSONDecoder {
         decoder.dateDecodingStrategy = .iso8601
         return decoder
     }
+
+    static var codexLocalProjectUsageSidecar: JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .millisecondsSince1970
+        return decoder
+    }
 }
 
 extension JSONEncoder {
     static var codexLocalProjectUsage: JSONEncoder {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }
+
+    static var codexLocalProjectUsageSidecar: JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .millisecondsSince1970
         return encoder
     }
 }

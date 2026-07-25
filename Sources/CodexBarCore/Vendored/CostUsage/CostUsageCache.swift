@@ -11,7 +11,7 @@ enum CostUsageCacheIO {
     private static func artifactVersion(for provider: UsageProvider) -> Int {
         switch provider {
         case .codex:
-            10
+            11
         case .claude, .vertexai:
             5
         default:
@@ -155,6 +155,8 @@ struct CostUsageFileUsage: Codable {
     var codexStandardTokens: [String: [String: Int]]?
     var codexPriorityTokens: [String: [String: Int]]?
     var codexTurnIDs: [String]?
+    /// Refreshed by Codex normalization paths, never by sidecar cache validation.
+    var codexWorkspaceContentFingerprint: String?
     var codexRows: [CostUsageScanner.CodexUsageRow]?
     var claudeRows: [CostUsageScanner.ClaudeUsageRow]?
 }
@@ -209,4 +211,12 @@ struct CostUsageCodexTotals: Codable, Equatable {
     var input: Int
     var cached: Int
     var output: Int
+    var reasoning: Int?
+
+    init(input: Int, cached: Int, output: Int, reasoning: Int? = nil) {
+        self.input = input
+        self.cached = cached
+        self.output = output
+        self.reasoning = reasoning
+    }
 }

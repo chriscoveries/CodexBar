@@ -41,6 +41,7 @@ public struct CodexLocalProjectUsageSnapshot: Sendable, Codable, Equatable {
     public let modelBreakdowns: [CodexLocalUsageModelBreakdown]
     public let daily: [CodexLocalUsageDailyPoint]
     public let sourceStatus: CodexLocalProjectUsageSourceStatus
+    public let modelsAnalytics: CodexModelsAnalyticsPayload?
 
     private enum CodingKeys: String, CodingKey {
         case updatedAt
@@ -55,6 +56,7 @@ public struct CodexLocalProjectUsageSnapshot: Sendable, Codable, Equatable {
         case modelBreakdowns
         case daily
         case sourceStatus
+        case modelsAnalytics
     }
 
     public init(
@@ -69,7 +71,8 @@ public struct CodexLocalProjectUsageSnapshot: Sendable, Codable, Equatable {
         sessions: [CodexLocalSessionUsage] = [],
         modelBreakdowns: [CodexLocalUsageModelBreakdown] = [],
         daily: [CodexLocalUsageDailyPoint],
-        sourceStatus: CodexLocalProjectUsageSourceStatus = .complete)
+        sourceStatus: CodexLocalProjectUsageSourceStatus = .complete,
+        modelsAnalytics: CodexModelsAnalyticsPayload? = nil)
     {
         self.updatedAt = updatedAt
         self.historyDays = historyDays
@@ -83,6 +86,7 @@ public struct CodexLocalProjectUsageSnapshot: Sendable, Codable, Equatable {
         self.modelBreakdowns = modelBreakdowns
         self.daily = daily
         self.sourceStatus = sourceStatus
+        self.modelsAnalytics = modelsAnalytics
     }
 
     public init(from decoder: Decoder) throws {
@@ -103,6 +107,9 @@ public struct CodexLocalProjectUsageSnapshot: Sendable, Codable, Equatable {
         self.sourceStatus = try container.decodeIfPresent(
             CodexLocalProjectUsageSourceStatus.self,
             forKey: .sourceStatus) ?? .complete
+        self.modelsAnalytics = try container.decodeIfPresent(
+            CodexModelsAnalyticsPayload.self,
+            forKey: .modelsAnalytics)
     }
 
     /// An aggregate without per-project detail cannot render the inspector

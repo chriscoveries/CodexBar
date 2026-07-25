@@ -74,11 +74,50 @@ enum CostUsageScanner {
     struct CodexUsageRow: Codable, Equatable {
         let day: String
         let model: String
+        let rawModel: String?
         let turnID: String?
         let eventIndex: Int?
+        let timestampUnixMs: Int64?
         let input: Int
         let cached: Int
         let output: Int
+        let reasoning: Int?
+        let knownCostNanos: Int64?
+        let unpricedTokens: Int?
+        let pricingModel: String?
+        let pricingMode: String?
+
+        init(
+            day: String,
+            model: String,
+            rawModel: String? = nil,
+            turnID: String?,
+            eventIndex: Int?,
+            timestampUnixMs: Int64? = nil,
+            input: Int,
+            cached: Int,
+            output: Int,
+            reasoning: Int? = nil,
+            knownCostNanos: Int64? = nil,
+            unpricedTokens: Int? = nil,
+            pricingModel: String? = nil,
+            pricingMode: String? = nil)
+        {
+            self.day = day
+            self.model = model
+            self.rawModel = rawModel
+            self.turnID = turnID
+            self.eventIndex = eventIndex
+            self.timestampUnixMs = timestampUnixMs
+            self.input = input
+            self.cached = cached
+            self.output = output
+            self.reasoning = reasoning.map { min(max(0, $0), max(0, output)) }
+            self.knownCostNanos = knownCostNanos
+            self.unpricedTokens = unpricedTokens
+            self.pricingModel = pricingModel
+            self.pricingMode = pricingMode
+        }
     }
 
     struct CodexScanState {
@@ -139,7 +178,8 @@ enum CostUsageScanner {
         CostUsageCodexTotals(
             input: lhs.input + rhs.input,
             cached: lhs.cached + rhs.cached,
-            output: lhs.output + rhs.output)
+            output: lhs.output + rhs.output,
+            reasoning: self.codexAddOptional(lhs.reasoning, rhs.reasoning))
     }
 
     private static func codexMinTotals(
@@ -149,18 +189,24 @@ enum CostUsageScanner {
         CostUsageCodexTotals(
             input: min(lhs.input, rhs.input),
             cached: min(lhs.cached, rhs.cached),
-            output: min(lhs.output, rhs.output))
+            output: min(lhs.output, rhs.output),
+            reasoning: self.codexMinOptional(lhs.reasoning, rhs.reasoning))
     }
 
     private static func codexTotalDelta(
         from baseline: CostUsageCodexTotals?,
         to current: CostUsageCodexTotals) -> CostUsageCodexTotals
     {
+        let reasoning = Self.codexOptionalDelta(
+            from: baseline?.reasoning,
+            to: current.reasoning,
+            hasBaseline: baseline != nil)
         let baseline = baseline ?? .init(input: 0, cached: 0, output: 0)
         return CostUsageCodexTotals(
             input: max(0, current.input - baseline.input),
             cached: max(0, current.cached - baseline.cached),
-            output: max(0, current.output - baseline.output))
+            output: max(0, current.output - baseline.output),
+            reasoning: reasoning)
     }
 
     private static func codexDivergentTotalDelta(
@@ -181,7 +227,11 @@ enum CostUsageScanner {
         return CostUsageCodexTotals(
             input: delta(raw: rawBaseline.input, counted: countedBaseline.input, current: current.input),
             cached: delta(raw: rawBaseline.cached, counted: countedBaseline.cached, current: current.cached),
-            output: delta(raw: rawBaseline.output, counted: countedBaseline.output, current: current.output))
+            output: delta(raw: rawBaseline.output, counted: countedBaseline.output, current: current.output),
+            reasoning: Self.codexDivergentOptionalDelta(
+                raw: rawBaseline.reasoning,
+                counted: countedBaseline.reasoning,
+                current: current.reasoning))
     }
 
     private static func codexMaxTotals(
@@ -192,7 +242,8 @@ enum CostUsageScanner {
         return CostUsageCodexTotals(
             input: max(lhs.input, rhs.input),
             cached: max(lhs.cached, rhs.cached),
-            output: max(lhs.output, rhs.output))
+            output: max(lhs.output, rhs.output),
+            reasoning: Self.codexMaxOptional(lhs.reasoning, rhs.reasoning))
     }
 
     /// Post-latch totals containment for interleaved cumulative counters (issue #2037 Phase 1).
@@ -219,7 +270,58 @@ enum CostUsageScanner {
         return CostUsageCodexTotals(
             input: component(water: watermark.input, counted: counted.input, current: current.input),
             cached: component(water: watermark.cached, counted: counted.cached, current: current.cached),
-            output: component(water: watermark.output, counted: counted.output, current: current.output))
+            output: component(water: watermark.output, counted: counted.output, current: current.output),
+            reasoning: Self.codexContainedOptionalDelta(
+                water: watermark.reasoning,
+                counted: counted.reasoning,
+                current: current.reasoning))
+    }
+
+    private static func codexAddOptional(_ lhs: Int?, _ rhs: Int?) -> Int? {
+        guard let lhs, let rhs else { return nil }
+        return lhs + rhs
+    }
+
+    private static func codexMinOptional(_ lhs: Int?, _ rhs: Int?) -> Int? {
+        guard let lhs, let rhs else { return nil }
+        return min(lhs, rhs)
+    }
+
+    private static func codexMaxOptional(_ lhs: Int?, _ rhs: Int?) -> Int? {
+        switch (lhs, rhs) {
+        case let (lhs?, rhs?): max(lhs, rhs)
+        case let (lhs?, nil): lhs
+        case let (nil, rhs?): rhs
+        case (nil, nil): nil
+        }
+    }
+
+    private static func codexSubtractOptional(_ value: Int?, _ baseline: Int?) -> Int? {
+        guard let value, let baseline else { return nil }
+        return max(0, value - baseline)
+    }
+
+    private static func codexOptionalDelta(from baseline: Int?, to current: Int?, hasBaseline: Bool) -> Int? {
+        guard let current else { return nil }
+        if !hasBaseline { return current }
+        guard let baseline else { return nil }
+        return max(0, current - baseline)
+    }
+
+    private static func codexDivergentOptionalDelta(raw: Int?, counted: Int?, current: Int?) -> Int? {
+        guard let raw, let counted, let current else { return nil }
+        if current >= raw {
+            return max(0, current - raw)
+        }
+        return max(0, current - counted)
+    }
+
+    private static func codexContainedOptionalDelta(water: Int?, counted: Int?, current: Int?) -> Int? {
+        guard let water, let counted, let current else { return nil }
+        if current >= water {
+            return max(0, current - max(water, counted))
+        }
+        return max(0, current - counted)
     }
 
     /// Post-latch event delta: contained totals growth, optionally capped by `last`.
@@ -265,7 +367,7 @@ enum CostUsageScanner {
         }
 
         func isSeen(_ totals: CostUsageCodexTotals) -> Bool {
-            self.seenRawTotals.contains(totals)
+            self.seenRawTotals.contains { CostUsageScanner.codexTotalsEqual($0, totals) }
         }
 
         /// Latches interleaved mode when any component of an observed cumulative snapshot drops
@@ -285,7 +387,7 @@ enum CostUsageScanner {
         /// value for best-effort re-emission suppression. Call after computing the event's delta.
         mutating func commitObserved(_ totals: CostUsageCodexTotals) {
             self.raiseWatermark(to: totals)
-            if !self.seenRawTotals.contains(totals) {
+            if !self.seenRawTotals.contains(where: { CostUsageScanner.codexTotalsEqual($0, totals) }) {
                 self.seenRawTotals.append(totals)
                 if self.seenRawTotals.count > Self.seenRawTotalsLimit {
                     self.seenRawTotals.removeFirst(self.seenRawTotals.count - Self.seenRawTotalsLimit)
@@ -314,7 +416,12 @@ enum CostUsageScanner {
             last: CostUsageCodexTotals?,
             total: CostUsageCodexTotals?) -> CostUsageCodexTotals
         {
-            let base = self.countedTotals ?? .init(input: 0, cached: 0, output: 0)
+            let hasReasoning = last?.reasoning != nil || total?.reasoning != nil
+            let base = self.countedTotals ?? .init(
+                input: 0,
+                cached: 0,
+                output: 0,
+                reasoning: hasReasoning ? 0 : nil)
             if let total {
                 // Best-effort exact re-emission suppression (precision only; containment is load-bearing).
                 if self.tracker.isSeen(total) {
@@ -1348,6 +1455,7 @@ enum CostUsageScanner {
     private static let codexJSONFieldModel = Array("model".utf8)
     private static let codexJSONFieldModelName = Array("model_name".utf8)
     private static let codexJSONFieldOutputTokens = Array("output_tokens".utf8)
+    private static let codexJSONFieldReasoningOutputTokens = Array("reasoning_output_tokens".utf8)
     private static let codexJSONFieldParentSessionId = Array("parent_session_id".utf8)
     private static let codexJSONFieldParentSessionIdCamel = Array("parentSessionId".utf8)
     private static let codexJSONFieldPayload = Array("payload".utf8)
@@ -1545,7 +1653,12 @@ enum CostUsageScanner {
             Self
                 .extractJSONByteIntField(Self.codexJSONFieldOutputTokens, from: bytes, in: objectRange, atDepth: 1) ??
                 0)
-        return CostUsageCodexTotals(input: input, cached: cached, output: output)
+        let reasoning = Self.extractJSONByteIntField(
+            Self.codexJSONFieldReasoningOutputTokens,
+            from: bytes,
+            in: objectRange,
+            atDepth: 1).map { min(max(0, $0), output) }
+        return CostUsageCodexTotals(input: input, cached: cached, output: output, reasoning: reasoning)
     }
 
     private static func codexInterAgentCommunication(
@@ -1994,16 +2107,22 @@ enum CostUsageScanner {
                         }
 
                         let total = (info["total_token_usage"] as? [String: Any]).map {
-                            CostUsageCodexTotals(
+                            let output = toInt($0["output_tokens"])
+                            return CostUsageCodexTotals(
                                 input: toInt($0["input_tokens"]),
                                 cached: toInt($0["cached_input_tokens"] ?? $0["cache_read_input_tokens"]),
-                                output: toInt($0["output_tokens"]))
+                                output: output,
+                                reasoning: ($0["reasoning_output_tokens"] as? NSNumber)
+                                    .map { min(max(0, $0.intValue), max(0, output)) })
                         }
                         let last = (info["last_token_usage"] as? [String: Any]).map {
-                            CostUsageCodexTotals(
+                            let output = max(0, toInt($0["output_tokens"]))
+                            return CostUsageCodexTotals(
                                 input: max(0, toInt($0["input_tokens"])),
                                 cached: max(0, toInt($0["cached_input_tokens"] ?? $0["cache_read_input_tokens"])),
-                                output: max(0, toInt($0["output_tokens"])))
+                                output: output,
+                                reasoning: ($0["reasoning_output_tokens"] as? NSNumber)
+                                    .map { min(max(0, $0.intValue), output) })
                         }
                         appendSnapshot(timestamp: timestamp, last: last, total: total)
                     }
@@ -2148,11 +2267,15 @@ enum CostUsageScanner {
             return trimmed.isEmpty ? nil : trimmed
         }
 
-        func observeTimestamp(_ timestamp: String?) {
+        func unixMilliseconds(from timestamp: String?) -> Int64? {
             guard let timestamp,
                   let date = Self.dateFromTimestamp(timestamp)
-            else { return }
-            let unixMs = Int64((date.timeIntervalSince1970 * 1000).rounded())
+            else { return nil }
+            return Int64((date.timeIntervalSince1970 * 1000).rounded())
+        }
+
+        func observeTimestamp(_ timestamp: String?) {
+            guard let unixMs = unixMilliseconds(from: timestamp) else { return }
             codexSession.startedAtUnixMs = switch codexSession.startedAtUnixMs {
             case let current?: min(current, unixMs)
             case nil: unixMs
@@ -2255,6 +2378,7 @@ enum CostUsageScanner {
             var deltaInput = 0
             var deltaCached = 0
             var deltaOutput = 0
+            var deltaReasoning: Int?
 
             func adjustedLastDelta(_ rawDelta: CostUsageCodexTotals) -> CostUsageCodexTotals {
                 guard var remaining = remainingInheritedTotals else { return rawDelta }
@@ -2262,11 +2386,13 @@ enum CostUsageScanner {
                 let adjusted = CostUsageCodexTotals(
                     input: max(0, rawDelta.input - remaining.input),
                     cached: max(0, rawDelta.cached - remaining.cached),
-                    output: max(0, rawDelta.output - remaining.output))
+                    output: max(0, rawDelta.output - remaining.output),
+                    reasoning: Self.codexSubtractOptional(rawDelta.reasoning, remaining.reasoning))
 
                 remaining.input = max(0, remaining.input - rawDelta.input)
                 remaining.cached = max(0, remaining.cached - rawDelta.cached)
                 remaining.output = max(0, remaining.output - rawDelta.output)
+                remaining.reasoning = Self.codexSubtractOptional(remaining.reasoning, rawDelta.reasoning)
                 remainingInheritedTotals = if remaining.input == 0, remaining.cached == 0,
                                               remaining.output == 0
                 {
@@ -2285,7 +2411,8 @@ enum CostUsageScanner {
                 return CostUsageCodexTotals(
                     input: max(0, rawTotals.input - inheritedTotals.input),
                     cached: max(0, rawTotals.cached - inheritedTotals.cached),
-                    output: max(0, rawTotals.output - inheritedTotals.output))
+                    output: max(0, rawTotals.output - inheritedTotals.output),
+                    reasoning: Self.codexSubtractOptional(rawTotals.reasoning, inheritedTotals.reasoning))
             }
 
             if let adjustedTotal {
@@ -2324,7 +2451,12 @@ enum CostUsageScanner {
                 deltaInput = delta.input
                 deltaCached = delta.cached
                 deltaOutput = delta.output
-                let prev = previousTotals ?? .init(input: 0, cached: 0, output: 0)
+                deltaReasoning = delta.reasoning
+                let prev = previousTotals ?? .init(
+                    input: 0,
+                    cached: 0,
+                    output: 0,
+                    reasoning: delta.reasoning == nil ? nil : 0)
                 previousTotals = Self.codexAddTotals(prev, delta)
                 rawTotalsBaseline = rawBaseline
                 if !Self.codexTotalsEqual(rawTotalsBaseline, previousTotals) {
@@ -2352,7 +2484,12 @@ enum CostUsageScanner {
                 deltaInput = adjustedDelta.input
                 deltaCached = adjustedDelta.cached
                 deltaOutput = adjustedDelta.output
-                let prev = previousTotals ?? .init(input: 0, cached: 0, output: 0)
+                deltaReasoning = adjustedDelta.reasoning
+                let prev = previousTotals ?? .init(
+                    input: 0,
+                    cached: 0,
+                    output: 0,
+                    reasoning: adjustedDelta.reasoning == nil ? nil : 0)
                 previousTotals = Self.codexAddTotals(prev, adjustedDelta)
                 rawTotalsBaseline = previousTotals
             }
@@ -2379,7 +2516,11 @@ enum CostUsageScanner {
                 let rawDelta = last
                 let hadRemainingInheritedTotals = remainingInheritedTotals != nil
                 var adjustedDelta = adjustedLastDelta(rawDelta)
-                let prev = previousTotals ?? .init(input: 0, cached: 0, output: 0)
+                let prev = previousTotals ?? .init(
+                    input: 0,
+                    cached: 0,
+                    output: 0,
+                    reasoning: adjustedDelta.reasoning == nil ? nil : 0)
 
                 if let currentTotals = adjustedTotal, !hasUnresolvedForkBaseline {
                     if tracker.sawInterleavedTotals {
@@ -2409,6 +2550,7 @@ enum CostUsageScanner {
                     deltaInput = adjustedDelta.input
                     deltaCached = adjustedDelta.cached
                     deltaOutput = adjustedDelta.output
+                    deltaReasoning = adjustedDelta.reasoning
                     previousTotals = countedTotals
                     rawTotalsBaseline = countedTotals
                     tracker.raiseWatermark(to: countedTotals)
@@ -2440,11 +2582,14 @@ enum CostUsageScanner {
                 rows.append(CodexUsageRow(
                     day: dayKey,
                     model: normModel,
+                    rawModel: model,
                     turnID: record.turnID ?? currentTurnID,
                     eventIndex: eventIndex,
+                    timestampUnixMs: unixMilliseconds(from: record.timestamp),
                     input: deltaInput,
                     cached: deltaCached,
-                    output: deltaOutput))
+                    output: deltaOutput,
+                    reasoning: deltaReasoning))
             }
         }
 
@@ -2626,10 +2771,10 @@ enum CostUsageScanner {
                                 metadata = CodexTurnContextMetadata(
                                     timestamp: tsText,
                                     model: Self.codexTurnContextModel(
-                                    payloadModel: payload["model"] as? String,
-                                    payloadModelName: payload["model_name"] as? String,
-                                    infoModel: info?["model"] as? String,
-                                    infoModelName: info?["model_name"] as? String),
+                                        payloadModel: payload["model"] as? String,
+                                        payloadModelName: payload["model_name"] as? String,
+                                        infoModel: info?["model"] as? String,
+                                        infoModelName: info?["model_name"] as? String),
                                     cwd: payload["cwd"] as? String
                                         ?? payload["current_working_directory"] as? String
                                         ?? payload["currentWorkingDirectory"] as? String,
@@ -2671,10 +2816,13 @@ enum CostUsageScanner {
                         }
 
                         func tokenTotals(_ usage: [String: Any]) -> CostUsageCodexTotals {
-                            CostUsageCodexTotals(
+                            let output = max(0, toInt(usage["output_tokens"]))
+                            return CostUsageCodexTotals(
                                 input: max(0, toInt(usage["input_tokens"])),
                                 cached: max(0, toInt(usage["cached_input_tokens"] ?? usage["cache_read_input_tokens"])),
-                                output: max(0, toInt(usage["output_tokens"])))
+                                output: output,
+                                reasoning: (usage["reasoning_output_tokens"] as? NSNumber)
+                                    .map { min(max(0, $0.intValue), output) })
                         }
 
                         let record = CodexTokenCountRecord(

@@ -135,7 +135,7 @@ enum CodexThreadCatalogReader {
         CodexLocalDataScope.resolve(options: options).stateDatabaseURL
     }
 
-    #if canImport(SQLite3)
+    #if canImport(SQLite3) || canImport(CSQLite3)
     private static func hasThreadsTable(_ db: OpaquePointer?) -> Bool? {
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(
