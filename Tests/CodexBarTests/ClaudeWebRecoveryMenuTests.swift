@@ -30,6 +30,7 @@ struct ClaudeWebRecoveryMenuTests {
         cookieSource: ProviderCookieSource = .auto,
         selectedSessionKey: Bool = false,
         authenticatedAccountEmail: String? = nil,
+        authenticatedOAuthWithoutEmail: Bool = false,
         attempts: [ProviderFetchAttempt] = []) -> [(String, MenuDescriptor.MenuAction)]
     {
         let settings = self.makeSettings()
@@ -43,10 +44,16 @@ struct ClaudeWebRecoveryMenuTests {
             fetcher: fetcher,
             browserDetection: BrowserDetection(cacheTTL: 0),
             settings: settings)
-        if let authenticatedAccountEmail {
+        if authenticatedAccountEmail != nil || authenticatedOAuthWithoutEmail {
             store._setSnapshotForTesting(
                 UsageSnapshot(
-                    primary: nil,
+                    primary: authenticatedOAuthWithoutEmail
+                        ? RateWindow(
+                            usedPercent: 25,
+                            windowMinutes: 5 * 60,
+                            resetsAt: nil,
+                            resetDescription: nil)
+                        : nil,
                     secondary: nil,
                     updatedAt: Date(),
                     identity: ProviderIdentitySnapshot(
@@ -90,6 +97,18 @@ struct ClaudeWebRecoveryMenuTests {
         let actions = self.actions(
             source: .auto,
             authenticatedAccountEmail: "claude@example.com")
+
+        #expect(actions.contains {
+            $0.0 == "Switch Account..." && $0.1 == .switchAccount(.claude)
+        })
+        #expect(!actions.contains { $0.0 == "Sign in with Claude Code..." })
+    }
+
+    @Test
+    func `email-less Claude OAuth snapshot shows switch action instead of sign in`() {
+        let actions = self.actions(
+            source: .oauth,
+            authenticatedOAuthWithoutEmail: true)
 
         #expect(actions.contains {
             $0.0 == "Switch Account..." && $0.1 == .switchAccount(.claude)
