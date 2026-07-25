@@ -285,6 +285,95 @@ struct CostUsagePerformanceGateTests {
         #expect(catalogLoadCount == 1)
     }
 
+    @Test
+    func `oversized codex session files are skipped instead of fully rescanned`() throws {
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+        let day = try env.makeLocalNoon(year: 2026, month: 5, day: 10)
+        let small = try Self.writeSyntheticCodexCorpus(env: env, day: day, files: 1, turnsPerFile: 2)
+        let smallURL = try #require(small.first)
+        let giantURL = try env.writeCodexSessionFile(
+            day: day,
+            filename: "giant-session.jsonl",
+            contents: String(repeating: "x", count: 8_192) + "\n")
+
+        var options = CostUsageScanner.Options(
+            codexSessionsRoot: env.codexSessionsRoot,
+            claudeProjectsRoots: nil,
+            cacheRoot: env.cacheRoot,
+            codexTraceDatabaseURL: env.root.appendingPathComponent("missing.sqlite"),
+            maxCodexSessionFileBytes: 1_024,
+            maxCodexScanBytesPerRefresh: 64 * 1024 * 1024)
+        options.refreshMinIntervalSeconds = 0
+
+        let report = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day,
+            options: options)
+        let cache = CostUsageCacheIO.load(provider: .codex, cacheRoot: env.cacheRoot)
+
+        #expect(report.summary?.totalTokens != nil)
+        #expect(cache.files[smallURL.path] != nil)
+        #expect(cache.files[giantURL.path] == nil)
+        #expect(report.data.isEmpty == false)
+    }
+
+    @Test
+    func `per refresh byte budget defers later dirty files`() throws {
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+        let day = try env.makeLocalNoon(year: 2026, month: 5, day: 10)
+        let urls = try Self.writeSyntheticCodexCorpus(env: env, day: day, files: 3, turnsPerFile: 3)
+        // Make deterministic order by newest-first: touch later files later.
+        let older = try #require(urls.first)
+        let newer = try #require(urls.last)
+        let olderDate = day.addingTimeInterval(-3_600)
+        let newerDate = day
+        try FileManager.default.setAttributes([.modificationDate: olderDate], ofItemAtPath: older.path)
+        try FileManager.default.setAttributes([.modificationDate: newerDate], ofItemAtPath: newer.path)
+
+        let newestMeta = CostUsageScanner.codexFileMetadata(fileURL: newer)
+        var options = CostUsageScanner.Options(
+            codexSessionsRoot: env.codexSessionsRoot,
+            claudeProjectsRoots: nil,
+            cacheRoot: env.cacheRoot,
+            codexTraceDatabaseURL: env.root.appendingPathComponent("missing.sqlite"),
+            maxCodexSessionFileBytes: 64 * 1024 * 1024,
+            // Enough for the newest file only; remaining dirty files defer.
+            maxCodexScanBytesPerRefresh: max(1, newestMeta.size),
+            preferNewestCodexSessionsFirst: true)
+        options.refreshMinIntervalSeconds = 0
+
+        _ = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day,
+            options: options)
+        let cache = CostUsageCacheIO.load(provider: .codex, cacheRoot: env.cacheRoot)
+
+        #expect(cache.files[newer.path] != nil)
+        #expect(cache.files[older.path] == nil)
+    }
+
+    @Test
+    func `pending work bytes treat fork files as full rescan work`() {
+        let metadata = CostUsageScanner.CodexFileMetadata(
+            path: "/tmp/forked.jsonl",
+            mtimeUnixMs: 2,
+            size: 1_000,
+            fileId: "1:2")
+        let cached = CostUsageFileUsage(
+            mtimeUnixMs: 1,
+            size: 400,
+            days: [:],
+            parsedBytes: 400,
+            forkedFromId: "parent-session")
+        #expect(CostUsageScanner.pendingCodexScanWorkBytes(metadata: metadata, cached: cached) == 1_000)
+    }
+
     private static func writeSyntheticCodexCorpus(
         env: CostUsageTestEnvironment,
         day: Date,

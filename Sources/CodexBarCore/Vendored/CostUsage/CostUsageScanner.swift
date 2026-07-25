@@ -33,6 +33,14 @@ enum CostUsageScanner {
         var claudeLogProviderFilter: ClaudeLogProviderFilter = .all
         /// Force a full rescan, ignoring per-file cache and incremental offsets.
         var forceRescan: Bool = false
+        /// Skip full/cold parses of individual Codex rollout files larger than this.
+        /// Fresh cached entries are still reused. Default 256 MiB.
+        var maxCodexSessionFileBytes: Int64 = 256 * 1024 * 1024
+        /// Soft budget for newly-read Codex session bytes in one refresh.
+        /// Remaining dirty files are deferred to later refreshes. Default 512 MiB.
+        var maxCodexScanBytesPerRefresh: Int64 = 512 * 1024 * 1024
+        /// Prefer newest session files first so recent usage lands before catch-up work.
+        var preferNewestCodexSessionsFirst: Bool = true
 
         init(
             codexSessionsRoot: URL? = nil,
@@ -40,7 +48,10 @@ enum CostUsageScanner {
             cacheRoot: URL? = nil,
             codexTraceDatabaseURL: URL? = nil,
             claudeLogProviderFilter: ClaudeLogProviderFilter = .all,
-            forceRescan: Bool = false)
+            forceRescan: Bool = false,
+            maxCodexSessionFileBytes: Int64 = 256 * 1024 * 1024,
+            maxCodexScanBytesPerRefresh: Int64 = 512 * 1024 * 1024,
+            preferNewestCodexSessionsFirst: Bool = true)
         {
             self.codexSessionsRoot = codexSessionsRoot
             self.claudeProjectsRoots = claudeProjectsRoots
@@ -48,6 +59,50 @@ enum CostUsageScanner {
             self.codexTraceDatabaseURL = codexTraceDatabaseURL
             self.claudeLogProviderFilter = claudeLogProviderFilter
             self.forceRescan = forceRescan
+            self.maxCodexSessionFileBytes = max(0, maxCodexSessionFileBytes)
+            self.maxCodexScanBytesPerRefresh = max(0, maxCodexScanBytesPerRefresh)
+            self.preferNewestCodexSessionsFirst = preferNewestCodexSessionsFirst
+        }
+    }
+
+    /// Per-refresh work limiter for Codex cost scans. Prevents multi-GB rollout corpora from
+    /// monopolizing a core for hours while still allowing progressive catch-up.
+    final class CodexScanBudget: @unchecked Sendable {
+        let maxFileBytes: Int64
+        let maxBytesPerRefresh: Int64
+        private(set) var bytesConsumed: Int64 = 0
+        private(set) var skippedOversizedFileCount = 0
+        private(set) var deferredByBudgetFileCount = 0
+
+        init(maxFileBytes: Int64, maxBytesPerRefresh: Int64) {
+            self.maxFileBytes = max(0, maxFileBytes)
+            self.maxBytesPerRefresh = max(0, maxBytesPerRefresh)
+        }
+
+        enum Admission {
+            case allow
+            case skipOversized
+            case deferBudget
+        }
+
+        func admit(workBytes: Int64) -> Admission {
+            let work = max(0, workBytes)
+            if self.maxFileBytes > 0, work > self.maxFileBytes {
+                self.skippedOversizedFileCount += 1
+                return .skipOversized
+            }
+            if self.maxBytesPerRefresh > 0,
+               self.bytesConsumed > 0,
+               self.bytesConsumed + work > self.maxBytesPerRefresh
+            {
+                self.deferredByBudgetFileCount += 1
+                return .deferBudget
+            }
+            return .allow
+        }
+
+        func consume(workBytes: Int64) {
+            self.bytesConsumed += max(0, workBytes)
         }
     }
 
@@ -408,6 +463,7 @@ enum CostUsageScanner {
         let changedPriorityTurnIDs: Set<String>
         let resources: CodexScanResources
         let checkCancellation: CancellationCheck?
+        let scanBudget: CodexScanBudget?
     }
 
     final class CodexCanonicalProjectPathResolver {
@@ -2732,10 +2788,60 @@ enum CostUsageScanner {
         if try Self.keepCachedCodexFileIfFresh(input: input, context: context, cache: &cache, state: &state) {
             return
         }
+
+        let pendingWorkBytes = Self.pendingCodexScanWorkBytes(metadata: metadata, cached: cached)
+        if let budget = context.scanBudget {
+            switch budget.admit(workBytes: pendingWorkBytes) {
+            case .allow:
+                break
+            case .skipOversized:
+                Self.log.warning(
+                    "Skipping oversized Codex session during cost scan",
+                    metadata: [
+                        "path": metadata.path,
+                        "bytes": "\(metadata.size)",
+                        "limit": "\(budget.maxFileBytes)",
+                    ])
+                // Preserve any prior contribution instead of thrashing on multi-GB rollouts.
+                // Fresh caches were already handled above; stale caches stay until a future
+                // refresh with room, or until the file shrinks under the limit.
+                return
+            case .deferBudget:
+                Self.log.debug(
+                    "Deferring Codex session cost scan until a later refresh",
+                    metadata: [
+                        "path": metadata.path,
+                        "pendingBytes": "\(pendingWorkBytes)",
+                        "consumed": "\(budget.bytesConsumed)",
+                        "limit": "\(budget.maxBytesPerRefresh)",
+                    ])
+                // Preserve stale cache so later refreshes can resume catch-up.
+                return
+            }
+        }
+
         if try Self.appendCodexFileIncrementIfPossible(input: input, context: context, cache: &cache, state: &state) {
+            context.scanBudget?.consume(workBytes: pendingWorkBytes)
             return
         }
         try Self.rescanCodexFile(input: input, context: context, cache: &cache, state: &state)
+        context.scanBudget?.consume(workBytes: pendingWorkBytes)
+    }
+
+    static func pendingCodexScanWorkBytes(metadata: CodexFileMetadata, cached: CostUsageFileUsage?) -> Int64 {
+        guard let cached else { return max(0, metadata.size) }
+        if cached.mtimeUnixMs == metadata.mtimeUnixMs, cached.size == metadata.size {
+            return 0
+        }
+        let startOffset = cached.parsedBytes ?? cached.size
+        if metadata.size > cached.size,
+           startOffset > 0,
+           startOffset <= metadata.size,
+           cached.forkedFromId == nil
+        {
+            return max(0, metadata.size - startOffset)
+        }
+        return max(0, metadata.size)
     }
 
     private static func makeCodexRefreshPlan(
@@ -2893,6 +2999,10 @@ enum CostUsageScanner {
                 files.append(fileURL)
             }
 
+            if options.preferNewestCodexSessionsFirst {
+                files = Self.sortedCodexSessionFilesNewestFirst(files)
+            }
+
             let filePathsInScan = Set(files.map(\.path))
             var scanState = CodexScanState()
             let fileIndex = CodexSessionFileIndex(
@@ -2913,18 +3023,33 @@ enum CostUsageScanner {
                 modelsDevCatalog: plan.modelsDevCatalog,
                 modelsDevCacheRoot: options.cacheRoot,
                 priorityTurns: plan.priorityTurns)
+            let scanBudget = CodexScanBudget(
+                maxFileBytes: options.maxCodexSessionFileBytes,
+                maxBytesPerRefresh: options.maxCodexScanBytesPerRefresh)
             let scanContext = Self.codexFileScanContext(
                 range: range,
                 options: options,
                 plan: plan,
                 resources: resources,
-                checkCancellation: checkCancellation)
+                checkCancellation: checkCancellation,
+                scanBudget: scanBudget)
             for fileURL in files {
                 try Self.scanCodexFile(
                     fileURL: fileURL,
                     context: scanContext,
                     cache: &cache,
                     state: &scanState)
+            }
+            if scanBudget.skippedOversizedFileCount > 0 || scanBudget.deferredByBudgetFileCount > 0 {
+                Self.log.info(
+                    "Codex cost scan applied work limits",
+                    metadata: [
+                        "skippedOversized": "\(scanBudget.skippedOversizedFileCount)",
+                        "deferredByBudget": "\(scanBudget.deferredByBudgetFileCount)",
+                        "bytesConsumed": "\(scanBudget.bytesConsumed)",
+                        "maxFileBytes": "\(scanBudget.maxFileBytes)",
+                        "maxBytesPerRefresh": "\(scanBudget.maxBytesPerRefresh)",
+                    ])
             }
             try checkCancellation?()
 
@@ -3004,7 +3129,8 @@ enum CostUsageScanner {
         options: Options,
         plan: CodexRefreshPlan,
         resources: CodexScanResources,
-        checkCancellation: CancellationCheck?) -> CodexFileScanContext
+        checkCancellation: CancellationCheck?,
+        scanBudget: CodexScanBudget? = nil) -> CodexFileScanContext
     {
         CodexFileScanContext(
             range: range,
@@ -3015,7 +3141,22 @@ enum CostUsageScanner {
             requiresTurnIDCache: plan.needsTurnIDCacheMigration,
             changedPriorityTurnIDs: plan.changedPriorityTurnIDs,
             resources: resources,
-            checkCancellation: checkCancellation)
+            checkCancellation: checkCancellation,
+            scanBudget: scanBudget)
+    }
+
+    static func sortedCodexSessionFilesNewestFirst(_ files: [URL]) -> [URL] {
+        files.sorted { lhs, rhs in
+            let left = Self.codexFileMetadata(fileURL: lhs)
+            let right = Self.codexFileMetadata(fileURL: rhs)
+            if left.mtimeUnixMs != right.mtimeUnixMs {
+                return left.mtimeUnixMs > right.mtimeUnixMs
+            }
+            if left.size != right.size {
+                return left.size < right.size
+            }
+            return lhs.path < rhs.path
+        }
     }
 }
 
