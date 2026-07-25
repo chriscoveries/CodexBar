@@ -1,5 +1,66 @@
 import CodexBarCore
 import Foundation
+import SwiftUI
+
+struct ProviderCostContent: View {
+    let section: UsageMenuCardView.Model.ProviderCostSection
+    let progressColor: Color
+    @Environment(\.menuItemHighlighted) private var isHighlighted
+
+    var body: some View {
+        if self.section.presentation == .inlineValue {
+            HStack(alignment: .firstTextBaseline) {
+                Text(self.section.title)
+                    .font(.body)
+                    .fontWeight(.medium)
+                Spacer()
+                Text(self.section.spendLine)
+                    .font(.footnote)
+                    .monospacedDigit()
+                    .lineLimit(1)
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(self.section.title)
+                        .font(.body)
+                        .fontWeight(.medium)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    if let balanceLine = self.section.balanceLine {
+                        Spacer(minLength: 8)
+                        Text(balanceLine)
+                            .font(.footnote)
+                            .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
+                            .monospacedDigit()
+                            .lineLimit(1)
+                            .layoutPriority(1)
+                    }
+                }
+                if let percentUsed = self.section.percentUsed {
+                    UsageProgressBar(
+                        percent: percentUsed,
+                        tint: self.progressColor,
+                        accessibilityLabel: L("Extra usage spent"))
+                }
+                HStack(alignment: .firstTextBaseline) {
+                    Text(self.section.spendLine).font(.footnote).lineLimit(1)
+                    Spacer()
+                    if let percentLine = self.section.percentLine {
+                        Text(percentLine)
+                            .font(.footnote)
+                            .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
+                            .lineLimit(1)
+                    }
+                }
+                if let personalSpendLine = self.section.personalSpendLine {
+                    Text(personalSpendLine)
+                        .font(.footnote).foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted)).lineLimit(1)
+                }
+            }
+        }
+    }
+}
 
 extension UsageMenuCardView.Model.ProviderCostSection {
     enum Presentation: Equatable {
@@ -12,6 +73,7 @@ extension UsageMenuCardView.Model.ProviderCostSection {
         percentUsed: Double?,
         spendLine: String,
         percentLine: String?,
+        balanceLine: String? = nil,
         presentation: Presentation = .detail,
         showsInProviderDetails: Bool = true)
     {
@@ -20,6 +82,7 @@ extension UsageMenuCardView.Model.ProviderCostSection {
             percentUsed: percentUsed,
             spendLine: spendLine,
             percentLine: percentLine,
+            balanceLine: balanceLine,
             personalSpendLine: nil,
             presentation: presentation,
             showsInProviderDetails: showsInProviderDetails)
@@ -366,14 +429,31 @@ extension UsageMenuCardView.Model {
                     percentLine: nil)
             }
 
-            guard let balance = cost.balance else { return nil }
-            let value = UsageFormatter.currencyString(balance, currencyCode: cost.currencyCode)
+            if cost.limit <= 0 {
+                guard let balance = cost.balance else { return nil }
+                let value = UsageFormatter.currencyString(balance, currencyCode: cost.currencyCode)
+                return ProviderCostSection(
+                    title: L("Credits"),
+                    percentUsed: nil,
+                    spendLine: value,
+                    percentLine: nil,
+                    presentation: .inlineValue,
+                    showsInProviderDetails: false)
+            }
+
+            let used = UsageFormatter.currencyString(cost.used, currencyCode: cost.currencyCode)
+            let limit = UsageFormatter.currencyString(cost.limit, currencyCode: cost.currencyCode)
+            let percentUsed = Self.clamped((cost.used / cost.limit) * 100)
+            let periodLabel = Self.localizedPeriodLabel(cost.period ?? "This month")
+            let balanceLine = cost.balance.map {
+                "\(L("Balance")): \(UsageFormatter.currencyString($0, currencyCode: cost.currencyCode))"
+            }
             return ProviderCostSection(
-                title: L("Credits"),
-                percentUsed: nil,
-                spendLine: value,
-                percentLine: nil,
-                presentation: .inlineValue,
+                title: L("Extra usage"),
+                percentUsed: percentUsed,
+                spendLine: "\(periodLabel): \(used) / \(limit)",
+                percentLine: String(format: L("%.0f%% used"), min(100, max(0, percentUsed))),
+                balanceLine: balanceLine,
                 showsInProviderDetails: false)
         }
 
@@ -438,6 +518,7 @@ extension UsageMenuCardView.Model {
             percentUsed: percentUsed,
             spendLine: "\(periodLabel): \(used) / \(limit)",
             percentLine: String(format: L("%.0f%% used"), min(100, max(0, percentUsed))),
+            balanceLine: nil,
             personalSpendLine: personalSpendLine)
     }
 

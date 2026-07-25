@@ -121,6 +121,7 @@ struct UsageMenuCardView: View {
             let percentUsed: Double?
             let spendLine: String
             let percentLine: String?
+            var balanceLine: String?
             var personalSpendLine: String?
             var presentation: Presentation = .detail
             var showsInProviderDetails = true
@@ -459,53 +460,6 @@ private struct TokenUsageSectionContent: View {
                     .overlay {
                         ClickToCopyOverlay(copyText: self.tokenUsage.errorCopyText ?? error)
                     }
-            }
-        }
-    }
-}
-
-private struct ProviderCostContent: View {
-    let section: UsageMenuCardView.Model.ProviderCostSection
-    let progressColor: Color
-    @Environment(\.menuItemHighlighted) private var isHighlighted
-
-    var body: some View {
-        if self.section.presentation == .inlineValue {
-            HStack(alignment: .firstTextBaseline) {
-                Text(self.section.title)
-                    .font(.body)
-                    .fontWeight(.medium)
-                Spacer()
-                Text(self.section.spendLine)
-                    .font(.footnote)
-                    .monospacedDigit()
-                    .lineLimit(1)
-            }
-        } else {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(self.section.title)
-                    .font(.body)
-                    .fontWeight(.medium)
-                if let percentUsed = self.section.percentUsed {
-                    UsageProgressBar(
-                        percent: percentUsed,
-                        tint: self.progressColor,
-                        accessibilityLabel: L("Extra usage spent"))
-                }
-                HStack(alignment: .firstTextBaseline) {
-                    Text(self.section.spendLine).font(.footnote).lineLimit(1)
-                    Spacer()
-                    if let percentLine = self.section.percentLine {
-                        Text(percentLine)
-                            .font(.footnote)
-                            .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
-                            .lineLimit(1)
-                    }
-                }
-                if let personalSpendLine = self.section.personalSpendLine {
-                    Text(personalSpendLine)
-                        .font(.footnote).foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted)).lineLimit(1)
-                }
             }
         }
     }
