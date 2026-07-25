@@ -92,6 +92,41 @@ final class CLIEntryTests: XCTestCase {
         try self.expectAdjacentVersionFile(raw: "version-3.2.3\n", expected: "version-3.2.3")
     }
 
+    func test_cliVersionUsesBundleExecutableWhenArgvPathIsUnavailable() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codexbar-cli-version-bundle-executable-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let appURL = root.appendingPathComponent("CodexBar.app", isDirectory: true)
+        let contentsURL = appURL.appendingPathComponent("Contents", isDirectory: true)
+        let macOSURL = contentsURL.appendingPathComponent("MacOS", isDirectory: true)
+        try FileManager.default.createDirectory(at: macOSURL, withIntermediateDirectories: true)
+
+        let infoURL = contentsURL.appendingPathComponent("Info.plist")
+        let plist: [String: Any] = [
+            "CFBundleExecutable": "CodexBarCLI",
+            "CFBundleIdentifier": "com.example.CodexBarCLI",
+            "CFBundlePackageType": "APPL",
+            "CFBundleShortVersionString": "CodexBar",
+        ]
+        let data = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+        try data.write(to: infoURL)
+
+        let executableURL = macOSURL.appendingPathComponent("CodexBarCLI")
+        try Data().write(to: executableURL)
+        try "8.7.6\n".write(
+            to: macOSURL.appendingPathComponent("VERSION"),
+            atomically: false,
+            encoding: .utf8)
+
+        guard let bundle = Bundle(url: appURL) else {
+            XCTFail("Expected test app bundle to load")
+            return
+        }
+
+        XCTAssertEqual(CodexBarCLI.currentVersion(bundle: bundle, executablePath: nil), "8.7.6")
+    }
+
     func test_cliVersionPrefersAdjacentVersionOverStandaloneBundleName() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("codexbar-cli-version-bundle-\(UUID().uuidString)", isDirectory: true)
