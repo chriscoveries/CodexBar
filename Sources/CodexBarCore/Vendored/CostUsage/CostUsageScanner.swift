@@ -675,11 +675,17 @@ enum CostUsageScanner {
 
         private let fileIndex: CodexSessionFileIndex
         private let checkCancellation: CancellationCheck?
+        private let scanBudget: CodexScanBudget?
         private var snapshotResolutions: [String: SnapshotResolution] = [:]
 
-        init(fileIndex: CodexSessionFileIndex, checkCancellation: CancellationCheck?) {
+        init(
+            fileIndex: CodexSessionFileIndex,
+            checkCancellation: CancellationCheck?,
+            scanBudget: CodexScanBudget? = nil)
+        {
             self.fileIndex = fileIndex
             self.checkCancellation = checkCancellation
+            self.scanBudget = scanBudget
         }
 
         func inheritedTotals(for sessionId: String, atOrBefore cutoffTimestamp: String) throws -> CodexForkBaseline {
@@ -749,6 +755,43 @@ enum CostUsageScanner {
                 return resolution
             }
 
+            let parentMetadata = CostUsageScanner.codexFileMetadata(fileURL: fileURL)
+            if let budget = self.scanBudget {
+                switch budget.admit(workBytes: parentMetadata.size) {
+                case .allow:
+                    break
+                case .skipOversized:
+                    CostUsageScanner.log.warning(
+                        "Skipping oversized Codex parent session during inherited baseline read",
+                        metadata: [
+                            "sessionId": sessionId,
+                            "path": fileURL.path,
+                            "bytes": "\(parentMetadata.size)",
+                            "limit": "\(budget.maxFileBytes)",
+                        ])
+                    let resolution = SnapshotResolution(
+                        dependencyKey: self.dependencyKey(for: sessionId, fileURL: fileURL),
+                        snapshots: nil)
+                    self.snapshotResolutions[sessionId] = resolution
+                    return resolution
+                case .deferBudget:
+                    CostUsageScanner.log.debug(
+                        "Deferring Codex parent session baseline read until a later refresh",
+                        metadata: [
+                            "sessionId": sessionId,
+                            "path": fileURL.path,
+                            "pendingBytes": "\(parentMetadata.size)",
+                            "consumed": "\(budget.bytesConsumed)",
+                            "limit": "\(budget.maxBytesPerRefresh)",
+                        ])
+                    let resolution = SnapshotResolution(
+                        dependencyKey: self.dependencyKey(for: sessionId, fileURL: fileURL),
+                        snapshots: nil)
+                    self.snapshotResolutions[sessionId] = resolution
+                    return resolution
+                }
+            }
+
             for _ in 0..<2 {
                 let dependencyKeyBeforeParse = self.dependencyKey(for: sessionId, fileURL: fileURL)
                 let parsed = try CostUsageScanner.parseCodexTokenSnapshots(
@@ -765,6 +808,7 @@ enum CostUsageScanner {
                         dependencyKey: dependencyKeyAfterParse,
                         snapshots: nil)
                     self.snapshotResolutions[sessionId] = resolution
+                    self.scanBudget?.consume(workBytes: parentMetadata.size)
                     return resolution
                 }
                 if parsedSessionId != sessionId {
@@ -779,12 +823,14 @@ enum CostUsageScanner {
                         dependencyKey: dependencyKeyAfterParse,
                         snapshots: nil)
                     self.snapshotResolutions[sessionId] = resolution
+                    self.scanBudget?.consume(workBytes: parentMetadata.size)
                     return resolution
                 }
                 let resolution = SnapshotResolution(
                     dependencyKey: dependencyKeyAfterParse,
                     snapshots: parsed.snapshots)
                 self.snapshotResolutions[sessionId] = resolution
+                self.scanBudget?.consume(workBytes: parentMetadata.size)
                 return resolution
             }
 
@@ -2829,10 +2875,10 @@ enum CostUsageScanner {
     }
 
     static func pendingCodexScanWorkBytes(metadata: CodexFileMetadata, cached: CostUsageFileUsage?) -> Int64 {
+        // Called only after keepCachedCodexFileIfFresh failed. Even when size/mtime still match
+        // (forced full rescan, priority invalidation, fork-dependency drift, etc.), the scanner
+        // will read the whole file — never report zero pending work in that case.
         guard let cached else { return max(0, metadata.size) }
-        if cached.mtimeUnixMs == metadata.mtimeUnixMs, cached.size == metadata.size {
-            return 0
-        }
         let startOffset = cached.parsedBytes ?? cached.size
         if metadata.size > cached.size,
            startOffset > 0,
@@ -3013,9 +3059,13 @@ enum CostUsageScanner {
                     roots: plan.roots,
                     knownExistingPaths: filePathsInScan),
                 checkCancellation: checkCancellation)
+            let scanBudget = CodexScanBudget(
+                maxFileBytes: options.maxCodexSessionFileBytes,
+                maxBytesPerRefresh: options.maxCodexScanBytesPerRefresh)
             let inheritedResolver = CodexInheritedTotalsResolver(
                 fileIndex: fileIndex,
-                checkCancellation: checkCancellation)
+                checkCancellation: checkCancellation,
+                scanBudget: scanBudget)
             let resources = CodexScanResources(
                 fileIndex: fileIndex,
                 inheritedResolver: inheritedResolver,
@@ -3023,9 +3073,6 @@ enum CostUsageScanner {
                 modelsDevCatalog: plan.modelsDevCatalog,
                 modelsDevCacheRoot: options.cacheRoot,
                 priorityTurns: plan.priorityTurns)
-            let scanBudget = CodexScanBudget(
-                maxFileBytes: options.maxCodexSessionFileBytes,
-                maxBytesPerRefresh: options.maxCodexScanBytesPerRefresh)
             let scanContext = Self.codexFileScanContext(
                 range: range,
                 options: options,

@@ -5,6 +5,7 @@
 ### Fixed
 
 - Cost usage: bound Codex local session scans with per-file and per-refresh byte budgets, and prefer newest rollouts first, so multi-GB session corpora cannot peg a CPU core for hours while rate-limit/account usage probing remains unchanged.
+- Cost usage: charge forced full rescans of unchanged cached files against the scan budget, and apply the same oversized/budget limits to inherited parent baseline reads used by forks/subagents.
 
 ## 0.45.2 — 2026-07-19
 

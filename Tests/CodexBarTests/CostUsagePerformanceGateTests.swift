@@ -374,6 +374,71 @@ struct CostUsagePerformanceGateTests {
         #expect(CostUsageScanner.pendingCodexScanWorkBytes(metadata: metadata, cached: cached) == 1_000)
     }
 
+    @Test
+    func `pending work bytes charge full file for forced rescans of unchanged cache entries`() {
+        let metadata = CostUsageScanner.CodexFileMetadata(
+            path: "/tmp/unchanged.jsonl",
+            mtimeUnixMs: 42,
+            size: 2_000_000_000,
+            fileId: "9:9")
+        let cached = CostUsageFileUsage(
+            mtimeUnixMs: 42,
+            size: 2_000_000_000,
+            days: ["2026-05-10": ["gpt-5.2-codex": [100, 20, 10]]],
+            parsedBytes: 2_000_000_000,
+            sessionId: "session-unchanged")
+        // keepCached can still reject this (forceFullScan / priority / fork dependency).
+        // Budget must not report zero pending work or multi-GB forced rescans slip through.
+        #expect(CostUsageScanner.pendingCodexScanWorkBytes(metadata: metadata, cached: cached) == 2_000_000_000)
+    }
+
+    @Test
+    func `oversized parent baseline reads are skipped for small fork children`() throws {
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+        let day = try env.makeLocalNoon(year: 2026, month: 5, day: 10)
+        let iso = env.isoString(for: day)
+
+        // Parent is intentionally larger than the per-file budget.
+        let parentBody = ([
+            #"{"type":"session_meta","timestamp":"\#(iso)","payload":{"session_id":"parent-giant"}}"#,
+            #"{"type":"turn_context","timestamp":"\#(iso)","payload":{"model":"openai/gpt-5.2-codex"}}"#,
+            #"{"type":"event_msg","timestamp":"\#(iso)","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":500,"cached_input_tokens":50,"output_tokens":25},"model":"openai/gpt-5.2-codex"}}}"#,
+        ] + Array(repeating: "x", count: 4_096)).joined(separator: "\n") + "\n"
+        _ = try env.writeCodexSessionFile(day: day, filename: "parent-giant.jsonl", contents: parentBody)
+
+        let childBody = [
+            #"{"type":"session_meta","timestamp":"\#(iso)","payload":{"session_id":"child-small","forked_from_id":"parent-giant"}}"#,
+            #"{"type":"turn_context","timestamp":"\#(iso)","payload":{"model":"openai/gpt-5.2-codex"}}"#,
+            #"{"type":"event_msg","timestamp":"\#(iso)","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":600,"cached_input_tokens":60,"output_tokens":30},"model":"openai/gpt-5.2-codex"}}}"#,
+        ].joined(separator: "\n") + "\n"
+        let childURL = try env.writeCodexSessionFile(day: day, filename: "child-small.jsonl", contents: childBody)
+
+        var options = CostUsageScanner.Options(
+            codexSessionsRoot: env.codexSessionsRoot,
+            claudeProjectsRoots: nil,
+            cacheRoot: env.cacheRoot,
+            codexTraceDatabaseURL: env.root.appendingPathComponent("missing.sqlite"),
+            maxCodexSessionFileBytes: 1_024,
+            maxCodexScanBytesPerRefresh: 64 * 1024 * 1024)
+        options.refreshMinIntervalSeconds = 0
+
+        let started = Date()
+        let report = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day,
+            options: options)
+        let elapsed = Date().timeIntervalSince(started)
+        let cache = CostUsageCacheIO.load(provider: .codex, cacheRoot: env.cacheRoot)
+
+        #expect(elapsed < 2.0)
+        #expect(cache.files[childURL.path] != nil)
+        // Child still contributes local tokens even if parent baseline is unresolved/skipped.
+        #expect((report.summary?.totalTokens ?? 0) > 0)
+    }
+
     private static func writeSyntheticCodexCorpus(
         env: CostUsageTestEnvironment,
         day: Date,
