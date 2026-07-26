@@ -138,6 +138,30 @@ struct GrokWebBillingFetcherTests {
     }
 
     @Test
+    func `cached team cookie surfaces trailing authentication failure`() async throws {
+        var attempts: [String] = []
+
+        await #expect {
+            _ = try await GrokWebFetchStrategy.fetchValidCookieHeader(
+                "sso=stale",
+                credentials: Self.credentials,
+                preserveTeamUsageUnsupported: false)
+            { _, authCredentials in
+                if authCredentials != nil {
+                    attempts.append("cookie+bearer")
+                    throw GrokWebBillingError.teamUsageUnsupported
+                }
+                attempts.append("cookie-only")
+                throw GrokWebBillingError.requestFailed(401, "expired")
+            }
+        } throws: { error in
+            GrokWebFetchStrategy.isCookieAuthenticationFailure(error)
+        }
+
+        #expect(attempts == ["cookie+bearer", "cookie-only"])
+    }
+
+    @Test
     func `web strategy tries later browser session when first cookie is stale`() async throws {
         let stale = try #require(Self.cookie(name: "sso", value: "stale"))
         let valid = try #require(Self.cookie(name: "sso", value: "valid"))

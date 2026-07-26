@@ -212,7 +212,8 @@ struct GrokWebFetchStrategy: ProviderFetchStrategy {
             do {
                 let snapshot = try await Self.fetchValidCookieHeader(
                     cached.cookieHeader,
-                    credentials: browserCredentials)
+                    credentials: browserCredentials,
+                    preserveTeamUsageUnsupported: false)
                 return (snapshot, cached.sourceLabel, false)
             } catch {
                 guard Self.isCookieAuthenticationFailure(error) else { throw error }
@@ -302,6 +303,7 @@ struct GrokWebFetchStrategy: ProviderFetchStrategy {
     static func fetchValidCookieHeader(
         _ cookieHeader: String,
         credentials: GrokCredentials? = nil,
+        preserveTeamUsageUnsupported: Bool = true,
         fetch: ((String, GrokCredentials?) async throws -> GrokWebBillingSnapshot)? = nil) async throws
         -> GrokWebBillingSnapshot
     {
@@ -322,7 +324,10 @@ struct GrokWebFetchStrategy: ProviderFetchStrategy {
                 lastError = error
             }
         }
-        throw teamUsageUnsupportedError ?? lastError ?? GrokWebBillingError.missingCredentials
+        if preserveTeamUsageUnsupported, let teamUsageUnsupportedError {
+            throw teamUsageUnsupportedError
+        }
+        throw lastError ?? GrokWebBillingError.missingCredentials
     }
 
     static func cookieAuthAttempts(credentials: GrokCredentials?) -> [GrokCredentials?] {
