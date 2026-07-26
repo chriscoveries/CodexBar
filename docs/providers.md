@@ -445,7 +445,8 @@ scan fails, while provider/account configuration changes replace obsolete result
 - `grok agent stdio` (ACP) JSON-RPC `x.ai/billing` method; requires `grok login` (SuperGrok OAuth/OIDC).
 - Reads cached credentials from `~/.grok/auth.json` for identity (email, team).
 - Falls back to grok.com's billing gRPC-web endpoint via Chrome session cookies when the CLI does not expose billing.
-- CLI/test runs do not import browser cookies unless `CODEXBAR_ALLOW_BROWSER_COOKIE_IMPORT=1` is set.
+- Ordinary CLI/test runs do not import browser cookies unless `CODEXBAR_ALLOW_BROWSER_COOKIE_IMPORT=1` is set;
+  `codexbar cookie refresh --provider grok` opts in for its explicit refresh.
 - Local fallback aggregates `~/.grok/sessions/**/signals.json` token counts when the RPC is unavailable.
 - Status: link only to `https://status.x.ai` (no auto-polling yet).
 - Details: `docs/grok.md`.

@@ -3,6 +3,7 @@
 ## 0.45.3 — Unreleased
 
 ### Fixed
+- Grok: cache validated browser sessions so background usage fetches and explicit cookie refreshes can reuse them.
 
 ## 0.45.2 — 2026-07-19
 

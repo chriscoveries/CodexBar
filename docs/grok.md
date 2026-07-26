@@ -43,8 +43,9 @@ browser session when the CLI surface does not expose billing.
      browser session, then retries that session with cookies only.
    - CodexBar imports Chrome only by default to avoid unrelated browser
      Keychain prompts.
-   - CLI/test runtime does not import browser cookies unless
-     `CODEXBAR_ALLOW_BROWSER_COOKIE_IMPORT=1` is set.
+   - Ordinary CLI/test runtime does not import browser cookies unless
+     `CODEXBAR_ALLOW_BROWSER_COOKIE_IMPORT=1` is set. An explicit
+     `codexbar cookie refresh --provider grok` also opts in for that refresh.
    - `~/.grok/auth.json` is still used for identity and as a last best-effort
      bearer-only probe after browser sessions fail. Expired tokens are not sent.
    - Parses the returned protobuf enough to recover used percent and

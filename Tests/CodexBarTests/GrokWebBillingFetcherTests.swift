@@ -55,12 +55,86 @@ struct GrokWebBillingFetcherTests {
     }
 
     @Test
-    func `cli runtime does not import browser cookies unless explicitly enabled`() {
+    func `cli runtime imports browser cookies only when explicitly enabled`() {
         #expect(GrokWebFetchStrategy.canImportBrowserCookies(runtime: .app, env: [:]))
         #expect(!GrokWebFetchStrategy.canImportBrowserCookies(runtime: .cli, env: [:]))
         #expect(GrokWebFetchStrategy.canImportBrowserCookies(
             runtime: .cli,
             env: ["CODEXBAR_ALLOW_BROWSER_COOKIE_IMPORT": "1"]))
+        let userInitiated = ProviderInteractionContext.$current.withValue(.userInitiated) {
+            GrokWebFetchStrategy.canImportBrowserCookies(runtime: .cli, env: [:])
+        }
+        #expect(userInitiated)
+    }
+
+    @Test
+    func `web strategy is available from a cached browser session`() async {
+        let service = "com.steipete.codexbar.tests.grok-availability.\(UUID().uuidString)"
+        await KeychainCacheStore.withServiceOverrideForTesting(service) {
+            await KeychainCacheStore.withImplicitTestStoreForTesting {
+                CookieHeaderCache.store(
+                    provider: .grok,
+                    cookieHeader: "sso=cached-session",
+                    sourceLabel: "Chrome")
+                let grokHome = FileManager.default.temporaryDirectory
+                    .appendingPathComponent(
+                        "CodexBar-GrokCachedAvailability-\(UUID().uuidString)",
+                        isDirectory: true)
+                let browserDetection = BrowserDetection(cacheTTL: 0)
+                let context = ProviderFetchContext(
+                    runtime: .cli,
+                    sourceMode: .web,
+                    includeCredits: true,
+                    webTimeout: 1,
+                    webDebugDumpHTML: false,
+                    verbose: false,
+                    env: ["GROK_HOME": grokHome.path],
+                    settings: nil,
+                    fetcher: UsageFetcher(),
+                    claudeFetcher: ClaudeUsageFetcher(browserDetection: browserDetection),
+                    browserDetection: browserDetection)
+
+                #expect(await GrokWebFetchStrategy().isAvailable(context))
+            }
+        }
+    }
+
+    @Test
+    func `validated browser session stages a cache replacement for explicit refresh`() async throws {
+        let service = "com.steipete.codexbar.tests.grok-refresh.\(UUID().uuidString)"
+        try await KeychainCacheStore.withServiceOverrideForTesting(service) {
+            try await KeychainCacheStore.withImplicitTestStoreForTesting {
+                let gate = try #require(CookieHeaderCache.beginRefreshReadSuppression(provider: .grok))
+                defer { CookieHeaderCache.endRefreshReadSuppression(gate) }
+                let observation = CookieHeaderCache.observeForConditionalMutation(provider: .grok)
+                let cookie = try #require(Self.cookie(name: "sso", value: "fresh-session"))
+                let sessions = [GrokCookieImporter.SessionInfo(cookies: [cookie], sourceLabel: "Chrome")]
+
+                let result = try await GrokWebFetchStrategy.fetchFirstValidCookieSession(
+                    sessions,
+                    cacheObservation: observation)
+                { _, _ in
+                    GrokWebBillingSnapshot(usedPercent: 7, resetsAt: nil)
+                }
+
+                #expect(result.0.usedPercent == 7)
+                #expect(CookieHeaderCache.load(provider: .grok)?.cookieHeader == "sso=fresh-session")
+                let commit = CookieHeaderCache.commitRefreshReadSuppression(gate)
+                #expect(commit == CookieRefreshCommitSummary(stagedCount: 1, committedCount: 1, failedCount: 0))
+            }
+        }
+    }
+
+    @Test
+    func `cached cookie eviction is limited to authentication failures`() {
+        #expect(GrokWebFetchStrategy.isCookieAuthenticationFailure(
+            GrokWebBillingError.requestFailed(401, "expired")))
+        #expect(GrokWebFetchStrategy.isCookieAuthenticationFailure(
+            GrokWebBillingError.rpcFailed(16, "unauthenticated")))
+        #expect(!GrokWebFetchStrategy.isCookieAuthenticationFailure(
+            GrokWebBillingError.requestFailed(503, "unavailable")))
+        #expect(!GrokWebFetchStrategy.isCookieAuthenticationFailure(
+            GrokWebBillingError.parseFailed))
     }
 
     @Test
