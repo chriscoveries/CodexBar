@@ -126,6 +126,10 @@ struct GrokWebFetchStrategy: ProviderFetchStrategy {
         sourceLabel: String,
         authenticatedByAuthFile: Bool)
 
+    /// Browser-cookie import must stay limited to surfaces where a person explicitly asked for it:
+    /// the menu-bar app runtime, a `userInitiated` interaction (set only by explicit refresh
+    /// commands and app UI gestures), or the environment override. Scheduled and background work
+    /// must keep the default `.background` context so it can never reach Chromium Keychain prompts.
     static func canImportBrowserCookies(runtime: ProviderRuntime, env: [String: String]) -> Bool {
         runtime == .app ||
             ProviderInteractionContext.current == .userInitiated ||
@@ -208,12 +212,12 @@ struct GrokWebFetchStrategy: ProviderFetchStrategy {
         #if os(macOS)
         var cacheObservation = CookieHeaderCache.observeForConditionalMutation(provider: .grok)
         var lastCookieError: Error?
-        if let cached = CookieHeaderCache.load(provider: .grok) {
+        if let cached = cacheObservation.entry {
             do {
                 let snapshot = try await Self.fetchValidCookieHeader(
                     cached.cookieHeader,
                     credentials: browserCredentials,
-                    preserveTeamUsageUnsupported: false)
+                    preferTrailingAuthenticationFailure: true)
                 return (snapshot, cached.sourceLabel, false)
             } catch {
                 guard Self.isCookieAuthenticationFailure(error) else { throw error }
@@ -300,10 +304,14 @@ struct GrokWebFetchStrategy: ProviderFetchStrategy {
         throw teamUsageUnsupportedError ?? lastError ?? GrokWebBillingError.missingCredentials
     }
 
+    /// `preferTrailingAuthenticationFailure` lets a cached-cookie caller surface a trailing
+    /// 401/403 over the team classification so stale sessions still trigger cache eviction.
+    /// Non-authentication trailing errors keep `teamUsageUnsupported` so team principals
+    /// degrade to identity-only data instead of failing outright.
     static func fetchValidCookieHeader(
         _ cookieHeader: String,
         credentials: GrokCredentials? = nil,
-        preserveTeamUsageUnsupported: Bool = true,
+        preferTrailingAuthenticationFailure: Bool = false,
         fetch: ((String, GrokCredentials?) async throws -> GrokWebBillingSnapshot)? = nil) async throws
         -> GrokWebBillingSnapshot
     {
@@ -324,8 +332,12 @@ struct GrokWebFetchStrategy: ProviderFetchStrategy {
                 lastError = error
             }
         }
-        if preserveTeamUsageUnsupported, let teamUsageUnsupportedError {
-            throw teamUsageUnsupportedError
+        if let teamUsageUnsupportedError {
+            let trailingAuthenticationFailure = preferTrailingAuthenticationFailure
+                && lastError.map(Self.isCookieAuthenticationFailure) == true
+            if !trailingAuthenticationFailure {
+                throw teamUsageUnsupportedError
+            }
         }
         throw lastError ?? GrokWebBillingError.missingCredentials
     }

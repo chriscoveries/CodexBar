@@ -447,6 +447,8 @@ scan fails, while provider/account configuration changes replace obsolete result
 - Falls back to grok.com's billing gRPC-web endpoint via Chrome session cookies when the CLI does not expose billing.
 - Ordinary CLI/test runs do not import browser cookies unless `CODEXBAR_ALLOW_BROWSER_COOKIE_IMPORT=1` is set;
   `codexbar cookie refresh --provider grok` opts in for its explicit refresh.
+- Validated sessions are cached in the Keychain cookie cache and reused before any new browser import;
+  the cache is evicted only on authentication failures.
 - Local fallback aggregates `~/.grok/sessions/**/signals.json` token counts when the RPC is unavailable.
 - Status: link only to `https://status.x.ai` (no auto-polling yet).
 - Details: `docs/grok.md`.
