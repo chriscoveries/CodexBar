@@ -21,18 +21,21 @@ enum CodexLocalProjectUsageIndexer {
         let clampedHistoryDays = max(1, min(365, historyDays))
         let stableScopeSignature = self.stableScopeSignature(options: options.scannerOptions)
         let sidecar = CodexWorkspaceUsageSidecar(cacheRoot: options.scannerOptions.cacheRoot)
+        let catalogResult = CodexThreadCatalogReader.loadResult(options: options.scannerOptions)
+        let sourceStatus = CodexLocalProjectUsageSourceStatus(catalog: catalogResult.completeness)
         if let snapshot = sidecar.loadLatestSnapshot(
             scopeSignature: stableScopeSignature,
-            historyDays: clampedHistoryDays)
+            historyDays: clampedHistoryDays,
+            catalog: catalogResult.isComplete ? catalogResult.catalog : nil)
         {
-            return snapshot
+            return self.projecting(snapshot, sourceStatus: sourceStatus)
         }
 
         // Compatibility only: pre-sidecar builds persisted a JSON snapshot. It is
         // never written again; the next successful refresh publishes the sidecar.
         let indexStore = CodexLocalProjectUsageIndexStore(cacheRoot: options.scannerOptions.cacheRoot)
         let cache = CostUsageCacheIO.load(provider: .codex, cacheRoot: options.scannerOptions.cacheRoot)
-        let catalog = CodexThreadCatalogReader.load(options: options.scannerOptions)
+        let catalog = catalogResult.catalog
         let scopeSignature = self.scopeSignature(
             options: options.scannerOptions,
             cache: cache,
@@ -40,6 +43,7 @@ enum CodexLocalProjectUsageIndexer {
         return indexStore.loadSnapshot(
             expectedScopeSignature: scopeSignature,
             expectedHistoryDays: clampedHistoryDays)
+            .map { self.projecting($0, sourceStatus: sourceStatus) }
     }
 
     static func loadSnapshot(
@@ -86,14 +90,17 @@ enum CodexLocalProjectUsageIndexer {
                 catalog: catalogResult.isComplete ? catalog : nil)
             {
                 CodexModelsTelemetry.cacheHit(historyDays: clampedHistoryDays)
-                return snapshot
+                return self.projecting(snapshot, sourceStatus: sourceStatus)
             }
         }
 
         // Import only scanner-derived deltas, then aggregate from the
         // sidecar's normalized rows. The raw cache remains the cursor and
         // cumulative-token authority; it is no longer the aggregation source.
-        try sidecar.synchronizeSources(cache: cache, catalog: catalog)
+        try sidecar.synchronizeSources(
+            cache: cache,
+            catalog: catalog,
+            catalogIsComplete: catalogResult.isComplete)
         let sidecarCache = try sidecar.usageCache(roots: rootsFingerprint)
         let snapshot = try self.buildSnapshotFromCostCache(
             now: now,
@@ -111,6 +118,7 @@ enum CodexLocalProjectUsageIndexer {
             snapshot: snapshot,
             cache: cache,
             catalog: catalog,
+            catalogIsComplete: catalogResult.isComplete,
             rootsFingerprint: rootsFingerprint)
         #if canImport(SQLite3) || canImport(CSQLite3)
         // The sidecar commit is now the durable source of the last complete
@@ -119,6 +127,27 @@ enum CodexLocalProjectUsageIndexer {
         CodexLocalProjectUsageIndexStore(cacheRoot: scannerOptions.cacheRoot).clear()
         #endif
         return snapshot
+    }
+
+    private static func projecting(
+        _ snapshot: CodexLocalProjectUsageSnapshot,
+        sourceStatus: CodexLocalProjectUsageSourceStatus) -> CodexLocalProjectUsageSnapshot
+    {
+        guard snapshot.sourceStatus != sourceStatus else { return snapshot }
+        return CodexLocalProjectUsageSnapshot(
+            updatedAt: snapshot.updatedAt,
+            historyDays: snapshot.historyDays,
+            scopeSignature: snapshot.scopeSignature,
+            rootsFingerprint: snapshot.rootsFingerprint,
+            indexedFileCount: snapshot.indexedFileCount,
+            skippedFileCount: snapshot.skippedFileCount,
+            total: snapshot.total,
+            projects: snapshot.projects,
+            sessions: snapshot.sessions,
+            modelBreakdowns: snapshot.modelBreakdowns,
+            daily: snapshot.daily,
+            sourceStatus: sourceStatus,
+            modelsAnalytics: snapshot.modelsAnalytics)
     }
 
     static func buildSnapshotFromCostCache(

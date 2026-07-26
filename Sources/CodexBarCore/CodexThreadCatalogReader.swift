@@ -214,7 +214,8 @@ enum CodexThreadCatalogReader {
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(
             db,
-            "SELECT COUNT(*), MAX(COALESCE(updated_at_ms, updated_at)) FROM threads",
+            "SELECT COUNT(*), MAX(CASE WHEN updated_at_ms IS NOT NULL THEN updated_at_ms " +
+                "ELSE updated_at * 1000 END) FROM threads",
             -1,
             &stmt,
             nil) == SQLITE_OK
@@ -246,7 +247,7 @@ enum CodexThreadCatalogReader {
             return sqlite3_column_int64(stmt, preferredColumn)
         }
         if sqlite3_column_type(stmt, fallbackColumn) != SQLITE_NULL {
-            return sqlite3_column_int64(stmt, fallbackColumn)
+            return sqlite3_column_int64(stmt, fallbackColumn) * 1000
         }
         return nil
     }

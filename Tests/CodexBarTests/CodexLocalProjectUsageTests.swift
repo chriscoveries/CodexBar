@@ -415,6 +415,100 @@ struct CodexLocalProjectUsageTests {
     }
 
     @Test
+    func `catalog reader normalizes legacy seconds timestamps to milliseconds`() throws {
+        #if canImport(SQLite3)
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+
+        let rolloutURL = env.codexSessionsRoot.appendingPathComponent("legacy-timestamp.jsonl", isDirectory: false)
+        try self.writeCodexStateDatabase(
+            at: env.codexHomeRoot.appendingPathComponent("state_5.sqlite", isDirectory: false),
+            thread: CodexStateThreadFixture(
+                id: "legacy-timestamp",
+                rolloutPath: rolloutURL.path,
+                cwd: env.root.path,
+                title: "Legacy timestamp",
+                preview: "Legacy timestamp preview",
+                model: "openai/gpt-5.4",
+                createdAtUnixMs: 1_800_000_000_000,
+                updatedAtUnixMs: 1_800_000_120_000,
+                usesLegacyTimestampColumns: true))
+
+        let options = CostUsageScanner.Options(
+            codexSessionsRoot: env.codexSessionsRoot,
+            cacheRoot: env.cacheRoot)
+        let entry = try #require(CodexThreadCatalogReader.load(options: options).entriesById["legacy-timestamp"])
+
+        #expect(entry.createdAtUnixMs == 1_800_000_000_000)
+        #expect(entry.updatedAtUnixMs == 1_800_000_120_000)
+        #else
+        #expect(Bool(true))
+        #endif
+    }
+
+    @Test
+    func `cached refresh surfaces catalog degradation while retaining last good usage`() throws {
+        #if canImport(SQLite3)
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+
+        let day = Date(timeIntervalSince1970: 1_800_000_000)
+        let project = env.root.appendingPathComponent("CachedCatalogProject", isDirectory: true)
+        let source = project.appendingPathComponent("Sources", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: project.appendingPathComponent(".git", isDirectory: true),
+            withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        let rolloutURL = env.codexSessionsRoot.appendingPathComponent("cached-catalog.jsonl", isDirectory: false)
+        let catalogURL = env.codexHomeRoot.appendingPathComponent("state_5.sqlite", isDirectory: false)
+        try self.writeCodexStateDatabase(
+            at: catalogURL,
+            thread: CodexStateThreadFixture(
+                id: "cached-catalog",
+                rolloutPath: rolloutURL.path,
+                cwd: source.path,
+                title: "Cached catalog title",
+                preview: "Cached catalog preview",
+                model: "openai/gpt-5.4-catalog",
+                createdAtUnixMs: 1_800_000_000_000,
+                updatedAtUnixMs: 1_800_000_120_000))
+        try self.writeCodexUsageFile(
+            env: env,
+            day: day,
+            fixture: CodexUsageFixture(
+                filename: "cached-catalog.jsonl",
+                sessionID: "cached-catalog",
+                cwd: nil,
+                input: 100,
+                cached: 10,
+                output: 25))
+        var options = CostUsageScanner.Options(
+            codexSessionsRoot: env.codexSessionsRoot,
+            cacheRoot: env.cacheRoot)
+        options.refreshMinIntervalSeconds = 0
+
+        let complete = try CodexLocalProjectUsageIndexer.loadSnapshot(
+            now: day,
+            historyDays: 1,
+            forceRefresh: true,
+            options: .init(scannerOptions: options))
+        try FileManager.default.removeItem(at: catalogURL)
+        let degraded = try CodexLocalProjectUsageIndexer.loadSnapshot(
+            now: day,
+            historyDays: 1,
+            options: .init(scannerOptions: options))
+
+        #expect(complete.sourceStatus == .complete)
+        #expect(degraded.sourceStatus == .catalogMissing)
+        #expect(degraded.total == complete.total)
+        #expect(degraded.projects == complete.projects)
+        #expect(degraded.sessions == complete.sessions)
+        #else
+        #expect(Bool(true))
+        #endif
+    }
+
+    @Test
     func `sidecar retains catalog metadata when a sparse rollout update arrives during catalog failure`() throws {
         #if canImport(SQLite3)
         let env = try CostUsageTestEnvironment()
@@ -464,13 +558,59 @@ struct CodexLocalProjectUsageTests {
             costNanos: 1)
         changedUsage.mtimeUnixMs = 1
         cache.files[rolloutURL.path] = changedUsage
-        try sidecar.synchronizeSources(cache: cache, catalog: .empty)
+        try sidecar.synchronizeSources(cache: cache, catalog: .empty, catalogIsComplete: false)
 
         let rehydrated = try sidecar.usageCache(roots: cache.roots ?? [:])
         let metadata = rehydrated.files[rolloutURL.path]?.codexSession
         #expect(metadata?.cwd == project.path)
         #expect(metadata?.title == "Retained catalog title")
         #expect(rehydrated.files[rolloutURL.path]?.days[dayKey]?["openai/gpt-5.4"]?[0] == 110)
+        #else
+        #expect(Bool(true))
+        #endif
+    }
+
+    @Test
+    func `sidecar prunes catalog metadata absent from a complete generation`() throws {
+        #if canImport(SQLite3)
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+
+        let rolloutURL = env.codexSessionsRoot.appendingPathComponent("pruned-catalog.jsonl", isDirectory: false)
+        let entry = CodexThreadCatalogEntry(
+            id: "pruned-catalog",
+            rolloutPath: rolloutURL.path,
+            cwd: "/catalog/cwd",
+            title: "Catalog title",
+            preview: "Catalog preview",
+            modelProvider: "openai",
+            model: "openai/gpt-5.4-catalog",
+            reasoningEffort: "high",
+            createdAtUnixMs: 1_800_000_000_000,
+            updatedAtUnixMs: 1_800_000_120_000,
+            archived: false)
+        let catalog = CodexThreadCatalog(
+            entriesById: [entry.id: entry],
+            entriesByRolloutPath: [rolloutURL.standardizedFileURL.path: entry],
+            fingerprint: "complete-generation-1")
+        var cache = CostUsageCache()
+        cache.files[rolloutURL.path] = self.makeCachedFileUsage(
+            dayKey: "2027-01-15",
+            fixture: CodexUsageFixture(
+                filename: "pruned-catalog.jsonl",
+                sessionID: entry.id,
+                cwd: "/rollout/cwd",
+                input: 100,
+                cached: 0,
+                output: 20),
+            costNanos: 1)
+        let sidecar = CodexWorkspaceUsageSidecar(cacheRoot: env.cacheRoot)
+        try sidecar.synchronizeSources(cache: cache, catalog: catalog)
+        #expect(try sidecar.usageCache(roots: [:]).files[rolloutURL.path]?.codexSession?.cwd == "/catalog/cwd")
+
+        try sidecar.synchronizeSources(cache: cache, catalog: .empty)
+
+        #expect(try sidecar.usageCache(roots: [:]).files[rolloutURL.path]?.codexSession?.cwd == "/rollout/cwd")
         #else
         #expect(Bool(true))
         #endif
@@ -869,6 +1009,7 @@ struct CodexLocalProjectUsageTests {
         var model: String
         var createdAtUnixMs: Int64
         var updatedAtUnixMs: Int64
+        var usesLegacyTimestampColumns = false
     }
 
     private func writeCodexStateDatabase(at url: URL, thread: CodexStateThreadFixture) throws {
@@ -920,8 +1061,13 @@ struct CodexLocalProjectUsageTests {
         sqlite3_bind_text(stmt, 5, thread.cwd, -1, transient)
         sqlite3_bind_text(stmt, 6, thread.title, -1, transient)
         sqlite3_bind_text(stmt, 7, thread.model, -1, transient)
-        sqlite3_bind_int64(stmt, 8, thread.createdAtUnixMs)
-        sqlite3_bind_int64(stmt, 9, thread.updatedAtUnixMs)
+        if thread.usesLegacyTimestampColumns {
+            sqlite3_bind_null(stmt, 8)
+            sqlite3_bind_null(stmt, 9)
+        } else {
+            sqlite3_bind_int64(stmt, 8, thread.createdAtUnixMs)
+            sqlite3_bind_int64(stmt, 9, thread.updatedAtUnixMs)
+        }
         sqlite3_bind_text(stmt, 10, thread.preview, -1, transient)
         guard sqlite3_step(stmt) == SQLITE_DONE else {
             throw NSError(domain: "CodexLocalProjectUsageTests", code: 3)

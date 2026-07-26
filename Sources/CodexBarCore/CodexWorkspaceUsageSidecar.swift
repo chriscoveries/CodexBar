@@ -147,6 +147,7 @@ struct CodexWorkspaceUsageSidecar: Sendable {
         snapshot: CodexLocalProjectUsageSnapshot,
         cache: CostUsageCache,
         catalog: CodexThreadCatalog,
+        catalogIsComplete: Bool = true,
         rootsFingerprint: [String: Int64]) throws
     {
         #if canImport(SQLite3) || canImport(CSQLite3)
@@ -159,6 +160,9 @@ struct CodexWorkspaceUsageSidecar: Sendable {
         do {
             let generation = UUID().uuidString
             try self.upsertCatalog(catalog, generation: generation, db: db)
+            if catalogIsComplete {
+                try self.pruneCatalog(generation: generation, db: db)
+            }
             try self.importChangedRollouts(cache, catalog: catalog, generation: generation, db: db)
             try self.markMissingRollouts(generation: generation, db: db)
             try self.storeSnapshot(snapshot, cache: cache, catalog: catalog, rootsFingerprint: rootsFingerprint, db: db)
@@ -171,13 +175,18 @@ struct CodexWorkspaceUsageSidecar: Sendable {
         _ = snapshot
         _ = cache
         _ = catalog
+        _ = catalogIsComplete
         _ = rootsFingerprint
         #endif
     }
 
     /// Imports only source deltas. Callers can then aggregate from
     /// `usageCache(roots:)` before committing a new complete snapshot.
-    func synchronizeSources(cache: CostUsageCache, catalog: CodexThreadCatalog) throws {
+    func synchronizeSources(
+        cache: CostUsageCache,
+        catalog: CodexThreadCatalog,
+        catalogIsComplete: Bool = true) throws
+    {
         #if canImport(SQLite3) || canImport(CSQLite3)
         guard let db = self.open(readOnly: false) else { throw SidecarError.openFailed }
         defer { sqlite3_close(db) }
@@ -186,6 +195,9 @@ struct CodexWorkspaceUsageSidecar: Sendable {
         do {
             let generation = UUID().uuidString
             try self.upsertCatalog(catalog, generation: generation, db: db)
+            if catalogIsComplete {
+                try self.pruneCatalog(generation: generation, db: db)
+            }
             try self.importChangedRollouts(cache, catalog: catalog, generation: generation, db: db)
             try self.markMissingRollouts(generation: generation, db: db)
             try Self.commit(db)
@@ -196,6 +208,7 @@ struct CodexWorkspaceUsageSidecar: Sendable {
         #else
         _ = cache
         _ = catalog
+        _ = catalogIsComplete
         #endif
     }
 
@@ -542,6 +555,19 @@ struct CodexWorkspaceUsageSidecar: Sendable {
             Self.bind(generation, to: statement, at: 13)
             guard sqlite3_step(statement) == SQLITE_DONE else { throw SidecarError.writeFailed }
         }
+    }
+
+    /// A complete catalog generation is authoritative: entries absent from it
+    /// must no longer override rollout-derived metadata. Unavailable reads
+    /// deliberately skip this deletion so the last-good attribution remains.
+    private func pruneCatalog(generation: String, db: OpaquePointer?) throws {
+        guard let statement = Self.prepare(
+            db,
+            "DELETE FROM catalog_threads WHERE last_seen_generation != ?")
+        else { throw SidecarError.statementFailed }
+        defer { sqlite3_finalize(statement) }
+        Self.bind(generation, to: statement, at: 1)
+        guard sqlite3_step(statement) == SQLITE_DONE else { throw SidecarError.writeFailed }
     }
 
     private func importChangedRollouts(
