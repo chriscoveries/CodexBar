@@ -102,9 +102,13 @@ struct BrowserCookieOrderStatusStringTests {
     }
 
     @Test
-    func `longcat cookie imports default to chrome only`() {
-        #expect(ProviderDefaults.metadata[.longcat]?.browserCookieOrder == [.chrome])
-        #expect(ProviderBrowserCookieDefaults.longcatCookieImportOrder == [.chrome])
+    func `longcat cookie import order supports chrome and firefox`() {
+        let order = ProviderDefaults.metadata[.longcat]?.browserCookieOrder ?? Browser.defaultImportOrder
+        #expect(order == ProviderBrowserCookieDefaults.longcatCookieImportOrder)
+        #expect(order == [.chrome, .firefox])
+        #expect(order.first == .chrome)
+        #expect(order.contains(.firefox))
+        #expect(!order.contains(.safari))
     }
     #endif
 }
