@@ -335,70 +335,26 @@ public struct QwenCloudUsageFetcher: Sendable {
     }
 
     private static func expandEmbeddedJSON(_ value: Any) -> Any {
-        if let string = value as? String {
-            let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard trimmed.hasPrefix("{") || trimmed.hasPrefix("[") else { return value }
-            guard let data = trimmed.data(using: .utf8),
-                  let decoded = try? JSONSerialization.jsonObject(with: data)
-            else {
-                return value
-            }
-            return self.expandEmbeddedJSON(decoded)
-        }
-        if let dictionary = value as? [String: Any] {
-            return dictionary.mapValues(self.expandEmbeddedJSON)
-        }
-        if let array = value as? [Any] {
-            return array.map(self.expandEmbeddedJSON)
-        }
-        return value
+        OneConsoleJSON.expandEmbeddedJSON(value)
     }
 
     private static func findObject(
         containingAnyOf keys: Set<String>,
         in value: Any) -> [String: Any]?
     {
-        if let dictionary = value as? [String: Any] {
-            if !keys.isDisjoint(with: dictionary.keys) {
-                return dictionary
-            }
-            for nested in dictionary.values {
-                if let found = self.findObject(containingAnyOf: keys, in: nested) {
-                    return found
-                }
-            }
-        } else if let array = value as? [Any] {
-            for nested in array {
-                if let found = self.findObject(containingAnyOf: keys, in: nested) {
-                    return found
-                }
-            }
-        }
-        return nil
+        OneConsoleJSON.findObject(containingAnyOf: keys, in: value)
     }
 
     private static func number(_ value: Any?) -> Double? {
-        if let number = value as? NSNumber {
-            return number.doubleValue
-        }
-        if let string = value as? String {
-            return Double(string.trimmingCharacters(in: .whitespacesAndNewlines))
-        }
-        return nil
+        OneConsoleJSON.number(value)
     }
 
     private static func percentagePoints(fromRatio ratio: Double?) -> Double? {
-        guard let ratio, ratio.isFinite else { return nil }
-        return min(max(ratio, 0), 1) * 100
+        OneConsoleJSON.percentagePoints(fromRatio: ratio)
     }
 
     private static func date(_ value: Any?) -> Date? {
-        if let number = self.number(value), number >= 0 {
-            let seconds = number >= 1_000_000_000_000 ? number / 1000 : number
-            return Date(timeIntervalSince1970: seconds)
-        }
-        guard let string = value as? String else { return nil }
-        return ISO8601DateFormatter().date(from: string)
+        OneConsoleJSON.date(value)
     }
 
     private static func map(_ error: AlibabaTokenPlanUsageError) -> QwenCloudUsageError {
