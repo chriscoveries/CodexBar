@@ -473,176 +473,28 @@ public struct QwenCloudUsageFetcher: Sendable {
 
     // MARK: - SEC session token
 
+    private static let secTokenResolver = OneConsoleSECTokenResolver(
+        configuration: OneConsoleSECTokenResolver.Configuration(
+            dashboardURL: { QwenCloudUsageFetcher.dashboardURL(environment: $0) },
+            userInfoPath: "/tool/user/info.json",
+            loginPageSniffers: [
+                "passport.alibabacloud.com",
+                "signin.aliyun.com",
+                "account.alibabacloud.com/login",
+                "login.qwencloud.com",
+            ]))
+
     private static func resolveSECSessionToken(
         cookieHeader: String,
         environment: [String: String],
         session: URLSession) async throws -> (value: String, sourceLabel: String)
     {
-        let dashboardURL = self.dashboardURL(environment: environment)
-
-        // The Qwen Cloud one-console injects a user-specific `sec_token` into the
-        // dashboard HTML (window.ALIYUN_CONSOLE_CONFIG / `sec_token = "..."`). Fetch the
-        // billing page with the session cookie and extract it.
-        if let htmlToken = try? await self.fetchSECSessionTokenFromDashboard(
+        let resolved = try await self.secTokenResolver.resolve(
             cookieHeader: cookieHeader,
-            dashboardURL: dashboardURL,
-            session: session)
-        {
-            return (htmlToken, "dashboard-html")
-        }
-
-        // Some console sessions also expose a `sec_token` cookie scoped to the console
-        // host; prefer it when present.
-        if let cookieToken = self.secTokenCookieValue(from: cookieHeader, host: dashboardURL.host) {
-            return (cookieToken, "cookie")
-        }
-
-        // Final fallback: the one-console user-info endpoint returns the active token.
-        if let userInfoToken = try? await self.fetchSECSessionTokenFromUserInfo(
-            cookieHeader: cookieHeader,
-            dashboardURL: dashboardURL,
-            session: session)
-        {
-            return (userInfoToken, "user-info")
-        }
-
-        throw QwenCloudUsageError.loginRequired
-    }
-
-    private static func fetchSECSessionTokenFromDashboard(
-        cookieHeader: String,
-        dashboardURL: URL,
-        session: URLSession) async throws -> String
-    {
-        var request = URLRequest(url: dashboardURL)
-        request.httpMethod = "GET"
-        request.timeoutInterval = 20
-        request.setValue("text/html,application/xhtml+xml", forHTTPHeaderField: "Accept")
-        request.setValue(cookieHeader, forHTTPHeaderField: "Cookie")
-
-        let data = try await self.fetchData(
-            session: session,
-            request: request,
-            cookieHeader: cookieHeader,
-            dashboardCookieHeader: cookieHeader)
-
-        guard let html = String(data: data, encoding: .utf8) else {
-            throw QwenCloudUsageError.loginRequired
-        }
-        if self.looksLikeLoginPage(html) {
-            throw QwenCloudUsageError.loginRequired
-        }
-        if let token = self.extractSECSessionToken(from: html) {
-            Self.log.info("Resolved Qwen Cloud sec_token from dashboard HTML")
-            return token
-        }
-        throw QwenCloudUsageError.loginRequired
-    }
-
-    private static func fetchSECSessionTokenFromUserInfo(
-        cookieHeader: String,
-        dashboardURL: URL,
-        session: URLSession) async throws -> String
-    {
-        let host = dashboardURL.host ?? "home.qwencloud.com"
-        var components = URLComponents()
-        components.scheme = "https"
-        components.host = host
-        if let port = dashboardURL.port {
-            components.port = port
-        }
-        components.path = "/tool/user/info.json"
-        guard let url = components.url else {
-            throw QwenCloudUsageError.loginRequired
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.timeoutInterval = 20
-        request.setValue("application/json, text/plain, */*", forHTTPHeaderField: "Accept")
-        request.setValue(cookieHeader, forHTTPHeaderField: "Cookie")
-
-        let data = try await self.fetchData(
-            session: session,
-            request: request,
-            cookieHeader: cookieHeader,
-            dashboardCookieHeader: cookieHeader)
-
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw QwenCloudUsageError.loginRequired
-        }
-        let dataDict: [String: Any]? = {
-            for key in ["data", "Data"] {
-                if let value = json[key] as? [String: Any] {
-                    return value
-                }
-            }
-            return nil
-        }()
-        guard let dataDict else {
-            throw QwenCloudUsageError.loginRequired
-        }
-
-        for key in ["secToken", "sec_token", "csrfToken", "token"] {
-            if let value = dataDict[key] as? String, !value.isEmpty {
-                Self.log.info("Resolved Qwen Cloud sec_token from user info")
-                return value
-            }
-        }
-        throw QwenCloudUsageError.loginRequired
-    }
-
-    private static func extractSECSessionToken(from html: String) -> String? {
-        let patterns = [
-            #""secToken"\s*:\s*"([^"]+)""#,
-            #""sec_token"\s*:\s*"([^"]+)""#,
-            #"secToken['"]?\s*[:=]\s*['"]([^'"]+)['"]"#,
-            #"sec_token['"]?\s*[:=]\s*['"]([^'"]+)['"]"#,
-            #"csrfToken['"]?\s*[:=]\s*['"]([^'"]+)['"]"#,
-        ]
-        for pattern in patterns {
-            if let token = self.matchFirstGroup(pattern: pattern, in: html), !token.isEmpty {
-                return token
-            }
-        }
-        return nil
-    }
-
-    private static func matchFirstGroup(pattern: String, in text: String) -> String? {
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else {
-            return nil
-        }
-        let range = NSRange(text.startIndex..<text.endIndex, in: text)
-        guard let match = regex.firstMatch(in: text, options: [], range: range),
-              match.numberOfRanges > 1,
-              let valueRange = Range(match.range(at: 1), in: text)
-        else {
-            return nil
-        }
-        let value = text[valueRange].trimmingCharacters(in: .whitespacesAndNewlines)
-        return value.isEmpty ? nil : String(value)
-    }
-
-    private static func secTokenCookieValue(from cookieHeader: String, host: String?) -> String? {
-        var fallback: String?
-        for pair in CookieHeaderNormalizer.pairs(from: cookieHeader) {
-            guard pair.name.lowercased() == "sec_token", !pair.value.isEmpty else { continue }
-            // Prefer a cookie scoped to the console host when the value encodes one.
-            if let host, pair.value.contains(host) {
-                return pair.value
-            }
-            fallback = pair.value
-        }
-        return fallback
-    }
-
-    private static func looksLikeLoginPage(_ html: String) -> Bool {
-        let lowered = html.lowercased()
-        return lowered.contains("passport.alibabacloud.com") ||
-            lowered.contains("signin.aliyun.com") ||
-            lowered.contains("account.alibabacloud.com/login") ||
-            lowered.contains("login.qwencloud.com") ||
-            (lowered.contains("login") && lowered.contains("password") && lowered.contains("sign in"))
+            environment: environment,
+            transport: session)
+        Self.log.info("Resolved Qwen Cloud sec_token from \(resolved.source.rawValue)")
+        return (resolved.value, resolved.source.rawValue)
     }
 
     private static func fetchData(
