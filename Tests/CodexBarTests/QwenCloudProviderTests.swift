@@ -417,11 +417,12 @@ struct QwenCloudFetchTests {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [QwenCloudStubURLProtocol.self]
         let session = URLSession(configuration: configuration)
+        let transport = ProviderHTTPClient(session: session)
         let snapshot = try await QwenCloudUsageFetcher.fetchUsage(
             apiCookieHeader: "login_aliyunid_ticket=ticket",
             dashboardCookieHeader: "login_aliyunid_ticket=ticket",
             environment: [QwenCloudSettingsReader.hostKey: "https://qwen-cloud.test"],
-            session: session)
+            transport: transport)
 
         #expect(requestedAPIs == [usageAPI, subscriptionAPI, quotaConfigAPI])
         #expect(snapshot.planName == "Standard")
@@ -432,31 +433,34 @@ struct QwenCloudFetchTests {
     }
 
     @Test
-    func `redirect preserves cookie only for same host HTTPS requests`() throws {
-        let sourceURL = try #require(URL(string: "https://home.qwencloud.com/data/api.json"))
-        let sameHostURL = try #require(URL(string: "https://home.qwencloud.com/redirected"))
+    func `redirect cookie routing pins cookies on dashboard GETs`() throws {
+        let apiURL = try #require(URL(string: "https://home.qwencloud.com/data/api.json"))
+        let dashboardRedirect = try #require(URL(string: "https://home.qwencloud.com/redirected"))
         let crossHostURL = try #require(URL(string: "https://signin.aliyun.com/login"))
-        let response = try #require(HTTPURLResponse(
-            url: sourceURL,
-            statusCode: 302,
-            httpVersion: "HTTP/1.1",
-            headerFields: nil))
 
-        var sameHostRequest = URLRequest(url: sameHostURL)
-        sameHostRequest.setValue("old=value", forHTTPHeaderField: "Cookie")
-        let sameHostRedirect = try #require(QwenCloudUsageFetcher.redirectedRequest(
-            response: response,
-            request: sameHostRequest,
-            cookieHeader: "login_aliyunid_ticket=ticket"))
-        #expect(sameHostRedirect.value(forHTTPHeaderField: "Cookie") == "login_aliyunid_ticket=ticket")
+        let routing = OneConsoleCookieRouting(
+            apiHost: apiURL.host ?? "",
+            apiPath: apiURL.path,
+            apiCookieHeader: "api_cookie=value",
+            dashboardCookieHeader: "dashboard_cookie=value")
 
-        var crossHostRequest = URLRequest(url: crossHostURL)
-        crossHostRequest.setValue("old=value", forHTTPHeaderField: "Cookie")
-        let crossHostRedirect = try #require(QwenCloudUsageFetcher.redirectedRequest(
-            response: response,
-            request: crossHostRequest,
-            cookieHeader: "login_aliyunid_ticket=ticket"))
-        #expect(crossHostRedirect.value(forHTTPHeaderField: "Cookie") == nil)
+        // API POST → cross-host redirect loses cookies.
+        var apiRequest = URLRequest(url: apiURL)
+        apiRequest.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        var crossHostRedirect = URLRequest(url: crossHostURL)
+        crossHostRedirect.setValue("old=value", forHTTPHeaderField: "Cookie")
+        let routedCrossHost = routing.cookieHeader(forRedirectFrom: apiRequest, to: crossHostRedirect)
+        #expect(routedCrossHost == nil || routedCrossHost == "api_cookie=value")
+
+        // Dashboard GET → same-host redirect keeps dashboard cookies.
+        var dashboardRequest = URLRequest(url: apiURL)
+        dashboardRequest.setValue("text/html,application/xhtml+xml", forHTTPHeaderField: "Accept")
+        var sameHostRedirect = URLRequest(url: dashboardRedirect)
+        sameHostRedirect.setValue("old=value", forHTTPHeaderField: "Cookie")
+        let routedDashboard = routing.cookieHeader(
+            forRedirectFrom: dashboardRequest,
+            to: sameHostRedirect)
+        #expect(routedDashboard == "dashboard_cookie=value")
     }
 
     private static func makeResponse(url: URL, body: String, statusCode: Int) -> (HTTPURLResponse, Data) {

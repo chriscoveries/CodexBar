@@ -46,6 +46,7 @@ public struct QwenCloudUsageFetcher: Sendable {
         let secTokenSource: String
         let environment: [String: String]
         let session: URLSession
+        let transport: any ProviderHTTPTransport
         let cookieHeader: String
         let dashboardCookieHeader: String
     }
@@ -113,14 +114,14 @@ public struct QwenCloudUsageFetcher: Sendable {
         apiCookieHeader rawCookieHeader: String,
         environment: [String: String] = ProcessInfo.processInfo.environment,
         now: Date = Date(),
-        session: URLSession = .shared) async throws -> QwenCloudUsageSnapshot
+        transport: any ProviderHTTPTransport = ProviderHTTPClient.shared) async throws -> QwenCloudUsageSnapshot
     {
         try await self.fetchUsage(
             apiCookieHeader: rawCookieHeader,
             dashboardCookieHeader: rawCookieHeader,
             environment: environment,
             now: now,
-            session: session)
+            transport: transport)
     }
 
     public static func fetchUsage(
@@ -128,7 +129,7 @@ public struct QwenCloudUsageFetcher: Sendable {
         dashboardCookieHeader: String,
         environment: [String: String] = ProcessInfo.processInfo.environment,
         now: Date = Date(),
-        session: URLSession = .shared) async throws -> QwenCloudUsageSnapshot
+        transport: any ProviderHTTPTransport = ProviderHTTPClient.shared) async throws -> QwenCloudUsageSnapshot
     {
         let normalizedAPI = CookieHeaderNormalizer.normalize(apiCookieHeader)
         let normalizedDashboard = CookieHeaderNormalizer.normalize(dashboardCookieHeader) ?? normalizedAPI
@@ -141,12 +142,13 @@ public struct QwenCloudUsageFetcher: Sendable {
         let secToken = try await self.resolveSECSessionToken(
             cookieHeader: normalizedDashboard ?? cookieHeader,
             environment: environment,
-            session: session)
+            transport: transport)
         let requestContext = APIRequestContext(
             secToken: secToken.value,
             secTokenSource: secToken.sourceLabel,
             environment: environment,
-            session: session,
+            session: URLSession.shared,
+            transport: transport,
             cookieHeader: cookieHeader,
             dashboardCookieHeader: normalizedDashboard ?? cookieHeader)
 
@@ -444,7 +446,8 @@ public struct QwenCloudUsageFetcher: Sendable {
             session: context.session,
             request: request,
             cookieHeader: context.cookieHeader,
-            dashboardCookieHeader: context.dashboardCookieHeader)
+            dashboardCookieHeader: context.dashboardCookieHeader,
+            transport: context.transport)
     }
 
     private static func fetchOptionalAPIData(
@@ -487,28 +490,25 @@ public struct QwenCloudUsageFetcher: Sendable {
     private static func resolveSECSessionToken(
         cookieHeader: String,
         environment: [String: String],
-        session: URLSession) async throws -> (value: String, sourceLabel: String)
+        transport: any ProviderHTTPTransport) async throws -> (value: String, sourceLabel: String)
     {
         let resolved = try await self.secTokenResolver.resolve(
             cookieHeader: cookieHeader,
             environment: environment,
-            transport: session)
+            transport: transport)
         Self.log.info("Resolved Qwen Cloud sec_token from \(resolved.source.rawValue)")
         return (resolved.value, resolved.source.rawValue)
     }
 
     private static func fetchData(
-        session: URLSession,
+        session _: URLSession,
         request: URLRequest,
-        cookieHeader: String,
-        dashboardCookieHeader: String) async throws -> Data
+        cookieHeader _: String,
+        dashboardCookieHeader _: String,
+        transport: (any ProviderHTTPTransport)? = nil) async throws -> Data
     {
-        let delegate = RedirectCookieDelegate(
-            apiHost: request.url?.host ?? "",
-            apiPath: request.url?.path ?? "",
-            apiCookieHeader: cookieHeader,
-            dashboardCookieHeader: dashboardCookieHeader)
-        let (data, response) = try await session.data(for: request, delegate: delegate)
+        let activeTransport: any ProviderHTTPTransport = transport ?? ProviderHTTPClient.shared
+        let (data, response) = try await activeTransport.data(for: request)
 
         if let http = response as? HTTPURLResponse {
             Self.log.info(
@@ -529,26 +529,6 @@ public struct QwenCloudUsageFetcher: Sendable {
         }
 
         return data
-    }
-
-    static func redirectedRequest(
-        response: HTTPURLResponse,
-        request: URLRequest,
-        cookieHeader: String) -> URLRequest?
-    {
-        guard let url = request.url, let host = url.host else { return nil }
-        guard response.statusCode >= 300, response.statusCode < 400 else { return nil }
-        guard url.scheme?.lowercased() == "https" else { return nil }
-
-        var mutable = request
-        let originalHost = self.dashboardURL.host ?? "home.qwencloud.com"
-        let isSameHost = host.lowercased() == originalHost.lowercased()
-        if isSameHost {
-            mutable.setValue(cookieHeader, forHTTPHeaderField: "Cookie")
-        } else {
-            mutable.setValue(nil, forHTTPHeaderField: "Cookie")
-        }
-        return mutable
     }
 
     private static func contentType(of data: Data) -> String? {
@@ -572,55 +552,5 @@ public struct QwenCloudUsageFetcher: Sendable {
 
     static func cookieNamesDescription(_ names: [String]) -> String {
         names.isEmpty ? "none" : names.joined(separator: ",")
-    }
-
-    private final class RedirectCookieDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
-        private let apiHost: String
-        private let apiPath: String
-        private let apiCookieHeader: String
-        private let dashboardCookieHeader: String
-
-        init(
-            apiHost: String,
-            apiPath: String,
-            apiCookieHeader: String,
-            dashboardCookieHeader: String)
-        {
-            self.apiHost = apiHost
-            self.apiPath = apiPath
-            self.apiCookieHeader = apiCookieHeader
-            self.dashboardCookieHeader = dashboardCookieHeader
-        }
-
-        func urlSession(
-            _: URLSession,
-            task: URLSessionTask,
-            willPerformHTTPRedirection response: HTTPURLResponse,
-            newRequest request: URLRequest) async -> URLRequest?
-        {
-            guard let originalRequest = task.originalRequest else { return request }
-            let acceptHeader = originalRequest.value(forHTTPHeaderField: "Accept")
-            let isDashboardNavigation = acceptHeader?.contains("text/html") == true
-            let cookieHeader = isDashboardNavigation ? self.dashboardCookieHeader : self.apiCookieHeader
-            guard let redirected = QwenCloudUsageFetcher.redirectedRequest(
-                response: response,
-                request: request,
-                cookieHeader: cookieHeader)
-            else {
-                return request
-            }
-            // Keep cookies pinned to the original API endpoint even if the console
-            // bounces through a same-host path (e.g. locale prefixes) before api.json.
-            if let url = redirected.url,
-               url.host?.lowercased() == self.apiHost.lowercased(),
-               url.path == self.apiPath,
-               !isDashboardNavigation
-            {
-                var pinned = redirected
-                pinned.setValue(self.apiCookieHeader, forHTTPHeaderField: "Cookie")
-                return pinned
-            }
-            return redirected
-        }
     }
 }

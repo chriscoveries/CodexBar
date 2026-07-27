@@ -7,6 +7,19 @@ public protocol ProviderHTTPTransport: Sendable {
     func data(for request: URLRequest) async throws -> (Data, URLResponse)
 }
 
+/// Optional cookie routing applied when the underlying transport follows an
+/// HTTP redirect. Providers that need different Cookie headers for dashboard
+/// GETs vs API POSTs (e.g. Aliyun OneConsole-based providers) implement this
+/// to keep cookies pinned to the right host across redirect chains.
+public protocol ProviderHTTPCookieRouting: Sendable {
+    /// Return the Cookie header to use for a redirected request, or nil to
+    /// drop cookies on the redirect. `original` is the request the redirect
+    /// started from; `redirected` is the new request URLSession would issue.
+    func cookieHeader(
+        forRedirectFrom original: URLRequest,
+        to redirected: URLRequest) -> String?
+}
+
 #if !os(Linux)
 extension URLSession: ProviderHTTPTransport {}
 #endif
@@ -170,8 +183,14 @@ public final class ProviderHTTPClient: ProviderHTTPTransport, @unchecked Sendabl
 
     private let session: URLSession
 
-    public init(session: URLSession? = nil) {
-        self.session = session ?? Self.redirectGuardedSession()
+    public init(session: URLSession? = nil, cookieRouting: (any ProviderHTTPCookieRouting)? = nil) {
+        if let session {
+            self.session = session
+        } else if let cookieRouting {
+            self.session = Self.redirectGuardedSession(cookieRouting: cookieRouting)
+        } else {
+            self.session = Self.redirectGuardedSession()
+        }
     }
 
     static func defaultConfiguration() -> URLSessionConfiguration {
@@ -193,11 +212,12 @@ public final class ProviderHTTPClient: ProviderHTTPTransport, @unchecked Sendabl
     }
 
     static func redirectGuardedSession(
-        configuration: URLSessionConfiguration = ProviderHTTPClient.defaultConfiguration()) -> URLSession
+        configuration: URLSessionConfiguration = ProviderHTTPClient.defaultConfiguration(),
+        cookieRouting: (any ProviderHTTPCookieRouting)? = nil) -> URLSession
     {
         URLSession(
             configuration: configuration,
-            delegate: ProviderHTTPRedirectGuardDelegate(),
+            delegate: ProviderHTTPRedirectGuardDelegate(cookieRouting: cookieRouting),
             delegateQueue: nil)
     }
 
@@ -218,6 +238,12 @@ public final class ProviderHTTPClient: ProviderHTTPTransport, @unchecked Sendabl
 }
 
 final class ProviderHTTPRedirectGuardDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    private let cookieRouting: (any ProviderHTTPCookieRouting)?
+
+    init(cookieRouting: (any ProviderHTTPCookieRouting)? = nil) {
+        self.cookieRouting = cookieRouting
+    }
+
     func urlSession(
         _: URLSession,
         task: URLSessionTask,
@@ -225,7 +251,23 @@ final class ProviderHTTPRedirectGuardDelegate: NSObject, URLSessionTaskDelegate,
         newRequest request: URLRequest,
         completionHandler: @escaping @Sendable (URLRequest?) -> Void)
     {
-        completionHandler(Self.guardedRedirectRequest(originalURL: task.originalRequest?.url, redirectRequest: request))
+        guard let guarded = Self.guardedRedirectRequest(
+            originalURL: task.originalRequest?.url,
+            redirectRequest: request)
+        else {
+            completionHandler(nil)
+            return
+        }
+        if let routing = self.cookieRouting,
+           let original = task.originalRequest,
+           let routed = routing.cookieHeader(forRedirectFrom: original, to: guarded)
+        {
+            var withCookies = guarded
+            withCookies.setValue(routed, forHTTPHeaderField: "Cookie")
+            completionHandler(withCookies)
+        } else {
+            completionHandler(guarded)
+        }
     }
 
     static func guardedRedirectRequest(originalURL: URL?, redirectRequest request: URLRequest) -> URLRequest? {
