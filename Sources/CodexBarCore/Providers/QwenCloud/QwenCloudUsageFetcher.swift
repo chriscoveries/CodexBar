@@ -816,9 +816,3 @@ public struct QwenCloudUsageFetcher: Sendable {
         }
     }
 }
-
-extension [String] {
-    fileprivate func uniquedSorted() -> [String] {
-        Array(Set(self)).sorted()
-    }
-}

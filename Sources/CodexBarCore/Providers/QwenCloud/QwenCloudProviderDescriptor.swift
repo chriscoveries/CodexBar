@@ -188,7 +188,7 @@ struct QwenCloudWebFetchStrategy: ProviderFetchStrategy {
         #if os(macOS)
         if allowCached,
            let cached = CookieHeaderCache.load(provider: .qwencloud),
-           let headers = QwenCloudCookieHeaders(cachedHeader: cached.cookieHeader)
+           let headers = QwenCloudCookieHeaders(qwenCloudCachedHeader: cached.cookieHeader)
         {
             Self.log.info(
                 "Qwen Cloud using cached browser cookie header",
@@ -223,7 +223,7 @@ struct QwenCloudWebFetchStrategy: ProviderFetchStrategy {
             }
             CookieHeaderCache.store(
                 provider: .qwencloud,
-                cookieHeader: headers.cacheCookieHeader,
+                cookieHeader: headers.cacheQwenCloudCookieHeader(),
                 sourceLabel: session.sourceLabel)
             Self.log.info(
                 "Qwen Cloud imported browser cookies",
@@ -264,11 +264,5 @@ extension QwenCloudUsageError {
         case .apiError, .networkError, .parseFailed:
             false
         }
-    }
-}
-
-extension [String] {
-    fileprivate func uniquedSorted() -> [String] {
-        Array(Set(self)).sorted()
     }
 }

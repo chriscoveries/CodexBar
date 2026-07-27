@@ -1008,9 +1008,3 @@ public struct AlibabaTokenPlanUsageFetcher: Sendable {
         return value.isEmpty ? nil : String(value)
     }
 }
-
-extension [String] {
-    fileprivate func uniquedSorted() -> [String] {
-        Array(Set(self)).sorted()
-    }
-}
