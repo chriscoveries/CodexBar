@@ -26,6 +26,12 @@ public enum QwenCloudUsageError: LocalizedError, Equatable {
     }
 }
 
+/// Orchestrator for Qwen Cloud token-plan usage fetches.
+///
+/// Owns: dashboard / API URL resolution, host-override normalization, and
+/// the sec_token -> three API calls -> snapshot flow. Request construction
+/// lives in `QwenCloudTokenPlanAPIClient`; response parsing lives in
+/// `QwenCloudUsageParser`.
 public struct QwenCloudUsageFetcher: Sendable {
     public static let gatewayBaseURLString = "https://home.qwencloud.com"
     static let dataGatewayBaseURLString = "https://cs-data.qwencloud.com"
@@ -39,17 +45,7 @@ public struct QwenCloudUsageFetcher: Sendable {
     static let region = "ap-southeast-1"
     static let language = "en-US"
 
-    private static let log = CodexBarLog.logger("qwen-cloud")
-
-    private struct APIRequestContext: Sendable {
-        let secToken: String
-        let secTokenSource: String
-        let environment: [String: String]
-        let session: URLSession
-        let transport: any ProviderHTTPTransport
-        let cookieHeader: String
-        let dashboardCookieHeader: String
-    }
+    static let log = CodexBarLog.logger("qwen-cloud")
 
     public static var dashboardURL: URL {
         self.dashboardURL(environment: ProcessInfo.processInfo.environment)
@@ -77,14 +73,14 @@ public struct QwenCloudUsageFetcher: Sendable {
         self.resolveAPIURL(api: self.usageAPI, environment: environment)
     }
 
-    private static func resolveAPIURL(api: String, environment: [String: String]) -> URL {
+    static func resolveAPIURL(api: String, environment: [String: String]) -> URL {
         if let override = QwenCloudSettingsReader.quotaURL(environment: environment) {
             return override
         }
         return self.defaultAPIURL(api: api, environment: environment)
     }
 
-    private static func defaultAPIURL(api: String, environment: [String: String]) -> URL {
+    fileprivate static func defaultAPIURL(api: String, environment: [String: String]) -> URL {
         let base = self.dataGatewayHostBase(environment: environment)
         var components = URLComponents(string: "\(base)/data/api.json")!
         components.queryItems = [
@@ -96,19 +92,30 @@ public struct QwenCloudUsageFetcher: Sendable {
         return components.url!
     }
 
-    private static func gatewayHostBase(environment: [String: String]) -> String {
+    static func gatewayHostBase(environment: [String: String]) -> String {
         if let override = QwenCloudSettingsReader.hostOverride(environment: environment) {
             return override.hasSuffix("/") ? String(override.dropLast()) : override
         }
         return self.gatewayBaseURLString
     }
 
-    private static func dataGatewayHostBase(environment: [String: String]) -> String {
+    fileprivate static func dataGatewayHostBase(environment: [String: String]) -> String {
         if let override = QwenCloudSettingsReader.hostOverride(environment: environment) {
             return override.hasSuffix("/") ? String(override.dropLast()) : override
         }
         return self.dataGatewayBaseURLString
     }
+
+    private static let secTokenResolver = OneConsoleSECTokenResolver(
+        configuration: OneConsoleSECTokenResolver.Configuration(
+            dashboardURL: { QwenCloudUsageFetcher.dashboardURL(environment: $0) },
+            userInfoPath: "/tool/user/info.json",
+            loginPageSniffers: [
+                "passport.alibabacloud.com",
+                "signin.aliyun.com",
+                "account.alibabacloud.com/login",
+                "login.qwencloud.com",
+            ]))
 
     public static func fetchUsage(
         apiCookieHeader rawCookieHeader: String,
@@ -138,49 +145,54 @@ public struct QwenCloudUsageFetcher: Sendable {
         }
 
         let usageURL = self.resolveQuotaURL(environment: environment)
-        guard let host = usageURL.host else { throw QwenCloudUsageError.networkError("Invalid quota URL") }
-        let secToken = try await self.resolveSECSessionToken(
+        guard let host = usageURL.host else {
+            throw QwenCloudUsageError.networkError("Invalid quota URL")
+        }
+        let resolved = try await self.secTokenResolver.resolve(
             cookieHeader: normalizedDashboard ?? cookieHeader,
             environment: environment,
             transport: transport)
-        let requestContext = APIRequestContext(
-            secToken: secToken.value,
-            secTokenSource: secToken.sourceLabel,
+        Self.log.info("Resolved Qwen Cloud sec_token from \(resolved.source.rawValue)")
+
+        let dashboardURL = self.dashboardURL(environment: environment)
+        let client = QwenCloudTokenPlanAPIClient(transport: transport)
+        let context = QwenCloudTokenPlanAPIClient.Context(
+            secToken: resolved.value,
+            secTokenSource: resolved.source.rawValue,
             environment: environment,
-            session: URLSession.shared,
-            transport: transport,
-            cookieHeader: cookieHeader,
-            dashboardCookieHeader: normalizedDashboard ?? cookieHeader)
+            apiCookieHeader: cookieHeader,
+            dashboardCookieHeader: normalizedDashboard ?? cookieHeader,
+            dashboardURL: dashboardURL)
 
         let usageData: Data
         do {
-            usageData = try await self.fetchAPIData(
+            usageData = try await client.fetch(
                 api: self.usageAPI,
                 dataParameters: [:],
-                context: requestContext)
+                context: context)
         } catch let error as QwenCloudUsageError {
             throw error
         } catch {
             throw QwenCloudUsageError.networkError(error.localizedDescription)
         }
 
-        let subscriptionData = await self.fetchOptionalAPIData(
+        let subscriptionData = await client.fetchOptional(
             api: self.subscriptionAPI,
             dataParameters: ["commodityCode": self.productCode],
-            context: requestContext)
-        let quotaConfigData = await self.fetchOptionalAPIData(
+            context: context)
+        let quotaConfigData = await client.fetchOptional(
             api: self.quotaConfigAPI,
             dataParameters: [:],
-            context: requestContext)
+            context: context)
 
         do {
-            return try self.parseUsageSnapshot(
+            return try QwenCloudUsageParser.parse(
                 from: usageData,
                 subscriptionData: subscriptionData,
                 quotaConfigData: quotaConfigData,
                 now: now)
         } catch let error as QwenCloudUsageError {
-            let contentType = self.contentType(of: usageData)
+            let contentType = Self.contentType(of: usageData)
             let bodyPreview = String(data: usageData.prefix(200), encoding: .utf8)?
                 .replacingOccurrences(of: "\n", with: " ") ?? "<\(usageData.count) bytes>"
             Self.log.warning(
@@ -196,341 +208,6 @@ public struct QwenCloudUsageFetcher: Sendable {
         }
     }
 
-    static func parseUsageSnapshot(from data: Data, now: Date = Date()) throws -> QwenCloudUsageSnapshot {
-        try self.parseUsageSnapshot(
-            from: data,
-            subscriptionData: nil,
-            quotaConfigData: nil,
-            now: now)
-    }
-
-    private static func parseUsageSnapshot(
-        from data: Data,
-        subscriptionData: Data?,
-        quotaConfigData: Data?,
-        now: Date) throws -> QwenCloudUsageSnapshot
-    {
-        if let snapshot = try self.parseCurrentTokenPlanUsage(
-            from: data,
-            subscriptionData: subscriptionData,
-            quotaConfigData: quotaConfigData,
-            now: now)
-        {
-            return snapshot
-        }
-        do {
-            let alibaba = try AlibabaTokenPlanUsageFetcher.parseUsageSnapshot(from: data, now: now)
-            return QwenCloudUsageSnapshot(alibabaSnapshot: alibaba)
-        } catch let error as AlibabaTokenPlanUsageError {
-            throw Self.map(error)
-        }
-    }
-
-    private static func parseCurrentTokenPlanUsage(
-        from data: Data,
-        subscriptionData: Data?,
-        quotaConfigData: Data?,
-        now: Date) throws -> QwenCloudUsageSnapshot?
-    {
-        let raw: Any
-        do {
-            raw = try JSONSerialization.jsonObject(with: data)
-        } catch {
-            return nil
-        }
-        let expanded = self.expandEmbeddedJSON(raw)
-        guard let usage = self.findObject(
-            containingAnyOf: ["per5HourPercentage", "per1WeekPercentage"],
-            in: expanded)
-        else {
-            return nil
-        }
-
-        let fiveHourPercent = self.percentagePoints(fromRatio: self.number(usage["per5HourPercentage"]))
-        let weeklyPercent = self.percentagePoints(fromRatio: self.number(usage["per1WeekPercentage"]))
-        guard fiveHourPercent != nil || weeklyPercent != nil else { return nil }
-        let planCode = subscriptionData.flatMap(self.planCode)
-        let planName = planCode.map(self.displayPlanName)
-        let quota = quotaConfigData.flatMap { self.quotaTotals(from: $0, planCode: planCode) }
-
-        return QwenCloudUsageSnapshot(
-            planName: planName,
-            usedQuota: nil,
-            totalQuota: nil,
-            remainingQuota: nil,
-            resetsAt: nil,
-            fiveHourUsedPercent: fiveHourPercent,
-            fiveHourTotalQuota: quota?.fiveHour,
-            fiveHourResetsAt: self.date(usage["per5HourResetTime"]),
-            weeklyUsedPercent: weeklyPercent,
-            weeklyTotalQuota: quota?.weekly,
-            weeklyResetsAt: self.date(usage["per1WeekResetTime"]),
-            updatedAt: now)
-    }
-
-    private static func planCode(from data: Data) -> String? {
-        guard let raw = try? JSONSerialization.jsonObject(with: data) else { return nil }
-        let expanded = self.expandEmbeddedJSON(raw)
-        guard let plan = self.findObject(
-            containingAnyOf: ["specCode", "spec_code", "planName", "plan_name"],
-            in: expanded)
-        else {
-            return nil
-        }
-        for key in ["specCode", "spec_code", "planName", "plan_name"] {
-            if let value = plan[key] as? String {
-                let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                if !normalized.isEmpty {
-                    return normalized
-                }
-            }
-        }
-        return nil
-    }
-
-    private static func displayPlanName(_ planCode: String) -> String {
-        switch planCode {
-        case "lite": "Lite"
-        case "standard": "Standard"
-        case "pro": "Pro"
-        case "max": "Max"
-        default: planCode
-        }
-    }
-
-    private static func quotaTotals(from data: Data, planCode: String?) -> (fiveHour: Double?, weekly: Double?)? {
-        guard let planCode,
-              let raw = try? JSONSerialization.jsonObject(with: data)
-        else {
-            return nil
-        }
-        let expanded = self.expandEmbeddedJSON(raw)
-        guard let value = self.findValue(forKey: planCode, in: expanded),
-              let quota = value as? [String: Any]
-        else {
-            return nil
-        }
-        let fiveHour = self.number(quota["five_hour"] ?? quota["fiveHour"])
-        let weekly = self.number(quota["weekly"])
-        guard fiveHour != nil || weekly != nil else { return nil }
-        return (fiveHour, weekly)
-    }
-
-    private static func findValue(forKey key: String, in value: Any) -> Any? {
-        if let dictionary = value as? [String: Any] {
-            if let found = dictionary.first(where: { $0.key.lowercased() == key.lowercased() })?.value {
-                return found
-            }
-            for nested in dictionary.values {
-                if let found = self.findValue(forKey: key, in: nested) {
-                    return found
-                }
-            }
-        } else if let array = value as? [Any] {
-            for nested in array {
-                if let found = self.findValue(forKey: key, in: nested) {
-                    return found
-                }
-            }
-        }
-        return nil
-    }
-
-    private static func expandEmbeddedJSON(_ value: Any) -> Any {
-        OneConsoleJSON.expandEmbeddedJSON(value)
-    }
-
-    private static func findObject(
-        containingAnyOf keys: Set<String>,
-        in value: Any) -> [String: Any]?
-    {
-        OneConsoleJSON.findObject(containingAnyOf: keys, in: value)
-    }
-
-    private static func number(_ value: Any?) -> Double? {
-        OneConsoleJSON.number(value)
-    }
-
-    private static func percentagePoints(fromRatio ratio: Double?) -> Double? {
-        OneConsoleJSON.percentagePoints(fromRatio: ratio)
-    }
-
-    private static func date(_ value: Any?) -> Date? {
-        OneConsoleJSON.date(value)
-    }
-
-    private static func map(_ error: AlibabaTokenPlanUsageError) -> QwenCloudUsageError {
-        switch error {
-        case .loginRequired: .loginRequired
-        case .invalidCredentials: .invalidCredentials
-        case let .apiError(message): .apiError(message)
-        case let .networkError(message): .networkError(message)
-        case let .parseFailed(message): .parseFailed(message)
-        }
-    }
-
-    private static func fetchAPIData(
-        api: String,
-        dataParameters: [String: String],
-        context: APIRequestContext) async throws -> Data
-    {
-        let url = self.resolveAPIURL(api: api, environment: context.environment)
-        guard let host = url.host else { throw QwenCloudUsageError.networkError("Invalid quota URL") }
-
-        let dashboardURL = self.dashboardURL(environment: context.environment)
-        var cornerstone: [String: Any] = [
-            "feTraceId": UUID().uuidString.lowercased(),
-            "feURL": dashboardURL.absoluteString,
-            "protocol": "V2",
-            "console": "ONE_CONSOLE",
-            "productCode": "p_efm",
-            "domain": dashboardURL.host ?? "home.qwencloud.com",
-            "consoleSite": "QWENCLOUD",
-            "userNickName": "",
-            "userPrincipalName": "",
-            "xsp_lang": self.language,
-        ]
-        if let anonymousID = self.cookieValue(named: "cna", in: context.cookieHeader) {
-            cornerstone["X-Anonymous-Id"] = anonymousID
-        }
-        var apiData = dataParameters as [String: Any]
-        apiData["cornerstoneParam"] = cornerstone
-        let params: [String: Any] = [
-            "Api": api,
-            "V": "1.0",
-            "Data": apiData,
-        ]
-        let paramsData = try JSONSerialization.data(withJSONObject: params)
-        guard let paramsJSON = String(data: paramsData, encoding: .utf8) else {
-            throw QwenCloudUsageError.parseFailed("Could not encode request parameters")
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 30
-        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        request.setValue("application/json, text/plain, */*", forHTTPHeaderField: "Accept")
-        request.setValue(context.cookieHeader, forHTTPHeaderField: "Cookie")
-        request.setValue(self.gatewayHostBase(environment: context.environment), forHTTPHeaderField: "Origin")
-        request.setValue(dashboardURL.absoluteString, forHTTPHeaderField: "Referer")
-        request.setValue("XMLHttpRequest", forHTTPHeaderField: "X-Requested-With")
-        if let csrf = self.cookieValue(named: "login_aliyunid_csrf", in: context.cookieHeader) ??
-            self.cookieValue(named: "csrf", in: context.cookieHeader)
-        {
-            request.setValue(csrf, forHTTPHeaderField: "x-xsrf-token")
-            request.setValue(csrf, forHTTPHeaderField: "x-csrf-token")
-        }
-
-        var body = URLComponents()
-        body.queryItems = [
-            URLQueryItem(name: "product", value: self.consoleProduct),
-            URLQueryItem(name: "action", value: self.consoleAction),
-            URLQueryItem(name: "sec_token", value: context.secToken),
-            URLQueryItem(name: "region", value: self.region),
-            URLQueryItem(name: "language", value: self.language),
-            URLQueryItem(name: "params", value: paramsJSON),
-        ]
-        request.httpBody = Data((body.percentEncodedQuery ?? "").utf8)
-
-        Self.log.info(
-            "Fetching Qwen Cloud token plan API",
-            metadata: [
-                "api": api,
-                "apiHost": host,
-                "apiCookieNames": self.cookieNames(from: context.cookieHeader).joined(separator: ","),
-                "hasCSRF": self.cookieValue(named: "login_aliyunid_csrf", in: context.cookieHeader) == nil ? "0" : "1",
-                "secTokenSource": context.secTokenSource,
-            ])
-
-        return try await self.fetchData(
-            session: context.session,
-            request: request,
-            cookieHeader: context.cookieHeader,
-            dashboardCookieHeader: context.dashboardCookieHeader,
-            transport: context.transport)
-    }
-
-    private static func fetchOptionalAPIData(
-        api: String,
-        dataParameters: [String: String],
-        context: APIRequestContext) async -> Data?
-    {
-        do {
-            return try await self.fetchAPIData(
-                api: api,
-                dataParameters: dataParameters,
-                context: context)
-        } catch {
-            self.log.warning(
-                "Optional Qwen Cloud token plan metadata fetch failed",
-                metadata: ["api": api, "error": error.localizedDescription])
-            return nil
-        }
-    }
-
-    private static func cookieValue(named name: String, in header: String) -> String? {
-        CookieHeaderNormalizer.pairs(from: header)
-            .first { $0.name.caseInsensitiveCompare(name) == .orderedSame }?
-            .value
-    }
-
-    // MARK: - SEC session token
-
-    private static let secTokenResolver = OneConsoleSECTokenResolver(
-        configuration: OneConsoleSECTokenResolver.Configuration(
-            dashboardURL: { QwenCloudUsageFetcher.dashboardURL(environment: $0) },
-            userInfoPath: "/tool/user/info.json",
-            loginPageSniffers: [
-                "passport.alibabacloud.com",
-                "signin.aliyun.com",
-                "account.alibabacloud.com/login",
-                "login.qwencloud.com",
-            ]))
-
-    private static func resolveSECSessionToken(
-        cookieHeader: String,
-        environment: [String: String],
-        transport: any ProviderHTTPTransport) async throws -> (value: String, sourceLabel: String)
-    {
-        let resolved = try await self.secTokenResolver.resolve(
-            cookieHeader: cookieHeader,
-            environment: environment,
-            transport: transport)
-        Self.log.info("Resolved Qwen Cloud sec_token from \(resolved.source.rawValue)")
-        return (resolved.value, resolved.source.rawValue)
-    }
-
-    private static func fetchData(
-        session _: URLSession,
-        request: URLRequest,
-        cookieHeader _: String,
-        dashboardCookieHeader _: String,
-        transport: (any ProviderHTTPTransport)? = nil) async throws -> Data
-    {
-        let activeTransport: any ProviderHTTPTransport = transport ?? ProviderHTTPClient.shared
-        let (data, response) = try await activeTransport.data(for: request)
-
-        if let http = response as? HTTPURLResponse {
-            Self.log.info(
-                "Qwen Cloud HTTP response",
-                metadata: [
-                    "status": "\(http.statusCode)",
-                    "contentType": http.value(forHTTPHeaderField: "Content-Type") ?? "unknown",
-                    "bodyBytes": "\(data.count)",
-                ])
-            switch http.statusCode {
-            case 200:
-                break
-            case 401, 403:
-                throw QwenCloudUsageError.invalidCredentials
-            default:
-                throw QwenCloudUsageError.apiError("HTTP \(http.statusCode)")
-            }
-        }
-
-        return data
-    }
-
     private static func contentType(of data: Data) -> String? {
         let head = data.prefix(64)
         if head.contains(0x7B) || head.contains(0x5B) {
@@ -543,14 +220,10 @@ public struct QwenCloudUsageFetcher: Sendable {
         return nil
     }
 
-    static func cookieNames(from header: String) -> [String] {
-        CookieHeaderNormalizer.pairs(from: header)
-            .map(\.name)
-            .filter { !$0.isEmpty }
-            .uniquedSorted()
-    }
-
-    static func cookieNamesDescription(_ names: [String]) -> String {
-        names.isEmpty ? "none" : names.joined(separator: ",")
+    public static func parseUsageSnapshot(
+        from data: Data,
+        now: Date = Date()) throws -> QwenCloudUsageSnapshot
+    {
+        try QwenCloudUsageParser.parseUsageSnapshot(from: data, now: now)
     }
 }
