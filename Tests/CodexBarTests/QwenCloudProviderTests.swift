@@ -2,6 +2,14 @@ import Foundation
 import Testing
 @testable import CodexBarCore
 
+private func qwenCloudFixture(_ name: String) throws -> Data {
+    try Data(
+        contentsOf: #require(Bundle.module.url(
+            forResource: name,
+            withExtension: "json",
+            subdirectory: "Fixtures/QwenCloud")))
+}
+
 struct QwenCloudSettingsReaderTests {
     @Test
     func `cookie reads from environment`() {
@@ -156,31 +164,8 @@ struct QwenCloudUsageParsingTests {
     @Test
     func `parses nested equity list token plan payload`() throws {
         let now = Date(timeIntervalSince1970: 1_700_000_000)
-        let json = """
-        {
-          "code": "200",
-          "successResponse": true,
-          "data": {
-            "TotalCount": 1,
-            "Data": [
-              {
-                "InstanceCode": "qwen-token-plan",
-                "Status": "NORMAL",
-                "EndTime": 1701000000000,
-                "EquityList": [
-                  {
-                    "Type": "CREDITS",
-                    "CycleTotalValue": "1000",
-                    "CycleSurplusValue": "875"
-                  }
-                ]
-              }
-            ]
-          }
-        }
-        """
-
-        let snapshot = try QwenCloudUsageFetcher.parseUsageSnapshot(from: Data(json.utf8), now: now)
+        let data = try qwenCloudFixture("nested_equity_list")
+        let snapshot = try QwenCloudUsageFetcher.parseUsageSnapshot(from: data, now: now)
 
         #expect(snapshot.totalQuota == 1000)
         #expect(snapshot.remainingQuota == 875)
@@ -191,18 +176,8 @@ struct QwenCloudUsageParsingTests {
 
     @Test
     func `parses flat subscription summary payload`() throws {
-        let json = """
-        {
-          "Success": true,
-          "Data": {
-            "TotalCount": 1,
-            "TotalValue": 2000,
-            "TotalSurplusValue": 1500
-          }
-        }
-        """
-
-        let snapshot = try QwenCloudUsageFetcher.parseUsageSnapshot(from: Data(json.utf8))
+        let data = try qwenCloudFixture("flat_subscription_summary")
+        let snapshot = try QwenCloudUsageFetcher.parseUsageSnapshot(from: data)
 
         #expect(snapshot.totalQuota == 2000)
         #expect(snapshot.remainingQuota == 1500)
@@ -210,31 +185,18 @@ struct QwenCloudUsageParsingTests {
     }
 
     @Test
-    func `login payload maps to login required`() {
-        let json = """
-        {
-          "code": "ConsoleNeedLogin",
-          "message": "You need to log in.",
-          "successResponse": false
-        }
-        """
-
+    func `login payload maps to login required`() throws {
+        let data = try qwenCloudFixture("login_required")
         #expect(throws: QwenCloudUsageError.loginRequired) {
-            try QwenCloudUsageFetcher.parseUsageSnapshot(from: Data(json.utf8))
+            try QwenCloudUsageFetcher.parseUsageSnapshot(from: data)
         }
     }
 
     @Test
-    func `forbidden payload maps to invalid credentials`() {
-        let json = """
-        {
-          "statusCode": 403,
-          "message": "Forbidden"
-        }
-        """
-
+    func `forbidden payload maps to invalid credentials`() throws {
+        let data = try qwenCloudFixture("forbidden")
         #expect(throws: QwenCloudUsageError.invalidCredentials) {
-            try QwenCloudUsageFetcher.parseUsageSnapshot(from: Data(json.utf8))
+            try QwenCloudUsageFetcher.parseUsageSnapshot(from: data)
         }
     }
 
@@ -249,38 +211,11 @@ struct QwenCloudUsageParsingTests {
     /// with no active individual token-plan subscription. Captured live against
     /// `home.qwencloud.com` (requestId/Uid redacted) — the API returns HTTP 200
     /// with `TotalCount: 0` and zeroed quota fields rather than an error, so the
-    /// parser must not report a false subscription. Used as a regression fixture
-    /// for https://github.com/steipete/CodexBar/pull/2361.
+    /// parser must not report a false subscription. Fixture: `Fixtures/QwenCloud/no_active_subscription.json`.
     @Test
     func `authenticated account with no active subscription reports no quota`() throws {
-        let json = """
-        {
-          "requestId": "019F853A-19F8-375A-9E07-1DA4C0294D39",
-          "code": "200",
-          "message": null,
-          "action": null,
-          "apiName": null,
-          "data": {
-            "RequestId": "019F853A-19F8-375A-9E07-1DA4C0294D39",
-            "Message": "Successful!",
-            "Data": {
-              "Uid": 5243284495423183,
-              "TotalSurplusValue": "0",
-              "TotalCount": 0,
-              "TotalValue": "0",
-              "ProductCode": "sfm_tokenplansolo_public_intl"
-            },
-            "Code": "Success",
-            "Success": true
-          },
-          "httpStatusCode": "200",
-          "accessDeniedDetail": null,
-          "extendedCode": null,
-          "successResponse": true
-        }
-        """
-
-        let snapshot = try QwenCloudUsageFetcher.parseUsageSnapshot(from: Data(json.utf8))
+        let data = try qwenCloudFixture("no_active_subscription")
+        let snapshot = try QwenCloudUsageFetcher.parseUsageSnapshot(from: data)
 
         // No subscription instance and zero total → no quota window to display.
         #expect(snapshot.totalQuota == 0 || snapshot.totalQuota == nil)
