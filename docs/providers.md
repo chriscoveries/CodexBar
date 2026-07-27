@@ -226,6 +226,25 @@ scan fails, while provider/account configuration changes replace obsolete result
 - Status: `https://status.aliyun.com` (link only, no auto-polling).
 - Details: `docs/alibaba-token-plan.md`.
 
+### Aliyun OneConsole family
+
+Alibaba Coding Plan, Alibaba Token Plan, and Qwen Cloud all run on the Aliyun OneConsole
+backend and share the following plumbing under `Sources/CodexBarCore/Providers/Shared/AliyunOneConsole/`:
+
+- `AliyunOneConsoleCookieImporter` — browser cookie iteration, Chromium fallback, Keychain preflight.
+  Each provider declares its own cookie domains and "is this an authenticated session" predicate.
+- `OneConsoleCookieHeaders` / `OneConsoleCookieHeaderBuilder` — `apiCookieHeader` / `dashboardCookieHeader`
+  pair with cached-header round-trip; providers pass a unique cache namespace.
+- `OneConsoleJSON` — recursive expand-embedded-JSON traversal and scalar coercion (`number`, `int`,
+  `string`, `date`, `percentagePoints`).
+- `OneConsoleSECTokenResolver` — dashboard HTML → cookie → user-info chain, configured per provider.
+- `OneConsoleCookieRouting` — `ProviderHTTPCookieRouting` impl that keeps dashboard / API cookies
+  pinned across redirect chains.
+
+Future OneConsole-based providers (Tongyi, Bailian China, …) plug in by declaring the
+provider-specific pieces (cookie domains, API names, dashboard URL, plan labels) and reusing
+all of the above as-is.
+
 ## Qwen Cloud
 - Web mode posts to Qwen Cloud's current individual Token Plan usage, subscription, and quota-configuration
   APIs (`home.qwencloud.com`) with form-encoded params and a resolved `sec_token`.
