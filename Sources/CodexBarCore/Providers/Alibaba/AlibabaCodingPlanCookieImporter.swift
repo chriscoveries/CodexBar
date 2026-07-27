@@ -9,8 +9,15 @@ import SweetCookieKit
 private let alibabaCookieImportOrder: BrowserCookieImportOrder =
     ProviderDefaults.metadata[.alibaba]?.browserCookieOrder ?? Browser.defaultImportOrder
 
+/// Alibaba-specific entry point for the shared OneConsole cookie importer.
+///
+/// Cookie-domain list and session-authentication rules are Alibaba-specific; the
+/// underlying import loop, Chromium fallback, and Keychain preflight live in
+/// `AliyunOneConsoleCookieImporter` and are reused by Qwen Cloud and future
+/// OneConsole-based providers.
 public enum AlibabaCodingPlanCookieImporter {
-    private static let cookieClient = BrowserCookieClient()
+    public typealias SessionInfo = AliyunOneConsoleCookieImporter.SessionInfo
+
     private static let cookieDomains = [
         "bailian-singapore-cs.alibabacloud.com",
         "bailian-cs.console.aliyun.com",
@@ -26,42 +33,6 @@ public enum AlibabaCodingPlanCookieImporter {
         "alibabacloud.com",
         "aliyun.com",
     ]
-
-    public struct SessionInfo: Sendable {
-        public let cookies: [HTTPCookie]
-        public let sourceLabel: String
-
-        public init(cookies: [HTTPCookie], sourceLabel: String) {
-            self.cookies = cookies
-            self.sourceLabel = sourceLabel
-        }
-
-        public var cookieHeader: String {
-            var byName: [String: HTTPCookie] = [:]
-            byName.reserveCapacity(self.cookies.count)
-
-            for cookie in self.cookies {
-                if let expiry = cookie.expiresDate, expiry < Date() {
-                    continue
-                }
-                guard !cookie.value.isEmpty else { continue }
-                if let existing = byName[cookie.name] {
-                    let existingExpiry = existing.expiresDate ?? .distantPast
-                    let candidateExpiry = cookie.expiresDate ?? .distantPast
-                    if candidateExpiry >= existingExpiry {
-                        byName[cookie.name] = cookie
-                    }
-                } else {
-                    byName[cookie.name] = cookie
-                }
-            }
-
-            return byName.keys.sorted().compactMap { name in
-                guard let cookie = byName[name] else { return nil }
-                return "\(cookie.name)=\(cookie.value)"
-            }.joined(separator: "; ")
-        }
-    }
 
     #if DEBUG
     final class ImportSessionOverrideStore: @unchecked Sendable {
@@ -102,93 +73,17 @@ public enum AlibabaCodingPlanCookieImporter {
             return try override(browserDetection, logger)
         }
         #endif
-        return try self.importSession(
+        return try AliyunOneConsoleCookieImporter.importSession(
             browserDetection: browserDetection,
             domains: self.cookieDomains,
             isAuthenticatedSession: self.isAuthenticatedSession(cookies:),
             logPrefix: "alibaba-cookie",
             sessionLabel: "Alibaba",
+            importOrder: alibabaCookieImportOrder,
             logger: logger)
     }
 
-    /// Generic cookie import for Aliyun one-console based providers (Alibaba Bailian, Qwen Cloud, …).
-    /// The domain list and session-validation rules are provider specific; everything else is shared.
-    public static func importSession(
-        browserDetection: BrowserDetection,
-        domains: [String],
-        isAuthenticatedSession: @escaping ([HTTPCookie]) -> Bool,
-        logPrefix: String,
-        sessionLabel: String,
-        logger: ((String) -> Void)? = nil) throws -> SessionInfo
-    {
-        let log: (String) -> Void = { msg in logger?("[\(logPrefix)] \(msg)") }
-        var accessDeniedHints: [String] = []
-        var failureDetails: [String] = []
-        let installedBrowsers = self.cookieImportCandidates(browserDetection: browserDetection)
-        log("Cookie import candidates: \(installedBrowsers.map(\.displayName).joined(separator: ", "))")
-
-        for browserSource in installedBrowsers {
-            do {
-                log("Checking \(browserSource.displayName)")
-                let query = BrowserCookieQuery(domains: domains)
-                let sources = try Self.cookieClient.codexBarRecords(
-                    matching: query,
-                    in: browserSource,
-                    logger: log)
-                if sources.isEmpty {
-                    log("No matching cookie records in \(browserSource.displayName)")
-                    if let fallbackSession = try Self.importChromiumFallbackSession(
-                        browser: browserSource,
-                        domains: domains,
-                        isAuthenticatedSession: isAuthenticatedSession,
-                        sessionLabel: sessionLabel,
-                        logger: log)
-                    {
-                        return fallbackSession
-                    }
-                }
-                for source in sources where !source.records.isEmpty {
-                    let httpCookies = BrowserCookieClient.makeHTTPCookies(source.records, origin: query.origin)
-                    if isAuthenticatedSession(httpCookies) {
-                        log("Found \(httpCookies.count) \(sessionLabel) cookies in \(source.label)")
-                        return SessionInfo(cookies: httpCookies, sourceLabel: source.label)
-                    }
-                    let cookieNames = Set(httpCookies.map(\.name))
-                    let hasTicket = cookieNames.contains("login_aliyunid_ticket")
-                    let hasAccount =
-                        cookieNames.contains("login_aliyunid_pk") ||
-                        cookieNames.contains("login_current_pk") ||
-                        cookieNames.contains("login_aliyunid")
-                    log("Skipping \(source.label): missing auth cookies (ticket=\(hasTicket), account=\(hasAccount))")
-                }
-                if let fallbackSession = try Self.importChromiumFallbackSession(
-                    browser: browserSource,
-                    domains: domains,
-                    isAuthenticatedSession: isAuthenticatedSession,
-                    sessionLabel: sessionLabel,
-                    logger: log)
-                {
-                    return fallbackSession
-                }
-            } catch let error as BrowserCookieError {
-                BrowserCookieAccessGate.recordIfNeeded(error)
-                if let hint = error.accessDeniedHint {
-                    accessDeniedHints.append(hint)
-                }
-                failureDetails.append("\(browserSource.displayName): \(error.localizedDescription)")
-                log("\(browserSource.displayName) cookie import failed: \(error.localizedDescription)")
-            } catch {
-                failureDetails.append("\(browserSource.displayName): \(error.localizedDescription)")
-                log("\(browserSource.displayName) cookie import failed: \(error.localizedDescription)")
-            }
-        }
-
-        let details = (Array(Set(accessDeniedHints)).sorted() + Array(Set(failureDetails)).sorted())
-            .joined(separator: " ")
-        throw AlibabaCodingPlanSettingsError.missingCookie(details: details.isEmpty ? nil : details)
-    }
-
-    private static func isAuthenticatedSession(cookies: [HTTPCookie]) -> Bool {
+    static func isAuthenticatedSession(cookies: [HTTPCookie]) -> Bool {
         guard !cookies.isEmpty else { return false }
         let names = Set(cookies.map(\.name))
         let hasTicket = names.contains("login_aliyunid_ticket")
@@ -203,66 +98,31 @@ public enum AlibabaCodingPlanCookieImporter {
         browserDetection: BrowserDetection,
         logger: ((String) -> Void)? = nil) -> Bool
     {
-        do {
-            _ = try self.importSession(browserDetection: browserDetection, logger: logger)
-            return true
-        } catch {
-            return false
-        }
-    }
-
-    private static func importChromiumFallbackSession(
-        browser: Browser,
-        domains: [String],
-        isAuthenticatedSession: @escaping ([HTTPCookie]) -> Bool,
-        sessionLabel: String,
-        logger: ((String) -> Void)? = nil) throws -> SessionInfo?
-    {
-        guard browser.usesChromiumProfileStore else { return nil }
-        guard let fallbackSession = try AlibabaChromiumCookieFallbackImporter.importSession(
-            browser: browser,
-            domains: domains,
+        AliyunOneConsoleCookieImporter.hasSession(
+            browserDetection: browserDetection,
+            domains: self.cookieDomains,
+            isAuthenticatedSession: self.isAuthenticatedSession(cookies:),
+            logPrefix: "alibaba-cookie",
+            sessionLabel: "Alibaba",
+            importOrder: alibabaCookieImportOrder,
             logger: logger)
-        else {
-            return nil
-        }
-        guard isAuthenticatedSession(fallbackSession.cookies) else {
-            let cookieNames = Set(fallbackSession.cookies.map(\.name))
-            let hasTicket = cookieNames.contains("login_aliyunid_ticket")
-            let hasAccount =
-                cookieNames.contains("login_aliyunid_pk") ||
-                cookieNames.contains("login_current_pk") ||
-                cookieNames.contains("login_aliyunid")
-            logger?(
-                "Fallback cookies missing auth cookies (ticket=\(hasTicket), account=\(hasAccount)); ignoring" +
-                    " \(fallbackSession.sourceLabel)")
-            return nil
-        }
-        logger?(
-            "Using fallback import (\(fallbackSession.cookies.count) \(sessionLabel) cookies) from" +
-                " \(fallbackSession.sourceLabel)")
-        return fallbackSession
     }
 
     static func cookieImportCandidates(
         browserDetection: BrowserDetection,
         importOrder: BrowserCookieImportOrder = alibabaCookieImportOrder) -> [Browser]
     {
-        importOrder.cookieImportCandidates(using: browserDetection)
+        AliyunOneConsoleCookieImporter.cookieImportCandidates(
+            browserDetection: browserDetection,
+            importOrder: importOrder)
     }
 
     static func matchesCookieDomain(_ domain: String, patterns: [String] = Self.cookieDomains) -> Bool {
-        let normalized = self.normalizeCookieDomain(domain)
-        return patterns.contains { pattern in
-            let normalizedPattern = self.normalizeCookieDomain(pattern)
-            return normalized == normalizedPattern || normalized.hasSuffix(".\(normalizedPattern)")
-        }
+        AliyunOneConsoleCookieImporter.matchesCookieDomain(domain, patterns: patterns)
     }
 
     static func normalizeCookieDomain(_ domain: String) -> String {
-        let trimmed = domain.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalized = trimmed.hasPrefix(".") ? String(trimmed.dropFirst()) : trimmed
-        return normalized.lowercased()
+        AliyunOneConsoleCookieImporter.normalizeCookieDomain(domain)
     }
 }
 

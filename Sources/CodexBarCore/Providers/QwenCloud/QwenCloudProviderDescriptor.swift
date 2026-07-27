@@ -77,6 +77,18 @@ public enum QwenCloudProviderDescriptor {
 struct QwenCloudWebFetchStrategy: ProviderFetchStrategy {
     private static let log = CodexBarLog.logger("qwen-cloud")
 
+    #if os(macOS)
+    static let browserOrder: BrowserCookieImportOrder = [
+        .chrome,
+        .chromeBeta,
+        .brave,
+        .edge,
+        .arc,
+        .firefox,
+        .safari,
+    ]
+    #endif
+
     let id: String = "qwen-cloud.web"
     let kind: ProviderFetchKind = .web
 
@@ -193,7 +205,8 @@ struct QwenCloudWebFetchStrategy: ProviderFetchStrategy {
             var importLog: [String] = []
             let session = try QwenCloudCookieImport.importSession(
                 browserDetection: context.browserDetection,
-                logger: { importLog.append($0) })
+                logger: { importLog.append($0) },
+                importOrder: Self.browserOrder)
             let rawCookieNames = session.cookies.map(\.name).filter { !$0.isEmpty }.uniquedSorted()
             guard let headers = QwenCloudCookieHeader.headers(
                 from: session.cookies,

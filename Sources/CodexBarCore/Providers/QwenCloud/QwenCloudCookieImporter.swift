@@ -3,6 +3,7 @@ import Foundation
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
+import SweetCookieKit
 
 /// Qwen Cloud (home.qwencloud.com) shares the Aliyun one-console auth backend, so its
 /// session cookies live on `qwencloud.com` plus the alibabacloud/aliyun passport domains.
@@ -33,14 +34,17 @@ public enum QwenCloudCookieImport {
 
     public static func importSession(
         browserDetection: BrowserDetection,
-        logger: ((String) -> Void)? = nil) throws -> AlibabaCodingPlanCookieImporter.SessionInfo
+        logger: ((String) -> Void)? = nil,
+        importOrder: BrowserCookieImportOrder = Browser.defaultImportOrder)
+        throws -> AliyunOneConsoleCookieImporter.SessionInfo
     {
-        try AlibabaCodingPlanCookieImporter.importSession(
+        try AliyunOneConsoleCookieImporter.importSession(
             browserDetection: browserDetection,
             domains: self.cookieDomains,
             isAuthenticatedSession: self.isAuthenticatedSession(cookies:),
             logPrefix: "qwen-cloud-cookie",
             sessionLabel: "Qwen Cloud",
+            importOrder: importOrder,
             logger: logger)
     }
 
