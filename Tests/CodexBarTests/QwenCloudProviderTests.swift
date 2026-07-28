@@ -404,6 +404,78 @@ struct QwenCloudFetchTests {
     }
 
     @Test
+    func `dashboard timeout maps to network error when token fallbacks are empty`() async throws {
+        let transport = ProviderHTTPTransportHandler { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            if url.path == "/billing/subscription/token-plan-individual" {
+                throw URLError(.timedOut)
+            }
+            if url.path == "/tool/user/info.json" {
+                return Self.makeTransportResponse(url: url, body: "{}", statusCode: 200)
+            }
+            throw URLError(.unsupportedURL)
+        }
+
+        let error = await #expect(throws: QwenCloudUsageError.self) {
+            try await QwenCloudUsageFetcher.fetchUsage(
+                apiCookieHeader: "login_aliyunid_ticket=ticket",
+                dashboardCookieHeader: "login_aliyunid_ticket=ticket",
+                environment: [QwenCloudSettingsReader.hostKey: "https://qwen-cloud.test"],
+                transport: transport)
+        }
+        guard case .networkError = error else {
+            Issue.record("Expected networkError, got \(String(describing: error))")
+            return
+        }
+    }
+
+    @Test
+    func `dashboard server failure maps to network error when token fallbacks are empty`() async throws {
+        let transport = ProviderHTTPTransportHandler { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            if url.path == "/billing/subscription/token-plan-individual" {
+                return Self.makeTransportResponse(url: url, body: "Unavailable", statusCode: 503)
+            }
+            if url.path == "/tool/user/info.json" {
+                return Self.makeTransportResponse(url: url, body: "{}", statusCode: 200)
+            }
+            throw URLError(.unsupportedURL)
+        }
+
+        let error = await #expect(throws: QwenCloudUsageError.self) {
+            try await QwenCloudUsageFetcher.fetchUsage(
+                apiCookieHeader: "login_aliyunid_ticket=ticket",
+                dashboardCookieHeader: "login_aliyunid_ticket=ticket",
+                environment: [QwenCloudSettingsReader.hostKey: "https://qwen-cloud.test"],
+                transport: transport)
+        }
+        guard case .networkError = error else {
+            Issue.record("Expected networkError, got \(String(describing: error))")
+            return
+        }
+    }
+
+    @Test
+    func `dashboard failure still allows sec token cookie fallback`() async throws {
+        let dashboardURL = try #require(URL(string: "https://qwen-cloud.test/dashboard"))
+        let resolver = OneConsoleSECTokenResolver(configuration: .init(
+            dashboardURL: { _ in dashboardURL },
+            userInfoPath: "/tool/user/info.json",
+            isLoginPage: { _ in false }))
+        let transport = ProviderHTTPTransportHandler { _ in
+            throw URLError(.timedOut)
+        }
+
+        let resolved = try await resolver.resolve(
+            cookieHeader: "login_aliyunid_ticket=ticket; sec_token=cookie-token",
+            environment: [:],
+            transport: transport)
+
+        #expect(resolved.value == "cookie-token")
+        #expect(resolved.source == .cookie)
+    }
+
+    @Test
     func `user info resolver preserves sec token key priority`() async throws {
         let dashboardURL = try #require(URL(string: "https://qwen-cloud.test/dashboard"))
         let resolver = OneConsoleSECTokenResolver(configuration: .init(

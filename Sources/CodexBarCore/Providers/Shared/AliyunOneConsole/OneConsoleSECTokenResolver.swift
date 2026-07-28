@@ -61,12 +61,17 @@ public struct OneConsoleSECTokenResolver: Sendable {
 
         // 1. Try the dashboard HTML. The one-console injects sec_token as an
         // inline JS constant; it's the freshest source.
-        if let token = try? await self.fetchFromDashboard(
-            cookieHeader: cookieHeader,
-            dashboardURL: dashboardURL,
-            transport: transport)
-        {
+        var dashboardFailure: Error?
+        do {
+            let token = try await self.fetchFromDashboard(
+                cookieHeader: cookieHeader,
+                dashboardURL: dashboardURL,
+                transport: transport)
             return Resolved(value: token, source: .dashboardHTML)
+        } catch OneConsoleSECTokenError.notFound {
+            // Continue through the token fallbacks.
+        } catch {
+            dashboardFailure = error
         }
 
         // 2. Fall back to a sec_token cookie scoped to the console host.
@@ -75,12 +80,20 @@ public struct OneConsoleSECTokenResolver: Sendable {
         }
 
         // 3. Final fallback: the user-info JSON endpoint.
-        if let userInfoToken = try? await self.fetchFromUserInfo(
-            cookieHeader: cookieHeader,
-            dashboardURL: dashboardURL,
-            transport: transport)
-        {
+        do {
+            let userInfoToken = try await self.fetchFromUserInfo(
+                cookieHeader: cookieHeader,
+                dashboardURL: dashboardURL,
+                transport: transport)
             return Resolved(value: userInfoToken, source: .userInfo)
+        } catch OneConsoleSECTokenError.notFound {
+            // A retained dashboard failure is more accurate than missing credentials.
+        } catch {
+            throw error
+        }
+
+        if let dashboardFailure {
+            throw dashboardFailure
         }
 
         throw OneConsoleSECTokenError.notFound
@@ -100,7 +113,13 @@ public struct OneConsoleSECTokenResolver: Sendable {
         request.setValue(cookieHeader, forHTTPHeaderField: "Cookie")
 
         let (data, response) = try await transport.data(for: request)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+        guard let http = response as? HTTPURLResponse else {
+            throw URLError(.badServerResponse)
+        }
+        guard http.statusCode == 200 else {
+            if (500...599).contains(http.statusCode) {
+                throw URLError(.badServerResponse)
+            }
             throw OneConsoleSECTokenError.notFound
         }
         guard let html = String(data: data, encoding: .utf8) else {
