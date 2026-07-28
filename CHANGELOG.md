@@ -3,6 +3,9 @@
 ## 0.45.3 — Unreleased
 
 ### Fixed
+- LiteLLM/LLM Proxy: validate the configured base URL before sending the API key to it, matching the other provider
+  endpoint overrides. Non-loopback base URLs must now be HTTPS and must not embed credentials; plain HTTP still works
+  for loopback addresses.
 - Ollama: reuse validated browser sessions across refreshes, and skip inaccessible Safari cookies during automatic
   fallback while preserving explicit Safari permission guidance.
 

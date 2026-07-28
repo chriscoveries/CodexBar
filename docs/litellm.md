@@ -30,6 +30,11 @@ export LITELLM_BASE_URL=https://litellm.example.com
 
 `LITELLM_BASE_URL` may include `/v1`; CodexBar strips that suffix before calling LiteLLM management endpoints.
 
+The base URL must be HTTPS and must not embed credentials, because the API key is sent to it as a bearer
+token. Plain HTTP is accepted only for loopback addresses (`http://localhost:4000`, `http://127.0.0.1:4000`,
+`http://[::1]:4000`) so self-hosted proxies keep working. A base URL that does not meet these rules is
+ignored, and the provider reports a missing or invalid base URL.
+
 ## Data Source
 
 The provider calls:

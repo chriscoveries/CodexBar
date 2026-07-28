@@ -15,7 +15,9 @@ public enum LLMProxyUsageError: LocalizedError, Sendable {
         case .missingCredentials:
             "Missing LLM Proxy API key. Set apiKey in ~/.codexbar/config.json or LLM_PROXY_API_KEY."
         case .missingBaseURL:
-            "Missing LLM Proxy base URL. Set enterpriseHost in ~/.codexbar/config.json or LLM_PROXY_BASE_URL."
+            "Missing or invalid LLM Proxy base URL. Set enterpriseHost in ~/.codexbar/config.json or " +
+                "LLM_PROXY_BASE_URL to an HTTPS URL without embedded credentials (plain HTTP is " +
+                "accepted for loopback addresses only)."
         case .invalidURL:
             "LLM Proxy URL is invalid."
         case let .apiError(message):

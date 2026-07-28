@@ -14,7 +14,10 @@ public enum LiteLLMSettingsReader {
         environment: [String: String] = ProcessInfo.processInfo.environment) -> URL?
     {
         guard let raw = self.cleaned(environment[self.baseURLEnvironmentKey]) else { return nil }
-        return URL(string: raw)
+        // The API key is sent to this URL as a bearer token, so validate it like every other
+        // provider override. Loopback HTTP stays allowed for self-hosted proxies; any other
+        // host must use HTTPS and carry no embedded credentials.
+        return ProviderEndpointOverrideValidator().validatedURLAllowingLoopbackHTTP(raw)
     }
 
     static func cleaned(_ raw: String?) -> String? {

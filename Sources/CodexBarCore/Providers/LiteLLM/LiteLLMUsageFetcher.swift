@@ -16,7 +16,9 @@ public enum LiteLLMUsageError: LocalizedError, Sendable {
         case .missingCredentials:
             "Missing LiteLLM API key. Set apiKey in ~/.codexbar/config.json or LITELLM_API_KEY."
         case .missingBaseURL:
-            "Missing LiteLLM base URL. Set enterpriseHost in ~/.codexbar/config.json or LITELLM_BASE_URL."
+            "Missing or invalid LiteLLM base URL. Set enterpriseHost in ~/.codexbar/config.json or " +
+                "LITELLM_BASE_URL to an HTTPS URL without embedded credentials (plain HTTP is " +
+                "accepted for loopback addresses only)."
         case .missingUserID:
             "LiteLLM key info did not include a user_id or team_id."
         case .invalidURL:

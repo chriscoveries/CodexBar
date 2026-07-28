@@ -30,6 +30,11 @@ Set the base URL with `LLM_PROXY_BASE_URL`, or add `enterpriseHost` to the provi
 
 The base URL may point at either the service root or `/v1`; CodexBar normalizes both to `/v1/quota-stats`.
 
+The base URL must be HTTPS and must not embed credentials, because the API key is sent to it as a bearer
+token. Plain HTTP is accepted only for loopback addresses (`http://localhost:8080`, `http://127.0.0.1:8080`,
+`http://[::1]:8080`) so self-hosted proxies keep working. A base URL that does not meet these rules is
+ignored, and the provider reports a missing or invalid base URL.
+
 ## Menu display
 
 - Primary: lowest remaining quota group, rendered as percent used.

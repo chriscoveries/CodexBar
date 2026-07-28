@@ -125,6 +125,62 @@ struct ProviderEndpointOverrideSecurityLinuxTests {
         #expect(MiMoSettingsReader.apiURL(environment: [MiMoSettingsReader.apiURLKey: "mimo-proxy.test/api/v1"])
             .absoluteString == "https://mimo-proxy.test/api/v1")
     }
+
+    // MARK: - LiteLLM / LLM Proxy
+
+    // Both send their API key to the configured base URL as a bearer token, so the override has
+    // to clear the same validator every sibling provider uses.
+
+    @Test
+    func liteLLMRejectsRemoteHTTPBaseURLBeforeSendingKey() {
+        #expect(LiteLLMSettingsReader.baseURL(
+            environment: [LiteLLMSettingsReader.baseURLEnvironmentKey: "http://attacker.test"]) == nil)
+    }
+
+    @Test
+    func liteLLMRejectsBaseURLWithEmbeddedCredentials() {
+        #expect(LiteLLMSettingsReader.baseURL(
+            environment: [LiteLLMSettingsReader.baseURLEnvironmentKey: "https://user:pass@attacker.test"]) == nil)
+    }
+
+    @Test
+    func liteLLMAcceptsHTTPSAndLoopbackHTTPBaseURLs() {
+        // Self-hosted proxies on loopback keep working; remote hosts must be HTTPS.
+        #expect(LiteLLMSettingsReader.baseURL(
+            environment: [LiteLLMSettingsReader.baseURLEnvironmentKey: "https://litellm.example.com"])?
+            .absoluteString == "https://litellm.example.com")
+        #expect(LiteLLMSettingsReader.baseURL(
+            environment: [LiteLLMSettingsReader.baseURLEnvironmentKey: "http://127.0.0.1:4000"])?
+            .absoluteString == "http://127.0.0.1:4000")
+        #expect(LiteLLMSettingsReader.baseURL(
+            environment: [LiteLLMSettingsReader.baseURLEnvironmentKey: "http://localhost:4000"])?
+            .absoluteString == "http://localhost:4000")
+        #expect(LiteLLMSettingsReader.baseURL(
+            environment: [LiteLLMSettingsReader.baseURLEnvironmentKey: "http://[::1]:4000"])?
+            .absoluteString == "http://[::1]:4000")
+    }
+
+    @Test
+    func llmProxyRejectsRemoteHTTPBaseURLBeforeSendingKey() {
+        #expect(LLMProxySettingsReader.baseURL(
+            environment: [LLMProxySettingsReader.baseURLEnvironmentKey: "http://attacker.test"]) == nil)
+    }
+
+    @Test
+    func llmProxyRejectsBaseURLWithEmbeddedCredentials() {
+        #expect(LLMProxySettingsReader.baseURL(
+            environment: [LLMProxySettingsReader.baseURLEnvironmentKey: "https://user:pass@attacker.test"]) == nil)
+    }
+
+    @Test
+    func llmProxyAcceptsHTTPSAndLoopbackHTTPBaseURLs() {
+        #expect(LLMProxySettingsReader.baseURL(
+            environment: [LLMProxySettingsReader.baseURLEnvironmentKey: "https://proxy.example.com"])?
+            .absoluteString == "https://proxy.example.com")
+        #expect(LLMProxySettingsReader.baseURL(
+            environment: [LLMProxySettingsReader.baseURLEnvironmentKey: "http://127.0.0.1:8080"])?
+            .absoluteString == "http://127.0.0.1:8080")
+    }
 }
 
 private struct FailingTransport: ProviderHTTPTransport {
