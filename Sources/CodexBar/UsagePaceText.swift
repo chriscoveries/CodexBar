@@ -65,10 +65,10 @@ enum UsagePaceText {
     }
 
     private static func windowsUntilResetText(_ count: Int) -> String {
-        let combinedText = String.localizedStringWithFormat(
-            L("≈%d full 5h windows of weekly left · %d windows until reset"),
-            0,
-            count)
+        let combinedText = String(
+            format: L("≈%d full 5h windows of weekly left · %d windows until reset"),
+            locale: codexBarLocalizedResourceLocale(),
+            arguments: [0, count])
         guard let separatorRange = combinedText.range(of: " · ") else { return combinedText }
         return String(combinedText[separatorRange.upperBound...])
     }
@@ -155,12 +155,16 @@ enum UsagePaceText {
     }
 
     static func sessionPace(provider: UsageProvider, window: RateWindow, now: Date) -> UsagePace? {
-        guard provider == .codex || provider == .claude || provider == .ollama || provider == .antigravity
+        guard provider == .codex || provider == .claude || provider == .ollama || provider == .antigravity ||
+            provider == .kimi
         else { return nil }
         if provider == .ollama, window.windowMinutes == nil {
             return nil
         }
         if provider == .antigravity, let windowMinutes = window.windowMinutes, windowMinutes != 300 {
+            return nil
+        }
+        if provider == .kimi, window.windowMinutes != KimiProviderDescriptor.sessionWindowMinutes {
             return nil
         }
         guard window.remainingPercent > 0 else { return nil }
