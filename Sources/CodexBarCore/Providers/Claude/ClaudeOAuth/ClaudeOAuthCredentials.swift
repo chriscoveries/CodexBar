@@ -2424,6 +2424,9 @@ public enum ClaudeOAuthCredentialsStore {
         if KeychainTestSafety.shouldIsolateUserStateUnderTests() {
             return PendingCacheClearMemoryStore()
         }
+        if let store = self.taskImplicitPendingCacheClearStoreOverride {
+            return store
+        }
         #endif
         return self.pendingCodexBarOAuthKeychainCacheClearStore
     }

@@ -70,35 +70,36 @@ struct ClaudeOAuthCredentialsStoreTests {
     }
 
     @Test
-    func `safety isolates pending cache clear from the application suite`() {
+    func `safety isolates pending cache clear from the application suite`() throws {
         guard ProcessInfo.processInfo.environment[KeychainTestSafety.allowAccessEnvironmentKey] != "1" else {
             return
         }
 
-        let domain = "com.steipete.codexbar"
+        let domain = "ClaudeOAuthPendingCacheIsolationTests.\(UUID().uuidString)"
         let key = "ClaudeOAuthPendingCodexBarOAuthKeychainCacheClearV1"
-        guard let defaults = UserDefaults(suiteName: domain) else {
-            Issue.record("Expected UserDefaults suite \(domain)")
-            return
-        }
-        let previous = defaults.object(forKey: key)
+        let tempDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let defaults = try #require(UserDefaults(suiteName: domain))
         defer {
-            if let previous {
-                defaults.set(previous, forKey: key)
-            } else {
-                defaults.removeObject(forKey: key)
-            }
+            defaults.removePersistentDomain(forName: domain)
             defaults.synchronize()
+            try? FileManager.default.removeItem(at: tempDirectory)
             ClaudeOAuthCredentialsStore._resetCredentialsFileTrackingForTesting()
         }
 
         let sentinel = "isolation-sentinel-\(UUID().uuidString)"
         defaults.set(sentinel, forKey: key)
         defaults.synchronize()
+        let implicitStore = ClaudeOAuthPendingCacheClearUserDefaultsStore(
+            domain: domain,
+            key: key,
+            lockURL: tempDirectory.appendingPathComponent("cache.lock"))
 
         // never-mode cache invalidation marks pending clear without an explicit store override.
-        ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.never) {
-            ClaudeOAuthCredentialsStore.invalidateCache()
+        ClaudeOAuthCredentialsStore.withImplicitPendingCacheClearStoreOverrideForTesting(implicitStore) {
+            ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.never) {
+                ClaudeOAuthCredentialsStore.invalidateCache()
+            }
         }
 
         defaults.synchronize()

@@ -22,6 +22,7 @@ extension ClaudeOAuthCredentialsStore {
     @TaskLocal static var taskMemoryCacheStoreOverride: MemoryCacheStore?
     @TaskLocal static var taskClaudeKeychainFingerprintStoreOverride: ClaudeKeychainFingerprintStore?
     @TaskLocal static var taskPendingCacheClearStoreOverride: ClaudeOAuthPendingCacheClearStore?
+    @TaskLocal static var taskImplicitPendingCacheClearStoreOverride: ClaudeOAuthPendingCacheClearStore?
 
     typealias OAuthCacheOperation = KeychainCacheStore.Operation
     typealias OAuthCacheOperationRecorder = KeychainCacheStore.OperationRecorder
@@ -284,6 +285,15 @@ extension ClaudeOAuthCredentialsStore {
     {
         try await self.$taskPendingCacheClearStoreOverride.withValue(store) {
             try await operation()
+        }
+    }
+
+    static func withImplicitPendingCacheClearStoreOverrideForTesting<T>(
+        _ store: ClaudeOAuthPendingCacheClearStore?,
+        operation: () throws -> T) rethrows -> T
+    {
+        try self.$taskImplicitPendingCacheClearStoreOverride.withValue(store) {
+            try operation()
         }
     }
 

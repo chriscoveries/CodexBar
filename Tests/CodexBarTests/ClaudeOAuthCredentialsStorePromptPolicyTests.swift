@@ -11,33 +11,33 @@ struct ClaudeOAuthCredentialsStorePromptPolicyTests {
     }
 
     @Test
-    func `safety does not inherit the application prompt preference`() {
+    func `safety does not inherit the application prompt preference`() throws {
         guard ProcessInfo.processInfo.environment[KeychainTestSafety.allowAccessEnvironmentKey] != "1" else {
             return
         }
 
         #expect(ClaudeOAuthKeychainPromptPreference.currentTaskOverrideForTesting == nil)
 
+        let domain = "ClaudeOAuthPromptPolicyIsolationTests.\(UUID().uuidString)"
         let key = "claudeOAuthKeychainPromptMode"
-        let defaults = ClaudeOAuthKeychainPromptPreference.applicationUserDefaults
-        let previous = defaults.string(forKey: key)
-        defaults.set(ClaudeOAuthKeychainPromptMode.never.rawValue, forKey: key)
+        let defaults = try #require(UserDefaults(suiteName: domain))
         defer {
-            if let previous {
-                defaults.set(previous, forKey: key)
-            } else {
-                defaults.removeObject(forKey: key)
+            defaults.removePersistentDomain(forName: domain)
+            defaults.synchronize()
+        }
+        defaults.set(ClaudeOAuthKeychainPromptMode.never.rawValue, forKey: key)
+        defaults.synchronize()
+
+        ClaudeOAuthKeychainPromptPreference.withImplicitApplicationUserDefaultsOverrideForTesting(defaults) {
+            // Isolation must ignore a conflicting value in the implicit application defaults domain.
+            #expect(ClaudeOAuthKeychainPromptPreference.storedMode() == .onlyOnUserAction)
+            #expect(ClaudeOAuthKeychainPromptPreference.storedMode(userDefaults: defaults) == .never)
+
+            let explicit = ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.always) {
+                ClaudeOAuthKeychainPromptPreference.storedMode()
             }
+            #expect(explicit == .always)
         }
-
-        // Isolation must ignore a conflicting value in the real application defaults domain.
-        #expect(ClaudeOAuthKeychainPromptPreference.storedMode() == .onlyOnUserAction)
-        #expect(ClaudeOAuthKeychainPromptPreference.storedMode(userDefaults: defaults) == .never)
-
-        let explicit = ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.always) {
-            ClaudeOAuthKeychainPromptPreference.storedMode()
-        }
-        #expect(explicit == .always)
     }
 
     private func makeCredentialsData(accessToken: String, expiresAt: Date, refreshToken: String? = nil) -> Data {
