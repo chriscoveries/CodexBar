@@ -642,30 +642,28 @@ struct ClaudeCLIFetchStrategy: ProviderFetchStrategy {
     let hasWebFallback: Bool
 
     func isAvailable(_ context: ProviderFetchContext) async -> Bool {
-        // Claude's "auth status" command is a child process that may invoke /usr/bin/security itself. A no-prompt
-        // policy in CodexBar cannot constrain that child process, so background Auto refresh must not launch it
-        // unless the user explicitly opted into Keychain access for background work.
-        //
-        // Exception: Advanced → Disable Keychain access already opts out of CodexBar Keychain use. OAuth/web
-        // cold-boot paths are empty without Keychain, so CLI (reading ~/.claude config files) must remain
-        // available on startup — matching Manual Refresh and the README promise.
         let isBackgroundAutoRefresh = context.runtime == .app
             && context.sourceMode == .auto
             && ProviderInteractionContext.current == .background
-        // Use explicit disable (user/env/override), not the DEBUG test-process Keychain block.
-        let keychainDisabled = KeychainAccessGate.isExplicitlyDisabled
-        if isBackgroundAutoRefresh, !keychainDisabled {
-            guard ClaudeOAuthKeychainPromptPreference.storedMode() == .always else {
+        if isBackgroundAutoRefresh {
+            // Every Claude child process is opaque to CodexBar's no-UI Keychain controls, including
+            // `claude auth status`. Background Auto therefore reuses only availability established by a
+            // successful user-initiated CLI fetch in this process; it never probes the CLI itself.
+            guard let binary = ClaudeCLIResolver.resolvedBinaryPath(environment: context.env),
+                  ClaudeCLIBackgroundAvailability.isEstablished(binary: binary)
+            else {
                 return false
             }
+            // Disable Keychain is a complete opt-out, so no prompt policy applies. With Keychain enabled,
+            // retain the explicit background opt-in introduced with the opaque-child safety gate.
+            return KeychainAccessGate.isExplicitlyDisabled
+                || ClaudeOAuthKeychainPromptPreference.storedMode() == .always
         }
 
-        // The interactive Claude REPL can open browser OAuth when it starts logged out. CLI runtime and every
-        // background Auto path establish authentication through the noninteractive status command first. This
-        // remains required with Keychain disabled: only a confirmed logged-in state may launch the background REPL.
-        let requiresAuthPreflight = context.runtime == .cli
-            || isBackgroundAutoRefresh
-        guard requiresAuthPreflight else { return true }
+        // The interactive Claude REPL can open browser OAuth when it starts logged out. CLI-runtime paths
+        // establish authentication through the noninteractive status command first. App user
+        // actions intentionally launch the interactive path directly so the user can complete authentication.
+        guard context.runtime == .cli else { return true }
         guard let binary = ClaudeCLIResolver.resolvedBinaryPath(environment: context.env) else { return false }
         return await ClaudeCLIAuthStatusProbe.isLoggedIn(binary: binary, environment: context.env)
     }
@@ -680,7 +678,22 @@ struct ClaudeCLIFetchStrategy: ProviderFetchStrategy {
             manualCookieHeader: self.manualCookieHeader,
             webOrganizationID: context.settings?.claude?.organizationID,
             keepCLISessionsAlive: keepAlive)
-        let usage = try await fetcher.loadLatestUsage(model: "sonnet")
+        let binary = ClaudeCLIResolver.resolvedBinaryPath(environment: context.env)
+        let usage: ClaudeUsageSnapshot
+        do {
+            usage = try await fetcher.loadLatestUsage(model: "sonnet")
+        } catch {
+            if let binary {
+                ClaudeCLIBackgroundAvailability.revoke(binary: binary)
+            }
+            throw error
+        }
+        if context.runtime == .app,
+           ProviderInteractionContext.current == .userInitiated,
+           let binary
+        {
+            ClaudeCLIBackgroundAvailability.establish(binary: binary)
+        }
         return self.makeResult(
             usage: ClaudeOAuthFetchStrategy.snapshot(from: usage),
             sourceLabel: "claude")
@@ -694,4 +707,52 @@ struct ClaudeCLIFetchStrategy: ProviderFetchStrategy {
         // Reuse the bounded planning result instead of repeating browser/Keychain work after CLI failure.
         return self.hasWebFallback
     }
+}
+
+enum ClaudeCLIBackgroundAvailability {
+    final class Store: @unchecked Sendable {
+        private let lock = NSLock()
+        private var establishedBinaries: Set<String> = []
+
+        func contains(_ binary: String) -> Bool {
+            self.lock.withLock { self.establishedBinaries.contains(binary) }
+        }
+
+        func insert(_ binary: String) {
+            self.lock.withLock { _ = self.establishedBinaries.insert(binary) }
+        }
+
+        func remove(_ binary: String) {
+            self.lock.withLock { _ = self.establishedBinaries.remove(binary) }
+        }
+    }
+
+    private static let sharedStore = Store()
+    @TaskLocal private static var storeOverrideForTesting: Store?
+
+    private static var store: Store {
+        self.storeOverrideForTesting ?? self.sharedStore
+    }
+
+    static func isEstablished(binary: String) -> Bool {
+        self.store.contains(binary)
+    }
+
+    static func establish(binary: String) {
+        self.store.insert(binary)
+    }
+
+    static func revoke(binary: String) {
+        self.store.remove(binary)
+    }
+
+    #if DEBUG
+    static func withIsolatedStoreForTesting<T>(
+        operation: () async throws -> T) async rethrows -> T
+    {
+        try await self.$storeOverrideForTesting.withValue(Store()) {
+            try await operation()
+        }
+    }
+    #endif
 }
