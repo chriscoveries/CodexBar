@@ -248,4 +248,88 @@ struct CLIConfigCommandTests {
         #expect(unredactedProvider?.cookieHeader == "cb_test_cookie_abc")
         #expect(unredactedProvider?.tokenAccounts?.accounts.first?.token == "cb_test_token_123")
     }
+
+    @Test
+    func `config dump command redacts fixture secrets unless explicitly requested`() throws {
+        let fixtureDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codexbar-config-dump-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: fixtureDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: fixtureDirectory) }
+
+        let secrets = [
+            "fixture-api-key-value",
+            "fixture-secret-key-value",
+            "fixture-cookie-value",
+            "fixture-token-account-value",
+        ]
+        let account = ProviderTokenAccount(
+            id: UUID(),
+            label: "Fixture account",
+            token: secrets[3],
+            addedAt: 1000,
+            lastUsed: nil,
+            usageScope: "team",
+            organizationID: "fixture-org",
+            workspaceID: "fixture-workspace")
+        let config = CodexBarConfig(providers: [ProviderConfig(
+            id: .zai,
+            enabled: true,
+            apiKey: secrets[0],
+            secretKey: secrets[1],
+            cookieHeader: secrets[2],
+            tokenAccounts: ProviderTokenAccountData(version: 1, accounts: [account], activeIndex: 0))])
+        let configURL = fixtureDirectory.appendingPathComponent("config.json")
+        try CodexBarConfigStore(fileURL: configURL).save(config)
+
+        let redactedData = try Self.runConfigDump(configURL: configURL, showSecrets: false)
+        let redactedJSON = try JSONSerialization.jsonObject(with: redactedData)
+        let redactedOutput = try #require(String(data: redactedData, encoding: .utf8))
+        #expect(redactedJSON is [String: Any])
+        #expect(redactedOutput.contains("[REDACTED]"))
+        for secret in secrets {
+            #expect(!redactedOutput.contains(secret))
+        }
+
+        let rawData = try Self.runConfigDump(configURL: configURL, showSecrets: true)
+        let rawJSON = try JSONSerialization.jsonObject(with: rawData)
+        let rawOutput = try #require(String(data: rawData, encoding: .utf8))
+        #expect(rawJSON is [String: Any])
+        for secret in secrets {
+            #expect(rawOutput.contains(secret))
+        }
+    }
+
+    private static func runConfigDump(configURL: URL, showSecrets: Bool) throws -> Data {
+        let process = Process()
+        process.executableURL = Self.cliExecutableURL
+        process.arguments = ["config", "dump"] + (showSecrets ? ["--show-secrets"] : [])
+        process.environment = ProcessInfo.processInfo.environment.merging([
+            CodexBarConfigStore.pathEnvironmentKey: configURL.path,
+        ]) { _, fixturePath in fixturePath }
+
+        let stdout = Pipe()
+        let stderr = Pipe()
+        process.standardOutput = stdout
+        process.standardError = stderr
+        try process.run()
+        process.waitUntilExit()
+
+        let output = stdout.fileHandleForReading.readDataToEndOfFile()
+        let errorOutput = stderr.fileHandleForReading.readDataToEndOfFile()
+        guard process.terminationStatus == 0 else {
+            let message = String(data: errorOutput, encoding: .utf8) ?? "CodexBarCLI exited without an error message"
+            throw NSError(domain: "CLIConfigCommandTests", code: Int(process.terminationStatus), userInfo: [
+                NSLocalizedDescriptionKey: message,
+            ])
+        }
+        return output
+    }
+
+    private static var cliExecutableURL: URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent(".build/debug/CodexBarCLI")
+    }
 }
