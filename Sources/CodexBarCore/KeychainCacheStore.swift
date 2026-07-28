@@ -100,7 +100,7 @@ public enum KeychainCacheStore {
         {
             return testResult
         }
-        if self.shouldUseDisabledAccessMemoryStore {
+        if self.shouldUseDisabledAccessMemoryStore(for: key.category) {
             return self.loadFromDisabledAccessMemory(key: key, as: type)
         }
         guard self.canUseRealKeychain else { return .missing }
@@ -156,7 +156,7 @@ public enum KeychainCacheStore {
         {
             return stored
         }
-        if self.shouldUseDisabledAccessMemoryStore {
+        if self.shouldUseDisabledAccessMemoryStore(for: key.category) {
             return self.storeInDisabledAccessMemory(key: key, entry: entry)
         }
         guard self.canUseRealKeychain else { return false }
@@ -222,7 +222,7 @@ public enum KeychainCacheStore {
         {
             return removed ? .removed : .missing
         }
-        if self.shouldUseDisabledAccessMemoryStore {
+        if self.shouldUseDisabledAccessMemoryStore(for: key.category) {
             return self.clearDisabledAccessMemory(key: key) ? .removed : .missing
         }
         guard self.canUseRealKeychain else { return .failed }
@@ -259,7 +259,7 @@ public enum KeychainCacheStore {
         {
             return .found(keys)
         }
-        if self.shouldUseDisabledAccessMemoryStore {
+        if self.shouldUseDisabledAccessMemoryStore(for: category) {
             return .found(self.keysFromDisabledAccessMemory(category: category))
         }
         guard self.canUseRealKeychain else { return .failed }
@@ -435,7 +435,8 @@ public enum KeychainCacheStore {
     /// When the user disables Keychain access, keep an in-process cache so cookie/session
     /// reconciliation can still succeed without treating every refresh as a session change.
     /// Unit tests keep using the isolated test stores instead, unless a test explicitly opts in.
-    private static var shouldUseDisabledAccessMemoryStore: Bool {
+    private static func shouldUseDisabledAccessMemoryStore(for category: String) -> Bool {
+        guard category == "cookie" else { return false }
         #if DEBUG
         if self.disabledAccessMemoryStoreEnabledForTesting == true {
             return true

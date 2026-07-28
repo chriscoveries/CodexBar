@@ -253,6 +253,29 @@ struct KeychainCacheStoreTests {
     }
 
     @Test
+    func `disabled keychain access does not retain OAuth entries in memory`() {
+        KeychainCacheStore.resetDisabledAccessMemoryStoreForTesting()
+        defer {
+            KeychainCacheStore.resetDisabledAccessMemoryStoreForTesting()
+            KeychainAccessGate.resetOverrideForTesting()
+        }
+
+        let service = "disabled-memory-oauth-\(UUID().uuidString)"
+        let key = KeychainCacheStore.Key.oauth(provider: .claude)
+        let entry = TestEntry(value: "synthetic-oauth-credential", storedAt: Date(timeIntervalSince1970: 4))
+
+        KeychainAccessGate.withTaskOverrideForTesting(true) {
+            KeychainCacheStore.withDisabledAccessMemoryStoreForTesting(true) {
+                KeychainCacheStore.withServiceOverrideForTesting(service) {
+                    #expect(!KeychainCacheStore.storeResult(key: key, entry: entry))
+                    #expect(self.loadedEntry(for: key) == nil)
+                    #expect(KeychainCacheStore.keysResult(category: "oauth") == .failed)
+                }
+            }
+        }
+    }
+
+    @Test
     func `toggling Keychain access clears the disabled access memory cache`() {
         KeychainCacheStore.resetDisabledAccessMemoryStoreForTesting()
         defer {

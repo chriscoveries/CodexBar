@@ -660,12 +660,11 @@ struct ClaudeCLIFetchStrategy: ProviderFetchStrategy {
             }
         }
 
-        // The interactive Claude REPL can open browser OAuth when it starts logged out. CLI runtime and the
-        // explicitly opted-in background Auto path establish authentication through the status command first.
-        // Skip that opaque probe when Keychain is disabled so boot does not launch `claude auth status`
-        // just to touch Keychain — same availability shape as user-initiated refresh.
+        // The interactive Claude REPL can open browser OAuth when it starts logged out. CLI runtime and every
+        // background Auto path establish authentication through the noninteractive status command first. This
+        // remains required with Keychain disabled: only a confirmed logged-in state may launch the background REPL.
         let requiresAuthPreflight = context.runtime == .cli
-            || (isBackgroundAutoRefresh && !keychainDisabled)
+            || isBackgroundAutoRefresh
         guard requiresAuthPreflight else { return true }
         guard let binary = ClaudeCLIResolver.resolvedBinaryPath(environment: context.env) else { return false }
         return await ClaudeCLIAuthStatusProbe.isLoggedIn(binary: binary, environment: context.env)

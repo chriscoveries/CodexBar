@@ -4,7 +4,7 @@ import Testing
 
 struct ClaudeCLIBackgroundAvailabilityTests {
     @Test
-    func `background Auto CLI remains available when Keychain access is disabled`() async {
+    func `background Auto CLI is unavailable when Keychain access is disabled and login probe fails`() async {
         let strategy = self.makeStrategy()
         let context = self.makeContext()
 
@@ -12,8 +12,25 @@ struct ClaudeCLIBackgroundAvailabilityTests {
             await ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.never) {
                 await ClaudeCLIResolver.withResolvedBinaryPathOverrideForTesting("/bin/echo") {
                     await ProviderInteractionContext.$current.withValue(.background) {
-                        // Auth-status would fail if probed; disabled-Keychain boot must not depend on it.
                         await ClaudeCLIAuthStatusProbe.withResultOverrideForTesting(false) {
+                            #expect(await !strategy.isAvailable(context))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    func `background Auto CLI is available when Keychain access is disabled and login probe succeeds`() async {
+        let strategy = self.makeStrategy()
+        let context = self.makeContext()
+
+        await KeychainAccessGate.withTaskOverrideForTesting(true) {
+            await ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.never) {
+                await ClaudeCLIResolver.withResolvedBinaryPathOverrideForTesting("/bin/echo") {
+                    await ProviderInteractionContext.$current.withValue(.background) {
+                        await ClaudeCLIAuthStatusProbe.withResultOverrideForTesting(true) {
                             #expect(await strategy.isAvailable(context))
                         }
                     }

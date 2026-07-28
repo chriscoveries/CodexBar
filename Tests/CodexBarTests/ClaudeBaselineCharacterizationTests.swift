@@ -258,7 +258,7 @@ struct ClaudeBaselineCharacterizationTests {
     }
 
     @Test
-    func `app background auto allows Claude CLI when Keychain access is disabled`() async throws {
+    func `app background auto does not launch logged out Claude CLI when Keychain access is disabled`() async throws {
         let settings = ProviderSettingsSnapshot.make(claude: .init(
             usageDataSource: .auto,
             webExtrasEnabled: false,
@@ -281,9 +281,9 @@ struct ClaudeBaselineCharacterizationTests {
             }
         }
 
-        #expect(cliAvailable)
-        // Disabled-Keychain background Auto skips auth-status preflight (same as user-initiated).
-        #expect(!FileManager.default.fileExists(atPath: invocationLog.path))
+        #expect(!cliAvailable)
+        let invocations = try String(contentsOf: invocationLog, encoding: .utf8)
+        #expect(invocations == "auth status --json\n")
     }
 
     @Test(arguments: ["nonzero", "timeout", "malformed"])
