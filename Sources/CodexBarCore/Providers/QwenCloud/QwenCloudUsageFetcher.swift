@@ -162,6 +162,8 @@ public struct QwenCloudUsageFetcher: Sendable {
                 transport: activeTransport)
         } catch OneConsoleSECTokenError.notFound {
             throw QwenCloudUsageError.loginRequired
+        } catch {
+            throw QwenCloudUsageError.networkError(error.localizedDescription)
         }
         Self.log.info("Resolved Qwen Cloud sec_token from \(resolved.source.rawValue)")
 
