@@ -70,15 +70,7 @@ struct QwenCloudWebFetchStrategy: ProviderFetchStrategy {
     private static let log = CodexBarLog.logger("qwen-cloud")
 
     #if os(macOS)
-    static let browserOrder: BrowserCookieImportOrder = [
-        .chrome,
-        .chromeBeta,
-        .brave,
-        .edge,
-        .arc,
-        .firefox,
-        .safari,
-    ]
+    static let browserOrder: BrowserCookieImportOrder = [.chrome]
     #endif
 
     let id: String = "qwen-cloud.web"

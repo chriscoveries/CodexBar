@@ -104,6 +104,7 @@ struct QwenCloudUsageSnapshotTests {
         #expect(metadata.weeklyLabel == "Weekly")
         #if os(macOS)
         #expect(metadata.browserCookieOrder == [.chrome])
+        #expect(QwenCloudWebFetchStrategy.browserOrder == [.chrome])
         #else
         #expect(metadata.browserCookieOrder == nil)
         #endif
