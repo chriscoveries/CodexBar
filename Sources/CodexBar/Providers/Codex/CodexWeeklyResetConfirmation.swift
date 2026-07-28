@@ -14,6 +14,7 @@ struct CodexWeeklyResetConfirmation: Sendable {
     }
 
     private static let resetEquivalenceToleranceSeconds: TimeInterval = 2 * 60
+    private static let resetDueToleranceSeconds: TimeInterval = 2 * 60
     private static let resetThreshold = 1.0
 
     static func initialDecision(
@@ -143,7 +144,8 @@ struct CodexWeeklyResetConfirmation: Sendable {
                previousWeekly,
                capturedAt: previous.updatedAt)
         {
-            guard initialBoundary.timeIntervalSince(previousBoundary) >= Self.resetEquivalenceToleranceSeconds,
+            guard confirmation.updatedAt.timeIntervalSince(previousBoundary) >= -Self.resetDueToleranceSeconds,
+                  initialBoundary.timeIntervalSince(previousBoundary) >= Self.resetEquivalenceToleranceSeconds,
                   confirmationBoundary.timeIntervalSince(previousBoundary) >= Self.resetEquivalenceToleranceSeconds
             else {
                 return .preservePrevious

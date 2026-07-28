@@ -98,17 +98,17 @@ struct CodexWeeklyResetConfirmationTests {
     func `semantic weekly lookup handles swapped snapshot lanes`() {
         let nextReset = self.resetAt.addingTimeInterval(7 * 24 * 60 * 60)
         let previous = self.snapshot(
-            offset: 0,
+            capturedAt: self.resetAt.addingTimeInterval(-60),
             weeklyUsed: 50,
             weeklyReset: self.resetAt,
             weeklyInPrimary: true)
         let initial = self.snapshot(
-            offset: 1,
+            capturedAt: self.resetAt.addingTimeInterval(1),
             weeklyUsed: 0,
             weeklyReset: nextReset,
             weeklyInPrimary: true)
         let confirmation = self.snapshot(
-            offset: 2,
+            capturedAt: self.resetAt.addingTimeInterval(2),
             weeklyUsed: 0.5,
             weeklyReset: nextReset.addingTimeInterval(60),
             weeklyInPrimary: true)
@@ -218,10 +218,16 @@ struct CodexWeeklyResetConfirmationTests {
     @Test
     func `two low observations publish only for an advanced equivalent boundary`() {
         let nextReset = self.resetAt.addingTimeInterval(7 * 24 * 60 * 60)
-        let previous = self.snapshot(offset: 0, weeklyUsed: 50, weeklyReset: self.resetAt)
-        let initial = self.snapshot(offset: 1, weeklyUsed: 0, weeklyReset: nextReset)
+        let previous = self.snapshot(
+            capturedAt: self.resetAt.addingTimeInterval(-60),
+            weeklyUsed: 50,
+            weeklyReset: self.resetAt)
+        let initial = self.snapshot(
+            capturedAt: self.resetAt.addingTimeInterval(1),
+            weeklyUsed: 0,
+            weeklyReset: nextReset)
         let confirmation = self.snapshot(
-            offset: 2,
+            capturedAt: self.resetAt.addingTimeInterval(2),
             weeklyUsed: 0.5,
             weeklyReset: nextReset.addingTimeInterval(119))
 
@@ -231,6 +237,37 @@ struct CodexWeeklyResetConfirmationTests {
                 initial: initial,
                 confirmation: confirmation)
                 == .publishConfirmation)
+    }
+
+    @Test
+    func `matching rolling boundary before prior reset preserves the previous snapshot`() throws {
+        let formatter = ISO8601DateFormatter()
+        let previousCapturedAt = try #require(formatter.date(from: "2026-07-28T03:09:20Z"))
+        let previousReset = try #require(formatter.date(from: "2026-08-02T10:17:56Z"))
+        let initialCapturedAt = try #require(formatter.date(from: "2026-07-28T03:59:23Z"))
+        let initialReset = try #require(formatter.date(from: "2026-08-04T03:59:21Z"))
+        let previous = self.snapshot(
+            capturedAt: previousCapturedAt,
+            weeklyUsed: 100,
+            weeklyReset: previousReset)
+        let initial = self.snapshot(
+            capturedAt: initialCapturedAt,
+            weeklyUsed: 0,
+            weeklyReset: initialReset)
+        let confirmation = self.snapshot(
+            capturedAt: initialCapturedAt.addingTimeInterval(30),
+            weeklyUsed: 0,
+            weeklyReset: initialReset.addingTimeInterval(30))
+
+        #expect(
+            CodexWeeklyResetConfirmation.initialDecision(previous: previous, initial: initial)
+                == .requiresConfirmation)
+        #expect(
+            CodexWeeklyResetConfirmation.confirmationDecision(
+                previous: previous,
+                initial: initial,
+                confirmation: confirmation)
+                == .preservePrevious)
     }
 
     @Test
