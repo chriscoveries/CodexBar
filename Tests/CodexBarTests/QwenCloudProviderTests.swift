@@ -102,6 +102,11 @@ struct QwenCloudUsageSnapshotTests {
 
         #expect(metadata.sessionLabel == "5-hour")
         #expect(metadata.weeklyLabel == "Weekly")
+        #if os(macOS)
+        #expect(metadata.browserCookieOrder == [.chrome])
+        #else
+        #expect(metadata.browserCookieOrder == nil)
+        #endif
     }
 
     @Test

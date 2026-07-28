@@ -7,7 +7,7 @@
       {
         "InstanceCode": "qwen-token-plan",
         "Status": "NORMAL",
-        "EndTime": 1701000000000,
+        "EndTime": 1.701e12,
         "EquityList": [
           {
             "Type": "CREDITS",

@@ -8,7 +8,7 @@
     "RequestId": "00000000-0000-4000-8000-000000000001",
     "Message": "Successful!",
     "Data": {
-      "Uid": 4242424242424242,
+      "Uid": 7,
       "TotalSurplusValue": "0",
       "TotalCount": 0,
       "TotalValue": "0",

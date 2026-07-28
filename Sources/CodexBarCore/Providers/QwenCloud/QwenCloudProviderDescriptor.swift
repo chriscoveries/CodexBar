@@ -9,15 +9,7 @@ public enum QwenCloudProviderDescriptor {
 
     static func makeDescriptor() -> ProviderDescriptor {
         #if os(macOS)
-        let browserOrder: BrowserCookieImportOrder = [
-            .chrome,
-            .chromeBeta,
-            .brave,
-            .edge,
-            .arc,
-            .firefox,
-            .safari,
-        ]
+        let browserOrder: BrowserCookieImportOrder = [.chrome]
         #else
         let browserOrder: BrowserCookieImportOrder? = nil
         #endif

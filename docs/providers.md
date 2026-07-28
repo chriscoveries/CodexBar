@@ -247,10 +247,10 @@ Future OneConsole-based providers can adopt the helpers that match their actual 
 provider-specific cookie validation, endpoints, login detection, and error translation at the provider boundary.
 
 ## Qwen Cloud
-- Web mode posts to Qwen Cloud's current individual Token Plan usage, subscription, and quota-configuration
-  APIs (`home.qwencloud.com`) with form-encoded params and a resolved `sec_token`.
+- Web mode resolves `sec_token` through the dashboard (`home.qwencloud.com`), then posts to the current
+  individual Token Plan usage, subscription, and quota-configuration APIs on `cs-data.qwencloud.com`.
 - Displays 5-hour and weekly consumed percentages, reset times, active tier, and tier-specific credit limits.
-- Cookie sources: browser import (`auto`), manual Cookie header, or `QWEN_CLOUD_COOKIE`.
+- Cookie sources: Chrome import (`auto`), manual Cookie header, or `QWEN_CLOUD_COOKIE`.
 - Default data gateway:
   `https://cs-data.qwencloud.com/data/api.json?action=IntlBroadScopeAspnGateway&product=sfm_bailian`.
 - Host overrides: `QWEN_CLOUD_HOST` or `QWEN_CLOUD_QUOTA_URL` (HTTPS URLs or bare hosts normalized to HTTPS).
