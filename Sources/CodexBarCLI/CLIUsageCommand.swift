@@ -759,6 +759,14 @@ extension CodexBarCLI {
             // Linux Auto/legacy-cli can use FACTORY_API_KEY without browser cookies.
             return false
         }
+        if provider == .minimax,
+           sourceMode == .auto,
+           environment.map({ MiniMaxAPISettingsReader.apiToken(environment: $0) != nil }) == true
+        {
+            // The MiniMax API fetch is plain HTTPS + Bearer auth; only its web/cookie path
+            // needs macOS, so a configured API key works off macOS too.
+            return false
+        }
         if provider == .mimo,
            sourceMode == .auto,
            let environment,
