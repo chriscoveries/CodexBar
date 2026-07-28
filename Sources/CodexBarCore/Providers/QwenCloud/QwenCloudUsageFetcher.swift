@@ -110,18 +110,13 @@ public struct QwenCloudUsageFetcher: Sendable {
         configuration: OneConsoleSECTokenResolver.Configuration(
             dashboardURL: { QwenCloudUsageFetcher.dashboardURL(environment: $0) },
             userInfoPath: "/tool/user/info.json",
-            loginPageSniffers: [
-                "passport.alibabacloud.com",
-                "signin.aliyun.com",
-                "account.alibabacloud.com/login",
-                "login.qwencloud.com",
-            ]))
+            isLoginPage: QwenCloudUsageFetcher.looksLikeLoginPage))
 
     public static func fetchUsage(
         apiCookieHeader rawCookieHeader: String,
         environment: [String: String] = ProcessInfo.processInfo.environment,
         now: Date = Date(),
-        transport: any ProviderHTTPTransport = ProviderHTTPClient.shared) async throws -> QwenCloudUsageSnapshot
+        transport: (any ProviderHTTPTransport)? = nil) async throws -> QwenCloudUsageSnapshot
     {
         try await self.fetchUsage(
             apiCookieHeader: rawCookieHeader,
@@ -136,32 +131,46 @@ public struct QwenCloudUsageFetcher: Sendable {
         dashboardCookieHeader: String,
         environment: [String: String] = ProcessInfo.processInfo.environment,
         now: Date = Date(),
-        transport: any ProviderHTTPTransport = ProviderHTTPClient.shared) async throws -> QwenCloudUsageSnapshot
+        transport: (any ProviderHTTPTransport)? = nil) async throws -> QwenCloudUsageSnapshot
     {
         let normalizedAPI = CookieHeaderNormalizer.normalize(apiCookieHeader)
         let normalizedDashboard = CookieHeaderNormalizer.normalize(dashboardCookieHeader) ?? normalizedAPI
         guard let cookieHeader = normalizedAPI, !cookieHeader.isEmpty else {
             throw QwenCloudSettingsError.invalidCookie
         }
+        let dashboardHeader = normalizedDashboard ?? cookieHeader
 
         let usageURL = self.resolveQuotaURL(environment: environment)
         guard let host = usageURL.host else {
             throw QwenCloudUsageError.networkError("Invalid quota URL")
         }
-        let resolved = try await self.secTokenResolver.resolve(
-            cookieHeader: normalizedDashboard ?? cookieHeader,
-            environment: environment,
-            transport: transport)
+        let dashboardURL = self.dashboardURL(environment: environment)
+        guard dashboardURL.host != nil else {
+            throw QwenCloudUsageError.networkError("Invalid dashboard URL")
+        }
+        let activeTransport: any ProviderHTTPTransport = transport ?? QwenCloudHTTPTransport(
+            routing: OneConsoleCookieRouting(
+                apiURL: usageURL,
+                dashboardURL: dashboardURL,
+                apiCookieHeader: cookieHeader,
+                dashboardCookieHeader: dashboardHeader))
+        let resolved: OneConsoleSECTokenResolver.Resolved
+        do {
+            resolved = try await self.secTokenResolver.resolve(
+                cookieHeader: dashboardHeader,
+                environment: environment,
+                transport: activeTransport)
+        } catch OneConsoleSECTokenError.notFound {
+            throw QwenCloudUsageError.loginRequired
+        }
         Self.log.info("Resolved Qwen Cloud sec_token from \(resolved.source.rawValue)")
 
-        let dashboardURL = self.dashboardURL(environment: environment)
-        let client = QwenCloudTokenPlanAPIClient(transport: transport)
+        let client = QwenCloudTokenPlanAPIClient(transport: activeTransport)
         let context = QwenCloudTokenPlanAPIClient.Context(
             secToken: resolved.value,
             secTokenSource: resolved.source.rawValue,
             environment: environment,
             apiCookieHeader: cookieHeader,
-            dashboardCookieHeader: normalizedDashboard ?? cookieHeader,
             dashboardURL: dashboardURL)
 
         let usageData: Data
@@ -218,6 +227,15 @@ public struct QwenCloudUsageFetcher: Sendable {
             return "text/html"
         }
         return nil
+    }
+
+    private static func looksLikeLoginPage(_ html: String) -> Bool {
+        let lowered = html.lowercased()
+        return lowered.contains("passport.alibabacloud.com") ||
+            lowered.contains("signin.aliyun.com") ||
+            lowered.contains("account.alibabacloud.com/login") ||
+            lowered.contains("login.qwencloud.com") ||
+            (lowered.contains("login") && lowered.contains("password") && lowered.contains("sign in"))
     }
 
     public static func parseUsageSnapshot(

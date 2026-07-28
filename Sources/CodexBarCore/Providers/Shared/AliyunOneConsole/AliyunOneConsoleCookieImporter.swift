@@ -1,5 +1,17 @@
 import Foundation
 
+public struct AliyunOneConsoleCookieImportError: LocalizedError, Sendable {
+    public let details: String?
+
+    public init(details: String? = nil) {
+        self.details = details
+    }
+
+    public var errorDescription: String? {
+        self.details
+    }
+}
+
 #if os(macOS)
 import SweetCookieKit
 
@@ -7,8 +19,8 @@ import SweetCookieKit
 ///
 /// Each provider (Alibaba Coding Plan, Alibaba Token Plan, Qwen Cloud, ...) declares
 /// its own cookie domains and "is this an authenticated session" predicate. Everything
-/// else -- the per-browser iteration, Chromium fallback, Keychain preflight, error
-/// translation -- is shared here.
+/// else -- the per-browser iteration, Chromium fallback, Keychain preflight, and
+/// diagnostic collection -- is shared here.
 public enum AliyunOneConsoleCookieImporter {
     private static let cookieClient = BrowserCookieClient()
 
@@ -122,7 +134,7 @@ public enum AliyunOneConsoleCookieImporter {
 
         let details = (Array(Set(accessDeniedHints)).sorted() + Array(Set(failureDetails)).sorted())
             .joined(separator: " ")
-        throw AlibabaCodingPlanSettingsError.missingCookie(details: details.isEmpty ? nil : details)
+        throw AliyunOneConsoleCookieImportError(details: details.isEmpty ? nil : details)
     }
 
     public static func hasSession(
@@ -157,9 +169,11 @@ public enum AliyunOneConsoleCookieImporter {
         logger: ((String) -> Void)? = nil) throws -> SessionInfo?
     {
         guard browser.usesChromiumProfileStore else { return nil }
-        guard let fallbackSession = try AlibabaChromiumCookieFallbackImporter.importSession(
+        guard let fallbackSession = try AliyunOneConsoleChromiumCookieFallbackImporter.importSession(
             browser: browser,
             domains: domains,
+            isAuthenticatedSession: isAuthenticatedSession,
+            sessionLabel: sessionLabel,
             logger: logger)
         else {
             return nil

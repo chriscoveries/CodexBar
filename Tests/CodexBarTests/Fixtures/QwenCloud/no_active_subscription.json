@@ -1,14 +1,14 @@
 {
-  "requestId": "019F853A-19F8-375A-9E07-1DA4C0294D39",
+  "requestId": "00000000-0000-4000-8000-000000000001",
   "code": "200",
   "message": null,
   "action": null,
   "apiName": null,
   "data": {
-    "RequestId": "019F853A-19F8-375A-9E07-1DA4C0294D39",
+    "RequestId": "00000000-0000-4000-8000-000000000001",
     "Message": "Successful!",
     "Data": {
-      "Uid": 5243284495423183,
+      "Uid": 4242424242424242,
       "TotalSurplusValue": "0",
       "TotalCount": 0,
       "TotalValue": "0",

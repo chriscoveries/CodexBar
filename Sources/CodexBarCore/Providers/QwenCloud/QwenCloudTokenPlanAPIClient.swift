@@ -18,7 +18,6 @@ struct QwenCloudTokenPlanAPIClient: Sendable {
         let secTokenSource: String
         let environment: [String: String]
         let apiCookieHeader: String
-        let dashboardCookieHeader: String
         let dashboardURL: URL
     }
 

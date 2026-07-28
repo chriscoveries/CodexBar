@@ -368,34 +368,191 @@ struct QwenCloudFetchTests {
     }
 
     @Test
-    func `redirect cookie routing pins cookies on dashboard GETs`() throws {
-        let apiURL = try #require(URL(string: "https://home.qwencloud.com/data/api.json"))
+    func `login page csrf token maps to login required before API requests`() async throws {
+        let transport = ProviderHTTPTransportHandler { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            if url.path == "/billing/subscription/token-plan-individual" {
+                return Self.makeTransportResponse(
+                    url: url,
+                    body: """
+                    <html>
+                      <a href="https://signin.aliyun.com/login">Sign in</a>
+                      <script>csrfToken = "login-page-csrf";</script>
+                    </html>
+                    """,
+                    statusCode: 200)
+            }
+            if url.path == "/tool/user/info.json" {
+                return Self.makeTransportResponse(url: url, body: "{}", statusCode: 200)
+            }
+            throw URLError(.unsupportedURL)
+        }
+
+        await #expect(throws: QwenCloudUsageError.loginRequired) {
+            try await QwenCloudUsageFetcher.fetchUsage(
+                apiCookieHeader: "login_aliyunid_ticket=expired",
+                dashboardCookieHeader: "login_aliyunid_ticket=expired",
+                environment: [QwenCloudSettingsReader.hostKey: "https://qwen-cloud.test"],
+                transport: transport)
+        }
+    }
+
+    @Test
+    func `user info resolver preserves sec token key priority`() async throws {
+        let dashboardURL = try #require(URL(string: "https://qwen-cloud.test/dashboard"))
+        let resolver = OneConsoleSECTokenResolver(configuration: .init(
+            dashboardURL: { _ in dashboardURL },
+            userInfoPath: "/tool/user/info.json",
+            isLoginPage: { _ in false }))
+        let transport = ProviderHTTPTransportHandler { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            if url.path == "/dashboard" {
+                return Self.makeTransportResponse(url: url, body: "<html></html>", statusCode: 200)
+            }
+            if url.path == "/tool/user/info.json" {
+                return Self.makeTransportResponse(
+                    url: url,
+                    body: """
+                    {
+                      "token": "generic-token",
+                      "data": {
+                        "secToken": "",
+                        "nested": { "secToken": "preferred-sec-token" }
+                      }
+                    }
+                    """,
+                    statusCode: 200)
+            }
+            throw URLError(.unsupportedURL)
+        }
+
+        let resolved = try await resolver.resolve(
+            cookieHeader: "login_aliyunid_ticket=ticket",
+            environment: [:],
+            transport: transport)
+
+        #expect(resolved.value == "preferred-sec-token")
+        #expect(resolved.source == .userInfo)
+    }
+
+    @Test
+    func `redirect routing strips cross origin credentials and blocks preserved bodies`() throws {
+        let apiURL = try #require(URL(string: "https://cs-data.qwencloud.com/data/api.json"))
         let dashboardRedirect = try #require(URL(string: "https://home.qwencloud.com/redirected"))
         let crossHostURL = try #require(URL(string: "https://signin.aliyun.com/login"))
-
+        let insecureURL = try #require(URL(string: "http://home.qwencloud.com/login"))
+        let untrustedPortURL = try #require(URL(string: "https://home.qwencloud.com:8443/login"))
+        let redirectResponse = try #require(HTTPURLResponse(
+            url: apiURL,
+            statusCode: 302,
+            httpVersion: "HTTP/1.1",
+            headerFields: ["Location": dashboardRedirect.absoluteString]))
         let routing = OneConsoleCookieRouting(
-            apiHost: apiURL.host ?? "",
-            apiPath: apiURL.path,
+            apiURL: apiURL,
+            dashboardURL: dashboardRedirect,
             apiCookieHeader: "api_cookie=value",
             dashboardCookieHeader: "dashboard_cookie=value")
 
-        // API POST → cross-host redirect loses cookies.
         var apiRequest = URLRequest(url: apiURL)
+        apiRequest.httpMethod = "POST"
         apiRequest.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        var crossHostRedirect = URLRequest(url: crossHostURL)
-        crossHostRedirect.setValue("old=value", forHTTPHeaderField: "Cookie")
-        let routedCrossHost = routing.cookieHeader(forRedirectFrom: apiRequest, to: crossHostRedirect)
-        #expect(routedCrossHost == nil || routedCrossHost == "api_cookie=value")
+        apiRequest.setValue("api_cookie=value", forHTTPHeaderField: "Cookie")
+        apiRequest.setValue("Bearer secret", forHTTPHeaderField: "Authorization")
+        apiRequest.setValue("Basic proxy-secret", forHTTPHeaderField: "Proxy-Authorization")
+        apiRequest.setValue("api-key-secret", forHTTPHeaderField: "x-api-key")
+        apiRequest.setValue("csrf-secret", forHTTPHeaderField: "x-csrf-token")
+        apiRequest.setValue("xsrf-secret", forHTTPHeaderField: "x-xsrf-token")
+        apiRequest.httpBody = Data("sec_token=secret".utf8)
 
-        // Dashboard GET → same-host redirect keeps dashboard cookies.
-        var dashboardRequest = URLRequest(url: apiURL)
-        dashboardRequest.setValue("text/html,application/xhtml+xml", forHTTPHeaderField: "Accept")
+        var crossHostRedirect = URLRequest(url: crossHostURL)
+        crossHostRedirect.httpMethod = "GET"
+        crossHostRedirect.setValue("old=value", forHTTPHeaderField: "Cookie")
+        crossHostRedirect.setValue("Bearer secret", forHTTPHeaderField: "Authorization")
+        crossHostRedirect.setValue("Basic proxy-secret", forHTTPHeaderField: "Proxy-Authorization")
+        crossHostRedirect.setValue("api-key-secret", forHTTPHeaderField: "x-api-key")
+        crossHostRedirect.setValue("csrf-secret", forHTTPHeaderField: "x-csrf-token")
+        crossHostRedirect.setValue("xsrf-secret", forHTTPHeaderField: "x-xsrf-token")
+        let routedCrossHost = try #require(routing.redirectedRequest(
+            forRedirectFrom: apiRequest,
+            response: redirectResponse,
+            to: crossHostRedirect))
+        #expect(routedCrossHost.value(forHTTPHeaderField: "Cookie") == nil)
+        #expect(routedCrossHost.value(forHTTPHeaderField: "Authorization") == nil)
+        #expect(routedCrossHost.value(forHTTPHeaderField: "Proxy-Authorization") == nil)
+        #expect(routedCrossHost.value(forHTTPHeaderField: "x-api-key") == nil)
+        #expect(routedCrossHost.value(forHTTPHeaderField: "x-csrf-token") == nil)
+        #expect(routedCrossHost.value(forHTTPHeaderField: "x-xsrf-token") == nil)
+        #expect(routedCrossHost.httpBody == nil)
+
         var sameHostRedirect = URLRequest(url: dashboardRedirect)
+        sameHostRedirect.httpMethod = "GET"
         sameHostRedirect.setValue("old=value", forHTTPHeaderField: "Cookie")
-        let routedDashboard = routing.cookieHeader(
-            forRedirectFrom: dashboardRequest,
-            to: sameHostRedirect)
-        #expect(routedDashboard == "dashboard_cookie=value")
+        sameHostRedirect.setValue("csrf-secret", forHTTPHeaderField: "x-csrf-token")
+        let routedDashboard = try #require(routing.redirectedRequest(
+            forRedirectFrom: apiRequest,
+            response: redirectResponse,
+            to: sameHostRedirect))
+        #expect(routedDashboard.value(forHTTPHeaderField: "Cookie") == "dashboard_cookie=value")
+        #expect(routedDashboard.value(forHTTPHeaderField: "x-csrf-token") == nil)
+        #expect(routedDashboard.httpBody == nil)
+
+        for statusCode in [307, 308] {
+            let preservedRedirectResponse = try #require(HTTPURLResponse(
+                url: apiURL,
+                statusCode: statusCode,
+                httpVersion: "HTTP/1.1",
+                headerFields: ["Location": crossHostURL.absoluteString]))
+
+            var apiRedirect = URLRequest(url: apiURL)
+            apiRedirect.httpMethod = "POST"
+            apiRedirect.httpBody = Data("sec_token=secret".utf8)
+            let routedAPI = try #require(routing.redirectedRequest(
+                forRedirectFrom: apiRequest,
+                response: preservedRedirectResponse,
+                to: apiRedirect))
+            #expect(routedAPI.value(forHTTPHeaderField: "Cookie") == "api_cookie=value")
+            #expect(routedAPI.httpBody == Data("sec_token=secret".utf8))
+
+            var externalPreservedPOST = URLRequest(url: crossHostURL)
+            externalPreservedPOST.httpMethod = "POST"
+            externalPreservedPOST.httpBody = Data("sec_token=secret".utf8)
+            #expect(routing.redirectedRequest(
+                forRedirectFrom: apiRequest,
+                response: preservedRedirectResponse,
+                to: externalPreservedPOST) == nil)
+
+            var dashboardPreservedPOST = URLRequest(url: dashboardRedirect)
+            dashboardPreservedPOST.httpMethod = "POST"
+            dashboardPreservedPOST.httpBody = Data("sec_token=secret".utf8)
+            #expect(routing.redirectedRequest(
+                forRedirectFrom: apiRequest,
+                response: preservedRedirectResponse,
+                to: dashboardPreservedPOST) == nil)
+        }
+
+        var untrustedPortRedirect = URLRequest(url: untrustedPortURL)
+        untrustedPortRedirect.setValue("old=value", forHTTPHeaderField: "Cookie")
+        let routedUntrustedPort = try #require(routing.redirectedRequest(
+            forRedirectFrom: apiRequest,
+            response: redirectResponse,
+            to: untrustedPortRedirect))
+        #expect(routedUntrustedPort.value(forHTTPHeaderField: "Cookie") == nil)
+
+        let insecureRedirect = URLRequest(url: insecureURL)
+        #expect(routing.redirectedRequest(
+            forRedirectFrom: apiRequest,
+            response: redirectResponse,
+            to: insecureRedirect) == nil)
+
+        let notModified = try #require(HTTPURLResponse(
+            url: apiURL,
+            statusCode: 304,
+            httpVersion: "HTTP/1.1",
+            headerFields: nil))
+        #expect(routing.redirectedRequest(
+            forRedirectFrom: apiRequest,
+            response: notModified,
+            to: crossHostRedirect) == nil)
     }
 
     private static func makeResponse(url: URL, body: String, statusCode: Int) -> (HTTPURLResponse, Data) {
@@ -405,6 +562,15 @@ struct QwenCloudFetchTests {
             httpVersion: "HTTP/1.1",
             headerFields: ["Content-Type": "application/json"])!
         return (response, Data(body.utf8))
+    }
+
+    private static func makeTransportResponse(
+        url: URL,
+        body: String,
+        statusCode: Int) -> (Data, URLResponse)
+    {
+        let (response, data) = self.makeResponse(url: url, body: body, statusCode: statusCode)
+        return (data, response)
     }
 
     private static func requestBodyString(from request: URLRequest) -> String {

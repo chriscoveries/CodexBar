@@ -229,28 +229,30 @@ scan fails, while provider/account configuration changes replace obsolete result
 ### Aliyun OneConsole family
 
 Alibaba Coding Plan, Alibaba Token Plan, and Qwen Cloud all run on the Aliyun OneConsole
-backend and share the following plumbing under `Sources/CodexBarCore/Providers/Shared/AliyunOneConsole/`:
+backend. They selectively reuse plumbing under
+`Sources/CodexBarCore/Providers/Shared/AliyunOneConsole/`:
 
 - `AliyunOneConsoleCookieImporter` — browser cookie iteration, Chromium fallback, Keychain preflight.
-  Each provider declares its own cookie domains and "is this an authenticated session" predicate.
+  The Alibaba providers and Qwen Cloud supply their own cookie domains and authenticated-session predicate.
 - `OneConsoleCookieHeaders` / `OneConsoleCookieHeaderBuilder` — `apiCookieHeader` / `dashboardCookieHeader`
-  pair with cached-header round-trip; providers pass a unique cache namespace.
+  pair with cached-header round-trip, currently used by Alibaba Token Plan and Qwen Cloud.
 - `OneConsoleJSON` — recursive expand-embedded-JSON traversal and scalar coercion (`number`, `int`,
-  `string`, `date`, `percentagePoints`).
-- `OneConsoleSECTokenResolver` — dashboard HTML → cookie → user-info chain, configured per provider.
-- `OneConsoleCookieRouting` — `ProviderHTTPCookieRouting` impl that keeps dashboard / API cookies
-  pinned across redirect chains.
+  `string`, `date`, `percentagePoints`), used by all three providers.
+- `OneConsoleSECTokenResolver` — dashboard HTML → cookie → user-info chain, currently used by Qwen Cloud.
+- `OneConsoleCookieRouting` — Qwen Cloud's provider-local redirect policy. It pins dashboard/API cookies
+  to their matching trusted origin, strips credentials from cross-origin GET/HEAD navigation, and blocks
+  cross-origin redirects that preserve a request body.
 
-Future OneConsole-based providers (Tongyi, Bailian China, …) plug in by declaring the
-provider-specific pieces (cookie domains, API names, dashboard URL, plan labels) and reusing
-all of the above as-is.
+Future OneConsole-based providers can adopt the helpers that match their actual protocol while keeping
+provider-specific cookie validation, endpoints, login detection, and error translation at the provider boundary.
 
 ## Qwen Cloud
 - Web mode posts to Qwen Cloud's current individual Token Plan usage, subscription, and quota-configuration
   APIs (`home.qwencloud.com`) with form-encoded params and a resolved `sec_token`.
 - Displays 5-hour and weekly consumed percentages, reset times, active tier, and tier-specific credit limits.
 - Cookie sources: browser import (`auto`), manual Cookie header, or `QWEN_CLOUD_COOKIE`.
-- Default gateway: `https://home.qwencloud.com/data/api.json?action=IntlBroadScopeAspnGateway&product=sfm_bailian`.
+- Default data gateway:
+  `https://cs-data.qwencloud.com/data/api.json?action=IntlBroadScopeAspnGateway&product=sfm_bailian`.
 - Host overrides: `QWEN_CLOUD_HOST` or `QWEN_CLOUD_QUOTA_URL` (HTTPS URLs or bare hosts normalized to HTTPS).
 - Status: `https://status.alibabacloud.com` (link only, no auto-polling).
 - Details: `docs/qwen-cloud.md`.

@@ -14,22 +14,23 @@ public struct OneConsoleSECTokenResolver: Sendable {
         public let dashboardURL: @Sendable ([String: String]) -> URL
         /// Path under the dashboard host to the user-info JSON endpoint (typically "tool/user/info.json").
         public let userInfoPath: String
-        /// Strings that, when all present in a dashboard response body, prove the
-        /// session is a login redirect rather than an authenticated dashboard.
-        public let loginPageSniffers: [String]
+        /// Provider-specific login-page detector. OneConsole providers use
+        /// different passport hosts and login markup, so the provider owns this
+        /// classification instead of flattening alternatives into shared rules.
+        public let isLoginPage: @Sendable (String) -> Bool
         /// Additional regex patterns the provider wants to try beyond the
-        /// built-in set (secToken, sec_token, csrfToken, token).
+        /// built-in set (secToken, sec_token, csrfToken).
         public let extraHTMLPatterns: [String]
 
         public init(
             dashboardURL: @escaping @Sendable ([String: String]) -> URL,
             userInfoPath: String,
-            loginPageSniffers: [String],
+            isLoginPage: @escaping @Sendable (String) -> Bool,
             extraHTMLPatterns: [String] = [])
         {
             self.dashboardURL = dashboardURL
             self.userInfoPath = userInfoPath
-            self.loginPageSniffers = loginPageSniffers
+            self.isLoginPage = isLoginPage
             self.extraHTMLPatterns = extraHTMLPatterns
         }
     }
@@ -105,19 +106,13 @@ public struct OneConsoleSECTokenResolver: Sendable {
         guard let html = String(data: data, encoding: .utf8) else {
             throw OneConsoleSECTokenError.notFound
         }
-        if Self.looksLikeLoginPage(html, sniffers: self.configuration.loginPageSniffers) {
+        if self.configuration.isLoginPage(html) {
             throw OneConsoleSECTokenError.notFound
         }
         if let token = Self.extractToken(from: html, extraPatterns: self.configuration.extraHTMLPatterns) {
             return token
         }
         throw OneConsoleSECTokenError.notFound
-    }
-
-    private static func looksLikeLoginPage(_ html: String, sniffers: [String]) -> Bool {
-        guard !sniffers.isEmpty else { return false }
-        let lowered = html.lowercased()
-        return sniffers.allSatisfy { lowered.contains($0.lowercased()) }
     }
 
     private static func extractToken(from html: String, extraPatterns: [String]) -> String? {

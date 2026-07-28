@@ -78,23 +78,80 @@ public enum OneConsoleJSON {
 
     /// Returns the first string value associated with any of `keys` in `value`.
     public static func findFirstString(forKeys keys: [String], in value: Any) -> String? {
-        if let raw = self.findFirstValue(forKeys: keys, in: value) {
-            return self.string(raw)
+        for key in keys {
+            if let found = self.findFirstConvertedValue(
+                forKey: key,
+                in: value,
+                transform: self.string)
+            {
+                return found
+            }
         }
         return nil
     }
 
     /// Returns the first integer value associated with any of `keys` in `value`.
     public static func findFirstInt(forKeys keys: [String], in value: Any) -> Int? {
-        if let raw = self.findFirstValue(forKeys: keys, in: value) {
-            return self.int(raw)
+        for key in keys {
+            if let found = self.findFirstConvertedValue(
+                forKey: key,
+                in: value,
+                transform: self.int)
+            {
+                return found
+            }
         }
         return nil
     }
 
     /// Returns the first array value associated with any of `keys` in `value`.
     public static func findFirstArray(forKeys keys: [String], in value: Any) -> [Any]? {
-        self.findFirstValue(forKeys: keys, in: value) as? [Any]
+        for key in keys {
+            if let found = self.findFirstConvertedValue(
+                forKey: key,
+                in: value,
+                transform: { $0 as? [Any] })
+            {
+                return found
+            }
+        }
+        return nil
+    }
+
+    /// Searches one key at a time so caller priority is preserved across the full tree.
+    /// Invalid values do not mask a later valid value for the same key.
+    private static func findFirstConvertedValue<T>(
+        forKey expectedKey: String,
+        in value: Any,
+        transform: (Any?) -> T?) -> T?
+    {
+        if let dictionary = value as? [String: Any] {
+            for (key, nested) in dictionary where key.caseInsensitiveCompare(expectedKey) == .orderedSame {
+                if let converted = transform(nested) {
+                    return converted
+                }
+            }
+            for nested in dictionary.values {
+                if let found = self.findFirstConvertedValue(
+                    forKey: expectedKey,
+                    in: nested,
+                    transform: transform)
+                {
+                    return found
+                }
+            }
+        } else if let array = value as? [Any] {
+            for nested in array {
+                if let found = self.findFirstConvertedValue(
+                    forKey: expectedKey,
+                    in: nested,
+                    transform: transform)
+                {
+                    return found
+                }
+            }
+        }
+        return nil
     }
 
     /// Coerces `value` to Double. Accepts NSNumber, Int, Double, and numeric

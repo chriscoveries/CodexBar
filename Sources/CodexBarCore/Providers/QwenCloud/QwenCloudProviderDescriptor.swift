@@ -248,6 +248,9 @@ struct QwenCloudWebFetchStrategy: ProviderFetchStrategy {
     }
 
     private static func missingCookieDetails(from error: Error) -> String? {
+        if let error = error as? AliyunOneConsoleCookieImportError {
+            return error.details
+        }
         if case let AlibabaCodingPlanSettingsError.missingCookie(details) = error {
             return details
         }
