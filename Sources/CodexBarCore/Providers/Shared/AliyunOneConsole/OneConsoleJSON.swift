@@ -197,11 +197,11 @@ public enum OneConsoleJSON {
     }
 
     /// Coerces `value` to a Date. Accepts:
-    ///   - Numeric epoch in seconds or milliseconds (auto-detected via magnitude)
+    ///   - Positive numeric epoch in seconds or milliseconds (auto-detected via magnitude)
     ///   - ISO 8601 strings
-    ///   - "yyyy-MM-dd HH:mm" and "yyyy-MM-dd HH:mm:ss" strings
+    ///   - "yyyy-MM-dd", "yyyy-MM-dd HH:mm", and "yyyy-MM-dd HH:mm:ss" strings
     public static func date(_ value: Any?) -> Date? {
-        if let number = self.number(value), number >= 0 {
+        if let number = self.number(value), number > 0 {
             let seconds = number >= 1_000_000_000_000 ? number / 1000 : number
             return Date(timeIntervalSince1970: seconds)
         }
@@ -212,7 +212,7 @@ public enum OneConsoleJSON {
         }
         let dateFormatter = DateFormatter()
         dateFormatter.locale = Locale(identifier: "en_US_POSIX")
-        for format in ["yyyy-MM-dd HH:mm", "yyyy-MM-dd HH:mm:ss"] {
+        for format in ["yyyy-MM-dd", "yyyy-MM-dd HH:mm", "yyyy-MM-dd HH:mm:ss"] {
             dateFormatter.dateFormat = format
             if let date = dateFormatter.date(from: string) {
                 return date

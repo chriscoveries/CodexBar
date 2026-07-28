@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import CodexBarCore
 
@@ -45,5 +46,20 @@ struct OneConsoleJSONTests {
             in: value) as? [Int]
 
         #expect(result == [2, 3])
+    }
+
+    @Test
+    func `date only string round trips`() throws {
+        let date = try #require(OneConsoleJSON.date("2026-07-28"))
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+
+        #expect(formatter.string(from: date) == "2026-07-28")
+    }
+
+    @Test
+    func `numeric zero date is treated as missing`() {
+        #expect(OneConsoleJSON.date(0) == nil)
     }
 }
