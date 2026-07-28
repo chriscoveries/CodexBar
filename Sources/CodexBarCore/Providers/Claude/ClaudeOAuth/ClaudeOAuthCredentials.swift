@@ -413,7 +413,6 @@ public enum ClaudeOAuthCredentialsStore {
                     respectKeychainPromptCooldown: respectKeychainPromptCooldown,
                     allowCacheKeychainWrite: !cacheTemporarilyUnavailable,
                     environment: environment,
-                    profileIdentifier: profileIdentifier,
                     lastError: &lastError)
                 {
                     return prompted
@@ -460,10 +459,11 @@ public enum ClaudeOAuthCredentialsStore {
             respectKeychainPromptCooldown: Bool,
             allowCacheKeychainWrite: Bool,
             environment: [String: String],
-            profileIdentifier: String,
             lastError: inout Error?) -> ClaudeOAuthCredentialRecord?
         {
             guard allowKeychainPrompt else { return nil }
+            let profileIdentifier = ClaudeOAuthCredentialsStore.credentialsProfileIdentifier(
+                environment: environment)
             let promptGeneration = ClaudeOAuthKeychainAccessGate.promptAttemptGeneration()
             let refreshRequestID = ProviderRefreshRequestContext.id
             #if DEBUG
