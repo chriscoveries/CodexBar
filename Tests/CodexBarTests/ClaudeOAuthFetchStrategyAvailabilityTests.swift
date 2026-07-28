@@ -137,6 +137,58 @@ struct ClaudeOAuthFetchStrategyAvailabilityTests {
     }
 
     @Test
+    func `auto without cached web session publishes O auth usage without browser discovery`() async throws {
+        try await self.withIsolatedCookieCache {
+            let settings = ProviderSettingsSnapshot.make(claude: .init(
+                usageDataSource: .auto,
+                webExtrasEnabled: false,
+                cookieSource: .auto,
+                manualCookieHeader: nil))
+            let context = self.makeContext(sourceMode: .auto, settings: settings)
+            let credentials = ClaudeOAuthCredentials(
+                accessToken: "oauth-token",
+                refreshToken: nil,
+                expiresAt: Date(timeIntervalSinceNow: 3600),
+                scopes: ["user:profile"],
+                rateLimitTier: "claude_pro")
+            let usageResponse = try ClaudeOAuthUsageFetcher._decodeUsageResponseForTesting(Data("""
+            {"five_hour":{"utilization":7}}
+            """.utf8))
+            let importedSession = ClaudeWebAPIFetcher.SessionKeyInfo(
+                key: "sk-ant-browser-session",
+                sourceLabel: "Browser",
+                cookieCount: 1)
+            let transport = ProviderHTTPTransportHandler { request in
+                Issue.record("Unexpected Claude browser-cookie discovery request: \(request.url?.absoluteString ?? "nil")")
+                throw URLError(.badServerResponse)
+            }
+            let loadCredentials: @Sendable (
+                [String: String],
+                Bool,
+                Bool) async throws -> ClaudeOAuthCredentials = { _, _, _ in credentials }
+            let fetchUsage: @Sendable (String, Bool) async throws -> OAuthUsageResponse = { _, _ in usageResponse }
+            let fetchProfile: @Sendable (String) async throws -> OAuthProfileResponse = { _ in
+                OAuthProfileResponse(emailAddress: "user@example.com", organizationUuid: "org-123")
+            }
+
+            let result = try await ClaudeWebSessionKeyImport.$overrideForTesting.withValue(importedSession) {
+                try await ClaudeWebHTTPTransport.$overrideForTesting.withValue(transport) {
+                    try await ClaudeUsageFetcher.$loadOAuthCredentialsOverride.withValue(loadCredentials) {
+                        try await ClaudeUsageFetcher.$fetchOAuthUsageOverride.withValue(fetchUsage) {
+                            try await ClaudeUsageFetcher.$fetchOAuthProfileOverride.withValue(fetchProfile) {
+                                try await ClaudeOAuthFetchStrategy().fetch(context)
+                            }
+                        }
+                    }
+                }
+            }
+
+            #expect(result.usage.primary?.usedPercent == 7)
+            #expect(result.usage.providerCost == nil)
+        }
+    }
+
+    @Test
     func `blank manual cookie does not fall back to browser enrichment`() async throws {
         let settings = ProviderSettingsSnapshot.make(claude: .init(
             usageDataSource: .oauth,
@@ -745,6 +797,20 @@ struct ClaudeOAuthFetchStrategyAvailabilityTests {
         try Data("#!/bin/sh\nexit 0\n".utf8).write(to: url)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
         return url.path
+    }
+
+    private func withIsolatedCookieCache<T>(_ operation: () async throws -> T) async rethrows -> T {
+        let legacyBase = FileManager.default.temporaryDirectory
+            .appendingPathComponent("claude-oauth-enrichment-\(UUID().uuidString)", isDirectory: true)
+        return try await KeychainCacheStore.withServiceOverrideForTesting("claude-oauth-enrichment-\(UUID().uuidString)") {
+            try await CookieHeaderCache.withLegacyBaseURLOverrideForTesting(legacyBase) {
+                KeychainCacheStore.setTestStoreForTesting(true)
+                defer { KeychainCacheStore.setTestStoreForTesting(false) }
+                CookieHeaderCache.resetDisplayCacheForTesting()
+                defer { CookieHeaderCache.resetDisplayCacheForTesting() }
+                return try await operation()
+            }
+        }
     }
 
     private func expiredCLIAvailability(

@@ -152,7 +152,10 @@ public enum ClaudeProviderDescriptor {
                 isAvailable: ClaudeWebAPIFetcher.hasSessionKey(cookieHeader: header),
                 manualCookieHeader: header)
         case .auto?, nil:
-            return WebEnrichmentAccess(isAvailable: true, manualCookieHeader: nil)
+            let header = CookieHeaderCache.load(provider: .claude)?.cookieHeader
+            return WebEnrichmentAccess(
+                isAvailable: ClaudeWebAPIFetcher.hasSessionKey(cookieHeader: header),
+                manualCookieHeader: header)
         }
     }
 
