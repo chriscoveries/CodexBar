@@ -968,7 +968,9 @@ enum CLIRenderer {
     }
 
     private static func nonCodexPlanDisplay(provider: UsageProvider, plan: String) -> String {
-        if provider == .gemini || provider == .mimo {
+        // cleanPlanName preserves acronyms ("Management API"); `.capitalized`
+        // would mangle them into "Management Api".
+        if provider == .gemini || provider == .mimo || provider == .xai {
             return UsageFormatter.cleanPlanName(plan)
         }
         return plan.capitalized

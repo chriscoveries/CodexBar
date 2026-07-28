@@ -470,6 +470,8 @@ struct XAIProviderTests {
         // The generic no-window fallback would print "Cost: 7.4 / 0.0", which
         // presents the balance as a spend against a zero budget.
         #expect(!text.contains("Cost:"))
+        // `plan.capitalized` would mangle the login method into "Management Api".
+        #expect(text.contains("Plan: Management API"))
     }
 
     // MARK: - Helpers

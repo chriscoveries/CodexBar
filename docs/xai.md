@@ -57,6 +57,11 @@ The balance endpoint reports an inverted ledger in string USD cents — a $10 to
 remaining balance is the negated cent value. A response without a parseable total is treated as an error, never as a
 $0.00 balance.
 
+The displayed balance is the **posted** prepaid ledger. xAI posts spend deductions to the ledger at billing-cycle
+close (ledger entries are keyed by billing period), so mid-cycle the ledger balance can be higher than the Console's
+live remaining credit by the current cycle's not-yet-posted spend. Live verification on a real account confirmed this:
+posted balance ≈ live remaining + current-cycle spend.
+
 ## Display
 
 The menu card shows the prepaid balance in US dollars. The inline dashboard shows the last 30 days of daily platform
