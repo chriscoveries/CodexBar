@@ -10,7 +10,7 @@ public struct ZoomMateUsageFetcher: Sendable {
     /// the same `/ai-computer/` API interchangeably and either may retire in the future, so every
     /// API request falls over to the next host on non-auth failures via `withAPIHostFailover`
     /// (precedent: `FactoryStatusProbe`'s base-URL candidates).
-    static let apiHosts = ["ai.zoom.us", "zoommate.zoom.us"]
+    static let apiHosts = ZoomMateCookieHeaders.allowedHosts
     static let creditsStatusPath = "/ai-computer/api/v1/credits/status"
     private static let userAgent =
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " +
@@ -33,6 +33,8 @@ public struct ZoomMateUsageFetcher: Sendable {
     public struct RequestContext: Sendable {
         public let authorization: String
         public let headers: [String: String]
+        public let cookieHeaders: ZoomMateCookieHeaders
+        public let preferredHost: String?
         /// Signed-in user's email, when known. Only populated by the `.auto` cookie-mint path
         /// (sourced from the login bootstrap response's `data.user_profile.email`); the manual
         /// `.web` cURL-capture path has no equivalent payload to read it from, so this stays `nil`
@@ -46,11 +48,15 @@ public struct ZoomMateUsageFetcher: Sendable {
         public init(
             authorization: String,
             headers: [String: String] = [:],
+            cookieHeaders: ZoomMateCookieHeaders = ZoomMateCookieHeaders(headersByHost: [:]),
+            preferredHost: String? = nil,
             accountEmail: String? = nil,
             cacheKey: String? = nil)
         {
             self.authorization = authorization
             self.headers = headers
+            self.cookieHeaders = cookieHeaders
+            self.preferredHost = preferredHost
             self.accountEmail = accountEmail
             self.cacheKey = cacheKey
         }
@@ -89,8 +95,12 @@ public struct ZoomMateUsageFetcher: Sendable {
             timeout: timeout,
             logger: log,
             transport: transport)
-        if !context.headers.isEmpty {
-            let headerNames = context.headers.keys.sorted().joined(separator: ", ")
+        if !context.headers.isEmpty || !context.cookieHeaders.isEmpty {
+            var names = Set(context.headers.keys)
+            if !context.cookieHeaders.isEmpty {
+                names.insert("Cookie")
+            }
+            let headerNames = names.sorted().joined(separator: ", ")
             log("Forwarding captured headers: \(headerNames)")
         }
         return try await Self.fetchCreditsStatus(
@@ -106,7 +116,7 @@ public struct ZoomMateUsageFetcher: Sendable {
         now: Date = Date(),
         transport: any ProviderHTTPTransport = ProviderHTTPClient.shared) async throws -> ZoomMateUsageSnapshot
     {
-        try await self.withAPIHostFailover { host in
+        try await self.withAPIHostFailover(hosts: self.hosts(preferred: context.preferredHost)) { host in
             try await self.fetchCreditsStatus(
                 context: context,
                 host: host,
@@ -122,10 +132,11 @@ public struct ZoomMateUsageFetcher: Sendable {
     /// error) falls through to the next host so the provider keeps working if either host
     /// retires.
     static func withAPIHostFailover<T: Sendable>(
+        hosts: [String] = ZoomMateUsageFetcher.apiHosts,
         operation: (String) async throws -> T) async throws -> T
     {
         var lastError: Error?
-        for (index, host) in self.apiHosts.enumerated() {
+        for (index, host) in hosts.enumerated() {
             try Task.checkCancellation()
             do {
                 return try await operation(host)
@@ -142,7 +153,7 @@ public struct ZoomMateUsageFetcher: Sendable {
                     throw CancellationError()
                 }
                 lastError = error
-                if index < self.apiHosts.count - 1 {
+                if index < hosts.count - 1 {
                     Self.log.info("ZoomMate API host unavailable; retrying on the alternate host")
                 }
             }
@@ -164,6 +175,7 @@ public struct ZoomMateUsageFetcher: Sendable {
         for (name, value) in context.headers {
             request.setValue(value, forHTTPHeaderField: name)
         }
+        request.setValue(context.cookieHeaders.header(forHost: host), forHTTPHeaderField: "Cookie")
         // Authorization is always sent (the required credential per design D2). Origin and Referer
         // are fixed here so captured values can never widen the first-party request boundary.
         request.setValue(context.authorization, forHTTPHeaderField: "Authorization")
@@ -201,13 +213,13 @@ public struct ZoomMateUsageFetcher: Sendable {
     /// session cookies remain valid. Callers should prefer `cachedOrMintedToken`, which reuses a
     /// still-valid minted token from `ZoomMateBearerTokenCache` instead of re-minting every fetch.
     public static func mintBearerToken(
-        cookieHeader: String,
+        cookieHeaders: ZoomMateCookieHeaders,
         timeout: TimeInterval = 15,
         transport: any ProviderHTTPTransport = ProviderHTTPClient.shared) async throws -> MintedToken
     {
         try await self.withAPIHostFailover { host in
             try await self.mintBearerToken(
-                cookieHeader: cookieHeader,
+                cookieHeader: cookieHeaders.header(forHost: host),
                 host: host,
                 timeout: timeout,
                 transport: transport)
@@ -215,7 +227,7 @@ public struct ZoomMateUsageFetcher: Sendable {
     }
 
     private static func mintBearerToken(
-        cookieHeader: String,
+        cookieHeader: String?,
         host: String,
         timeout: TimeInterval,
         transport: any ProviderHTTPTransport) async throws -> MintedToken
@@ -281,11 +293,12 @@ public struct ZoomMateUsageFetcher: Sendable {
         // the last validated session instead of rereading the browser.
         if allowCachedCookieHeader,
            let cached = CookieHeaderCache.load(provider: .zoommate),
-           !cached.cookieHeader.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+           let cookieHeaders = ZoomMateCookieHeaders.decodeFromStorage(cached.cookieHeader),
+           !cookieHeaders.isEmpty
         {
             logger?("[zoommate] Using cached cookie header from \(cached.sourceLabel)")
             return try await Self.requestContext(
-                forCookieHeader: cached.cookieHeader,
+                forCookieHeaders: cookieHeaders,
                 persistingValidatedHeaderAs: nil,
                 cache: cache,
                 timeout: timeout,
@@ -324,7 +337,7 @@ public struct ZoomMateUsageFetcher: Sendable {
             logger?("[zoommate] Trying cookies from \(session.sourceLabel)")
             do {
                 return try await self.requestContext(
-                    forCookieHeader: session.cookieHeader,
+                    forCookieHeaders: session.cookieHeaders,
                     persistingValidatedHeaderAs: session.sourceLabel,
                     cache: cache,
                     timeout: timeout,
@@ -345,7 +358,7 @@ public struct ZoomMateUsageFetcher: Sendable {
     /// Only the cookie header is persisted; the minted bearer stays in the in-memory
     /// `ZoomMateBearerTokenCache`.
     static func requestContext(
-        forCookieHeader cookieHeader: String,
+        forCookieHeaders cookieHeaders: ZoomMateCookieHeaders,
         persistingValidatedHeaderAs sourceLabel: String?,
         cache: ZoomMateBearerTokenCache = .shared,
         timeout: TimeInterval,
@@ -353,43 +366,43 @@ public struct ZoomMateUsageFetcher: Sendable {
         logger: (@Sendable (String) -> Void)?) async throws -> RequestContext
     {
         let minted = try await Self.cachedOrMintedToken(
-            cookieHeader: cookieHeader,
+            cookieHeaders: cookieHeaders,
             cache: cache,
             timeout: timeout,
             transport: transport,
             logger: logger)
-        if let sourceLabel {
+        if let sourceLabel, let encodedCookieHeaders = cookieHeaders.encodedForStorage() {
             CookieHeaderCache.store(
                 provider: .zoommate,
-                cookieHeader: cookieHeader,
+                cookieHeader: encodedCookieHeaders,
                 sourceLabel: sourceLabel)
         }
         return RequestContext(
             authorization: Self.bearerHeaderValue(from: minted.bearerToken),
-            headers: ["Cookie": cookieHeader],
+            cookieHeaders: cookieHeaders,
             accountEmail: minted.accountEmail,
-            cacheKey: ZoomMateBearerTokenCache.key(forCookieHeader: cookieHeader))
+            cacheKey: ZoomMateBearerTokenCache.key(forCookieHeaders: cookieHeaders))
     }
     #endif
 
-    /// Returns a still-valid cached bearer token for `cookieHeader`, or mints a fresh one and caches
+    /// Returns a still-valid cached bearer token for `cookieHeaders`, or mints a fresh one and caches
     /// it when the minted JWT exposes an `exp` claim. A token whose expiry can't be read is returned
     /// but never cached, so `.auto` refreshes degrade to the mint-every-fetch behavior rather than
     /// risk serving an undatable (possibly expired) token.
     static func cachedOrMintedToken(
-        cookieHeader: String,
+        cookieHeaders: ZoomMateCookieHeaders,
         cache: ZoomMateBearerTokenCache,
         timeout: TimeInterval,
         transport: any ProviderHTTPTransport,
         logger: (@Sendable (String) -> Void)?) async throws -> MintedToken
     {
-        let cacheKey = ZoomMateBearerTokenCache.key(forCookieHeader: cookieHeader)
+        let cacheKey = ZoomMateBearerTokenCache.key(forCookieHeaders: cookieHeaders)
         if let entry = await cache.validEntry(forKey: cacheKey, now: Date()) {
             logger?("[zoommate] Reusing cached bearer token")
             return MintedToken(bearerToken: entry.token, accountEmail: entry.accountEmail)
         }
         let minted = try await Self.mintBearerToken(
-            cookieHeader: cookieHeader,
+            cookieHeaders: cookieHeaders,
             timeout: timeout,
             transport: transport)
         if let expiry = Self.expiry(fromJWT: minted.bearerToken) {
@@ -444,7 +457,10 @@ public struct ZoomMateUsageFetcher: Sendable {
     /// `Authorization` header can be extracted — that's the required credential (design D2).
     static func requestContext(from raw: String?) -> RequestContext? {
         guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else { return nil }
-        guard let captureURL = CurlCaptureParser.requestURL(from: raw), self.isAllowedCaptureURL(captureURL) else {
+        guard let captureURL = CurlCaptureParser.requestURL(from: raw),
+              self.isAllowedCaptureURL(captureURL),
+              let captureHost = captureURL.host?.lowercased()
+        else {
             return nil
         }
         let headerFields = CurlCaptureParser.headerFields(from: raw)
@@ -455,7 +471,13 @@ public struct ZoomMateUsageFetcher: Sendable {
         }
         var headers = CurlCaptureParser.forwardedHeaders(from: headerFields, allowlist: self.forwardedManualHeaders)
         headers.removeValue(forKey: "Authorization")
-        return RequestContext(authorization: Self.bearerHeaderValue(from: authorization), headers: headers)
+        let cookieHeader = headers.removeValue(forKey: "Cookie")
+        let cookieHeaders = ZoomMateCookieHeaders(headersByHost: cookieHeader.map { [captureHost: $0] } ?? [:])
+        return RequestContext(
+            authorization: Self.bearerHeaderValue(from: authorization),
+            headers: headers,
+            cookieHeaders: cookieHeaders,
+            preferredHost: captureHost)
     }
 
     /// Captures are accepted from any host in `apiHosts` (the interchangeable first-party API
@@ -480,6 +502,11 @@ public struct ZoomMateUsageFetcher: Sendable {
         request.setValue("empty", forHTTPHeaderField: "Sec-Fetch-Dest")
         request.setValue("cors", forHTTPHeaderField: "Sec-Fetch-Mode")
         request.setValue("same-site", forHTTPHeaderField: "Sec-Fetch-Site")
+    }
+
+    static func hosts(preferred host: String?) -> [String] {
+        guard let host = host?.lowercased(), self.apiHosts.contains(host) else { return self.apiHosts }
+        return [host] + self.apiHosts.filter { $0 != host }
     }
 
     private struct CreditsStatusEnvelope: Decodable {

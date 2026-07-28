@@ -8,6 +8,18 @@ import Testing
 @Suite(.serialized)
 struct ZoomMateCookieCacheTests {
     private static let cachedHeader = "_zm_ssid=fake-session-value; cf_clearance=fake-clearance-value"
+    private static let cachedHeaders = ZoomMateCookieHeaders(headersByHost: [
+        "ai.zoom.us": cachedHeader,
+        "zoommate.zoom.us": cachedHeader,
+    ])
+    private static let cachedStorage = cachedHeaders.encodedForStorage() ?? ""
+
+    private static func sharedCookieHeaders(_ header: String) -> ZoomMateCookieHeaders {
+        ZoomMateCookieHeaders(headersByHost: [
+            "ai.zoom.us": header,
+            "zoommate.zoom.us": header,
+        ])
+    }
 
     /// Minimal unsigned JWT carrying only a far-future `exp` claim, so minted tokens are cacheable.
     private static func makeJWT(exp: Int = 9_999_999_999) -> String {
@@ -46,7 +58,7 @@ struct ZoomMateCookieCacheTests {
         }
         CookieHeaderCache.store(
             provider: .zoommate,
-            cookieHeader: Self.cachedHeader,
+            cookieHeader: Self.cachedStorage,
             sourceLabel: "Chrome (Test)")
 
         let jwt = Self.makeJWT()
@@ -64,9 +76,9 @@ struct ZoomMateCookieCacheTests {
             transport: stub)
 
         #expect(context.authorization == "Bearer \(jwt)")
-        #expect(context.headers["Cookie"] == Self.cachedHeader)
+        #expect(context.cookieHeaders == Self.cachedHeaders)
         #expect(context.accountEmail == "fake.user@example.com")
-        #expect(context.cacheKey == ZoomMateBearerTokenCache.key(forCookieHeader: Self.cachedHeader))
+        #expect(context.cacheKey == ZoomMateBearerTokenCache.key(forCookieHeaders: Self.cachedHeaders))
         #expect(await stub.requests().count == 1) // the mint only — no browser import happened
     }
 
@@ -79,7 +91,7 @@ struct ZoomMateCookieCacheTests {
         }
         CookieHeaderCache.store(
             provider: .zoommate,
-            cookieHeader: Self.cachedHeader,
+            cookieHeader: Self.cachedStorage,
             sourceLabel: "Chrome (Test)")
 
         let stub = ProviderHTTPTransportStub { request in
@@ -104,7 +116,7 @@ struct ZoomMateCookieCacheTests {
             return true
         }
         // Skipping the cache must not mutate it; clearing is the strategy's explicit decision.
-        #expect(CookieHeaderCache.load(provider: .zoommate)?.cookieHeader == Self.cachedHeader)
+        #expect(CookieHeaderCache.load(provider: .zoommate)?.cookieHeader == Self.cachedStorage)
     }
 
     @Test
@@ -116,7 +128,7 @@ struct ZoomMateCookieCacheTests {
         }
         CookieHeaderCache.store(
             provider: .zoommate,
-            cookieHeader: Self.cachedHeader,
+            cookieHeader: Self.cachedStorage,
             sourceLabel: "Chrome (Test)")
 
         let stub = ProviderHTTPTransportStub { request in
@@ -153,7 +165,7 @@ struct ZoomMateCookieCacheTests {
         let stub = Self.mintResponseStub(nak: nak, expectedCookieHeader: Self.cachedHeader)
 
         let context = try await ZoomMateUsageFetcher.requestContext(
-            forCookieHeader: Self.cachedHeader,
+            forCookieHeaders: Self.cachedHeaders,
             persistingValidatedHeaderAs: "Chrome (Test)",
             cache: ZoomMateBearerTokenCache(),
             timeout: 1,
@@ -161,7 +173,7 @@ struct ZoomMateCookieCacheTests {
             logger: nil)
 
         let cached = try #require(CookieHeaderCache.load(provider: .zoommate))
-        #expect(cached.cookieHeader == Self.cachedHeader)
+        #expect(cached.cookieHeader == Self.cachedStorage)
         #expect(cached.sourceLabel == "Chrome (Test)")
         // Only the cookie header is persisted — the minted bearer stays in memory.
         #expect(!cached.cookieHeader.contains(nak))
@@ -181,10 +193,10 @@ struct ZoomMateCookieCacheTests {
         let jwt = Self.makeJWT()
         let sessions = [
             ZoomMateCookieImporter.SessionInfo(
-                cookieHeader: rejectedHeader,
+                cookieHeaders: Self.sharedCookieHeaders(rejectedHeader),
                 sourceLabel: "Chrome Profile 1"),
             ZoomMateCookieImporter.SessionInfo(
-                cookieHeader: validHeader,
+                cookieHeaders: Self.sharedCookieHeaders(validHeader),
                 sourceLabel: "Chrome Profile 2"),
         ]
         let stub = ProviderHTTPTransportStub { request in
@@ -216,10 +228,10 @@ struct ZoomMateCookieCacheTests {
             logger: nil)
 
         #expect(context.authorization == "Bearer \(jwt)")
-        #expect(context.headers["Cookie"] == validHeader)
+        #expect(context.cookieHeaders == Self.sharedCookieHeaders(validHeader))
         #expect(await stub.requests().count == 2)
         let cached = try #require(CookieHeaderCache.load(provider: .zoommate))
-        #expect(cached.cookieHeader == validHeader)
+        #expect(cached.cookieHeader == Self.sharedCookieHeaders(validHeader).encodedForStorage())
         #expect(cached.sourceLabel == "Chrome Profile 2")
     }
 
@@ -233,10 +245,10 @@ struct ZoomMateCookieCacheTests {
 
         let sessions = [
             ZoomMateCookieImporter.SessionInfo(
-                cookieHeader: "_zm_ssid=fake-malformed-response-session",
+                cookieHeaders: Self.sharedCookieHeaders("_zm_ssid=fake-malformed-response-session"),
                 sourceLabel: "Chrome Profile 1"),
             ZoomMateCookieImporter.SessionInfo(
-                cookieHeader: "_zm_ssid=fake-unused-session",
+                cookieHeaders: Self.sharedCookieHeaders("_zm_ssid=fake-unused-session"),
                 sourceLabel: "Chrome Profile 2"),
         ]
         let stub = ProviderHTTPTransportStub { request in
@@ -278,7 +290,7 @@ struct ZoomMateCookieCacheTests {
 
         await #expect {
             _ = try await ZoomMateUsageFetcher.requestContext(
-                forCookieHeader: Self.cachedHeader,
+                forCookieHeaders: Self.cachedHeaders,
                 persistingValidatedHeaderAs: "Chrome (Test)",
                 cache: ZoomMateBearerTokenCache(),
                 timeout: 1,
@@ -301,7 +313,7 @@ struct ZoomMateCookieCacheTests {
 
         let stub = Self.mintResponseStub(nak: Self.makeJWT())
         _ = try await ZoomMateUsageFetcher.requestContext(
-            forCookieHeader: Self.cachedHeader,
+            forCookieHeaders: Self.cachedHeaders,
             persistingValidatedHeaderAs: nil,
             cache: ZoomMateBearerTokenCache(),
             timeout: 1,
@@ -320,7 +332,7 @@ struct ZoomMateCookieCacheTests {
         }
         CookieHeaderCache.store(
             provider: .zoommate,
-            cookieHeader: Self.cachedHeader,
+            cookieHeader: Self.cachedStorage,
             sourceLabel: "Chrome (Test)")
 
         let curl = "curl 'https://ai.zoom.us/ai-computer/api/v1/credits/status' " +
@@ -340,8 +352,9 @@ struct ZoomMateCookieCacheTests {
             transport: stub)
 
         #expect(context.authorization == "Bearer fake-manual-token")
-        #expect(context.headers["Cookie"] == "session=fake-manual-cookie")
-        #expect(CookieHeaderCache.load(provider: .zoommate)?.cookieHeader == Self.cachedHeader)
+        #expect(context.cookieHeaders.header(forHost: "ai.zoom.us") == "session=fake-manual-cookie")
+        #expect(context.cookieHeaders.header(forHost: "zoommate.zoom.us") == nil)
+        #expect(CookieHeaderCache.load(provider: .zoommate)?.cookieHeader == Self.cachedStorage)
     }
     #endif
 }

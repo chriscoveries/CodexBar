@@ -12,7 +12,7 @@ import Crypto
 /// lets a still-valid token be reused across refreshes instead.
 ///
 /// Safety properties (why reuse can't serve a bad token):
-///   - Entries are keyed by a non-reversible SHA-256 of the originating cookie header, so distinct
+///   - Entries are keyed by a non-reversible SHA-256 of the originating host-scoped cookie headers, so distinct
 ///     browser sessions / accounts never collide and the raw cookies are never stored as a key.
 ///   - A token is cached *only* when its JWT carries a decodable `exp` claim, and is served only
 ///     while `now < exp - refreshSkew`. A token whose expiry cannot be determined is never cached
@@ -36,9 +36,10 @@ actor ZoomMateBearerTokenCache {
 
     private var entries: [String: Entry] = [:]
 
-    /// Non-reversible cache key for a cookie session. SHA-256 hex of the raw cookie header.
-    static func key(forCookieHeader cookieHeader: String) -> String {
-        let digest = SHA256.hash(data: Data(cookieHeader.utf8))
+    /// Non-reversible cache key for a cookie session. SHA-256 hex of its canonical host map.
+    static func key(forCookieHeaders cookieHeaders: ZoomMateCookieHeaders) -> String {
+        let canonical = cookieHeaders.encodedForStorage() ?? ""
+        let digest = SHA256.hash(data: Data(canonical.utf8))
         return digest.map { String(format: "%02x", $0) }.joined()
     }
 

@@ -36,6 +36,13 @@ struct ZoomMateUsageFetcherTests {
 
     private static let now = Date(timeIntervalSince1970: 1_782_800_000)
 
+    private static func sharedCookieHeaders(_ header: String) -> ZoomMateCookieHeaders {
+        ZoomMateCookieHeaders(headersByHost: [
+            "ai.zoom.us": header,
+            "zoommate.zoom.us": header,
+        ])
+    }
+
     /// Fully synthetic payload matching the first-party web client's decoded response shape.
     private static let sampleResponse = """
     { "data": { "credit_status": {
@@ -210,7 +217,9 @@ struct ZoomMateUsageFetcherTests {
 
         let context = try #require(ZoomMateUsageFetcher.requestContext(from: curl))
         #expect(context.authorization == "Bearer fake-manual-token")
-        #expect(context.headers["Cookie"] == "session=fake-cookie-value")
+        #expect(context.cookieHeaders.header(forHost: "ai.zoom.us") == "session=fake-cookie-value")
+        #expect(context.cookieHeaders.header(forHost: "zoommate.zoom.us") == nil)
+        #expect(context.preferredHost == "ai.zoom.us")
         #expect(context.headers["Origin"] == nil)
         #expect(context.headers["Referer"] == nil)
     }
@@ -236,10 +245,63 @@ struct ZoomMateUsageFetcherTests {
     @Test
     func `manual curl capture accepts either interchangeable first-party host`() throws {
         let capture = "curl 'https://zoommate.zoom.us/ai-computer/api/v1/credits/status' " +
-            "-H 'authorization: Bearer fake-manual-token'"
+            "-H 'authorization: Bearer fake-manual-token' -H 'cookie: mate-only=fake'"
 
         let context = try #require(ZoomMateUsageFetcher.requestContext(from: capture))
         #expect(context.authorization == "Bearer fake-manual-token")
+        #expect(context.cookieHeaders.header(forHost: "ai.zoom.us") == nil)
+        #expect(context.cookieHeaders.header(forHost: "zoommate.zoom.us") == "mate-only=fake")
+        #expect(context.preferredHost == "zoommate.zoom.us")
+    }
+
+    @Test
+    func `manual ai capture never sends its cookie to zoommate during failover`() async throws {
+        let capture = "curl 'https://ai.zoom.us/ai-computer/api/v1/credits/status' " +
+            "-H 'authorization: Bearer fake-manual-token' -H 'cookie: ai-only=fake'"
+        let context = try #require(ZoomMateUsageFetcher.requestContext(from: capture))
+        let stub = ProviderHTTPTransportStub { request in
+            let statusCode = request.url?.host == "ai.zoom.us" ? 503 : 200
+            if request.url?.host == "ai.zoom.us" {
+                #expect(request.value(forHTTPHeaderField: "Cookie") == "ai-only=fake")
+            } else {
+                #expect(request.url?.host == "zoommate.zoom.us")
+                #expect(request.value(forHTTPHeaderField: "Cookie") == nil)
+            }
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: statusCode,
+                httpVersion: nil,
+                headerFields: nil)!
+            return (statusCode == 200 ? Data(Self.sampleResponse.utf8) : Data(), response)
+        }
+
+        _ = try await ZoomMateUsageFetcher.fetchCreditsStatus(context: context, now: Self.now, transport: stub)
+        #expect(await stub.requests().count == 2)
+    }
+
+    @Test
+    func `manual zoommate capture starts on its host and drops its cookie during failover`() async throws {
+        let capture = "curl 'https://zoommate.zoom.us/ai-computer/api/v1/credits/status' " +
+            "-H 'authorization: Bearer fake-manual-token' -H 'cookie: mate-only=fake'"
+        let context = try #require(ZoomMateUsageFetcher.requestContext(from: capture))
+        let stub = ProviderHTTPTransportStub { request in
+            let statusCode = request.url?.host == "zoommate.zoom.us" ? 503 : 200
+            if request.url?.host == "zoommate.zoom.us" {
+                #expect(request.value(forHTTPHeaderField: "Cookie") == "mate-only=fake")
+            } else {
+                #expect(request.url?.host == "ai.zoom.us")
+                #expect(request.value(forHTTPHeaderField: "Cookie") == nil)
+            }
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: statusCode,
+                httpVersion: nil,
+                headerFields: nil)!
+            return (statusCode == 200 ? Data(Self.sampleResponse.utf8) : Data(), response)
+        }
+
+        _ = try await ZoomMateUsageFetcher.fetchCreditsStatus(context: context, now: Self.now, transport: stub)
+        #expect(await stub.requests().count == 2)
     }
 
     @Test
@@ -259,7 +321,12 @@ struct ZoomMateUsageFetcherTests {
             return (Data(Self.sampleResponse.utf8), response)
         }
 
-        let context = ZoomMateUsageFetcher.RequestContext(authorization: "Bearer fake-token")
+        let context = ZoomMateUsageFetcher.RequestContext(
+            authorization: "Bearer fake-token",
+            cookieHeaders: ZoomMateCookieHeaders(headersByHost: [
+                "ai.zoom.us": "parent=fake; ai-only=fake",
+                "zoommate.zoom.us": "parent=fake; mate-only=fake",
+            ]))
         let snapshot = try await ZoomMateUsageFetcher.fetchCreditsStatus(
             context: context,
             now: Self.now,
@@ -267,6 +334,9 @@ struct ZoomMateUsageFetcherTests {
 
         #expect(snapshot.creditStatus.usedCredit == 678)
         #expect(await stub.requests().count == 2)
+        let requests = await stub.requests()
+        #expect(requests[0].value(forHTTPHeaderField: "Cookie") == "parent=fake; ai-only=fake")
+        #expect(requests[1].value(forHTTPHeaderField: "Cookie") == "parent=fake; mate-only=fake")
     }
 
     @Test
@@ -307,6 +377,7 @@ struct ZoomMateUsageFetcherTests {
     func `mint fails over to the alternate host on a non-auth failure`() async throws {
         let stub = ProviderHTTPTransportStub { request in
             if request.url?.host == "ai.zoom.us" {
+                #expect(request.value(forHTTPHeaderField: "Cookie") == "parent=fake; ai-only=fake")
                 let response = HTTPURLResponse(
                     url: request.url!,
                     statusCode: 500,
@@ -316,13 +387,17 @@ struct ZoomMateUsageFetcherTests {
             }
             #expect(request.url?.host == "zoommate.zoom.us")
             #expect(request.url?.path == "/ai-computer/api/v1/login")
+            #expect(request.value(forHTTPHeaderField: "Cookie") == "parent=fake; mate-only=fake")
             let body = "{\"success\": true, \"data\": {\"nak\": \"fake-minted-jwt\"}}"
             let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
             return (Data(body.utf8), response)
         }
 
         let minted = try await ZoomMateUsageFetcher.mintBearerToken(
-            cookieHeader: "session=fake-cookie-value",
+            cookieHeaders: ZoomMateCookieHeaders(headersByHost: [
+                "ai.zoom.us": "parent=fake; ai-only=fake",
+                "zoommate.zoom.us": "parent=fake; mate-only=fake",
+            ]),
             transport: stub)
 
         #expect(minted.bearerToken == "fake-minted-jwt")
@@ -430,7 +505,7 @@ struct ZoomMateUsageFetcherTests {
         }
 
         let minted = try await ZoomMateUsageFetcher.mintBearerToken(
-            cookieHeader: "session=fake-cookie-value",
+            cookieHeaders: Self.sharedCookieHeaders("session=fake-cookie-value"),
             transport: stub)
 
         #expect(minted.bearerToken == "fake-minted-jwt")
@@ -450,7 +525,7 @@ struct ZoomMateUsageFetcherTests {
         }
 
         let minted = try await ZoomMateUsageFetcher.mintBearerToken(
-            cookieHeader: "session=fake-cookie-value",
+            cookieHeaders: Self.sharedCookieHeaders("session=fake-cookie-value"),
             transport: stub)
 
         #expect(minted.bearerToken == "fake-minted-jwt")
@@ -468,7 +543,7 @@ struct ZoomMateUsageFetcherTests {
         }
 
         let minted = try await ZoomMateUsageFetcher.mintBearerToken(
-            cookieHeader: "session=fake-cookie-value",
+            cookieHeaders: Self.sharedCookieHeaders("session=fake-cookie-value"),
             transport: stub)
 
         #expect(minted.bearerToken == "fake-minted-jwt")
@@ -488,7 +563,7 @@ struct ZoomMateUsageFetcherTests {
         }
 
         let minted = try await ZoomMateUsageFetcher.mintBearerToken(
-            cookieHeader: "session=fake-cookie-value",
+            cookieHeaders: Self.sharedCookieHeaders("session=fake-cookie-value"),
             transport: stub)
 
         #expect(minted.bearerToken == "fake-minted-jwt")
@@ -522,7 +597,9 @@ struct ZoomMateUsageFetcherTests {
         }
 
         await #expect {
-            _ = try await ZoomMateUsageFetcher.mintBearerToken(cookieHeader: "session=expired", transport: stub)
+            _ = try await ZoomMateUsageFetcher.mintBearerToken(
+                cookieHeaders: Self.sharedCookieHeaders("session=expired"),
+                transport: stub)
         } throws: { error in
             guard case ZoomMateUsageError.invalidCredentials = error else { return false }
             return true
@@ -537,7 +614,9 @@ struct ZoomMateUsageFetcherTests {
         }
 
         await #expect {
-            _ = try await ZoomMateUsageFetcher.mintBearerToken(cookieHeader: "session=fake", transport: stub)
+            _ = try await ZoomMateUsageFetcher.mintBearerToken(
+                cookieHeaders: Self.sharedCookieHeaders("session=fake"),
+                transport: stub)
         } throws: { error in
             guard case ZoomMateUsageError.parseFailed = error else { return false }
             return true
@@ -599,7 +678,7 @@ struct ZoomMateUsageFetcherTests {
             return (Data(body.utf8), response)
         }
         _ = try await ZoomMateUsageFetcher.cachedOrMintedToken(
-            cookieHeader: "session=\(cookieMarker)",
+            cookieHeaders: Self.sharedCookieHeaders("session=\(cookieMarker)"),
             cache: ZoomMateBearerTokenCache(),
             timeout: 1,
             transport: mintStub,
@@ -644,13 +723,13 @@ struct ZoomMateUsageFetcherTests {
         let cache = ZoomMateBearerTokenCache()
 
         let first = try await ZoomMateUsageFetcher.cachedOrMintedToken(
-            cookieHeader: "session=abc",
+            cookieHeaders: Self.sharedCookieHeaders("session=abc"),
             cache: cache,
             timeout: 1,
             transport: stub,
             logger: nil)
         let second = try await ZoomMateUsageFetcher.cachedOrMintedToken(
-            cookieHeader: "session=abc",
+            cookieHeaders: Self.sharedCookieHeaders("session=abc"),
             cache: cache,
             timeout: 1,
             transport: stub,
@@ -671,13 +750,13 @@ struct ZoomMateUsageFetcherTests {
         let cache = ZoomMateBearerTokenCache()
 
         _ = try await ZoomMateUsageFetcher.cachedOrMintedToken(
-            cookieHeader: "session=abc",
+            cookieHeaders: Self.sharedCookieHeaders("session=abc"),
             cache: cache,
             timeout: 1,
             transport: stub,
             logger: nil)
         _ = try await ZoomMateUsageFetcher.cachedOrMintedToken(
-            cookieHeader: "session=abc",
+            cookieHeaders: Self.sharedCookieHeaders("session=abc"),
             cache: cache,
             timeout: 1,
             transport: stub,
@@ -689,7 +768,7 @@ struct ZoomMateUsageFetcherTests {
     @Test
     func `cache serves an in-date entry but withholds one inside the refresh-skew window`() async {
         let cache = ZoomMateBearerTokenCache()
-        let key = ZoomMateBearerTokenCache.key(forCookieHeader: "session=abc")
+        let key = ZoomMateBearerTokenCache.key(forCookieHeaders: Self.sharedCookieHeaders("session=abc"))
         let now = Date(timeIntervalSince1970: 1_000_000_000)
         // Expiry comfortably beyond the 60s skew → served.
         await cache.store(
@@ -721,17 +800,17 @@ struct ZoomMateUsageFetcherTests {
             return (Data(body.utf8), response)
         }
         let cache = ZoomMateBearerTokenCache()
-        let key = ZoomMateBearerTokenCache.key(forCookieHeader: "session=abc")
+        let key = ZoomMateBearerTokenCache.key(forCookieHeaders: Self.sharedCookieHeaders("session=abc"))
 
         _ = try await ZoomMateUsageFetcher.cachedOrMintedToken(
-            cookieHeader: "session=abc",
+            cookieHeaders: Self.sharedCookieHeaders("session=abc"),
             cache: cache,
             timeout: 1,
             transport: stub,
             logger: nil)
         await cache.invalidate(forKey: key)
         _ = try await ZoomMateUsageFetcher.cachedOrMintedToken(
-            cookieHeader: "session=abc",
+            cookieHeaders: Self.sharedCookieHeaders("session=abc"),
             cache: cache,
             timeout: 1,
             transport: stub,
@@ -742,17 +821,39 @@ struct ZoomMateUsageFetcherTests {
 
     #if os(macOS)
     @Test
-    func `cookie scope filter keeps session hosts and parent domain but drops unrelated subdomains`() {
-        // Kept: exact session hosts + parent-scoped SSO cookies a browser sends to ai.zoom.us.
-        #expect(ZoomMateCookieImporter.isSendable(cookieDomain: "ai.zoom.us"))
-        #expect(ZoomMateCookieImporter.isSendable(cookieDomain: "zoommate.zoom.us"))
-        #expect(ZoomMateCookieImporter.isSendable(cookieDomain: ".zoom.us"))
-        #expect(ZoomMateCookieImporter.isSendable(cookieDomain: "zoom.us"))
-        // Dropped: cookies host-scoped to unrelated *.zoom.us siblings, and non-Zoom lookalikes.
-        #expect(!ZoomMateCookieImporter.isSendable(cookieDomain: "marketing.zoom.us"))
-        #expect(!ZoomMateCookieImporter.isSendable(cookieDomain: "us05web.zoom.us"))
-        #expect(!ZoomMateCookieImporter.isSendable(cookieDomain: "zoom.us.attacker.com"))
-        #expect(!ZoomMateCookieImporter.isSendable(cookieDomain: ""))
+    func `automatic import partitions parent and host-only cookies per destination`() throws {
+        func cookie(domain: String, name: String) throws -> HTTPCookie {
+            try #require(HTTPCookie(properties: [
+                .domain: domain,
+                .path: "/",
+                .name: name,
+                .value: "fake",
+                .secure: "TRUE",
+            ]))
+        }
+
+        let headers = try ZoomMateCookieImporter.cookieHeaders(from: [
+            cookie(domain: ".zoom.us", name: "parent"),
+            cookie(domain: "zoom.us", name: "parent-host-only"),
+            cookie(domain: "ai.zoom.us", name: "ai-only"),
+            cookie(domain: "zoommate.zoom.us", name: "mate-only"),
+            cookie(domain: "marketing.zoom.us", name: "marketing-only"),
+        ])
+
+        #expect(headers.header(forHost: "ai.zoom.us") == "parent=fake; ai-only=fake")
+        #expect(headers.header(forHost: "zoommate.zoom.us") == "parent=fake; mate-only=fake")
+    }
+
+    @Test
+    func `cookie scope filter follows RFC 6265 host-only and domain matching`() {
+        #expect(ZoomMateCookieImporter.isSendable(cookieDomain: "ai.zoom.us", toHost: "ai.zoom.us"))
+        #expect(!ZoomMateCookieImporter.isSendable(cookieDomain: "ai.zoom.us", toHost: "zoommate.zoom.us"))
+        #expect(ZoomMateCookieImporter.isSendable(cookieDomain: ".zoom.us", toHost: "ai.zoom.us"))
+        #expect(ZoomMateCookieImporter.isSendable(cookieDomain: ".zoom.us", toHost: "zoommate.zoom.us"))
+        #expect(!ZoomMateCookieImporter.isSendable(cookieDomain: "zoom.us", toHost: "ai.zoom.us"))
+        #expect(!ZoomMateCookieImporter.isSendable(cookieDomain: "marketing.zoom.us", toHost: "ai.zoom.us"))
+        #expect(!ZoomMateCookieImporter.isSendable(cookieDomain: "zoom.us.attacker.com", toHost: "ai.zoom.us"))
+        #expect(!ZoomMateCookieImporter.isSendable(cookieDomain: "", toHost: "ai.zoom.us"))
     }
     #endif
 

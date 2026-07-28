@@ -65,6 +65,42 @@ struct ZoomMateCreditsHistoryFetcherTests {
     }
 
     @Test
+    func `history failover sends only the cookie header scoped to each host`() async throws {
+        let stub = ProviderHTTPTransportStub { request in
+            let statusCode = request.url?.host == "ai.zoom.us" ? 503 : 200
+            if request.url?.host == "ai.zoom.us" {
+                #expect(request.value(forHTTPHeaderField: "Cookie") == "parent=fake; ai-only=fake")
+            } else {
+                #expect(request.url?.host == "zoommate.zoom.us")
+                #expect(request.value(forHTTPHeaderField: "Cookie") == "parent=fake; mate-only=fake")
+            }
+            let body = Self.page(records: "", total: 0)
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: statusCode,
+                httpVersion: nil,
+                headerFields: nil)!
+            return (statusCode == 200 ? Data(body.utf8) : Data(), response)
+        }
+        let context = ZoomMateUsageFetcher.RequestContext(
+            authorization: "Bearer fake-token",
+            cookieHeaders: ZoomMateCookieHeaders(headersByHost: [
+                "ai.zoom.us": "parent=fake; ai-only=fake",
+                "zoommate.zoom.us": "parent=fake; mate-only=fake",
+            ]))
+
+        let snapshot = try await ZoomMateCreditsHistoryFetcher.fetch(
+            context: context,
+            startTime: Self.startTime,
+            endTime: Self.now,
+            now: Self.now,
+            transport: stub)
+
+        #expect(snapshot.records.isEmpty)
+        #expect(await stub.requests().count == 2)
+    }
+
+    @Test
     func `paginates across multiple pages until total is satisfied`() async throws {
         let stub = ProviderHTTPTransportStub { request in
             let query = request.url?.query ?? ""

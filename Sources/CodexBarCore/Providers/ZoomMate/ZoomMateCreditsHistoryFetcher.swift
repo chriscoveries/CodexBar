@@ -110,7 +110,9 @@ public struct ZoomMateCreditsHistoryFetcher: Sendable {
     {
         // The whole pagination loop fails over as a unit so all pages of one snapshot come from
         // the same host.
-        try await ZoomMateUsageFetcher.withAPIHostFailover { host in
+        try await ZoomMateUsageFetcher.withAPIHostFailover(
+            hosts: ZoomMateUsageFetcher.hosts(preferred: context.preferredHost))
+        { host in
             var allRecords: [ZoomMateCreditHistoryRecord] = []
             var page = 0
             var total = Int.max
@@ -184,6 +186,9 @@ public struct ZoomMateCreditsHistoryFetcher: Sendable {
         for (name, value) in pageRequest.context.headers {
             request.setValue(value, forHTTPHeaderField: name)
         }
+        request.setValue(
+            pageRequest.context.cookieHeaders.header(forHost: pageRequest.host),
+            forHTTPHeaderField: "Cookie")
         request.setValue(pageRequest.context.authorization, forHTTPHeaderField: "Authorization")
         request.setValue(self.refererURL.absoluteString, forHTTPHeaderField: "Origin")
         request.setValue(self.refererURL.absoluteString, forHTTPHeaderField: "Referer")
@@ -217,7 +222,9 @@ public struct ZoomMateCreditsHistoryFetcher: Sendable {
     private static func parseRecordTime(_ text: String) -> Date? {
         let withFractional = ISO8601DateFormatter()
         withFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = withFractional.date(from: text) { return date }
+        if let date = withFractional.date(from: text) {
+            return date
+        }
         let plain = ISO8601DateFormatter()
         plain.formatOptions = [.withInternetDateTime]
         return plain.date(from: text)
