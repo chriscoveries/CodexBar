@@ -2,6 +2,7 @@ import CodexBarCore
 import Foundation
 import Testing
 @testable import CodexBar
+@testable import CodexBarCLI
 
 struct XAIProviderTests {
     // MARK: - Settings reader
@@ -443,6 +444,32 @@ struct XAIProviderTests {
         #expect(model.providerCost?.spendLine == "Balance: $7.36")
         #expect(model.providerCost?.percentUsed == nil)
         #expect(model.providerCost?.percentLine == nil)
+    }
+
+    @Test
+    func `CLI text renders the prepaid balance instead of the generic cost fallback`() {
+        let usage = XAIUsageSnapshot(
+            balanceUSD: 7.36,
+            daily: [
+                .init(day: "2027-01-14", costUSD: 1.5),
+                .init(day: "2027-01-15", costUSD: 0.25),
+            ],
+            updatedAt: Date(timeIntervalSince1970: 1_800_000_000))
+        let text = CLIRenderer.renderText(
+            provider: .xai,
+            snapshot: usage.toUsageSnapshot(),
+            credits: nil,
+            context: RenderContext(
+                header: "xAI (api)",
+                status: nil,
+                useColor: false,
+                resetStyle: .countdown))
+
+        #expect(text.contains("Balance: $7.36"))
+        #expect(text.contains("Last 30 days: $1.75"))
+        // The generic no-window fallback would print "Cost: 7.4 / 0.0", which
+        // presents the balance as a spend against a zero budget.
+        #expect(!text.contains("Cost:"))
     }
 
     // MARK: - Helpers

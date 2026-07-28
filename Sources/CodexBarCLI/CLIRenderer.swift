@@ -41,6 +41,7 @@ enum CLIRenderer {
         self.appendWayfinderUsageLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendDeepgramLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendAmpBalanceLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
+        self.appendXAIUsageLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendDevinOverageBalanceLine(
             provider: provider,
             snapshot: snapshot,
@@ -109,6 +110,7 @@ enum CLIRenderer {
         self.appendWayfinderUsageLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendDeepgramLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendAmpBalanceLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
+        self.appendXAIUsageLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendDevinOverageBalanceLine(
             provider: provider,
             snapshot: snapshot,
@@ -496,6 +498,7 @@ enum CLIRenderer {
         self.appendWayfinderUsageLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendDeepgramLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendAmpBalanceLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
+        self.appendXAIUsageLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendDevinOverageBalanceLine(
             provider: provider,
             snapshot: snapshot,
@@ -613,7 +616,10 @@ enum CLIRenderer {
             provider != .clawrouter,
             let cost = snapshot.providerCost,
             !(provider == .devin && cost.period == "Extra usage balance"),
-            !(provider == .claude && cost.used == 0 && cost.limit == 0 && cost.balance != nil)
+            !(provider == .claude && cost.used == 0 && cost.limit == 0 && cost.balance != nil),
+            // xAI's providerCost carries the prepaid balance, not a spend/limit
+            // pair; the dedicated balance line renders it instead.
+            !(provider == .xai && cost.period == "Prepaid credits")
         else { return }
         // Fallback to cost/quota display if no primary rate window.
         let label = cost.currencyCode == "Quota" ? "Quota" : "Cost"
@@ -676,6 +682,19 @@ enum CLIRenderer {
         else { return }
         let value = UsageFormatter.currencyString(balance, currencyCode: cost.currencyCode)
         lines.append(self.labelValueLine("Extra usage balance", value: value, useColor: useColor))
+    }
+
+    private static func appendXAIUsageLines(
+        snapshot: UsageSnapshot,
+        useColor: Bool,
+        lines: inout [String])
+    {
+        guard let usage = snapshot.xaiUsage else { return }
+        let balance = UsageFormatter.currencyString(usage.balanceUSD, currencyCode: "USD")
+        lines.append(self.labelValueLine("Balance", value: balance, useColor: useColor))
+        guard !usage.daily.isEmpty else { return }
+        let spend = UsageFormatter.currencyString(usage.windowCostUSD, currencyCode: "USD")
+        lines.append(self.labelValueLine(usage.historyWindowPeriodLabel, value: spend, useColor: useColor))
     }
 
     private static func appendClawRouterUsageLines(
