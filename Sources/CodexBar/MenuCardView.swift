@@ -552,16 +552,19 @@ private struct MetricRow: View {
                         }
                     }
                     if let sessionEquivalentDetail = self.metric.sessionEquivalentDetail {
-                        Text(sessionEquivalentDetail.verdictText)
-                            .font(.footnote)
-                            .foregroundStyle(MenuHighlightStyle.primary(self.isHighlighted))
-                            .lineLimit(1)
-                            .accessibilityLabel(sessionEquivalentDetail.verdictAccessibilityLabel)
-                        Text(sessionEquivalentDetail.numberText)
-                            .font(.footnote)
-                            .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
-                            .lineLimit(1)
-                            .accessibilityLabel(sessionEquivalentDetail.numberAccessibilityLabel)
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(sessionEquivalentDetail.leftText)
+                                .font(.footnote)
+                                .foregroundStyle(MenuHighlightStyle.primary(self.isHighlighted))
+                                .lineLimit(1)
+                            Spacer()
+                            Text(sessionEquivalentDetail.rightText)
+                                .font(.footnote)
+                                .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
+                                .lineLimit(1)
+                        }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(sessionEquivalentDetail.accessibilityLabel)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -1035,6 +1038,12 @@ extension UsageMenuCardView.Model {
             }
             return self.planDisplay(pass, for: provider)
         }
+        if provider == .amp,
+           let plan = snapshot?.ampUsage?.subscriptionPlan,
+           !plan.isEmpty
+        {
+            return self.planDisplay(plan, for: provider)
+        }
         if let plan = snapshot?.loginMethod(for: provider), !plan.isEmpty {
             return self.planDisplay(plan, for: provider)
         }
@@ -1335,7 +1344,7 @@ extension UsageMenuCardView.Model {
         {
             primaryDetailLeft = detail
         }
-        if [.warp, .kilo, .mimo, .deepseek, .deepinfra, .qoder, .mistral, .neuralwatt, .litellm]
+        if [.warp, .kilo, .mimo, .deepseek, .deepinfra, .qoder, .mistral, .neuralwatt, .litellm, .chutes]
             .contains(input.provider),
             let detail = primary.resetDescription,
             !detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -1365,7 +1374,7 @@ extension UsageMenuCardView.Model {
                 primaryResetText = nil
             }
         }
-        if [.warp, .kilo, .mimo, .deepseek, .deepinfra, .qoder, .mistral, .neuralwatt, .litellm, .zenmux]
+        if [.warp, .kilo, .mimo, .deepseek, .deepinfra, .qoder, .mistral, .neuralwatt, .litellm, .zenmux, .chutes]
             .contains(input.provider),
             primary.resetsAt == nil
         {
@@ -1408,7 +1417,11 @@ extension UsageMenuCardView.Model {
                     primaryPaceOnTop = paceDetail.paceOnTop
                 }
             }
-        } else if let paceDetail = Self.resetWindowPaceDetail(window: primary, input: input) {
+        } else if let paceDetail = Self.resetWindowPaceDetail(
+            window: primary,
+            input: input,
+            pace: input.provider == .kimi ? input.weeklyPace : nil)
+        {
             primaryDetailLeft = paceDetail.leftLabel
             primaryDetailRight = paceDetail.rightLabel
             primaryPacePercent = paceDetail.pacePercent
@@ -1468,12 +1481,21 @@ extension UsageMenuCardView.Model {
         title: String? = nil,
         zaiTimeDetail: String?) -> Metric
     {
-        var paceDetail = Self.weeklyPaceDetail(
-            provider: input.provider,
-            window: weekly,
-            now: input.now,
-            pace: input.weeklyPace,
-            showUsed: input.usageBarsShowUsed)
+        // Kimi's secondary slot is its 5-hour rate limit rather than a weekly window.
+        var paceDetail = if input.provider == .kimi {
+            Self.sessionPaceDetail(
+                provider: input.provider,
+                window: weekly,
+                now: input.now,
+                showUsed: input.usageBarsShowUsed)
+        } else {
+            Self.weeklyPaceDetail(
+                provider: input.provider,
+                window: weekly,
+                now: input.now,
+                pace: input.weeklyPace,
+                showUsed: input.usageBarsShowUsed)
+        }
         var weeklyResetText = Self.resetText(for: weekly, style: input.resetTimeDisplayStyle, now: input.now)
         var weeklyDetailText: String? = input.provider == .zai ? zaiTimeDetail : nil
         if input.provider == .warp,
@@ -1483,7 +1505,7 @@ extension UsageMenuCardView.Model {
             weeklyResetText = nil
             weeklyDetailText = detail
         }
-        if input.provider == .kilo || input.provider == .litellm,
+        if [.kilo, .litellm, .chutes].contains(input.provider),
            let detail = weekly.resetDescription,
            !detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         {
