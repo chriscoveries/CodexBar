@@ -39,43 +39,19 @@ enum UsagePaceText {
 
     static func sessionEquivalentDetail(forecast: SessionEquivalentForecast) -> SessionEquivalentDetail {
         let displayedEstimate = Self.boundedFullWindowCount(forecast.estimatedWindowsToExhaustWeekly)
-        let leftText = if displayedEstimate == 1 {
-            String.localizedStringWithFormat(
-                L("≈%d full 5h window of weekly left"),
-                1)
-        } else {
-            String.localizedStringWithFormat(
-                L("≈%d full 5h windows of weekly left"),
-                displayedEstimate)
-        }
-
-        let untilText = if forecast.windowsUntilReset == 1 {
-            String.localizedStringWithFormat(
-                L("%d window until reset"),
-                1)
-        } else {
-            String.localizedStringWithFormat(
-                L("%d windows until reset"),
-                forecast.windowsUntilReset)
-        }
-
-        let numberText = "\(leftText) · \(untilText)"
+        let numberText = String.localizedStringWithFormat(
+            L("≈%d full 5h windows of weekly left · %d windows until reset"),
+            displayedEstimate,
+            forecast.windowsUntilReset)
         let verdictText: String
         if forecast.estimatedWindowsToExhaustWeekly >= forecast.availableWindowsUntilReset {
             verdictText = L("Weekly cannot run out before reset at this pace")
         } else {
             let windowsEarly = Self.boundedWindowCount(
                 forecast.availableWindowsUntilReset - forecast.estimatedWindowsToExhaustWeekly)
-            let earlyCount = max(1, windowsEarly)
-            if earlyCount == 1 {
-                verdictText = String.localizedStringWithFormat(
-                    L("Weekly can run out ≈%d window early"),
-                    1)
-            } else {
-                verdictText = String.localizedStringWithFormat(
-                    L("Weekly can run out ≈%d windows early"),
-                    earlyCount)
-            }
+            verdictText = String.localizedStringWithFormat(
+                L("Weekly can run out ≈%d windows early"),
+                max(1, windowsEarly))
         }
         return SessionEquivalentDetail(
             verdictText: verdictText,
