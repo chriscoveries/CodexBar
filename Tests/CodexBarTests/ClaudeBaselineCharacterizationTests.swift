@@ -369,21 +369,21 @@ struct ClaudeBaselineCharacterizationTests {
         let context = self.makeContext(runtime: .app, sourceMode: .auto, env: env, settings: settings)
         let strategies = await descriptor.fetchPlan.pipeline.resolveStrategies(context)
         let cli = try #require(strategies.first { $0.id == "claude.cli" })
-        let fetchOverride: @Sendable (String, TimeInterval, Bool) async throws -> ClaudeStatusSnapshot = {
-            binary, _, _ in
-            #expect(binary == stubCLIPath)
-            return ClaudeStatusSnapshot(
-                sessionPercentLeft: 88,
-                weeklyPercentLeft: 60,
-                opusPercentLeft: 95,
-                accountEmail: "user@example.com",
-                accountOrganization: "Example Org",
-                loginMethod: nil,
-                primaryResetDescription: "Resets 11am",
-                secondaryResetDescription: "Resets Nov 21",
-                opusResetDescription: "Resets Nov 21",
-                rawText: "")
-        }
+        let fetchOverride: @Sendable (String, TimeInterval, Bool) async throws
+            -> ClaudeStatusSnapshot = { binary, _, _ in
+                #expect(binary == stubCLIPath)
+                return ClaudeStatusSnapshot(
+                    sessionPercentLeft: 88,
+                    weeklyPercentLeft: 60,
+                    opusPercentLeft: 95,
+                    accountEmail: "user@example.com",
+                    accountOrganization: "Example Org",
+                    loginMethod: nil,
+                    primaryResetDescription: "Resets 11am",
+                    secondaryResetDescription: "Resets Nov 21",
+                    opusResetDescription: "Resets Nov 21",
+                    rawText: "")
+            }
 
         try await ClaudeCLIBackgroundAvailability.withIsolatedStoreForTesting {
             _ = try await ClaudeStatusProbe.$fetchOverride.withValue(fetchOverride) {
