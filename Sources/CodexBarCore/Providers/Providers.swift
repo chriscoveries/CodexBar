@@ -305,10 +305,11 @@ public enum ProviderBrowserCookieDefaults {
         #endif
     }
 
-    /// LongCat Auto imports only from Chrome by default to avoid prompting unrelated browser keychains.
+    /// LongCat Auto keeps Chrome first for existing users, then checks Firefox without adding
+    /// an unrelated browser Keychain prompt.
     public static var longcatCookieImportOrder: BrowserCookieImportOrder? {
         #if os(macOS)
-        [.chrome]
+        [.chrome, .firefox]
         #else
         nil
         #endif
