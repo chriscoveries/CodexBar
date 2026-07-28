@@ -159,7 +159,8 @@ struct ClaudeOAuthFetchStrategyAvailabilityTests {
                 sourceLabel: "Browser",
                 cookieCount: 1)
             let transport = ProviderHTTPTransportHandler { request in
-                Issue.record("Unexpected Claude browser-cookie discovery request: \(request.url?.absoluteString ?? "nil")")
+                let url = request.url?.absoluteString ?? "nil"
+                Issue.record("Unexpected Claude browser-cookie discovery request: \(url)")
                 throw URLError(.badServerResponse)
             }
             let loadCredentials: @Sendable (
@@ -802,7 +803,8 @@ struct ClaudeOAuthFetchStrategyAvailabilityTests {
     private func withIsolatedCookieCache<T>(_ operation: () async throws -> T) async rethrows -> T {
         let legacyBase = FileManager.default.temporaryDirectory
             .appendingPathComponent("claude-oauth-enrichment-\(UUID().uuidString)", isDirectory: true)
-        return try await KeychainCacheStore.withServiceOverrideForTesting("claude-oauth-enrichment-\(UUID().uuidString)") {
+        let service = "claude-oauth-enrichment-\(UUID().uuidString)"
+        return try await KeychainCacheStore.withServiceOverrideForTesting(service) {
             try await CookieHeaderCache.withLegacyBaseURLOverrideForTesting(legacyBase) {
                 KeychainCacheStore.setTestStoreForTesting(true)
                 defer { KeychainCacheStore.setTestStoreForTesting(false) }
