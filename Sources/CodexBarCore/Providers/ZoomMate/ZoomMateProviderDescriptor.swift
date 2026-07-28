@@ -59,13 +59,13 @@ public enum ZoomMateProviderDescriptor {
 }
 
 /// Single unified strategy (modeled on `T3ChatWebFetchStrategy`) branching internally on the
-/// selected `cookieSource`: `.auto` resolves a cookie session — the `CookieHeaderCache`d header
-/// first, else a fresh browser import whose validated header is persisted back through the cache —
+/// selected `cookieSource`: `.auto` resolves a cookie session — the `CookieHeaderCache`d host map
+/// first, else a fresh browser import whose validated headers are persisted back through the cache —
 /// and mints a bearer JWT via `ZoomMateUsageFetcher.mintBearerToken`, reusing a still-valid token
 /// from `ZoomMateBearerTokenCache` across refreshes; `.manual` uses the pasted cURL capture.
 /// Cookies outlive the ~hourly JWT by weeks, so minting from cookies (and caching the result until
 /// it nears expiry) avoids the manual re-paste entirely as long as the underlying browser session
-/// stays valid, and the persisted header lets background refreshes and the bundled CLI reuse that
+/// stays valid, and the persisted headers let background refreshes and the bundled CLI reuse that
 /// session without rereading Chrome. A rejected session clears the cached header and retries once
 /// with a fresh import (see `fetch`).
 struct ZoomMateWebFetchStrategy: ProviderFetchStrategy {
@@ -91,7 +91,7 @@ struct ZoomMateWebFetchStrategy: ProviderFetchStrategy {
             return try await self.fetchOnce(context, allowCachedCookieHeader: true)
         } catch ZoomMateUsageError.invalidCredentials where cookieSource == .auto {
             // The persisted cookie session (or a bearer minted from it) was rejected. Drop the
-            // cached header and retry once against a fresh browser import, mirroring
+            // cached headers and retry once against a fresh browser import, mirroring
             // OpenCodeUsageFetchStrategy. Outside user-initiated contexts the import is
             // gate-blocked, so the retry surfaces `noSession` instead of replaying a dead cookie.
             CookieHeaderCache.clear(provider: .zoommate)

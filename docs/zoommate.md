@@ -40,10 +40,10 @@ session, CodexBar reports `invalidCredentials`.
 
 Chrome's cookie decryption key lives in the macOS Keychain, so CodexBar only reads Chrome's cookie
 store during user-initiated refreshes (a menu or Settings refresh, or `codexbar cookie`). Once a
-fresh import validates — the cookie-to-token mint succeeds — the validated cookie header is saved to
+fresh import validates — the cookie-to-token mint succeeds — the validated host-scoped cookie headers are saved to
 CodexBar's shared Keychain cookie cache (`com.steipete.codexbar.cache`, account `cookie.zoommate`,
 same as other cookie providers) and reused before re-importing from Chrome. Background refreshes and
-the bundled `codexbar` CLI run entirely from that cached header, so they never touch Chrome's cookie
+the bundled `codexbar` CLI run entirely from those cached headers, so they never touch Chrome's cookie
 store or trigger a Keychain prompt. If Zoom rejects the cached session, CodexBar drops it and retries
 one fresh Chrome import (user-initiated contexts only; background refreshes report `noSession` until
 the next user refresh).
@@ -66,7 +66,9 @@ Unlike some other manual-paste providers, the forwarded header allowlist for Zoo
 selected browser headers may also be forwarded, but `Origin` and `Referer` are always replaced with
 the fixed `https://zoommate.zoom.us` value. Captures are accepted only for the HTTPS
 `/ai-computer/api/v1/credits/status` endpoint on `ai.zoom.us` or `zoommate.zoom.us` — DevTools may
-show the request on either host, since both currently serve the same first-party API.
+show the request on either host, since both currently serve the same first-party API. A captured
+`Cookie` header is bound to that request's host: CodexBar tries the captured host first and never
+forwards its cookies if a non-auth failure falls back to the sibling host.
 
 ## Token expiry (~hourly)
 
@@ -83,12 +85,13 @@ longer, so:
 ## Auth & privacy
 
 Automatic mode uses the same first-party ZoomMate web-client flow a signed-in browser uses:
-CodexBar imports Zoom session cookies from the local Chrome cookie jar, sends those cookies only
-to Zoom's `ai.zoom.us` login bootstrap endpoint, receives a short-lived bearer token, and then uses
-that bearer token for the `credits/status` and `credits/history` requests.
+CodexBar imports Zoom session cookies from the local Chrome cookie jar, partitions them into the
+headers a browser would send to each fixed API host, exchanges one of those host-scoped headers for
+a short-lived bearer token, and then uses that bearer token for the `credits/status` and
+`credits/history` requests.
 
 The minted bearer token is never persisted — it is held only in a process-lifetime in-memory cache.
-The validated cookie header (and only the header — never the bearer) is persisted to CodexBar's
+The validated host-scoped cookie headers (and only those headers — never the bearer) are persisted to CodexBar's
 existing shared Keychain cookie cache after a successful mint, the same cache and lifecycle other
 cookie providers (Claude web, Perplexity, OpenCode, …) already use, so background refreshes and the
 bundled CLI can reuse the session without rereading Chrome. ZoomMate logs intentionally omit
@@ -99,10 +102,12 @@ but the imported set is then narrowed to only cookies a browser would actually a
 unrelated `*.zoom.us` siblings that these endpoints never receive.
 
 All authentication and credit requests use fixed HTTPS URLs on the two first-party API hosts:
-`ai.zoom.us` is tried first, falling back to `zoommate.zoom.us` on non-auth failures. The hosts
-currently serve the same `/ai-computer/` API interchangeably and either may retire in the future, so
-the provider works with both; auth rejections (401/403) never trigger the fallback since the host
-answered and the session is the problem. `zoommate.zoom.us` additionally provides the product UI and
+automatic mode tries `ai.zoom.us` first, while manual mode starts with the host in the accepted cURL
+capture; either mode falls back to the other host on non-auth failures. Each request receives only
+the cookies scoped to its destination host. The hosts currently serve the same `/ai-computer/` API
+interchangeably and either may retire in the future, so the provider works with both; auth rejections
+(401/403) never trigger the fallback since the host answered and the session is the problem.
+`zoommate.zoom.us` additionally provides the product UI and
 the fixed web-client `continue`, `Origin`, and `Referer` values. The parent `zoom.us` scope is used
 only to discover parent-scoped SSO cookies; it does not authorize requests to arbitrary Zoom
 subdomains. ZoomMate does not currently expose a
@@ -122,8 +127,9 @@ GET https://ai.zoom.us/ai-computer/api/v1/credits/status
 GET https://ai.zoom.us/ai-computer/api/v1/credits/history?app_id=demo_app&limit=50&page=<n>&sort_by=time&sort_order=desc&start_time=<ISO8601>&end_time=<ISO8601>
 ```
 
-(Each request retries once on `zoommate.zoom.us` with the same path if `ai.zoom.us` fails with a
-non-auth error — see "Auth & privacy" above.)
+(Automatic requests retry once on `zoommate.zoom.us` with the same path if `ai.zoom.us` fails with a
+non-auth error. Manual requests start on the captured host and retry the other host without the
+captured host's cookies — see "Auth & privacy" above.)
 
 The `credits/status` response's `data.credit_status` object is decoded into a
 `ZoomMateCreditStatus` struct. The `credits/history` request is paginated (looping on `page` until
@@ -229,7 +235,7 @@ descriptor allowlist and keeps showing every component their feed returns, uncha
 codexbar usage --provider zoommate
 ```
 
-The CLI reuses the cookie header cached by a previous validated refresh; it does not read Chrome's
+The CLI reuses the host-scoped cookie headers cached by a previous validated refresh; it does not read Chrome's
 cookie store itself. If no cached session exists yet (`noSession`), refresh once from the app or
 seed the cache from the terminal with `codexbar cookie --provider zoommate` (add
 `--allow-keychain-prompt` to acknowledge that Chrome cookie decryption may prompt).

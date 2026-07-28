@@ -206,7 +206,7 @@ public struct ZoomMateUsageFetcher: Sendable {
         }
     }
 
-    /// Exchanges a ZoomMate/Zoom session cookie header for a fresh bearer JWT via ZoomMate's own
+    /// Exchanges ZoomMate/Zoom session cookie headers for a fresh bearer JWT via ZoomMate's own
     /// cookie-to-token bootstrap endpoint — the same call its web frontend makes on every page
     /// load. Cookies (session/SSO-backed) live far longer than the ~hourly JWT, so minting a fresh
     /// token from cookies avoids the manual re-paste entirely as long as the underlying browser
@@ -287,7 +287,7 @@ public struct ZoomMateUsageFetcher: Sendable {
         }
 
         #if os(macOS)
-        // Cached cookie header first (Perplexity/OpenCode precedent): Chrome's cookie decryption
+        // Cached host-scoped cookie headers first (Perplexity/OpenCode precedent): Chrome's cookie decryption
         // is gated behind user-initiated contexts (`BrowserCookieAccessGate`) to avoid Keychain
         // prompts, so background refreshes and the bundled CLI must be able to run entirely from
         // the last validated session instead of rereading the browser.
@@ -296,7 +296,7 @@ public struct ZoomMateUsageFetcher: Sendable {
            let cookieHeaders = ZoomMateCookieHeaders.decodeFromStorage(cached.cookieHeader),
            !cookieHeaders.isEmpty
         {
-            logger?("[zoommate] Using cached cookie header from \(cached.sourceLabel)")
+            logger?("[zoommate] Using cached cookie headers from \(cached.sourceLabel)")
             return try await Self.requestContext(
                 forCookieHeaders: cookieHeaders,
                 persistingValidatedHeaderAs: nil,
@@ -353,9 +353,9 @@ public struct ZoomMateUsageFetcher: Sendable {
 
     /// Builds the `.auto` request context for a cookie session: reuses or mints the bearer JWT
     /// and, when `sourceLabel` is non-nil (a fresh browser import), persists the now-validated
-    /// cookie header through `CookieHeaderCache`. The successful mint is the validation —
+    /// cookie headers through `CookieHeaderCache`. The successful mint is the validation —
     /// ZoomMate's login bootstrap rejects a dead session with 401/403 before anything is stored.
-    /// Only the cookie header is persisted; the minted bearer stays in the in-memory
+    /// Only the cookie headers are persisted; the minted bearer stays in the in-memory
     /// `ZoomMateBearerTokenCache`.
     static func requestContext(
         forCookieHeaders cookieHeaders: ZoomMateCookieHeaders,
