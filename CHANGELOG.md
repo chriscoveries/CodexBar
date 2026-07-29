@@ -8,7 +8,6 @@
 ## 0.46.0 — 2026-07-29
 
 ### Added
-- xAI: new provider for xAI developer-platform billing — prepaid credit balance plus a 30-day daily spend dashboard from the documented Management API (management key + team ID), fully separate from the Grok subscription provider (#1712).
 - Qwen Cloud: new provider for Individual Token Plans with 5-hour and weekly rolling windows (#2361). Thanks @umutkeltek, and @Yach0 for the API investigation!
 - ZoomMate: new provider with credits, session history, and pacing, using host-scoped cookie routing (#2344). Thanks @weddle!
 - Alibaba: Personal/Solo Token Plan variants for mainland (Bailian) and international (Model Studio) accounts (#2487). Thanks @LeoLin990405 and @halilertekin for the investigations!
