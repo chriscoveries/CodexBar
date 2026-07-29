@@ -91,6 +91,11 @@ struct OpenCodeGoLocalUsageFetchStrategy: ProviderFetchStrategy {
     private let localSnapshotLoader: LocalSnapshotLoader
     private let webUsageOverlayFetcher: WebUsageOverlayFetcher
 
+    private struct OverlayCookie {
+        let header: String
+        let cachedEntry: CookieHeaderCache.Entry?
+    }
+
     init(
         localSnapshotLoader: @escaping LocalSnapshotLoader = { context in
             try OpenCodeGoLocalUsageReader().fetch(historyDays: context.costUsageHistoryDays)
@@ -119,7 +124,7 @@ struct OpenCodeGoLocalUsageFetchStrategy: ProviderFetchStrategy {
     private func snapshot(context: ProviderFetchContext) async throws -> (OpenCodeGoUsageSnapshot, Bool) {
         let snapshot = try self.localSnapshotLoader(context)
         guard context.settings?.opencodego?.cookieSource != .off,
-              let cookieHeader = Self.cachedOrManualCookieHeader(context: context)
+              let cookie = Self.cachedOrManualCookie(context: context)
         else {
             return (snapshot, false)
         }
@@ -131,11 +136,20 @@ struct OpenCodeGoLocalUsageFetchStrategy: ProviderFetchStrategy {
         // keep a cancelled refresh from completing with a successful local-only result.
         let webSnapshot: OpenCodeGoUsageSnapshot?
         do {
-            webSnapshot = try await self.webUsageOverlayFetcher(context, cookieHeader)
+            webSnapshot = try await self.webUsageOverlayFetcher(context, cookie.header)
+        } catch OpenCodeGoUsageError.invalidCredentials {
+            #if os(macOS)
+            if let cached = cookie.cachedEntry {
+                _ = CookieHeaderCache.clearIfCurrent(provider: .opencodego, expected: cached)
+            }
+            #endif
+            return (snapshot, false)
         } catch is CancellationError {
             throw CancellationError()
         } catch let error as URLError where error.code == .cancelled {
             throw CancellationError()
+        } catch {
+            return (snapshot, false)
         }
         if let webSnapshot {
             return (snapshot.applyingWebUsage(webSnapshot), true)
@@ -149,7 +163,7 @@ struct OpenCodeGoLocalUsageFetchStrategy: ProviderFetchStrategy {
         let zenBalanceTask = Task<Double?, Error> {
             do {
                 return try await OpenCodeGoUsageFetcher.fetchOptionalZenBalance(
-                    cookieHeader: cookieHeader,
+                    cookieHeader: cookie.header,
                     timeout: context.webTimeout,
                     workspaceIDOverride: workspaceOverride)
             } catch is CancellationError {
@@ -174,6 +188,8 @@ struct OpenCodeGoLocalUsageFetchStrategy: ProviderFetchStrategy {
                 timeout: context.webTimeout,
                 workspaceIDOverride: workspaceOverride,
                 includeZenBalance: context.includeOptionalUsage)
+        } catch OpenCodeGoUsageError.invalidCredentials {
+            throw OpenCodeGoUsageError.invalidCredentials
         } catch is CancellationError {
             throw CancellationError()
         } catch let error as URLError where error.code == .cancelled {
@@ -186,14 +202,20 @@ struct OpenCodeGoLocalUsageFetchStrategy: ProviderFetchStrategy {
         }
     }
 
-    private static func cachedOrManualCookieHeader(context: ProviderFetchContext) -> String? {
+    private static func cachedOrManualCookie(context: ProviderFetchContext) -> OverlayCookie? {
         if let settings = context.settings?.opencodego, settings.cookieSource == .manual {
-            return OpenCodeWebCookieSupport.requestCookieHeader(from: settings.manualCookieHeader)
+            guard let header = OpenCodeWebCookieSupport.requestCookieHeader(from: settings.manualCookieHeader) else {
+                return nil
+            }
+            return OverlayCookie(header: header, cachedEntry: nil)
         }
 
         #if os(macOS)
-        guard let cached = CookieHeaderCache.load(provider: .opencodego) else { return nil }
-        return OpenCodeWebCookieSupport.requestCookieHeader(from: cached.cookieHeader)
+        let observation = CookieHeaderCache.observeForConditionalMutation(provider: .opencodego)
+        guard let cached = observation.entry,
+              let header = OpenCodeWebCookieSupport.requestCookieHeader(from: cached.cookieHeader)
+        else { return nil }
+        return OverlayCookie(header: header, cachedEntry: cached)
         #else
         return nil
         #endif

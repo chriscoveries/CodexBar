@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import CodexBarCore
 
+@Suite(.serialized)
 struct OpenCodeGoWebOverlayTests {
     private static let updatedAt = Date(timeIntervalSince1970: 1_784_836_525)
     private static let renewsAt = Date(timeIntervalSince1970: 1_786_550_400)
@@ -251,4 +252,71 @@ struct OpenCodeGoWebOverlayTests {
             try await strategy.fetch(self.makeContext(settings: self.makeManualCookieSettings()))
         }
     }
+
+    #if os(macOS)
+    @Test
+    func `local strategy evicts cached cookie after authentication failure`() async throws {
+        try await self.withCachedCookie {
+            let strategy = OpenCodeGoLocalUsageFetchStrategy(
+                localSnapshotLoader: { _ in Self.localEstimate() },
+                webUsageOverlayFetcher: { _, _ in throw OpenCodeGoUsageError.invalidCredentials })
+
+            let result = try await strategy.fetch(self.makeContext(includeOptionalUsage: false))
+
+            #expect(result.sourceLabel == "local")
+            #expect(result.usage.tertiary?.usedPercent == 100)
+            #expect(CookieHeaderCache.load(provider: .opencodego) == nil)
+        }
+    }
+
+    @Test
+    func `local strategy retains cached cookie after transport failure`() async throws {
+        try await self.withCachedCookie {
+            let strategy = OpenCodeGoLocalUsageFetchStrategy(
+                localSnapshotLoader: { _ in Self.localEstimate() },
+                webUsageOverlayFetcher: { _, _ in throw URLError(.timedOut) })
+
+            let result = try await strategy.fetch(self.makeContext(includeOptionalUsage: false))
+
+            #expect(result.sourceLabel == "local")
+            #expect(result.usage.tertiary?.usedPercent == 100)
+            #expect(CookieHeaderCache.load(provider: .opencodego)?.cookieHeader == "auth=cached-session")
+        }
+    }
+
+    @Test
+    func `local strategy reuses valid cached cookie`() async throws {
+        try await self.withCachedCookie {
+            let observedCookies = Recorder<String>()
+            let strategy = OpenCodeGoLocalUsageFetchStrategy(
+                localSnapshotLoader: { _ in Self.localEstimate() },
+                webUsageOverlayFetcher: { _, cookieHeader in
+                    observedCookies.append(cookieHeader)
+                    return Self.webUsage()
+                })
+
+            let result = try await strategy.fetch(self.makeContext(includeOptionalUsage: false))
+
+            #expect(result.sourceLabel == "local+web")
+            #expect(result.usage.tertiary?.usedPercent == 64)
+            #expect(observedCookies.values == ["auth=cached-session"])
+            #expect(CookieHeaderCache.load(provider: .opencodego)?.cookieHeader == "auth=cached-session")
+        }
+    }
+
+    private func withCachedCookie<T>(_ operation: () async throws -> T) async rethrows -> T {
+        let service = "com.steipete.codexbar.tests.opencodego-overlay.\(UUID().uuidString)"
+        return try await KeychainCacheStore.withServiceOverrideForTesting(service) {
+            try await KeychainCacheStore.withImplicitTestStoreForTesting {
+                CookieHeaderCache.resetDisplayCacheForTesting()
+                defer { CookieHeaderCache.resetDisplayCacheForTesting() }
+                CookieHeaderCache.store(
+                    provider: .opencodego,
+                    cookieHeader: "auth=cached-session",
+                    sourceLabel: "Chrome")
+                return try await operation()
+            }
+        }
+    }
+    #endif
 }
