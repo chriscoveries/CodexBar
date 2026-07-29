@@ -330,6 +330,31 @@ struct CostUsageCalendarTests {
         #expect(cached?.projects.flatMap(\.daily).map(\.date) == [expectedDay])
         #expect(cached?.sessions.map(\.sessionID) == ["calendar-fetcher-time-zone.jsonl"])
         #expect(cached?.sessionTokens == 10)
+
+        let staleProjectSnapshot = await CostUsageFetcher.loadCachedCodexLocalProjectUsageSnapshot(
+            now: now,
+            historyDays: 1,
+            hidePersonalInfo: false,
+            scannerOptions: options)
+        #expect(staleProjectSnapshot == nil)
+
+        let projectSnapshot = try await CostUsageFetcher.loadCodexLocalProjectUsageSnapshot(
+            now: now,
+            forceRefresh: true,
+            historyDays: 1,
+            hidePersonalInfo: false,
+            scannerOptions: options)
+        #expect(projectSnapshot.daily.map(\.day) == [expectedDay])
+        #expect(projectSnapshot.projects.flatMap(\.daily).map(\.day) == [expectedDay])
+        #expect(projectSnapshot.sessions.flatMap(\.daily).map(\.day) == [expectedDay])
+        #expect(projectSnapshot.scopeSignature.contains("timeZone=\(calendar.timeZone.identifier)"))
+
+        let cachedProjectSnapshot = await CostUsageFetcher.loadCachedCodexLocalProjectUsageSnapshot(
+            now: now,
+            historyDays: 1,
+            hidePersonalInfo: false,
+            scannerOptions: options)
+        #expect(cachedProjectSnapshot?.daily.map(\.day) == [expectedDay])
     }
 
     private static func codexOptions(
