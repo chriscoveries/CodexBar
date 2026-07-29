@@ -3,8 +3,8 @@
 ## 0.45.3 — Unreleased
 
 ### Fixed
-- Menu bar: ignore leftover `--hook-event` invocations from other CodexBar installations before
-  initializing the app UI, preventing temporary duplicate provider icons during Codex activity.
+- Ollama: reuse validated browser sessions across refreshes, and skip inaccessible Safari cookies during automatic
+  fallback while preserving explicit Safari permission guidance.
 
 ## 0.45.2 — 2026-07-19
 
