@@ -1189,4 +1189,84 @@ struct DoubaoAgentPlanUsageTests {
         #expect(await transport.requestCount() == 1)
         #expect(snapshot.toUsageSnapshot().primary?.usedPercent == 12.5)
     }
+
+    @Test
+    func `agent plan fallback surfaces access denied`() async {
+        let transport = DoubaoScriptedTransport(results: [
+            .rawResponse(
+                statusCode: 200,
+                body: #"{"Result":{"Status":"Reclaimed"}}"#),
+            .rawResponse(
+                statusCode: 403,
+                body: #"{"ResponseMetadata":{"Error":{"Code":"AccessDenied","Message":"not authorized"}}}"#),
+        ])
+
+        await #expect {
+            _ = try await DoubaoUsageFetcher.fetchCodingPlanUsage(
+                credentials: Self.credentials,
+                session: transport)
+        } throws: { error in
+            guard case let DoubaoUsageError.apiError(code, message) = error else { return false }
+            return code == 403 && message.contains("AccessDenied")
+        }
+    }
+
+    @Test
+    func `agent plan fallback surfaces malformed response`() async {
+        let transport = DoubaoScriptedTransport(results: [
+            .rawResponse(
+                statusCode: 200,
+                body: #"{"Result":{"Status":"Reclaimed"}}"#),
+            .rawResponse(statusCode: 200, body: #"{"Result":null}"#),
+        ])
+
+        await #expect {
+            _ = try await DoubaoUsageFetcher.fetchCodingPlanUsage(
+                credentials: Self.credentials,
+                session: transport)
+        } throws: { error in
+            guard case .parseFailed = error as? DoubaoUsageError else { return false }
+            return true
+        }
+    }
+
+    @Test
+    func `agent plan fallback surfaces transport failure`() async {
+        let transport = DoubaoScriptedTransport(results: [
+            .rawResponse(
+                statusCode: 200,
+                body: #"{"Result":{"Status":"Reclaimed"}}"#),
+            .failure(URLError(.timedOut)),
+        ])
+
+        await #expect {
+            _ = try await DoubaoUsageFetcher.fetchCodingPlanUsage(
+                credentials: Self.credentials,
+                session: transport)
+        } throws: { error in
+            guard case let DoubaoUsageError.networkError(message) = error else { return false }
+            return !message.isEmpty
+        }
+    }
+
+    @Test
+    func `agent plan fallback propagates cancellation`() async {
+        let transport = DoubaoScriptedTransport(results: [
+            .rawResponse(
+                statusCode: 200,
+                body: #"{"Result":{"Status":"Reclaimed"}}"#),
+            .cancellation,
+        ])
+
+        await #expect(throws: CancellationError.self) {
+            _ = try await DoubaoUsageFetcher.fetchCodingPlanUsage(
+                credentials: Self.credentials,
+                session: transport)
+        }
+    }
+
+    private static let credentials = DoubaoCodingPlanCredentials(
+        accessKeyID: "AKLTTEST",
+        secretAccessKey: "secret",
+        region: "cn-beijing")
 }

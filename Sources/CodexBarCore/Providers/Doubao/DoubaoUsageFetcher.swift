@@ -364,10 +364,9 @@ public struct DoubaoUsageFetcher: Sendable {
             // A 200 with no quota window means the Coding Plan is not active for this account
             // (e.g. Status "Reclaimed" after switching to an Agent Plan). Fall back to the
             // Agent Plan (AFP) usage before surfacing an empty Coding Plan snapshot.
-            if let agentSnapshot = try? await self.fetchAgentPlanUsage(
-                credentials: credentials, session: transport, date: date),
-                agentSnapshot.codingPlanUsage?.quotas.isEmpty == false
-            {
+            let agentSnapshot = try await self.fetchAgentPlanUsage(
+                credentials: credentials, session: transport, date: date)
+            if agentSnapshot.codingPlanUsage?.quotas.isEmpty == false {
                 return agentSnapshot
             }
         }
@@ -401,7 +400,16 @@ public struct DoubaoUsageFetcher: Sendable {
             credentials: credentials,
             date: date)
 
-        let response = try await transport.response(for: request)
+        let response: ProviderHTTPResponse
+        do {
+            response = try await transport.response(for: request)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as URLError where error.code == .cancelled {
+            throw CancellationError()
+        } catch {
+            throw DoubaoUsageError.networkError(error.localizedDescription)
+        }
         guard response.statusCode == 200 else {
             let summary = Self.apiErrorSummary(statusCode: response.statusCode, data: response.data)
             Self.log.error("Doubao agent plan API returned \(response.statusCode): \(summary)")
