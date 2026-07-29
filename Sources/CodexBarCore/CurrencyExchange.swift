@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// Manages currency exchange rates for converting USD-denominated AI model token estimates
 /// into user-preferred currencies (GBP, EUR, CNY, JPY, CAD, AUD, etc.).
