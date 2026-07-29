@@ -81,6 +81,7 @@ struct ClaudeCLIBackgroundAvailabilityTests {
     private func makeStrategy() -> ClaudeCLIFetchStrategy {
         ClaudeCLIFetchStrategy(
             useWebExtras: false,
+            includePrepaidBalance: false,
             manualCookieHeader: nil,
             browserDetection: BrowserDetection(cacheTTL: 0),
             hasWebFallback: false)
