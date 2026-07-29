@@ -332,7 +332,7 @@ extension UsageMenuCardView.Model {
     }
 
     static func usesProviderCostHistoryAsPrimaryDashboard(_ provider: UsageProvider) -> Bool {
-        provider == .openai || provider == .mistral || provider == .groq
+        provider == .openai || provider == .mistral || provider == .groq || provider == .xai
     }
 
     static func primaryCostHistorySnapshot(input: Input) -> CostUsageTokenSnapshot? {
@@ -349,6 +349,11 @@ extension UsageMenuCardView.Model {
             return input.snapshot == nil ? input.tokenSnapshot : nil
         case .groq:
             if let projected = input.snapshot?.groqConsoleUsage?.toCostUsageTokenSnapshot() {
+                return projected
+            }
+            return input.snapshot == nil ? input.tokenSnapshot : nil
+        case .xai:
+            if let projected = input.snapshot?.xaiUsage?.costHistorySnapshot() {
                 return projected
             }
             return input.snapshot == nil ? input.tokenSnapshot : nil

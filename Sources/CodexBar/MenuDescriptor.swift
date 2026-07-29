@@ -412,6 +412,14 @@ struct MenuDescriptor {
         if let mimoUsage = snapshot.mimoUsage {
             entries.append(.text("\(L("Balance")): \(mimoUsage.balanceDetail)", .primary))
         }
+        if let xaiUsage = snapshot.xaiUsage {
+            entries.append(.text("\(L("Balance")): \(UsageFormatter.usdString(xaiUsage.balanceUSD))", .primary))
+            if !xaiUsage.daily.isEmpty {
+                entries.append(.text(
+                    "\(xaiUsage.historyWindowPeriodLabel): \(UsageFormatter.usdString(xaiUsage.windowCostUSD))",
+                    .secondary))
+            }
+        }
         // Sakana pay-as-you-go is optional data gated by "Show optional credits and extra usage".
         // Gate the render on the setting too, not just the fetch: toggling the setting off only
         // rebuilds the menu, it does not immediately refetch, so a previously-populated
