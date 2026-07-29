@@ -101,7 +101,7 @@ public enum ClaudeSwapAccountProjection {
         case .tokenExpired:
             "Token expired. Switch to this account in claude-swap to refresh it."
         case .reloginRequired:
-            "Re-login required. Switch to this account in claude-swap to refresh it."
+            "Re-login required. Re-authenticate this account in claude-swap."
         case .apiKey:
             "API-key account; subscription usage is unavailable."
         case .keychainUnavailable:
