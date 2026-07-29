@@ -288,11 +288,15 @@ extension UsageMenuCardView.Model {
             Sub2APIProviderDescriptor.primaryLabel(details: snapshot.sub2APIUsage) ?? input.metadata.sessionLabel
         } else if input.provider == .amp {
             AmpProviderDescriptor.primaryLabel(details: snapshot.ampUsage) ?? input.metadata.sessionLabel
+        } else if input.provider == .alibabatokenplan {
+            AlibabaTokenPlanProviderDescriptor.primaryLabel(window: snapshot.primary) ?? input.metadata.sessionLabel
         } else {
             input.metadata.sessionLabel
         }
         let secondaryLabel = if input.provider == .amp {
             AmpProviderDescriptor.secondaryLabel(details: snapshot.ampUsage) ?? input.metadata.weeklyLabel
+        } else if input.provider == .alibabatokenplan {
+            AlibabaTokenPlanProviderDescriptor.secondaryLabel(window: snapshot.secondary) ?? input.metadata.weeklyLabel
         } else {
             input.metadata.weeklyLabel
         }

@@ -219,9 +219,12 @@ scan fails, while provider/account configuration changes replace obsolete result
 - Details: `docs/alibaba-coding-plan.md`.
 
 ## Alibaba Token Plan
-- Web mode posts to the Bailian `GetSubscriptionSummary` endpoint with form-encoded params and optional `sec_token`.
+- Explicit Team variants post to `GetSubscriptionSummary`; explicit Personal/Solo variants fetch the 5-hour and
+  weekly rolling windows plus subscription/quota metadata without probing across plan types.
 - Cookie sources: browser import (`auto`), manual Cookie header, or `ALIBABA_TOKEN_PLAN_COOKIE`.
-- Default quota URL: `https://bailian.console.aliyun.com/data/api.json?action=GetSubscriptionSummary&product=BssOpenAPI-V3`.
+- Region values: `intl` / `cn` for Team and `intl-personal` / `cn-personal` for Personal/Solo.
+- Personal quota hosts: `bailian-singapore-cs.alibabacloud.com` (international) and
+  `bailian-cs.console.aliyun.com` (mainland), with cookies scoped independently from the dashboard host.
 - Host overrides: `ALIBABA_TOKEN_PLAN_HOST` or `ALIBABA_TOKEN_PLAN_QUOTA_URL`.
 - Status: `https://status.aliyun.com` (link only, no auto-polling).
 - Details: `docs/alibaba-token-plan.md`.

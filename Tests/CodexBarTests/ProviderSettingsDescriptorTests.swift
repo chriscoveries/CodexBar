@@ -569,8 +569,10 @@ extension ProviderSettingsDescriptorTests {
         let implementation = AlibabaTokenPlanProviderImplementation()
         let pickers = implementation.settingsPickers(context: context)
         let fields = implementation.settingsFields(context: context)
+        let regionPicker = try #require(pickers.first(where: { $0.id == "alibaba-token-plan-region" }))
 
         #expect(pickers.contains(where: { $0.id == "alibaba-token-plan-cookie-source" }))
+        #expect(Set(regionPicker.options.map(\.id)) == ["intl", "cn", "intl-personal", "cn-personal"])
         #expect(fields.contains(where: { $0.id == "alibaba-token-plan-cookie" }))
         #expect(fields.first?.actions.contains(where: { $0.id == "alibaba-token-plan-open-dashboard" }) == true)
     }
