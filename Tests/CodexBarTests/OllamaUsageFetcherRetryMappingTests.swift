@@ -623,6 +623,17 @@ struct OllamaUsageFetcherRetryMappingTests {
     }
 
     @Test
+    func `token account header survives the manual strategy boundary`() {
+        let header = "__Secure-session=my-cookie:session=abc"
+        let context = self.makeContext(
+            sourceMode: .auto,
+            settings: ProviderSettingsSnapshot.make(
+                ollama: .init(cookieSource: .manual, manualCookieHeader: header)))
+
+        #expect(OllamaStatusFetchStrategy.manualCookieHeader(from: context) == header)
+    }
+
+    @Test
     func `token account session value reaches outgoing cookie header`() async throws {
         defer { OllamaRetryMappingStubURLProtocol.handler = nil }
 
