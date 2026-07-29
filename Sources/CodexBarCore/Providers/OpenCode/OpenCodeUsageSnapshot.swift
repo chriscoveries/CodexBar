@@ -100,6 +100,10 @@ public struct OpenCodeUsageSnapshot: Sendable {
     /// Renders monthly spend as the primary window when a spend limit exists, and always surfaces
     /// spend plus remaining prepaid balance as cost. The billing payload carries no cycle boundary,
     /// so `resetsAt` stays `nil` rather than guessing one.
+    ///
+    /// A workspace with no configured limit reports `limit: 0`, the same convention the OpenAI and
+    /// ClawRouter providers use for limitless spend; the menu card renders that case as a plain
+    /// spend line instead of a percentage.
     private func payAsYouGoUsageSnapshot(_ usage: PayAsYouGoUsage) -> UsageSnapshot {
         let primary = usage.usedPercent.map { percent in
             RateWindow(

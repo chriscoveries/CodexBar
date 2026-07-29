@@ -400,6 +400,20 @@ extension UsageMenuCardView.Model {
                 percentLine: nil)
         }
 
+        if provider == .opencode, cost.limit <= 0 {
+            let spend = UsageFormatter.currencyString(cost.used, currencyCode: cost.currencyCode)
+            let periodLabel = Self.localizedPeriodLabel(cost.period ?? "This month")
+            let balanceLine = cost.balance.map {
+                "\(L("Balance")): \(UsageFormatter.currencyString($0, currencyCode: cost.currencyCode))"
+            }
+            return ProviderCostSection(
+                title: L("metric_mistral_payg"),
+                percentUsed: nil,
+                spendLine: "\(periodLabel): \(spend)",
+                percentLine: nil,
+                balanceLine: balanceLine)
+        }
+
         if provider == .minimax, cost.period == "MiniMax points balance" {
             let balance = String(format: "%.0f", cost.used)
             return ProviderCostSection(
