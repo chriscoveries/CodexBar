@@ -16,8 +16,8 @@ public final class CurrencyExchange: @unchecked Sendable {
     ]
 
     private let lock = NSLock()
-    // Hardcoded fallback rates (approximate mid-market rates as of 2025-07).
-    // These are only used when no cached or live rates are available.
+    /// Hardcoded fallback rates (approximate mid-market rates as of 2025-07).
+    /// These are only used when no cached or live rates are available.
     private var rates: [String: Double] = [
         "USD": 1.0,
         "GBP": 0.79,
@@ -41,7 +41,9 @@ public final class CurrencyExchange: @unchecked Sendable {
     }
 
     /// Converts a USD amount to the specified target currency code.
-    public func convert(usdAmount: Double, to currencyCode: String) -> Double {
+    /// Returns `nil` when the requested rate is unavailable so callers cannot
+    /// accidentally relabel the unchanged amount as the target currency.
+    public func convert(usdAmount: Double, to currencyCode: String) -> Double? {
         let code = currencyCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         guard !code.isEmpty, code != "USD" else { return usdAmount }
 
@@ -49,14 +51,14 @@ public final class CurrencyExchange: @unchecked Sendable {
         let rate = self.rates[code]
         self.lock.unlock()
 
-        guard let rate else { return usdAmount }
+        guard let rate else { return nil }
         return usdAmount * rate
     }
 
     /// Converts an amount from one currency to another via USD as the pivot.
     /// For example, `convert(amount: 10, from: "GBP", to: "CNY")` converts £10 to yuan.
-    /// Falls back to the original amount when either currency rate is unavailable.
-    public func convert(amount: Double, from sourceCurrency: String, to targetCurrency: String) -> Double {
+    /// Returns `nil` when either currency rate is unavailable.
+    public func convert(amount: Double, from sourceCurrency: String, to targetCurrency: String) -> Double? {
         let source = sourceCurrency.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         let target = targetCurrency.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         guard !source.isEmpty, !target.isEmpty, source != target else { return amount }
@@ -66,7 +68,7 @@ public final class CurrencyExchange: @unchecked Sendable {
         let targetRate = target == "USD" ? 1.0 : self.rates[target]
         self.lock.unlock()
 
-        guard let sourceRate, let targetRate, sourceRate > 0 else { return amount }
+        guard let sourceRate, let targetRate, sourceRate > 0 else { return nil }
         let usdAmount = amount / sourceRate
         return usdAmount * targetRate
     }

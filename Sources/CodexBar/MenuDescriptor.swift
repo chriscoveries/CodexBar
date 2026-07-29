@@ -404,7 +404,10 @@ struct MenuDescriptor {
                 preferredCurrencyCode: preferredCurrencyCode)
         }
         if let mistralUsage = snapshot.mistralUsage, !mistralUsage.daily.isEmpty {
-            Self.appendMistralUsageSummary(entries: &entries, usage: mistralUsage)
+            Self.appendMistralUsageSummary(
+                entries: &entries,
+                usage: mistralUsage,
+                preferredCurrencyCode: preferredCurrencyCode)
         }
         if let mimoUsage = snapshot.mimoUsage {
             entries.append(.text("\(L("Balance")): \(mimoUsage.balanceDetail)", .primary))
@@ -416,8 +419,12 @@ struct MenuDescriptor {
         if showOptionalUsage, let sakanaPayAsYouGo = snapshot.sakanaPayAsYouGo {
             entries.append(.text("\(L("Balance")): \(sakanaPayAsYouGo.balanceDetail)", .primary))
             if let periodUsageTotal = sakanaPayAsYouGo.periodUsageTotal {
+                let cost = UsageFormatter.convertedCostString(
+                    periodUsageTotal,
+                    preferredCurrency: preferredCurrencyCode,
+                    providerCurrency: "USD")
                 entries.append(.text(
-                    "\(L("Usage")): \(UsageFormatter.usdString(periodUsageTotal))",
+                    "\(L("Usage")): \(cost)",
                     .secondary))
             }
         }

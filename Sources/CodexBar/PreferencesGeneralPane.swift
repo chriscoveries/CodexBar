@@ -76,7 +76,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
 }
 
 enum PreferredCurrencyOption: String, CaseIterable, Identifiable {
-    case auto = "auto"
+    case auto
     case usd = "USD"
     case gbp = "GBP"
     case eur = "EUR"
@@ -89,7 +89,9 @@ enum PreferredCurrencyOption: String, CaseIterable, Identifiable {
     case sgd = "SGD"
     case inr = "INR"
 
-    var id: String { self.rawValue }
+    var id: String {
+        self.rawValue
+    }
 
     var label: String {
         switch self {

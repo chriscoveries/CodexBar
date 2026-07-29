@@ -91,18 +91,27 @@ extension MenuDescriptor {
 
     static func appendMistralUsageSummary(
         entries: inout [Entry],
-        usage: MistralUsageSnapshot)
+        usage: MistralUsageSnapshot,
+        preferredCurrencyCode: String = "auto")
     {
         let latest = usage.daily.last
         if let latest {
+            let cost = UsageFormatter.convertedCostString(
+                latest.cost,
+                preferredCurrency: preferredCurrencyCode,
+                providerCurrency: usage.currency)
             entries.append(.text(
-                "\(L("Latest")): \(usage.currencySymbol)\(String(format: "%.4f", max(0, latest.cost))) · " +
+                "\(L("Latest")): \(cost) · " +
                     "\(UsageFormatter.tokenCountString(latest.totalTokens)) \(L("tokens"))",
                 .secondary))
         }
         let totalTokens = usage.totalInputTokens + usage.totalCachedTokens + usage.totalOutputTokens
+        let totalCost = UsageFormatter.convertedCostString(
+            usage.totalCost,
+            preferredCurrency: preferredCurrencyCode,
+            providerCurrency: usage.currency)
         entries.append(.text(
-            "\(L("Month")): \(usage.currencySymbol)\(String(format: "%.4f", max(0, usage.totalCost))) · " +
+            "\(L("Month")): \(totalCost) · " +
                 "\(UsageFormatter.tokenCountString(totalTokens)) \(L("tokens"))",
             .secondary))
         if let top = Self.topMistralModel(from: usage.daily) {

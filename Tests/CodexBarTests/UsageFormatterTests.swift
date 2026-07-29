@@ -474,22 +474,22 @@ struct UsageFormatterTests {
         let exchange = CurrencyExchange.shared
         let epsilon = 1e-9
         // USD → USD is identity
-        #expect(abs(exchange.convert(usdAmount: 10.0, to: "USD") - 10.0) < epsilon)
+        #expect(abs((exchange.convert(usdAmount: 10.0, to: "USD") ?? 0) - 10.0) < epsilon)
 
         // Cross-currency conversion via USD pivot
         let gbpRate = exchange.rate(for: "GBP") ?? 0.79
         let eurRate = exchange.rate(for: "EUR") ?? 0.92
-        #expect(abs(exchange.convert(usdAmount: 10.0, to: "GBP") - 10.0 * gbpRate) < epsilon)
-        #expect(abs(exchange.convert(usdAmount: 10.0, to: "EUR") - 10.0 * eurRate) < epsilon)
+        #expect(abs((exchange.convert(usdAmount: 10.0, to: "GBP") ?? 0) - 10.0 * gbpRate) < epsilon)
+        #expect(abs((exchange.convert(usdAmount: 10.0, to: "EUR") ?? 0) - 10.0 * eurRate) < epsilon)
 
         // Cross-currency: GBP → EUR
         let gbpToEur = exchange.convert(amount: 10.0, from: "GBP", to: "EUR")
         let expectedGbpToEur = 10.0 / gbpRate * eurRate
-        #expect(abs(gbpToEur - expectedGbpToEur) < epsilon)
+        #expect(abs((gbpToEur ?? 0) - expectedGbpToEur) < epsilon)
 
         // GBP → USD cross-currency
         let gbpToUsd = exchange.convert(amount: 10.0, from: "GBP", to: "USD")
-        #expect(abs(gbpToUsd - 10.0 / gbpRate) < epsilon)
+        #expect(abs((gbpToUsd ?? 0) - 10.0 / gbpRate) < epsilon)
 
         // Formatting
         let gbpFormatted = UsageFormatter.convertedCostString(10.0, targetCurrency: "GBP")
@@ -504,6 +504,14 @@ struct UsageFormatterTests {
 
         let explicitCNY = UsageFormatter.convertedCostString(10.0, preferredCurrency: "CNY", providerCurrency: "USD")
         #expect(explicitCNY.contains("¥"))
+
+        #expect(exchange.convert(amount: 10.0, from: "CHF", to: "USD") == nil)
+        let unavailable = UsageFormatter.convertedCostString(
+            10.0,
+            preferredCurrency: "USD",
+            providerCurrency: "CHF")
+        #expect(unavailable.contains("CHF"))
+        #expect(!unavailable.contains("$"))
     }
 
     @Test

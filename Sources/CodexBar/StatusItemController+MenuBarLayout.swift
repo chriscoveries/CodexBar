@@ -90,17 +90,20 @@ extension StatusItemController {
         -> (today: String?, last30Days: String?)
     {
         let snapshot = self.store.tokenSnapshotForCurrentProviderConfig(for: provider)?.snapshot
-        let providerCostCurrency = self.store.snapshot(for: provider)?.providerCost?.currencyCode
-        let preferred = self.settings.preferredCurrencyCode
-        let currencyCode = preferred != "auto" && !preferred.isEmpty
-            ? preferred
-            : (providerCostCurrency ?? snapshot?.currencyCode ?? "USD")
+        let sourceCurrencyCode = snapshot?.currencyCode ?? "USD"
+        let preferredCurrencyCode = self.settings.preferredCurrencyCode
 
         let today = MenuBarLayoutCostResolver.todayCostUSD(snapshot: snapshot, now: now).map {
-            UsageFormatter.convertedCostString($0, targetCurrency: currencyCode)
+            UsageFormatter.convertedCostString(
+                $0,
+                preferredCurrency: preferredCurrencyCode,
+                providerCurrency: sourceCurrencyCode)
         }
         let last30Days = snapshot?.last30DaysCostUSD.map {
-            UsageFormatter.convertedCostString($0, targetCurrency: currencyCode)
+            UsageFormatter.convertedCostString(
+                $0,
+                preferredCurrency: preferredCurrencyCode,
+                providerCurrency: sourceCurrencyCode)
         }
         return (today, last30Days)
     }

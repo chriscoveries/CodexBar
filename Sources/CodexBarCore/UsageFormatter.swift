@@ -226,8 +226,11 @@ public enum UsageFormatter {
 
     /// Formats a USD value into a target currency code with exchange rate conversion applied.
     public static func convertedCostString(_ usdValue: Double, targetCurrency: String) -> String {
-        let converted = CurrencyExchange.shared.convert(usdAmount: usdValue, to: targetCurrency)
-        return self.currencyString(converted, currencyCode: targetCurrency)
+        let converted = Self.convertedCost(
+            usdValue,
+            preferredCurrency: targetCurrency,
+            providerCurrency: "USD")
+        return self.currencyString(converted.value, currencyCode: converted.currencyCode)
     }
 
     /// Formats a value from one currency into another via USD pivot conversion.
@@ -238,7 +241,13 @@ public enum UsageFormatter {
         fromCurrency: String,
         targetCurrency: String) -> String
     {
-        let converted = CurrencyExchange.shared.convert(amount: value, from: fromCurrency, to: targetCurrency)
+        guard let converted = CurrencyExchange.shared.convert(
+            amount: value,
+            from: fromCurrency,
+            to: targetCurrency)
+        else {
+            return self.currencyString(value, currencyCode: fromCurrency)
+        }
         return self.currencyString(converted, currencyCode: targetCurrency)
     }
 
@@ -263,12 +272,33 @@ public enum UsageFormatter {
         preferredCurrency: String,
         providerCurrency: String?) -> String
     {
-        let effective = Self.effectiveCurrencyCode(preferred: preferredCurrency, providerCurrency: providerCurrency)
+        let converted = Self.convertedCost(
+            value,
+            preferredCurrency: preferredCurrency,
+            providerCurrency: providerCurrency)
+        return Self.currencyString(converted.value, currencyCode: converted.currencyCode)
+    }
+
+    /// Resolves and converts a numeric cost while preserving its source currency
+    /// when the requested exchange rate is unavailable.
+    public static func convertedCost(
+        _ value: Double,
+        preferredCurrency: String,
+        providerCurrency: String?) -> (value: Double, currencyCode: String)
+    {
         let sourceCurrency = providerCurrency ?? "USD"
-        guard effective == sourceCurrency else {
-            return Self.convertedCostString(value, fromCurrency: sourceCurrency, targetCurrency: effective)
+        let targetCurrency = Self.effectiveCurrencyCode(
+            preferred: preferredCurrency,
+            providerCurrency: providerCurrency)
+        guard targetCurrency != sourceCurrency,
+              let converted = CurrencyExchange.shared.convert(
+                  amount: value,
+                  from: sourceCurrency,
+                  to: targetCurrency)
+        else {
+            return (value, sourceCurrency)
         }
-        return Self.currencyString(value, currencyCode: effective)
+        return (converted, targetCurrency)
     }
 
     /// Formats a USD value with proper negative handling and thousand separators.

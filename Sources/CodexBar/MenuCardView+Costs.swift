@@ -90,8 +90,10 @@ extension UsageMenuCardView.Model.ProviderCostSection {
 }
 
 extension UsageMenuCardView.Model {
-    static func sakanaPayAsYouGoSection(_ usage: SakanaPayAsYouGoSnapshot?,
-                                        preferredCurrencyCode: String = "auto") -> ProviderCostSection? {
+    static func sakanaPayAsYouGoSection(
+        _ usage: SakanaPayAsYouGoSnapshot?,
+        preferredCurrencyCode: String = "auto") -> ProviderCostSection?
+    {
         guard let usage else { return nil }
         return ProviderCostSection(
             title: L("Extra usage"),
@@ -164,8 +166,10 @@ extension UsageMenuCardView.Model {
         return parts.joined(separator: " · ")
     }
 
-    private static func ampCreditsLine(_ usage: AmpUsageDetails,
-                                       preferredCurrencyCode: String = "auto") -> String? {
+    private static func ampCreditsLine(
+        _ usage: AmpUsageDetails,
+        preferredCurrencyCode: String = "auto") -> String?
+    {
         var lines: [String] = []
         if let individualCredits = usage.individualCredits {
             let cost = UsageFormatter.convertedCostString(
@@ -194,12 +198,11 @@ extension UsageMenuCardView.Model {
         guard enabled else { return nil }
         guard let snapshot else { return nil }
 
-        let effectiveCurrencyCode = preferredCurrencyCode != "auto" && !preferredCurrencyCode.isEmpty
-            ? preferredCurrencyCode
-            : snapshot.currencyCode
-
         let sessionCost = snapshot.sessionCostUSD.map {
-            UsageFormatter.convertedCostString($0, targetCurrency: effectiveCurrencyCode)
+            UsageFormatter.convertedCostString(
+                $0,
+                preferredCurrency: preferredCurrencyCode,
+                providerCurrency: snapshot.currencyCode)
         } ?? "—"
         let sessionTokens = snapshot.sessionTokens.map { UsageFormatter.tokenCountString($0) }
         let sessionLabel = if provider == .bedrock || provider == .mistral {
@@ -215,7 +218,10 @@ extension UsageMenuCardView.Model {
         }()
 
         let monthCost = snapshot.last30DaysCostUSD.map {
-            UsageFormatter.convertedCostString($0, targetCurrency: effectiveCurrencyCode)
+            UsageFormatter.convertedCostString(
+                $0,
+                preferredCurrency: preferredCurrencyCode,
+                providerCurrency: snapshot.currencyCode)
         } ?? "—"
         let fallbackTokens = snapshot.daily.compactMap(\.totalTokens).reduce(0, +)
         let monthTokensValue = snapshot.last30DaysTokens ?? (fallbackTokens > 0 ? fallbackTokens : nil)
@@ -239,7 +245,10 @@ extension UsageMenuCardView.Model {
         // Plan-metered spend over the same window (what the provider actually deducts);
         // only providers that report it (currently Cursor) populate `meteredCostUSD`.
         let meteredLine: String? = snapshot.meteredCostUSD.map {
-            let amount = UsageFormatter.convertedCostString($0, targetCurrency: effectiveCurrencyCode)
+            let amount = UsageFormatter.convertedCostString(
+                $0,
+                preferredCurrency: preferredCurrencyCode,
+                providerCurrency: snapshot.currencyCode)
             return String(format: L("Cursor-metered: %@ (%@)"), amount, windowLabel.lowercased())
         }
         let err = (error?.isEmpty ?? true) ? nil : error
@@ -249,7 +258,12 @@ extension UsageMenuCardView.Model {
             meteredLine: meteredLine,
             comparisonLines: comparisonPeriodsEnabled
                 ? snapshot.comparisonSummaries().map {
-                    Self.costWindowLine(summary: $0, currencyCode: effectiveCurrencyCode)
+                    Self.costWindowLine(
+                        summary: $0,
+                        currencyCode: UsageFormatter.effectiveCurrencyCode(
+                            preferred: preferredCurrencyCode,
+                            providerCurrency: snapshot.currencyCode),
+                        sourceCurrencyCode: snapshot.currencyCode)
                 }
                 : [],
             hintLine: Self.tokenUsageHint(provider: provider),
@@ -257,10 +271,17 @@ extension UsageMenuCardView.Model {
             errorCopyText: (error?.isEmpty ?? true) ? nil : error)
     }
 
-    static func costWindowLine(summary: CostUsageWindowSummary, currencyCode: String) -> String {
+    static func costWindowLine(
+        summary: CostUsageWindowSummary,
+        currencyCode: String,
+        sourceCurrencyCode: String? = nil) -> String
+    {
         let label = Self.costHistoryWindowLabel(days: summary.days)
         let cost = summary.totalCostUSD.map {
-            UsageFormatter.convertedCostString($0, targetCurrency: currencyCode)
+            UsageFormatter.convertedCostString(
+                $0,
+                preferredCurrency: currencyCode,
+                providerCurrency: sourceCurrencyCode ?? currencyCode)
         } ?? "—"
         guard let totalTokens = summary.totalTokens else { return "\(label): \(cost)" }
         return String(

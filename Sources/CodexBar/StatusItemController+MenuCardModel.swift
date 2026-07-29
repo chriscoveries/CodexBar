@@ -186,8 +186,8 @@ extension StatusItemController {
         let forecast: SessionEquivalentForecast? = if let codexProjection,
                                                       let session = codexProjection
                                                           .rateWindow(for: .session),
-                                                      let weekly = codexProjection
-                                                          .rateWindow(for: .weekly)
+                                                          let weekly = codexProjection
+                                                              .rateWindow(for: .weekly)
         {
             self.store.sessionEquivalentForecast(
                 provider: target,
@@ -197,7 +197,7 @@ extension StatusItemController {
                 now: now)
         } else if let snapshot,
                   let windows = self.store.sessionEquivalentWindows(
-                    provider: target, snapshot: snapshot)
+                      provider: target, snapshot: snapshot)
         {
             self.store.sessionEquivalentForecast(
                 provider: target,
