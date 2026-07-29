@@ -156,6 +156,13 @@ struct CostUsageFileUsage: Codable {
     var codexTurnIDs: [String]?
     var codexRows: [CostUsageScanner.CodexUsageRow]?
     var claudeRows: [CostUsageScanner.ClaudeUsageRow]?
+    /// Identity and target size for an in-progress bounded Codex parse.
+    var codexScanFileId: String?
+    var codexScanTargetSize: Int64?
+    var codexScanComplete: Bool?
+    var codexJSONLResumeState: CostUsageJsonl.ResumeState?
+    /// Compact relevant events retained while a subagent rollout awaits full-shape classification.
+    var codexBufferedSubagentLines: [CostUsageScanner.CodexBufferedFastLine]?
 }
 
 struct CostUsageCodexTotals: Codable, Equatable {

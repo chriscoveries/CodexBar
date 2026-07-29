@@ -694,6 +694,13 @@ extension CodexBarCLI {
         {
             return false
         }
+        if provider == .alibabatokenplan,
+           settings?.alibabaTokenPlan?.cookieSource == .manual
+        {
+            // The Alibaba/Qwen Token Plan fetch is plain URLSession + cookies; only browser
+            // cookie auto-import needs macOS, so a manual cookie header works off macOS too.
+            return false
+        }
         #if os(Linux)
         if provider == .cursor,
            settings?.cursor?.cookieSource != .off
@@ -707,6 +714,19 @@ extension CodexBarCLI {
            environment.map({ SakanaSettingsReader.cookieHeader(environment: $0) != nil }) == true
         {
             return false
+        }
+        if provider == .qwencloud,
+           sourceMode == .auto || sourceMode == .web,
+           settings?.qwenCloud?.cookieSource != .off
+        {
+            let hasEnvironmentCookie = environment.map {
+                QwenCloudSettingsReader.cookieHeader(environment: $0) != nil
+            } == true
+            let hasManualCookie = settings?.qwenCloud?.cookieSource == .manual &&
+                CookieHeaderNormalizer.normalize(settings?.qwenCloud?.manualCookieHeader) != nil
+            if hasEnvironmentCookie || hasManualCookie {
+                return false
+            }
         }
         if provider == .qoder,
            settings?.qoder?.cookieSource == .manual

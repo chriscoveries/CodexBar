@@ -299,7 +299,12 @@ extension CostUsageScanner {
         codexPriorityTokens: [String: [String: Int]]? = nil,
         codexTurnIDs: [String]? = nil,
         codexRows: [CodexUsageRow]? = nil,
-        claudeRows: [ClaudeUsageRow]? = nil) -> CostUsageFileUsage
+        claudeRows: [ClaudeUsageRow]? = nil,
+        codexScanFileId: String? = nil,
+        codexScanTargetSize: Int64? = nil,
+        codexScanComplete: Bool? = nil,
+        codexJSONLResumeState: CostUsageJsonl.ResumeState? = nil,
+        codexBufferedSubagentLines: [CodexBufferedFastLine]? = nil) -> CostUsageFileUsage
     {
         CostUsageFileUsage(
             mtimeUnixMs: mtimeUnixMs,
@@ -329,7 +334,12 @@ extension CostUsageScanner {
             codexPriorityTokens: codexPriorityTokens,
             codexTurnIDs: codexTurnIDs,
             codexRows: codexRows,
-            claudeRows: claudeRows)
+            claudeRows: claudeRows,
+            codexScanFileId: codexScanFileId,
+            codexScanTargetSize: codexScanTargetSize,
+            codexScanComplete: codexScanComplete,
+            codexJSONLResumeState: codexJSONLResumeState,
+            codexBufferedSubagentLines: codexBufferedSubagentLines)
     }
 
     static func needsCodexCostCache(_ usage: CostUsageFileUsage) -> Bool {
@@ -894,6 +904,7 @@ extension CostUsageScanner {
         let needsSessionId = cached.sessionId == nil
         guard cached.mtimeUnixMs == input.metadata.mtimeUnixMs,
               cached.size == input.metadata.size,
+              cached.codexScanComplete != false,
               !needsSessionId,
               !context.forceFullScan
         else { return false }
@@ -964,11 +975,13 @@ extension CostUsageScanner {
         return !(Set(cached.codexTurnIDs ?? []).isDisjoint(with: context.changedPriorityTurnIDs))
     }
 
+    // swiftlint:disable:next function_body_length
     static func appendCodexFileIncrementIfPossible(
         input: CodexFileScanInput,
         context: CodexFileScanContext,
         cache: inout CostUsageCache,
-        state: inout CodexScanState) throws -> Bool
+        state: inout CodexScanState,
+        maxBytesToRead: Int64? = nil) throws -> Bool
     {
         try context.checkCancellation?()
         guard let cached = input.cached, cached.sessionId != nil, !context.forceFullScan else { return false }
@@ -978,7 +991,11 @@ extension CostUsageScanner {
         }
         // Subagent shape depends on the complete lineage prefix. Appended metadata can change an
         // independent counter into a copied-prefix rollout, so a tail-only parse is not sound.
-        if try Self.codexFileIsSubagentThread(
+        let isResumablePartial = cached.codexScanComplete == false
+            && cached.codexScanFileId == input.metadata.fileId
+            && cached.codexScanTargetSize == input.metadata.size
+            && cached.mtimeUnixMs == input.metadata.mtimeUnixMs
+        if !isResumablePartial, try Self.codexFileIsSubagentThread(
             fileURL: input.fileURL,
             checkCancellation: context.checkCancellation)
         {
@@ -994,11 +1011,13 @@ extension CostUsageScanner {
             (cached.hasInterleavedTotals == true && cached.lastRawTotalsWatermark == nil)
             || (cached.lastRawTotalsWatermark != nil && cached.hasInterleavedTotals == nil)
             || (initialHasDivergentTotals && cached.lastRawTotalsWatermark == nil)
-        let canIncremental = input.metadata.size > cached.size && startOffset > 0
+        let canIncremental = startOffset > 0
             && startOffset <= input.metadata.size
-            && initialCountedTotals != nil
-            && cached.forkedFromId == nil
-            && !hasIncompleteInterleaveState
+            && (isResumablePartial
+                || (input.metadata.size > cached.size
+                    && initialCountedTotals != nil
+                    && cached.forkedFromId == nil
+                    && !hasIncompleteInterleaveState))
         guard canIncremental else { return false }
 
         let delta = try Self.parseCodexFileCancellable(
@@ -1014,12 +1033,19 @@ extension CostUsageScanner {
             initialHasInterleavedTotals: cached.hasInterleavedTotals ?? false,
             initialCodexTurnID: cached.lastCodexTurnID,
             initialCodexUsageRowIndex: Self.nextCodexUsageRowIndex(cached.codexRows),
+            initialBufferedSubagentLines: cached.codexBufferedSubagentLines,
+            initialJSONLResumeState: cached.codexJSONLResumeState,
+            maxBytesToRead: maxBytesToRead,
             checkCancellation: context.checkCancellation)
-        if delta.forkedFromId != nil {
+        if delta.forkedFromId != nil, !isResumablePartial {
             return false
         }
         let sessionId = delta.sessionId ?? cached.sessionId
         let projectPath = delta.projectPath ?? cached.projectPath
+        let forkBaselineDependencyKey = Self.codexForkBaselineDependencyKey(
+            parentSessionId: delta.forkedFromId,
+            dependsOnParentTotals: delta.dependsOnParentTotals,
+            inheritedResolver: context.resources.inheritedResolver)
         let canonicalProjectPath = delta.projectPath.map {
             context.resources.projectPathResolver.canonicalProjectPath(for: $0)
         } ?? cached.canonicalProjectPath ?? context.resources.projectPathResolver.canonicalProjectPath(for: projectPath)
@@ -1088,6 +1114,7 @@ extension CostUsageScanner {
             lastCodexTurnID: delta.lastCodexTurnID,
             sessionId: sessionId,
             forkedFromId: delta.forkedFromId ?? migratedCached.forkedFromId,
+            forkBaselineDependencyKey: forkBaselineDependencyKey ?? migratedCached.forkBaselineDependencyKey,
             projectPath: projectPath,
             canonicalProjectPath: canonicalProjectPath,
             codexCostNanos: Self.codexMergedCostMap(
@@ -1111,7 +1138,12 @@ extension CostUsageScanner {
                 migratedCached.codexPriorityTokens,
                 splitMaps.priorityTokens),
             codexTurnIDs: Self.mergeCodexTurnIDs(migratedCached.codexTurnIDs, rows: uniqueRows),
-            codexRows: Self.mergeCodexRows(retainedCachedRows, rows: uniqueRows, sessionId: sessionId))
+            codexRows: Self.mergeCodexRows(retainedCachedRows, rows: uniqueRows, sessionId: sessionId),
+            codexScanFileId: input.metadata.fileId,
+            codexScanTargetSize: input.metadata.size,
+            codexScanComplete: delta.parsedBytes >= input.metadata.size && delta.jsonlResumeState == nil,
+            codexJSONLResumeState: delta.jsonlResumeState,
+            codexBufferedSubagentLines: delta.bufferedSubagentLines)
         Self.rememberScannedCodexFile(
             input: input,
             session: CodexScannedSession(id: sessionId, days: mergedDays),
@@ -1125,7 +1157,8 @@ extension CostUsageScanner {
         input: CodexFileScanInput,
         context: CodexFileScanContext,
         cache: inout CostUsageCache,
-        state: inout CodexScanState) throws
+        state: inout CodexScanState,
+        maxBytesToRead: Int64? = nil) throws
     {
         try context.checkCancellation?()
         if let cached = input.cached {
@@ -1139,6 +1172,7 @@ extension CostUsageScanner {
         let parsed = try Self.parseCodexFileCancellable(
             fileURL: input.fileURL,
             range: context.range,
+            maxBytesToRead: maxBytesToRead,
             inheritedTotalsResolver: context.resources.inheritedResolver.inheritedTotals(for:atOrBefore:),
             checkCancellation: context.checkCancellation)
         let forkBaselineDependencyKey = Self.codexForkBaselineDependencyKey(
@@ -1159,7 +1193,8 @@ extension CostUsageScanner {
         if let sessionId,
            state.contributingSessionIds.contains(sessionId),
            uniqueRows.isEmpty,
-           usageDays.isEmpty
+           usageDays.isEmpty,
+           parsed.bufferedSubagentLines == nil
         {
             cache.files.removeValue(forKey: input.metadata.path)
             return
@@ -1236,7 +1271,12 @@ extension CostUsageScanner {
                 : Self.mergeCodexTurnIDs(migratedCached?.codexTurnIDs, rows: uniqueRows),
             codexRows: context.dropDeferredCodexRows
                 ? nil
-                : Self.mergeCodexRows(migratedCached?.codexRows, rows: uniqueRows, sessionId: sessionId))
+                : Self.mergeCodexRows(migratedCached?.codexRows, rows: uniqueRows, sessionId: sessionId),
+            codexScanFileId: input.metadata.fileId,
+            codexScanTargetSize: input.metadata.size,
+            codexScanComplete: parsed.parsedBytes >= input.metadata.size && parsed.jsonlResumeState == nil,
+            codexJSONLResumeState: parsed.jsonlResumeState,
+            codexBufferedSubagentLines: parsed.bufferedSubagentLines)
         Self.applyFileDays(cache: &cache, fileDays: cache.files[input.metadata.path]?.days ?? [:], sign: 1)
         Self.rememberScannedCodexFile(
             input: input,

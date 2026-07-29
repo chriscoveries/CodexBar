@@ -13,6 +13,7 @@ public enum UsageProvider: String, CaseIterable, Sendable, Codable {
     case opencodego
     case alibaba
     case alibabatokenplan
+    case qwencloud
     case factory
     case gemini
     case antigravity
@@ -84,6 +85,7 @@ public enum IconStyle: String, Sendable, CaseIterable {
     case opencode
     case opencodego
     case alibaba
+    case qwencloud
     case factory
     case copilot
     case devin
@@ -291,10 +293,11 @@ public enum ProviderBrowserCookieDefaults {
         #endif
     }
 
-    /// LongCat Auto imports only from Chrome by default to avoid prompting unrelated browser keychains.
+    /// LongCat Auto keeps Chrome first for existing users, then checks Firefox without adding
+    /// an unrelated browser Keychain prompt.
     public static var longcatCookieImportOrder: BrowserCookieImportOrder? {
         #if os(macOS)
-        [.chrome]
+        [.chrome, .firefox]
         #else
         nil
         #endif
