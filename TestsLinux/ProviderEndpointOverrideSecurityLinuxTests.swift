@@ -142,7 +142,7 @@ struct ProviderEndpointOverrideSecurityLinuxTests {
     @Test
     func liteLLMRejectsBaseURLWithEmbeddedCredentials() {
         #expect(LiteLLMSettingsReader.baseURL(
-            environment: [LiteLLMSettingsReader.baseURLEnvironmentKey: "https://user:pass@attacker.test"]) == nil)
+            environment: [LiteLLMSettingsReader.baseURLEnvironmentKey: "https://user@attacker.test"]) == nil)
     }
 
     @Test
@@ -167,7 +167,7 @@ struct ProviderEndpointOverrideSecurityLinuxTests {
     @Test
     func llmProxyRejectsBaseURLWithEmbeddedCredentials() {
         #expect(LLMProxySettingsReader.baseURL(
-            environment: [LLMProxySettingsReader.baseURLEnvironmentKey: "https://user:pass@attacker.test"]) == nil)
+            environment: [LLMProxySettingsReader.baseURLEnvironmentKey: "https://user@attacker.test"]) == nil)
     }
 
     @Test
