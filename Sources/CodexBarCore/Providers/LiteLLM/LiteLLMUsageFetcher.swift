@@ -6,6 +6,7 @@ import FoundationNetworking
 public enum LiteLLMUsageError: LocalizedError, Sendable {
     case missingCredentials
     case missingBaseURL
+    case invalidEndpointOverride(String)
     case missingUserID
     case invalidURL
     case apiError(String)
@@ -16,9 +17,10 @@ public enum LiteLLMUsageError: LocalizedError, Sendable {
         case .missingCredentials:
             "Missing LiteLLM API key. Set apiKey in ~/.codexbar/config.json or LITELLM_API_KEY."
         case .missingBaseURL:
-            "Missing or invalid LiteLLM base URL. Set enterpriseHost in ~/.codexbar/config.json or " +
-                "LITELLM_BASE_URL to an HTTPS URL without embedded credentials (plain HTTP is " +
-                "accepted for loopback addresses only)."
+            "Missing LiteLLM base URL. Set enterpriseHost in ~/.codexbar/config.json or LITELLM_BASE_URL."
+        case let .invalidEndpointOverride(key):
+            "LiteLLM base URL override \(key) is invalid. Use an HTTPS URL, or plain HTTP for " +
+                "loopback addresses only, without embedded credentials."
         case .missingUserID:
             "LiteLLM key info did not include a user_id or team_id."
         case .invalidURL:

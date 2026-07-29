@@ -20,6 +20,17 @@ public enum LiteLLMSettingsReader {
         return ProviderEndpointOverrideValidator().validatedURLAllowingLoopbackHTTP(raw)
     }
 
+    /// True when a base URL is configured at all, even if it fails validation.
+    ///
+    /// Availability checks use this so a rejected override still reaches the fetch path and
+    /// surfaces ``LiteLLMUsageError/invalidEndpointOverride(_:)`` instead of silently hiding
+    /// the provider as unconfigured.
+    public static func hasBaseURLOverride(
+        environment: [String: String] = ProcessInfo.processInfo.environment) -> Bool
+    {
+        self.cleaned(environment[self.baseURLEnvironmentKey]) != nil
+    }
+
     static func cleaned(_ raw: String?) -> String? {
         guard var value = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
             return nil

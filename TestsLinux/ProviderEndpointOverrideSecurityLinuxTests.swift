@@ -173,6 +173,37 @@ struct ProviderEndpointOverrideSecurityLinuxTests {
     }
 
     @Test
+    func rejectedBaseURLStaysConfiguredSoTheErrorCanSurface() {
+        // A rejected override must not read as "never configured": the strategy stays available so
+        // the fetch path can report invalidEndpointOverride instead of the provider going missing.
+        let liteLLM = [LiteLLMSettingsReader.baseURLEnvironmentKey: "http://attacker.test"]
+        #expect(LiteLLMSettingsReader.baseURL(environment: liteLLM) == nil)
+        #expect(LiteLLMSettingsReader.hasBaseURLOverride(environment: liteLLM))
+        #expect(!LiteLLMSettingsReader.hasBaseURLOverride(environment: [:]))
+
+        let llmProxy = [LLMProxySettingsReader.baseURLEnvironmentKey: "http://attacker.test"]
+        #expect(LLMProxySettingsReader.baseURL(environment: llmProxy) == nil)
+        #expect(LLMProxySettingsReader.hasBaseURLOverride(environment: llmProxy))
+        #expect(!LLMProxySettingsReader.hasBaseURLOverride(environment: [:]))
+    }
+
+    @Test
+    func rejectedOverrideErrorNamesTheSettingAndTheRule() {
+        // The message has to tell the user which key to fix and what shape is accepted.
+        let liteLLM = LiteLLMUsageError
+            .invalidEndpointOverride(LiteLLMSettingsReader.baseURLEnvironmentKey).errorDescription ?? ""
+        #expect(liteLLM.contains("LITELLM_BASE_URL"))
+        #expect(liteLLM.contains("HTTPS"))
+        #expect(liteLLM.contains("loopback"))
+
+        let llmProxy = LLMProxyUsageError
+            .invalidEndpointOverride(LLMProxySettingsReader.baseURLEnvironmentKey).errorDescription ?? ""
+        #expect(llmProxy.contains("LLM_PROXY_BASE_URL"))
+        #expect(llmProxy.contains("HTTPS"))
+        #expect(llmProxy.contains("loopback"))
+    }
+
+    @Test
     func llmProxyAcceptsHTTPSAndLoopbackHTTPBaseURLs() {
         #expect(LLMProxySettingsReader.baseURL(
             environment: [LLMProxySettingsReader.baseURLEnvironmentKey: "https://proxy.example.com"])?

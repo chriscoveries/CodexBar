@@ -40,9 +40,6 @@
 - Resets: show the day form at exactly 24 hours in countdowns (#2343). Thanks @OfficialAbhinavSingh!
 - z.ai: clamp the raw-percentage fallback to 0–100 (#2342). Thanks @OfficialAbhinavSingh!
 - LLMProxy: skip already-elapsed reset times when picking the next reset (#2335). Thanks @OfficialAbhinavSingh!
-- LiteLLM/LLM Proxy: validate the configured base URL before sending the API key to it, matching the other provider
-  endpoint overrides. Non-loopback base URLs must now be HTTPS and must not embed credentials; plain HTTP still works
-  for loopback addresses.
 - Ollama: reuse validated browser sessions across refreshes, and skip inaccessible Safari cookies during automatic
   fallback while preserving explicit Safari permission guidance (#2404). Thanks @hxy91819!
 
