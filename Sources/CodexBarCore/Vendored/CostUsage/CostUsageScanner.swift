@@ -33,6 +33,14 @@ enum CostUsageScanner {
         var claudeLogProviderFilter: ClaudeLogProviderFilter = .all
         /// Force a full rescan, ignoring per-file cache and incremental offsets.
         var forceRescan: Bool = false
+        /// Maximum bounded slice read from one Codex rollout per refresh. Larger files
+        /// resume from cached progress on later refreshes. Default 256 MiB.
+        var maxCodexSessionFileBytes: Int64 = 256 * 1024 * 1024
+        /// Soft budget for newly-read Codex session bytes in one refresh.
+        /// Remaining dirty files are deferred to later refreshes. Default 512 MiB.
+        var maxCodexScanBytesPerRefresh: Int64 = 512 * 1024 * 1024
+        /// Prefer newest session files first so recent usage lands before catch-up work.
+        var preferNewestCodexSessionsFirst: Bool = true
 
         init(
             codexSessionsRoot: URL? = nil,
@@ -40,7 +48,10 @@ enum CostUsageScanner {
             cacheRoot: URL? = nil,
             codexTraceDatabaseURL: URL? = nil,
             claudeLogProviderFilter: ClaudeLogProviderFilter = .all,
-            forceRescan: Bool = false)
+            forceRescan: Bool = false,
+            maxCodexSessionFileBytes: Int64 = 256 * 1024 * 1024,
+            maxCodexScanBytesPerRefresh: Int64 = 512 * 1024 * 1024,
+            preferNewestCodexSessionsFirst: Bool = true)
         {
             self.codexSessionsRoot = codexSessionsRoot
             self.claudeProjectsRoots = claudeProjectsRoots
@@ -48,6 +59,50 @@ enum CostUsageScanner {
             self.codexTraceDatabaseURL = codexTraceDatabaseURL
             self.claudeLogProviderFilter = claudeLogProviderFilter
             self.forceRescan = forceRescan
+            self.maxCodexSessionFileBytes = max(0, maxCodexSessionFileBytes)
+            self.maxCodexScanBytesPerRefresh = max(0, maxCodexScanBytesPerRefresh)
+            self.preferNewestCodexSessionsFirst = preferNewestCodexSessionsFirst
+        }
+    }
+
+    /// Per-refresh work limiter for Codex cost scans. Prevents multi-GB rollout corpora from
+    /// monopolizing a core for hours while still allowing progressive catch-up.
+    final class CodexScanBudget: @unchecked Sendable {
+        let maxFileBytes: Int64
+        let maxBytesPerRefresh: Int64
+        private(set) var bytesConsumed: Int64 = 0
+        private(set) var resumedPartialFileCount = 0
+        private(set) var deferredByBudgetFileCount = 0
+
+        init(maxFileBytes: Int64, maxBytesPerRefresh: Int64) {
+            self.maxFileBytes = max(0, maxFileBytes)
+            self.maxBytesPerRefresh = max(0, maxBytesPerRefresh)
+        }
+
+        enum Admission {
+            case allow(Int64)
+            case deferBudget
+        }
+
+        func admit(workBytes: Int64) -> Admission {
+            let work = max(0, workBytes)
+            let refreshRemaining = self.maxBytesPerRefresh > 0
+                ? max(0, self.maxBytesPerRefresh - self.bytesConsumed)
+                : Int64.max
+            if work > 0, refreshRemaining == 0 {
+                self.deferredByBudgetFileCount += 1
+                return .deferBudget
+            }
+            let fileAllowance = self.maxFileBytes > 0 ? self.maxFileBytes : Int64.max
+            let allowance = min(work, fileAllowance, refreshRemaining)
+            if allowance < work {
+                self.resumedPartialFileCount += 1
+            }
+            return .allow(allowance)
+        }
+
+        func consume(workBytes: Int64) {
+            self.bytesConsumed += max(0, workBytes)
         }
     }
 
@@ -69,6 +124,8 @@ enum CostUsageScanner {
         let projectPath: String?
         let codexSession: CostUsageCodexSessionMetadata
         let rows: [CodexUsageRow]
+        let jsonlResumeState: CostUsageJsonl.ResumeState?
+        let bufferedSubagentLines: [CodexBufferedFastLine]?
     }
 
     struct CodexUsageRow: Codable, Equatable {
@@ -516,6 +573,7 @@ enum CostUsageScanner {
         let changedPriorityTurnIDs: Set<String>
         let resources: CodexScanResources
         let checkCancellation: CancellationCheck?
+        let scanBudget: CodexScanBudget?
     }
 
     final class CodexCanonicalProjectPathResolver {
@@ -727,11 +785,17 @@ enum CostUsageScanner {
 
         private let fileIndex: CodexSessionFileIndex
         private let checkCancellation: CancellationCheck?
+        private let scanBudget: CodexScanBudget?
         private var snapshotResolutions: [String: SnapshotResolution] = [:]
 
-        init(fileIndex: CodexSessionFileIndex, checkCancellation: CancellationCheck?) {
+        init(
+            fileIndex: CodexSessionFileIndex,
+            checkCancellation: CancellationCheck?,
+            scanBudget: CodexScanBudget? = nil)
+        {
             self.fileIndex = fileIndex
             self.checkCancellation = checkCancellation
+            self.scanBudget = scanBudget
         }
 
         func inheritedTotals(for sessionId: String, atOrBefore cutoffTimestamp: String) throws -> CodexForkBaseline {
@@ -801,6 +865,43 @@ enum CostUsageScanner {
                 return resolution
             }
 
+            let parentMetadata = CostUsageScanner.codexFileMetadata(fileURL: fileURL)
+            if let budget = self.scanBudget {
+                switch budget.admit(workBytes: parentMetadata.size) {
+                case let .allow(allowance) where allowance >= parentMetadata.size:
+                    break
+                case .allow:
+                    CostUsageScanner.log.warning(
+                        "Deferring oversized Codex parent baseline read while its file scan resumes",
+                        metadata: [
+                            "sessionId": sessionId,
+                            "path": fileURL.path,
+                            "bytes": "\(parentMetadata.size)",
+                            "slice": "\(budget.maxFileBytes)",
+                        ])
+                    let resolution = SnapshotResolution(
+                        dependencyKey: self.dependencyKey(for: sessionId, fileURL: fileURL),
+                        snapshots: nil)
+                    self.snapshotResolutions[sessionId] = resolution
+                    return resolution
+                case .deferBudget:
+                    CostUsageScanner.log.debug(
+                        "Deferring Codex parent session baseline read until a later refresh",
+                        metadata: [
+                            "sessionId": sessionId,
+                            "path": fileURL.path,
+                            "pendingBytes": "\(parentMetadata.size)",
+                            "consumed": "\(budget.bytesConsumed)",
+                            "limit": "\(budget.maxBytesPerRefresh)",
+                        ])
+                    let resolution = SnapshotResolution(
+                        dependencyKey: self.dependencyKey(for: sessionId, fileURL: fileURL),
+                        snapshots: nil)
+                    self.snapshotResolutions[sessionId] = resolution
+                    return resolution
+                }
+            }
+
             for _ in 0..<2 {
                 let dependencyKeyBeforeParse = self.dependencyKey(for: sessionId, fileURL: fileURL)
                 let parsed = try CostUsageScanner.parseCodexTokenSnapshots(
@@ -817,6 +918,7 @@ enum CostUsageScanner {
                         dependencyKey: dependencyKeyAfterParse,
                         snapshots: nil)
                     self.snapshotResolutions[sessionId] = resolution
+                    self.scanBudget?.consume(workBytes: parentMetadata.size)
                     return resolution
                 }
                 if parsedSessionId != sessionId {
@@ -831,12 +933,14 @@ enum CostUsageScanner {
                         dependencyKey: dependencyKeyAfterParse,
                         snapshots: nil)
                     self.snapshotResolutions[sessionId] = resolution
+                    self.scanBudget?.consume(workBytes: parentMetadata.size)
                     return resolution
                 }
                 let resolution = SnapshotResolution(
                     dependencyKey: dependencyKeyAfterParse,
                     snapshots: parsed.snapshots)
                 self.snapshotResolutions[sessionId] = resolution
+                self.scanBudget?.consume(workBytes: parentMetadata.size)
                 return resolution
             }
 
@@ -1399,7 +1503,7 @@ enum CostUsageScanner {
         return String(filename[matchRange])
     }
 
-    private struct CodexSessionMetadata {
+    struct CodexSessionMetadata: Codable {
         let sessionId: String?
         let forkedFromId: String?
         let forkTimestamp: String?
@@ -1407,14 +1511,14 @@ enum CostUsageScanner {
         let isSubagentThread: Bool
     }
 
-    private struct CodexTurnContextMetadata {
+    struct CodexTurnContextMetadata: Codable {
         let timestamp: String?
         let model: String?
         let cwd: String?
         let title: String?
     }
 
-    private struct CodexTokenCountRecord {
+    struct CodexTokenCountRecord: Codable {
         let timestamp: String
         let model: String?
         let turnID: String?
@@ -1422,7 +1526,7 @@ enum CostUsageScanner {
         let total: CostUsageCodexTotals?
     }
 
-    private enum CodexFastLine {
+    enum CodexFastLine: Codable {
         case sessionMeta(CodexSessionMetadata)
         case turnContext(CodexTurnContextMetadata)
         case interAgentCommunication(triggerTurn: Bool)
@@ -1439,7 +1543,7 @@ enum CostUsageScanner {
         }
     }
 
-    private struct CodexBufferedFastLine {
+    struct CodexBufferedFastLine: Codable {
         let lineIndex: Int
         let line: CodexFastLine
     }
@@ -2189,7 +2293,9 @@ enum CostUsageScanner {
                 title: nil,
                 startedAtUnixMs: nil,
                 latestActivityUnixMs: nil),
-            rows: [])
+            rows: [],
+            jsonlResumeState: nil,
+            bufferedSubagentLines: nil)
     }
 
     // swiftlint:disable:next cyclomatic_complexity function_body_length
@@ -2206,6 +2312,9 @@ enum CostUsageScanner {
         initialHasInterleavedTotals: Bool = false,
         initialCodexTurnID: String? = nil,
         initialCodexUsageRowIndex: Int = 0,
+        initialBufferedSubagentLines: [CodexBufferedFastLine]? = nil,
+        initialJSONLResumeState: CostUsageJsonl.ResumeState? = nil,
+        maxBytesToRead: Int64? = nil,
         inheritedTotalsResolver: ((String, String) throws -> CodexForkBaseline)? = nil,
         checkCancellation: CancellationCheck? = nil) throws -> CodexParseResult
     {
@@ -2617,12 +2726,17 @@ enum CostUsageScanner {
         let maxLineBytes = 256 * 1024
         let prefixBytes = maxLineBytes
 
-        var pendingSubagentLines: [CodexBufferedFastLine]?
+        var pendingSubagentLines = initialBufferedSubagentLines
 
-        if startOffset == 0,
-           let metadata = try Self.parseCodexSessionMetadata(
-               fileURL: fileURL,
-               checkCancellation: checkCancellation)
+        if let initialBufferedSubagentLines, startOffset > 0 {
+            for buffered in initialBufferedSubagentLines {
+                guard case let .sessionMeta(metadata) = buffered.line else { continue }
+                try handleSessionMetadata(metadata)
+            }
+        } else if startOffset == 0,
+                  let metadata = try Self.parseCodexSessionMetadata(
+                      fileURL: fileURL,
+                      checkCancellation: checkCancellation)
         {
             try handleSessionMetadata(metadata)
             if metadata.isSubagentThread {
@@ -2641,13 +2755,17 @@ enum CostUsageScanner {
         }
 
         var parsedBytes: Int64
-        var physicalLineIndex = 0
+        let targetSize = Self.codexFileMetadata(fileURL: fileURL).size
+        var physicalLineIndex = (initialBufferedSubagentLines?.last?.lineIndex ?? -1) + 1
+        var jsonlResumeState = initialJSONLResumeState
         do {
-            parsedBytes = try CostUsageJsonl.scan(
+            let scanProgress = try CostUsageJsonl.scanBounded(
                 fileURL: fileURL,
                 offset: startOffset,
                 maxLineBytes: maxLineBytes,
                 prefixBytes: prefixBytes,
+                maxBytesToRead: maxBytesToRead,
+                resumeState: initialJSONLResumeState,
                 checkCancellation: checkCancellation,
                 onLine: { line in
                     let lineIndex = physicalLineIndex
@@ -2838,11 +2956,13 @@ enum CostUsageScanner {
                         }
                     }
                 })
+            parsedBytes = scanProgress.readOffset
+            jsonlResumeState = scanProgress.resumeState
             if let deferredError {
                 throw deferredError
             }
 
-            if let pendingSubagentLines {
+            if let pendingSubagentLines, parsedBytes >= targetSize, jsonlResumeState == nil {
                 // Same-leaf metadata can fill lineage fields after the opening record. Collect it
                 // before replay so copied-prefix totals never run once on the wrong baseline, and
                 // so an owned-suffix filter cannot discard the only fork identifier.
@@ -2957,6 +3077,7 @@ enum CostUsageScanner {
                 "Codex cost usage failed while scanning session file",
                 metadata: ["path": fileURL.path, "error": error.localizedDescription])
             parsedBytes = startOffset
+            jsonlResumeState = initialJSONLResumeState
         }
 
         return CodexParseResult(
@@ -2980,7 +3101,9 @@ enum CostUsageScanner {
                     || (subagentCounterSemantics != .independent && !usesLocalSubagentBoundary)),
             projectPath: projectPath,
             codexSession: codexSession,
-            rows: rows)
+            rows: rows,
+            jsonlResumeState: jsonlResumeState,
+            bufferedSubagentLines: parsedBytes < targetSize || jsonlResumeState != nil ? pendingSubagentLines : nil)
     }
 
     private static func codexTurnID(from payload: [String: Any]) -> String? {
@@ -3012,10 +3135,89 @@ enum CostUsageScanner {
         if try Self.keepCachedCodexFileIfFresh(input: input, context: context, cache: &cache, state: &state) {
             return
         }
-        if try Self.appendCodexFileIncrementIfPossible(input: input, context: context, cache: &cache, state: &state) {
+
+        let pendingWorkBytes = Self.pendingCodexScanWorkBytes(metadata: metadata, cached: cached)
+        let allowedWorkBytes: Int64
+        if let budget = context.scanBudget {
+            switch budget.admit(workBytes: pendingWorkBytes) {
+            case let .allow(allowance):
+                allowedWorkBytes = allowance
+            case .deferBudget:
+                Self.log.debug(
+                    "Deferring Codex session cost scan until a later refresh",
+                    metadata: [
+                        "path": metadata.path,
+                        "pendingBytes": "\(pendingWorkBytes)",
+                        "consumed": "\(budget.bytesConsumed)",
+                        "limit": "\(budget.maxBytesPerRefresh)",
+                    ])
+                // Preserve stale cache so later refreshes can resume catch-up.
+                return
+            }
+        } else {
+            allowedWorkBytes = pendingWorkBytes
+        }
+
+        if try Self.appendCodexFileIncrementIfPossible(
+            input: input,
+            context: context,
+            cache: &cache,
+            state: &state,
+            maxBytesToRead: allowedWorkBytes)
+        {
+            context.scanBudget?.consume(workBytes: allowedWorkBytes)
             return
         }
-        try Self.rescanCodexFile(input: input, context: context, cache: &cache, state: &state)
+        let fullRescanWorkBytes = max(0, metadata.size)
+        let fullRescanAllowedBytes: Int64
+        if fullRescanWorkBytes == pendingWorkBytes {
+            fullRescanAllowedBytes = allowedWorkBytes
+        } else if let budget = context.scanBudget {
+            switch budget.admit(workBytes: fullRescanWorkBytes) {
+            case let .allow(allowance):
+                fullRescanAllowedBytes = allowance
+            case .deferBudget:
+                // No work was consumed by the rejected incremental path, so this is only
+                // reachable when the refresh budget has no allowance for the full rescan.
+                return
+            }
+        } else {
+            fullRescanAllowedBytes = fullRescanWorkBytes
+        }
+
+        try Self.rescanCodexFile(
+            input: input,
+            context: context,
+            cache: &cache,
+            state: &state,
+            maxBytesToRead: fullRescanAllowedBytes)
+        context.scanBudget?.consume(workBytes: fullRescanAllowedBytes)
+    }
+
+    static func pendingCodexScanWorkBytes(metadata: CodexFileMetadata, cached: CostUsageFileUsage?) -> Int64 {
+        // Called only after keepCachedCodexFileIfFresh failed. Even when size/mtime still match
+        // (forced full rescan, priority invalidation, fork-dependency drift, etc.), the scanner
+        // will read the whole file — never report zero pending work in that case.
+        guard let cached else { return max(0, metadata.size) }
+        if cached.codexScanComplete == false {
+            if cached.codexScanFileId != nil,
+               cached.codexScanFileId == metadata.fileId,
+               cached.codexScanTargetSize == metadata.size,
+               cached.mtimeUnixMs == metadata.mtimeUnixMs
+            {
+                return max(0, metadata.size - (cached.parsedBytes ?? 0))
+            }
+            return max(0, metadata.size)
+        }
+        let startOffset = cached.parsedBytes ?? cached.size
+        if metadata.size > cached.size,
+           startOffset > 0,
+           startOffset <= metadata.size,
+           cached.forkedFromId == nil
+        {
+            return max(0, metadata.size - startOffset)
+        }
+        return max(0, metadata.size)
     }
 
     private static func makeCodexRefreshPlan(
@@ -3113,6 +3315,7 @@ enum CostUsageScanner {
             shouldRefresh: shouldRefresh)
     }
 
+    // swiftlint:disable:next function_body_length
     private static func loadCodexDaily(
         range: CostUsageDayRange,
         now: Date,
@@ -3173,6 +3376,10 @@ enum CostUsageScanner {
                 files.append(fileURL)
             }
 
+            if options.preferNewestCodexSessionsFirst {
+                files = Self.sortedCodexSessionFilesNewestFirst(files)
+            }
+
             let filePathsInScan = Set(files.map(\.path))
             var scanState = CodexScanState()
             let fileIndex = CodexSessionFileIndex(
@@ -3183,9 +3390,13 @@ enum CostUsageScanner {
                     roots: plan.roots,
                     knownExistingPaths: filePathsInScan),
                 checkCancellation: checkCancellation)
+            let scanBudget = CodexScanBudget(
+                maxFileBytes: options.maxCodexSessionFileBytes,
+                maxBytesPerRefresh: options.maxCodexScanBytesPerRefresh)
             let inheritedResolver = CodexInheritedTotalsResolver(
                 fileIndex: fileIndex,
-                checkCancellation: checkCancellation)
+                checkCancellation: checkCancellation,
+                scanBudget: scanBudget)
             let resources = CodexScanResources(
                 fileIndex: fileIndex,
                 inheritedResolver: inheritedResolver,
@@ -3198,13 +3409,25 @@ enum CostUsageScanner {
                 options: options,
                 plan: plan,
                 resources: resources,
-                checkCancellation: checkCancellation)
+                checkCancellation: checkCancellation,
+                scanBudget: scanBudget)
             for fileURL in files {
                 try Self.scanCodexFile(
                     fileURL: fileURL,
                     context: scanContext,
                     cache: &cache,
                     state: &scanState)
+            }
+            if scanBudget.resumedPartialFileCount > 0 || scanBudget.deferredByBudgetFileCount > 0 {
+                Self.log.info(
+                    "Codex cost scan applied work limits",
+                    metadata: [
+                        "partialFiles": "\(scanBudget.resumedPartialFileCount)",
+                        "deferredByBudget": "\(scanBudget.deferredByBudgetFileCount)",
+                        "bytesConsumed": "\(scanBudget.bytesConsumed)",
+                        "maxFileBytes": "\(scanBudget.maxFileBytes)",
+                        "maxBytesPerRefresh": "\(scanBudget.maxBytesPerRefresh)",
+                    ])
             }
             try checkCancellation?()
 
@@ -3284,7 +3507,8 @@ enum CostUsageScanner {
         options: Options,
         plan: CodexRefreshPlan,
         resources: CodexScanResources,
-        checkCancellation: CancellationCheck?) -> CodexFileScanContext
+        checkCancellation: CancellationCheck?,
+        scanBudget: CodexScanBudget? = nil) -> CodexFileScanContext
     {
         CodexFileScanContext(
             range: range,
@@ -3295,7 +3519,22 @@ enum CostUsageScanner {
             requiresTurnIDCache: plan.needsTurnIDCacheMigration,
             changedPriorityTurnIDs: plan.changedPriorityTurnIDs,
             resources: resources,
-            checkCancellation: checkCancellation)
+            checkCancellation: checkCancellation,
+            scanBudget: scanBudget)
+    }
+
+    static func sortedCodexSessionFilesNewestFirst(_ files: [URL]) -> [URL] {
+        files.sorted { lhs, rhs in
+            let left = Self.codexFileMetadata(fileURL: lhs)
+            let right = Self.codexFileMetadata(fileURL: rhs)
+            if left.mtimeUnixMs != right.mtimeUnixMs {
+                return left.mtimeUnixMs > right.mtimeUnixMs
+            }
+            if left.size != right.size {
+                return left.size < right.size
+            }
+            return lhs.path < rhs.path
+        }
     }
 }
 
