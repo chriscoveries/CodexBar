@@ -209,6 +209,38 @@ struct UsageStoreSessionQuotaTransitionTests {
     }
 
     @Test
+    func `crof credits-only balance depletion and top-up do not emit quota notifications`() {
+        let settings = self.makeSettings(suiteName: "UsageStoreSessionQuotaTransitionTests-crof-balance")
+        settings.refreshFrequency = .manual
+        settings.statusChecksEnabled = false
+        settings.sessionQuotaNotificationsEnabled = true
+        settings.quotaWarningNotificationsEnabled = true
+        settings.quotaWarningThresholds = [50, 20]
+
+        let notifier = SessionQuotaNotifierSpy()
+        let store = UsageStore(
+            fetcher: UsageFetcher(),
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings,
+            sessionQuotaNotifier: notifier)
+
+        let funded = CrofUsageSnapshot(credits: 9.0441, updatedAt: Date()).toUsageSnapshot()
+        let depleted = CrofUsageSnapshot(credits: 0, updatedAt: Date()).toUsageSnapshot()
+        let toppedUp = CrofUsageSnapshot(credits: 5, updatedAt: Date()).toUsageSnapshot()
+
+        #expect(funded.primary?.windowMinutes == nil)
+        #expect(depleted.primary?.usedPercent == 100)
+
+        for snapshot in [funded, depleted, toppedUp] {
+            store.handleSessionQuotaTransition(provider: .crof, snapshot: snapshot)
+            store.handleQuotaWarningTransitions(provider: .crof, snapshot: snapshot)
+        }
+
+        #expect(notifier.posts.isEmpty)
+        #expect(notifier.quotaWarningPosts.isEmpty)
+    }
+
+    @Test
     func `claude five hour primary still emits session quota notifications`() {
         let settings = self.makeSettings(suiteName: "UsageStoreSessionQuotaTransitionTests-claude-session")
         settings.refreshFrequency = .manual

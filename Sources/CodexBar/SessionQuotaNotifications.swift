@@ -407,7 +407,9 @@ extension UsageStore {
         provider: UsageProvider,
         snapshot: UsageSnapshot) -> (window: RateWindow, source: SessionQuotaWindowSource)?
     {
-        guard provider != .mimo, provider != .qoder else { return nil }
+        // Crof credits-only balances publish a duration-less primary window. Keep them out of
+        // session-quota transitions so a $0 PAYG balance cannot fire session-limit alerts/hooks.
+        guard provider != .mimo, provider != .qoder, provider != .crof else { return nil }
         if provider == .antigravity {
             guard let window = Self.antigravityWindow(snapshot: snapshot, windowMinutes: 5 * 60) else {
                 return nil
