@@ -187,6 +187,7 @@ extension StatusItemController {
             ],
             workDaysPerWeek: self.settings.weeklyProgressWorkDays,
             usesLiveSubtitle: surface == .liveCard,
+            preferredCurrencyCode: self.settings.preferredCurrencyCode,
             now: now)
         return UsageMenuCardView.Model.make(input)
     }

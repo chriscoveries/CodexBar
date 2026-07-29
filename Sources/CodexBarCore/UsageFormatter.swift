@@ -224,6 +224,53 @@ public enum UsageFormatter {
         return String(format: "%.2f", value)
     }
 
+    /// Formats a USD value into a target currency code with exchange rate conversion applied.
+    public static func convertedCostString(_ usdValue: Double, targetCurrency: String) -> String {
+        let converted = CurrencyExchange.shared.convert(usdAmount: usdValue, to: targetCurrency)
+        return self.currencyString(converted, currencyCode: targetCurrency)
+    }
+
+    /// Formats a value from one currency into another via USD pivot conversion.
+    /// Useful when displaying provider costs that are denominated in non-USD currencies
+    /// (e.g., Anthropic extra usage returned in GBP) under the user's preferred currency.
+    public static func convertedCostString(
+        _ value: Double,
+        fromCurrency: String,
+        targetCurrency: String) -> String
+    {
+        let converted = CurrencyExchange.shared.convert(amount: value, from: fromCurrency, to: targetCurrency)
+        return self.currencyString(converted, currencyCode: targetCurrency)
+    }
+
+    /// Resolves the effective currency code for cost display given user preference
+    /// and an optional provider currency. Returns the provider currency when preference
+    /// is "auto", otherwise returns the explicit preference.
+    public static func effectiveCurrencyCode(
+        preferred: String,
+        providerCurrency: String?) -> String
+    {
+        guard preferred != "auto", !preferred.isEmpty else {
+            return providerCurrency ?? "USD"
+        }
+        return preferred
+    }
+
+    /// Formats a cost value with smart currency conversion.
+    /// - When `preferredCurrency` is "auto", renders in `providerCurrency` (or USD fallback) without conversion.
+    /// - When `preferredCurrency` is an explicit code, converts from `providerCurrency` to the target.
+    public static func convertedCostString(
+        _ value: Double,
+        preferredCurrency: String,
+        providerCurrency: String?) -> String
+    {
+        let effective = Self.effectiveCurrencyCode(preferred: preferredCurrency, providerCurrency: providerCurrency)
+        let sourceCurrency = providerCurrency ?? "USD"
+        guard effective == sourceCurrency else {
+            return Self.convertedCostString(value, fromCurrency: sourceCurrency, targetCurrency: effective)
+        }
+        return Self.currencyString(value, currencyCode: effective)
+    }
+
     /// Formats a USD value with proper negative handling and thousand separators.
     /// Uses Swift's modern FormatStyle API (iOS 15+/macOS 12+) for robust, locale-aware formatting.
     public static func usdString(_ value: Double) -> String {

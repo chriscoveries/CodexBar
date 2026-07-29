@@ -38,6 +38,7 @@ extension UsageMenuCardView.Model {
         let quotaWarningThresholds: [QuotaWarningWindow: [Int]]
         let workDaysPerWeek: Int?
         let usesLiveSubtitle: Bool
+        let preferredCurrencyCode: String
         let now: Date
 
         init(
@@ -76,6 +77,7 @@ extension UsageMenuCardView.Model {
             quotaWarningThresholds: [QuotaWarningWindow: [Int]] = [:],
             workDaysPerWeek: Int? = nil,
             usesLiveSubtitle: Bool = false,
+            preferredCurrencyCode: String = "auto",
             now: Date)
         {
             self.provider = provider
@@ -99,7 +101,7 @@ extension UsageMenuCardView.Model {
             self.tokenCostUsageEnabled = tokenCostUsageEnabled
             self.codexLocalSessionCostLedgerEnabled = codexLocalSessionCostLedgerEnabled
             self.tokenCostInlineDashboardEnabled = tokenCostInlineDashboardEnabled ?? tokenCostUsageEnabled
-            self.tokenCostMenuSectionEnabled = tokenCostMenuSectionEnabled ?? tokenCostUsageEnabled
+            self.tokenCostMenuSectionEnabled = tokenCostMenuSectionEnabled ?? (tokenCostUsageEnabled && snapshot != nil)
             self.costComparisonPeriodsEnabled = costComparisonPeriodsEnabled
             self.showOptionalCreditsAndExtraUsage = showOptionalCreditsAndExtraUsage
             self.claudeDailyRoutinesUsageVisible = claudeDailyRoutinesUsageVisible
@@ -113,6 +115,7 @@ extension UsageMenuCardView.Model {
             self.quotaWarningThresholds = quotaWarningThresholds
             self.workDaysPerWeek = workDaysPerWeek
             self.usesLiveSubtitle = usesLiveSubtitle
+            self.preferredCurrencyCode = preferredCurrencyCode
             self.now = now
         }
     }

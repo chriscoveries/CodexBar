@@ -868,7 +868,8 @@ extension UsageMenuCardView.Model {
         return nil
     }
 
-    static func openRouterQuotaDetail(provider: UsageProvider, snapshot: UsageSnapshot) -> String? {
+    static func openRouterQuotaDetail(provider: UsageProvider, snapshot: UsageSnapshot,
+                                      preferredCurrencyCode: String = "auto") -> String? {
         guard provider == .openrouter,
               let usage = snapshot.openRouterUsage,
               usage.hasValidKeyQuota,
@@ -878,8 +879,8 @@ extension UsageMenuCardView.Model {
             return nil
         }
 
-        let remaining = UsageFormatter.usdString(keyRemaining)
-        let limit = UsageFormatter.usdString(keyLimit)
+        let remaining = UsageFormatter.convertedCostString(keyRemaining, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")
+        let limit = UsageFormatter.convertedCostString(keyLimit, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")
         return String(format: L("%@/%@ left"), remaining, limit)
     }
 

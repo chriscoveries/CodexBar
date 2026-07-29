@@ -75,6 +75,40 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     }
 }
 
+enum PreferredCurrencyOption: String, CaseIterable, Identifiable {
+    case auto = "auto"
+    case usd = "USD"
+    case gbp = "GBP"
+    case eur = "EUR"
+    case cny = "CNY"
+    case jpy = "JPY"
+    case cad = "CAD"
+    case aud = "AUD"
+    case hkd = "HKD"
+    case twd = "TWD"
+    case sgd = "SGD"
+    case inr = "INR"
+
+    var id: String { self.rawValue }
+
+    var label: String {
+        switch self {
+        case .auto: L("currency_auto")
+        case .usd: "USD ($)"
+        case .gbp: "GBP (£)"
+        case .eur: "EUR (€)"
+        case .cny: "CNY (¥)"
+        case .jpy: "JPY (¥)"
+        case .cad: "CAD ($)"
+        case .aud: "AUD ($)"
+        case .hkd: "HKD ($)"
+        case .twd: "TWD (NT$)"
+        case .sgd: "SGD ($)"
+        case .inr: "INR (₹)"
+        }
+    }
+}
+
 @MainActor
 struct GeneralPane: View {
     @Bindable var settings: SettingsStore
@@ -91,6 +125,20 @@ struct GeneralPane: View {
                     optionLabel: { rawValue in
                         Text(verbatim: AppLanguage(rawValue: rawValue)?.label ?? rawValue)
                     })
+
+                SettingsMenuPicker(
+                    selection: self.$settings.preferredCurrencyCode,
+                    options: PreferredCurrencyOption.allCases.map(\.rawValue),
+                    label: {
+                        SettingsRowLabel(L("currency_title"), subtitle: L("currency_subtitle"))
+                    },
+                    optionLabel: { rawValue in
+                        Text(verbatim: PreferredCurrencyOption(rawValue: rawValue)?.label ?? rawValue)
+                    })
+                    .onChange(of: self.settings.preferredCurrencyCode) { _, newValue in
+                        guard newValue != "auto" else { return }
+                        Task { await CurrencyExchange.shared.fetchLatestRatesIfNeeded() }
+                    }
 
                 SettingsMenuPicker(
                     selection: self.$settings.terminalApp,

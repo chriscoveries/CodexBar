@@ -4,7 +4,8 @@ import Foundation
 extension MenuDescriptor {
     static func appendOpenAIAPIUsageSummary(
         entries: inout [Entry],
-        usage: OpenAIAPIUsageSnapshot)
+        usage: OpenAIAPIUsageSnapshot,
+        preferredCurrencyCode: String = "auto")
     {
         let today = usage.currentDay
         let last7 = usage.last7Days
@@ -12,15 +13,15 @@ extension MenuDescriptor {
         let historyLabel = usage.historyWindowLabel
 
         entries.append(.text(
-            "\(L("Today")): \(UsageFormatter.usdString(today.costUSD)) · " +
+            "\(L("Today")): \(UsageFormatter.convertedCostString(today.costUSD, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")) · " +
                 "\(UsageFormatter.tokenCountString(today.totalTokens)) \(L("tokens"))",
             .secondary))
         entries.append(.text(
-            "7d: \(UsageFormatter.usdString(last7.costUSD)) · " +
+            "7d: \(UsageFormatter.convertedCostString(last7.costUSD, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")) · " +
                 "\(UsageFormatter.tokenCountString(last7.requests)) \(L("requests"))",
             .secondary))
         entries.append(.text(
-            "\(historyLabel): \(UsageFormatter.usdString(last30.costUSD)) · " +
+            "\(historyLabel): \(UsageFormatter.convertedCostString(last30.costUSD, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")) · " +
                 "\(UsageFormatter.tokenCountString(last30.requests)) \(L("requests"))",
             .secondary))
         if let topModel = usage.topModels.first?.name {
@@ -30,22 +31,23 @@ extension MenuDescriptor {
 
     static func appendClaudeAdminAPIUsageSummary(
         entries: inout [Entry],
-        usage: ClaudeAdminAPIUsageSnapshot)
+        usage: ClaudeAdminAPIUsageSnapshot,
+        preferredCurrencyCode: String = "auto")
     {
         let today = usage.currentDay
         let last7 = usage.last7Days
         let last30 = usage.last30Days
 
         entries.append(.text(
-            "\(L("Today")): \(UsageFormatter.usdString(today.costUSD)) · " +
+            "\(L("Today")): \(UsageFormatter.convertedCostString(today.costUSD, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")) · " +
                 "\(UsageFormatter.tokenCountString(today.totalTokens)) \(L("tokens"))",
             .secondary))
         entries.append(.text(
-            "7d: \(UsageFormatter.usdString(last7.costUSD)) · " +
+            "7d: \(UsageFormatter.convertedCostString(last7.costUSD, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")) · " +
                 "\(UsageFormatter.tokenCountString(last7.totalTokens)) \(L("tokens"))",
             .secondary))
         entries.append(.text(
-            "30d: \(UsageFormatter.usdString(last30.costUSD)) · " +
+            "30d: \(UsageFormatter.convertedCostString(last30.costUSD, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")) · " +
                 "\(UsageFormatter.tokenCountString(last30.totalTokens)) \(L("tokens"))",
             .secondary))
         if let topModel = usage.topModels.first?.name {
@@ -55,16 +57,17 @@ extension MenuDescriptor {
 
     static func appendOpenRouterUsageSummary(
         entries: inout [Entry],
-        usage: OpenRouterUsageSnapshot)
+        usage: OpenRouterUsageSnapshot,
+        preferredCurrencyCode: String = "auto")
     {
         if let daily = usage.keyUsageDaily {
-            entries.append(.text("\(L("Today")): \(UsageFormatter.usdString(daily))", .secondary))
+            entries.append(.text("\(L("Today")): \(UsageFormatter.convertedCostString(daily, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD"))", .secondary))
         }
         if let weekly = usage.keyUsageWeekly {
-            entries.append(.text("\(L("Week")): \(UsageFormatter.usdString(weekly))", .secondary))
+            entries.append(.text("\(L("Week")): \(UsageFormatter.convertedCostString(weekly, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD"))", .secondary))
         }
         if let monthly = usage.keyUsageMonthly {
-            entries.append(.text("\(L("Month")): \(UsageFormatter.usdString(monthly))", .secondary))
+            entries.append(.text("\(L("Month")): \(UsageFormatter.convertedCostString(monthly, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD"))", .secondary))
         }
     }
 
@@ -91,14 +94,15 @@ extension MenuDescriptor {
 
     static func appendPoeUsageSummary(
         entries: inout [Entry],
-        usage: PoeUsageHistorySnapshot)
+        usage: PoeUsageHistorySnapshot,
+        preferredCurrencyCode: String = "auto")
     {
         let today = usage.currentDay()
         let week = usage.last7Days
         let month = usage.last30Days
-        let todayCostSuffix = today.costUSD.map { " · \(UsageFormatter.usdString($0))" } ?? ""
-        let weekCostSuffix = week.costUSD.map { " · \(UsageFormatter.usdString($0))" } ?? ""
-        let monthCostSuffix = month.costUSD.map { " · \(UsageFormatter.usdString($0))" } ?? ""
+        let todayCostSuffix = today.costUSD.map { " · \(UsageFormatter.convertedCostString($0, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD"))" } ?? ""
+        let weekCostSuffix = week.costUSD.map { " · \(UsageFormatter.convertedCostString($0, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD"))" } ?? ""
+        let monthCostSuffix = month.costUSD.map { " · \(UsageFormatter.convertedCostString($0, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD"))" } ?? ""
         entries.append(.text(
             "\(L("Today")): \(Self.pointsString(today.points)) · " +
                 "\(UsageFormatter.tokenCountString(today.requests)) \(L("requests"))\(todayCostSuffix)",
