@@ -77,7 +77,7 @@ scan fails, while provider/account configuration changes replace obsolete result
 | DeepInfra | API key from env or token accounts → billing checklist + monthly usage endpoints (`api`). |
 | Moonshot | API key from config/env → balance endpoint (`api`). |
 | Codebuff | API token from config/env or `codebuff login` credentials → usage API (`api`). |
-| Crof | API key from config/env → PAYG credit balance API (`api`). |
+| Crof | API key from config/env → credit balance + optional request quota API (`api`). |
 | Venice | API key from config/env → DIEM/USD balance API (`api`). |
 | Command Code | Web billing API via Command Code session cookies (`web`). |
 | ClinePass | API key from config/env → 5-hour, weekly, and monthly subscription usage limits (`api`). |
