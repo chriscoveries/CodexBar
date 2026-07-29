@@ -95,6 +95,7 @@ See [CLI configuration](docs/cli-configuration.md) for the full flow.
 - [Manus](docs/manus.md) — Browser `session_id` auth for credit balance, monthly credits, and daily refresh tracking.
 - [MiniMax](docs/minimax.md) — API token, cookie header, or browser cookies for coding-plan usage.
 - [T3 Chat](docs/t3chat.md) — Browser cookies capture for Base and Overage usage buckets.
+- [ZoomMate](docs/zoommate.md) — Chrome cookie auto-import or manual cURL capture for credits usage.
 - [Kimi](docs/kimi.md) — Auth token (JWT from `kimi-auth` cookie) for weekly quota + 5‑hour rate limit.
 - [Kilo](docs/kilo.md) — API token with CLI-auth fallback for Kilo Pass usage.
 - [Kiro](docs/kiro.md) — CLI-based usage; monthly credits + bonus credits.
