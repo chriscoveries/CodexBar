@@ -58,10 +58,8 @@ extension UsageStore {
     {
         let snapshot = self.snapshots[provider]
         let storedTokenSnapshot = self.tokenSnapshotForCurrentProviderConfig(for: provider)?.snapshot
-        let claudeQuotaOwnerKey: String? = if provider == .claude,
-                                              let account = self.settings.effectiveSelectedTokenAccount(for: provider)
-        {
-            self.tokenAccountSnapshotCacheKey(provider: provider, account: account)
+        let claudeQuotaOwnerKey: String? = if provider == .claude {
+            self.claudeWidgetQuotaOwnerKey()
         } else {
             nil
         }
@@ -148,12 +146,29 @@ extension UsageStore {
         let quotaOwnerKey: String?
     }
 
+    private func claudeWidgetQuotaOwnerKey() -> String {
+        if let account = self.settings.effectiveSelectedTokenAccount(for: .claude) {
+            return self.tokenAccountSnapshotCacheKey(provider: .claude, account: account)
+        }
+        let environment = ProviderRegistry.makeEnvironment(
+            base: self.environmentBase,
+            provider: .claude,
+            settings: self.settings,
+            tokenOverride: nil)
+        return ClaudeOAuthCredentialsStore.credentialsProfileIdentifier(environment: environment)
+    }
+
     private nonisolated static func preservedClaudeWidgetUsage(
         from entry: WidgetSnapshot.ProviderEntry?,
         expectedQuotaOwnerKey: String?) -> PreservedClaudeWidgetUsage?
     {
         guard let entry, entry.provider == .claude else { return nil }
-        guard entry.quotaOwnerKey == expectedQuotaOwnerKey else { return nil }
+        guard let expectedQuotaOwnerKey,
+              let quotaOwnerKey = entry.quotaOwnerKey,
+              quotaOwnerKey == expectedQuotaOwnerKey
+        else {
+            return nil
+        }
 
         let primary = entry.primary?.isSyntheticPlaceholder == true ? nil : entry.primary
         let secondary = entry.secondary?.isSyntheticPlaceholder == true ? nil : entry.secondary
@@ -176,7 +191,7 @@ extension UsageStore {
             secondary: secondary,
             tertiary: tertiary,
             usageRows: usageRows,
-            quotaOwnerKey: entry.quotaOwnerKey)
+            quotaOwnerKey: quotaOwnerKey)
     }
 
     nonisolated static func widgetTokenUsageSummary(

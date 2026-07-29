@@ -398,31 +398,12 @@ struct UsageStoreWidgetSnapshotTests {
             windowMinutes: 10080,
             resetsAt: quotaUpdatedAt.addingTimeInterval(86400),
             resetDescription: nil)
-        store.lastQueuedWidgetSnapshot = WidgetSnapshot(
-            entries: [
-                WidgetSnapshot.ProviderEntry(
-                    provider: .claude,
-                    updatedAt: quotaUpdatedAt,
-                    primary: primary,
-                    secondary: secondary,
-                    tertiary: nil,
-                    usageRows: [
-                        WidgetSnapshot.WidgetUsageRowSnapshot(
-                            id: "primary",
-                            title: "Session",
-                            percentLeft: 72),
-                        WidgetSnapshot.WidgetUsageRowSnapshot(
-                            id: "secondary",
-                            title: "Weekly",
-                            percentLeft: 88),
-                    ],
-                    creditsRemaining: nil,
-                    codeReviewRemainingPercent: nil,
-                    tokenUsage: nil,
-                    dailyUsage: []),
-            ],
-            enabledProviders: [.claude],
-            generatedAt: quotaUpdatedAt)
+        store._setSnapshotForTesting(
+            UsageSnapshot(
+                primary: primary,
+                secondary: secondary,
+                updatedAt: quotaUpdatedAt),
+            provider: .claude)
 
         var widgetSnapshots: [WidgetSnapshot] = []
         store._test_widgetSnapshotSaveOverride = { widgetSnapshots.append($0) }
@@ -437,7 +418,9 @@ struct UsageStoreWidgetSnapshotTests {
         #expect(preTokenEntry.secondary == secondary)
         #expect(preTokenEntry.usageRows?.map(\.id) == ["primary", "secondary"])
         #expect(preTokenEntry.tokenUsage == nil)
+        let quotaOwnerKey = try #require(preTokenEntry.quotaOwnerKey)
 
+        store.snapshots.removeValue(forKey: .claude)
         store._setTokenSnapshotForTesting(
             CostUsageTokenSnapshot(
                 sessionTokens: 4300,
@@ -480,7 +463,8 @@ struct UsageStoreWidgetSnapshotTests {
                     creditsRemaining: nil,
                     codeReviewRemainingPercent: nil,
                     tokenUsage: nil,
-                    dailyUsage: []),
+                    dailyUsage: [],
+                    quotaOwnerKey: quotaOwnerKey),
             ],
             enabledProviders: [.claude],
             generatedAt: quotaUpdatedAt)
@@ -519,7 +503,8 @@ struct UsageStoreWidgetSnapshotTests {
                     creditsRemaining: nil,
                     codeReviewRemainingPercent: nil,
                     tokenUsage: nil,
-                    dailyUsage: []),
+                    dailyUsage: [],
+                    quotaOwnerKey: quotaOwnerKey),
             ],
             enabledProviders: [.claude],
             generatedAt: quotaUpdatedAt)
