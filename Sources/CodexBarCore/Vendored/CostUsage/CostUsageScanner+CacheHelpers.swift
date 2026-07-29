@@ -991,17 +991,24 @@ extension CostUsageScanner {
         }
         // Subagent shape depends on the complete lineage prefix. Appended metadata can change an
         // independent counter into a copied-prefix rollout, so a tail-only parse is not sound.
+        let startOffset = cached.parsedBytes ?? cached.size
+        let hasMatchingResumeOffset = cached.codexJSONLResumeState?.offset == nil
+            || cached.codexJSONLResumeState?.offset == startOffset
         let isResumablePartial = cached.codexScanComplete == false
+            && cached.codexScanFileId != nil
             && cached.codexScanFileId == input.metadata.fileId
             && cached.codexScanTargetSize == input.metadata.size
             && cached.mtimeUnixMs == input.metadata.mtimeUnixMs
+            && hasMatchingResumeOffset
+        if cached.codexScanComplete == false, !isResumablePartial {
+            return false
+        }
         if !isResumablePartial, try Self.codexFileIsSubagentThread(
             fileURL: input.fileURL,
             checkCancellation: context.checkCancellation)
         {
             return false
         }
-        let startOffset = cached.parsedBytes ?? cached.size
         let initialCountedTotals = cached.lastCountedTotals ?? cached.lastTotals
         let initialRawTotalsBaseline = cached.lastRawTotalsBaseline ?? cached.lastTotals
         let initialHasDivergentTotals = cached.hasDivergentTotals ?? (cached.lastTotals == nil)

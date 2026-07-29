@@ -304,7 +304,7 @@ enum CostUsageJsonl {
         var committedOffset = lineStartOffset
         var jsonTailState = resumeState?.jsonTailState ?? JSONTailState()
         let fileSize = (try? FileManager.default.attributesOfItem(atPath: fileURL.path)[.size] as? NSNumber)?
-            .int64Value ?? 0
+            .int64Value
 
         func appendSegment(_ bytes: UnsafePointer<UInt8>, count: Int) {
             guard count > 0 else { return }
@@ -356,7 +356,7 @@ enum CostUsageJsonl {
             try checkCancellation?()
             let remaining = maxBytesToRead.map { max(0, $0 - bytesRead) }
             if remaining == 0 {
-                if startOffset + bytesRead >= fileSize, hasCompleteJSONTail() {
+                if let fileSize, startOffset + bytesRead >= fileSize, hasCompleteJSONTail() {
                     flushLine()
                     committedOffset = startOffset + bytesRead
                     lineStartOffset = committedOffset

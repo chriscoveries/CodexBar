@@ -2902,12 +2902,15 @@ enum CostUsageScanner {
         // (forced full rescan, priority invalidation, fork-dependency drift, etc.), the scanner
         // will read the whole file — never report zero pending work in that case.
         guard let cached else { return max(0, metadata.size) }
-        if cached.codexScanComplete == false,
-           cached.codexScanFileId == metadata.fileId,
-           cached.codexScanTargetSize == metadata.size,
-           cached.mtimeUnixMs == metadata.mtimeUnixMs
-        {
-            return max(0, metadata.size - (cached.parsedBytes ?? 0))
+        if cached.codexScanComplete == false {
+            if cached.codexScanFileId != nil,
+               cached.codexScanFileId == metadata.fileId,
+               cached.codexScanTargetSize == metadata.size,
+               cached.mtimeUnixMs == metadata.mtimeUnixMs
+            {
+                return max(0, metadata.size - (cached.parsedBytes ?? 0))
+            }
+            return max(0, metadata.size)
         }
         let startOffset = cached.parsedBytes ?? cached.size
         if metadata.size > cached.size,

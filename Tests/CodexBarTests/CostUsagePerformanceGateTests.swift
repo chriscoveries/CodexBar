@@ -390,6 +390,59 @@ struct CostUsagePerformanceGateTests {
     }
 
     @Test
+    func `oversized codex progress restarts when the target size changes`() throws {
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+        let day = try env.makeLocalNoon(year: 2026, month: 5, day: 10)
+        let files = try Self.writeSyntheticCodexCorpus(env: env, day: day, files: 1, turnsPerFile: 8)
+        let fileURL = try #require(files.first)
+        let originalMetadata = CostUsageScanner.codexFileMetadata(fileURL: fileURL)
+        let slice = max(1, originalMetadata.size / 4)
+        var options = CostUsageScanner.Options(
+            codexSessionsRoot: env.codexSessionsRoot,
+            claudeProjectsRoots: nil,
+            cacheRoot: env.cacheRoot,
+            codexTraceDatabaseURL: env.root.appendingPathComponent("missing.sqlite"),
+            maxCodexSessionFileBytes: slice,
+            maxCodexScanBytesPerRefresh: slice)
+        options.refreshMinIntervalSeconds = 0
+
+        _ = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day,
+            options: options)
+        let first = try #require(CostUsageCacheIO.load(
+            provider: .codex,
+            cacheRoot: env.cacheRoot).files.values.first)
+        #expect(first.parsedBytes == slice)
+        #expect(first.codexScanComplete == false)
+
+        let original = try String(contentsOf: fileURL, encoding: .utf8)
+        try (original + String(repeating: " ", count: 512)).write(to: fileURL, atomically: false, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.modificationDate: day.addingTimeInterval(60)],
+            ofItemAtPath: fileURL.path)
+        let changedMetadata = CostUsageScanner.codexFileMetadata(fileURL: fileURL)
+        #expect(changedMetadata.size != originalMetadata.size)
+
+        _ = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day,
+            options: options)
+        let restarted = try #require(CostUsageCacheIO.load(
+            provider: .codex,
+            cacheRoot: env.cacheRoot).files.values.first)
+        #expect(restarted.parsedBytes == slice)
+        #expect(restarted.codexScanTargetSize == changedMetadata.size)
+        #expect(restarted.codexScanFileId == changedMetadata.fileId)
+        #expect(restarted.codexScanComplete == false)
+    }
+
+    @Test
     func `single oversized jsonl record resumes without stalling`() throws {
         let env = try CostUsageTestEnvironment()
         defer { env.cleanup() }
