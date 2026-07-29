@@ -220,9 +220,10 @@ struct OllamaUsageFetcherTests {
 
         let expected = "__Secure-session=\(token)"
         #expect(normalized == expected)
-        #expect(try? OllamaUsageFetcher.resolveManualCookieHeader(
+        let resolved = try? OllamaUsageFetcher.resolveManualCookieHeader(
             override: normalized,
-            manualCookieMode: true) == expected)
+            manualCookieMode: true)
+        #expect(resolved == expected)
     }
 
     @Test(arguments: ["abc123", "opaque-session=="])

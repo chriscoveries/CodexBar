@@ -4,10 +4,9 @@ public enum CookieHeaderNormalizer {
     private static let headerPatterns: [String] = [
         #"(?i)-H\s*'Cookie:\s*([^']+)'"#,
         #"(?i)-H\s*\"Cookie:\s*([^\"]+)\""#,
-        #"(?i)-H\s*Cookie:\s*([^\s]+)"#,
-        #"(?im)^[ \t]*cookie:\s*'([^']+)'"#,
-        #"(?im)^[ \t]*cookie:\s*\"([^\"]+)\""#,
-        #"(?im)^[ \t]*cookie:\s*([^\r\n]+)"#,
+        #"(?i)\bcookie:\s*'([^']+)'"#,
+        #"(?i)\bcookie:\s*\"([^\"]+)\""#,
+        #"(?i)\bcookie:\s*([^\r\n]+)"#,
         #"(?i)(?:^|\s)(?:--cookie|-b)\s*'([^']+)'"#,
         #"(?i)(?:^|\s)(?:--cookie|-b)\s*\"([^\"]+)\""#,
         #"(?i)(?:^|\s)-b([^\s=]+=[^\s]+)"#,
@@ -32,10 +31,6 @@ public enum CookieHeaderNormalizer {
 
     public static func pairs(from raw: String) -> [(name: String, value: String)] {
         guard let normalized = self.normalize(raw) else { return [] }
-        return self.pairs(fromNormalizedHeader: normalized)
-    }
-
-    static func pairs(fromNormalizedHeader normalized: String) -> [(name: String, value: String)] {
         var results: [(name: String, value: String)] = []
         results.reserveCapacity(6)
 
