@@ -43,8 +43,8 @@ The Workspaces sidecar is:
 ```
 
 The sidecar currently uses SQLite schema version 5 and snapshot payload format
-3. The filename is intentionally independent of the internal schema version so
-supported upgrades can happen transactionally in place.
+3. This is the first released Workspaces schema. A database with any other
+`PRAGMA user_version` is rejected as incompatible and is never modified.
 
 ### v10 to v11
 
@@ -55,16 +55,10 @@ The v10 file remains untouched and recoverable. The v11 file is replaced
 atomically only after a successful scan; later v11 refreshes can use the normal
 incremental cursor.
 
-### Sidecar upgrades and rollback
+### Sidecar rollback
 
-Existing schema 2, 3, and 4 sidecars are upgraded additively to schema 5.
 Publication is transactional: a failed synchronization or snapshot write rolls
-back and leaves the previous complete snapshot available. A database whose
-`PRAGMA user_version` is newer than the supported schema is rejected as
-incompatible and is never modified.
-
-Pre-sidecar builds may leave a legacy JSON snapshot. It is read only for
-compatibility and removed only after the first successful sidecar publication.
+back and leaves the previous complete snapshot available.
 
 ## Catalog completeness and last-good data
 
@@ -91,6 +85,9 @@ Display-only projections are transient:
 
 - Hiding estimated cost does not rewrite the sidecar.
 - Including or excluding cached input does not rescan or rewrite the sidecar.
+- Hiding personal information removes persisted workspace paths, working
+  directories, workspace names, and session titles from snapshots before they
+  reach presentation code; it does not rewrite the local sidecar.
 - Rankings, totals, charts, and breakdowns must use the same projection.
 
 ## Privacy boundary

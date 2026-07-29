@@ -128,6 +128,26 @@ public struct CodexLocalProjectUsageSnapshot: Sendable, Codable, Equatable {
     }
 }
 
+extension CodexLocalProjectUsageSnapshot {
+    func hidingPersonalInformation(_ isEnabled: Bool) -> Self {
+        guard isEnabled else { return self }
+        return Self(
+            updatedAt: self.updatedAt,
+            historyDays: self.historyDays,
+            scopeSignature: self.scopeSignature,
+            rootsFingerprint: [:],
+            indexedFileCount: self.indexedFileCount,
+            skippedFileCount: self.skippedFileCount,
+            total: self.total,
+            projects: self.projects.map { $0.hidingPersonalInformation() },
+            sessions: self.sessions.map { $0.hidingPersonalInformation() },
+            modelBreakdowns: self.modelBreakdowns,
+            daily: self.daily,
+            sourceStatus: self.sourceStatus,
+            modelsAnalytics: self.modelsAnalytics)
+    }
+}
+
 public enum CodexLocalProjectUsageSourceStatus: String, Sendable, Codable, Equatable {
     case complete
     case catalogMissing
@@ -178,7 +198,9 @@ public struct CodexLocalCostEstimate: Sendable, Codable, Equatable {
     }
 
     public var coverage: CodexLocalCostCoverage {
-        if self.unknownTokens == 0 { return .known }
+        if self.unknownTokens == 0 {
+            return .known
+        }
         return self.knownUSD > 0 ? .partial : .unavailable
     }
 
@@ -329,6 +351,26 @@ public struct CodexLocalProjectUsage: Sendable, Codable, Identifiable, Equatable
     }
 }
 
+extension CodexLocalProjectUsage {
+    fileprivate func hidingPersonalInformation() -> Self {
+        Self(
+            id: self.id,
+            displayName: self.id == CodexLocalProjectRootResolver.chatsProjectId
+                ? CodexLocalProjectRootResolver.chatsDisplayName
+                : "Workspace",
+            path: nil,
+            totals: self.totals,
+            costEstimate: self.costEstimate,
+            sessionCount: self.sessionCount,
+            latestActivity: self.latestActivity,
+            topModel: self.topModel,
+            topSessions: self.topSessions.map { $0.hidingPersonalInformation() },
+            modelBreakdowns: self.modelBreakdowns,
+            daily: self.daily,
+            usageSeverity: self.usageSeverity)
+    }
+}
+
 public struct CodexLocalSessionUsage: Sendable, Codable, Identifiable, Equatable {
     /// Semantic fallback used when Codex did not persist a title. UI layers
     /// localize this value instead of storing a localization key in Core.
@@ -449,6 +491,22 @@ public struct CodexLocalSessionUsage: Sendable, Codable, Identifiable, Equatable
         try container.encode(self.costEstimate, forKey: .costEstimate)
         try container.encodeIfPresent(self.topModel, forKey: .topModel)
         try container.encode(self.daily, forKey: .daily)
+    }
+}
+
+extension CodexLocalSessionUsage {
+    fileprivate func hidingPersonalInformation() -> Self {
+        Self(
+            id: self.id,
+            projectId: self.projectId,
+            displayTitle: Self.localChatFallbackTitle,
+            cwd: nil,
+            startedAt: self.startedAt,
+            latestActivity: self.latestActivity,
+            totals: self.totals,
+            costEstimate: self.costEstimate,
+            topModel: self.topModel,
+            daily: self.daily)
     }
 }
 

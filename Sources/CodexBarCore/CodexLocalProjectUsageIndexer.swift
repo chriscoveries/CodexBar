@@ -18,6 +18,7 @@ enum CodexLocalProjectUsageIndexer {
         historyDays: Int = 30,
         options: Options = Options()) -> CodexLocalProjectUsageSnapshot?
     {
+        _ = now
         let clampedHistoryDays = max(1, min(365, historyDays))
         let stableScopeSignature = self.stableScopeSignature(options: options.scannerOptions)
         let sidecar = CodexWorkspaceUsageSidecar(cacheRoot: options.scannerOptions.cacheRoot)
@@ -30,20 +31,7 @@ enum CodexLocalProjectUsageIndexer {
         {
             return self.projecting(snapshot, sourceStatus: sourceStatus)
         }
-
-        // Compatibility only: pre-sidecar builds persisted a JSON snapshot. It is
-        // never written again; the next successful refresh publishes the sidecar.
-        let indexStore = CodexLocalProjectUsageIndexStore(cacheRoot: options.scannerOptions.cacheRoot)
-        let cache = CostUsageCacheIO.load(provider: .codex, cacheRoot: options.scannerOptions.cacheRoot)
-        let catalog = catalogResult.catalog
-        let scopeSignature = self.scopeSignature(
-            options: options.scannerOptions,
-            cache: cache,
-            catalogFingerprint: catalog.fingerprint)
-        return indexStore.loadSnapshot(
-            expectedScopeSignature: scopeSignature,
-            expectedHistoryDays: clampedHistoryDays)
-            .map { self.projecting($0, sourceStatus: sourceStatus) }
+        return nil
     }
 
     static func loadSnapshot(
@@ -120,12 +108,6 @@ enum CodexLocalProjectUsageIndexer {
             catalog: catalog,
             catalogIsComplete: catalogResult.isComplete,
             rootsFingerprint: rootsFingerprint)
-        #if canImport(SQLite3) || canImport(CSQLite3)
-        // The sidecar commit is now the durable source of the last complete
-        // snapshot. Retain the legacy JSON only until that commit succeeds so
-        // a stale pre-sidecar payload cannot be resurrected later.
-        CodexLocalProjectUsageIndexStore(cacheRoot: scannerOptions.cacheRoot).clear()
-        #endif
         return snapshot
     }
 
@@ -787,7 +769,9 @@ extension CodexLocalProjectUsageIndexer {
             }
             let modelIDs = models.keys.sorted()
             let topModelID = models.max {
-                if $0.value.tokens != $1.value.tokens { return $0.value.tokens < $1.value.tokens }
+                if $0.value.tokens != $1.value.tokens {
+                    return $0.value.tokens < $1.value.tokens
+                }
                 return $0.key > $1.key
             }?.key
             let modelBaselines = models.sorted { $0.key < $1.key }.map { modelID, values in
@@ -1088,11 +1072,17 @@ extension CodexLocalProjectUsageIndexer {
     fileprivate static func sortProjects(_ lhs: CodexLocalProjectUsage, _ rhs: CodexLocalProjectUsage) -> Bool {
         let lTokens = lhs.totals.totalTokens ?? -1
         let rTokens = rhs.totals.totalTokens ?? -1
-        if lTokens != rTokens { return lTokens > rTokens }
+        if lTokens != rTokens {
+            return lTokens > rTokens
+        }
         let lCost = lhs.estimatedCostUSD ?? -1
         let rCost = rhs.estimatedCostUSD ?? -1
-        if lCost != rCost { return lCost > rCost }
-        if lhs.sessionCount != rhs.sessionCount { return lhs.sessionCount > rhs.sessionCount }
+        if lCost != rCost {
+            return lCost > rCost
+        }
+        if lhs.sessionCount != rhs.sessionCount {
+            return lhs.sessionCount > rhs.sessionCount
+        }
         if lhs.latestActivity != rhs.latestActivity {
             return (lhs.latestActivity ?? .distantPast) > (rhs.latestActivity ?? .distantPast)
         }
@@ -1102,13 +1092,19 @@ extension CodexLocalProjectUsageIndexer {
     fileprivate static func sortSessions(_ lhs: CodexLocalSessionUsage, _ rhs: CodexLocalSessionUsage) -> Bool {
         let lTokens = lhs.totals.totalTokens ?? -1
         let rTokens = rhs.totals.totalTokens ?? -1
-        if lTokens != rTokens { return lTokens > rTokens }
+        if lTokens != rTokens {
+            return lTokens > rTokens
+        }
         let lCost = lhs.estimatedCostUSD ?? -1
         let rCost = rhs.estimatedCostUSD ?? -1
-        if lCost != rCost { return lCost > rCost }
+        if lCost != rCost {
+            return lCost > rCost
+        }
         let lDate = lhs.latestActivity ?? .distantPast
         let rDate = rhs.latestActivity ?? .distantPast
-        if lDate != rDate { return lDate > rDate }
+        if lDate != rDate {
+            return lDate > rDate
+        }
         return lhs.id < rhs.id
     }
 

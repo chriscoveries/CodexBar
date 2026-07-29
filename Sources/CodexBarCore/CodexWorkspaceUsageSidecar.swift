@@ -80,17 +80,14 @@ struct CodexWorkspaceUsageSidecar: Sendable {
         #if canImport(SQLite3) || canImport(CSQLite3)
         guard let db = self.open(readOnly: true) else { return nil }
         defer { sqlite3_close(db) }
-        let hasPayloadFormatVersion = Self.hasColumn("payload_format_version", in: "snapshot_payloads", db: db)
-        let payloadFormatColumn = hasPayloadFormatVersion
-            ? ",\n               snapshot_payloads.payload_format_version"
-            : ""
         let sql = """
         SELECT snapshot_payloads.payload,
                index_state.roots_fingerprint,
                index_state.catalog_fingerprint,
                index_state.cache_producer_key,
                index_state.pricing_key,
-               index_state.cache_fingerprint\(payloadFormatColumn)
+               index_state.cache_fingerprint,
+               snapshot_payloads.payload_format_version
         FROM snapshot_payloads
         JOIN index_state ON index_state.scope_signature = snapshot_payloads.scope_signature
         WHERE snapshot_payloads.scope_signature = ?
@@ -108,7 +105,7 @@ struct CodexWorkspaceUsageSidecar: Sendable {
         else { return nil }
         let length = Int(sqlite3_column_bytes(statement, 0))
         let data = Data(bytes: bytes, count: length)
-        let payloadFormatVersion = hasPayloadFormatVersion ? Int(sqlite3_column_int(statement, 6)) : 1
+        let payloadFormatVersion = Int(sqlite3_column_int(statement, 6))
         guard payloadFormatVersion == Self.snapshotPayloadFormatVersion,
               let snapshot = try? JSONDecoder.codexLocalProjectUsageSidecar.decode(
                   CodexLocalProjectUsageSnapshot.self,
@@ -155,7 +152,7 @@ struct CodexWorkspaceUsageSidecar: Sendable {
             throw SidecarError.openFailed
         }
         defer { sqlite3_close(db) }
-        try Self.migrate(db)
+        try Self.ensureSchema(db)
         try Self.begin(db)
         do {
             let generation = UUID().uuidString
@@ -190,7 +187,7 @@ struct CodexWorkspaceUsageSidecar: Sendable {
         #if canImport(SQLite3) || canImport(CSQLite3)
         guard let db = self.open(readOnly: false) else { throw SidecarError.openFailed }
         defer { sqlite3_close(db) }
-        try Self.migrate(db)
+        try Self.ensureSchema(db)
         try Self.begin(db)
         do {
             let generation = UUID().uuidString
@@ -368,12 +365,12 @@ struct CodexWorkspaceUsageSidecar: Sendable {
         return db
     }
 
-    private static func migrate(_ db: OpaquePointer?) throws {
+    private static func ensureSchema(_ db: OpaquePointer?) throws {
         let current = Self.userVersion(db)
-        if current > Self.schemaVersion {
+        guard current == 0 || current == Self.schemaVersion else {
             throw SidecarError.incompatibleSchema
         }
-        guard current < Self.schemaVersion else { return }
+        guard current == 0 else { return }
         try Self.execute(db, """
         CREATE TABLE IF NOT EXISTS schema_meta (
             key TEXT PRIMARY KEY,
@@ -475,39 +472,6 @@ struct CodexWorkspaceUsageSidecar: Sendable {
         CREATE INDEX IF NOT EXISTS usage_rollouts_session ON usage_rollouts (session_id);
         CREATE INDEX IF NOT EXISTS catalog_threads_rollout ON catalog_threads (rollout_path);
         """)
-        if current > 0, current < 2 {
-            try Self.execute(db, "ALTER TABLE index_state ADD COLUMN cache_fingerprint TEXT")
-        }
-        if current > 0, current < 3 {
-            try Self.execute(
-                db,
-                "ALTER TABLE usage_rollouts ADD COLUMN event_detail_complete INTEGER NOT NULL DEFAULT 0")
-        }
-        if current > 0, current < 4,
-           !Self.hasColumn("reasoning_tokens", in: "usage_events", db: db)
-        {
-            try Self.execute(db, "ALTER TABLE usage_events ADD COLUMN reasoning_tokens INTEGER")
-        }
-        if current > 0, current < 5 {
-            let additions = [
-                ("source_mtime_ms", "INTEGER"),
-                ("source_size", "INTEGER"),
-                ("source_parsed_bytes", "INTEGER"),
-                ("source_session_id", "TEXT"),
-                ("source_producer_key", "TEXT"),
-                ("source_pricing_key", "TEXT"),
-                ("content_fingerprint", "TEXT"),
-            ]
-            for (column, type) in additions where !Self.hasColumn(column, in: "usage_rollouts", db: db) {
-                try Self.execute(db, "ALTER TABLE usage_rollouts ADD COLUMN \(column) \(type)")
-            }
-            if !Self.hasColumn("payload_format_version", in: "snapshot_payloads", db: db) {
-                try Self.execute(
-                    db,
-                    "ALTER TABLE snapshot_payloads ADD COLUMN payload_format_version INTEGER NOT NULL DEFAULT 1")
-            }
-            try Self.execute(db, "CREATE INDEX IF NOT EXISTS catalog_threads_rollout ON catalog_threads (rollout_path)")
-        }
         try Self.execute(db, "PRAGMA user_version = \(Self.schemaVersion)")
     }
 
@@ -989,17 +953,6 @@ struct CodexWorkspaceUsageSidecar: Sendable {
         return sqlite3_column_int(statement, 0)
     }
 
-    private static func hasColumn(_ column: String, in table: String, db: OpaquePointer?) -> Bool {
-        guard let statement = self.prepare(db, "PRAGMA table_info(\(table))") else { return false }
-        defer { sqlite3_finalize(statement) }
-        while sqlite3_step(statement) == SQLITE_ROW {
-            if self.columnString(statement, at: 1) == column {
-                return true
-            }
-        }
-        return false
-    }
-
     private static let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
     private enum SidecarError: Error {
@@ -1009,6 +962,22 @@ struct CodexWorkspaceUsageSidecar: Sendable {
         case writeFailed
     }
     #endif
+}
+
+extension JSONDecoder {
+    static var codexLocalProjectUsageSidecar: JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .millisecondsSince1970
+        return decoder
+    }
+}
+
+extension JSONEncoder {
+    static var codexLocalProjectUsageSidecar: JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .millisecondsSince1970
+        return encoder
+    }
 }
 
 // swiftlint:enable type_body_length

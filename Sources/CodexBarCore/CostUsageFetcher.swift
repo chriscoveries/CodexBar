@@ -70,12 +70,14 @@ public struct CostUsageFetcher: Sendable {
     public func loadCachedCodexLocalProjectUsageSnapshot(
         now: Date = Date(),
         codexHomePath: String? = nil,
-        historyDays: Int = 30) async -> CodexLocalProjectUsageSnapshot?
+        historyDays: Int = 30,
+        hidePersonalInfo: Bool) async -> CodexLocalProjectUsageSnapshot?
     {
         await Self.loadCachedCodexLocalProjectUsageSnapshot(
             now: now,
             codexHomePath: codexHomePath,
             historyDays: historyDays,
+            hidePersonalInfo: hidePersonalInfo,
             scannerOptions: self.scannerOptionsOverride())
     }
 
@@ -84,6 +86,7 @@ public struct CostUsageFetcher: Sendable {
         forceRefresh: Bool = false,
         codexHomePath: String? = nil,
         historyDays: Int = 30,
+        hidePersonalInfo: Bool,
         progress: (@Sendable (CodexLocalProjectUsageIndexProgress) -> Void)? = nil)
         async throws -> CodexLocalProjectUsageSnapshot
     {
@@ -92,6 +95,7 @@ public struct CostUsageFetcher: Sendable {
             forceRefresh: forceRefresh,
             codexHomePath: codexHomePath,
             historyDays: historyDays,
+            hidePersonalInfo: hidePersonalInfo,
             progress: progress,
             scannerOptions: self.scannerOptionsOverride())
     }
@@ -611,6 +615,7 @@ public struct CostUsageFetcher: Sendable {
         now: Date = Date(),
         codexHomePath: String? = nil,
         historyDays: Int = 30,
+        hidePersonalInfo: Bool,
         scannerOptions overrideScannerOptions: CostUsageScanner.Options? = nil) async -> CodexLocalProjectUsageSnapshot?
     {
         let cachedSnapshot: CodexLocalProjectUsageSnapshot?? = try? await CostUsageScanExecutor.run { _ in
@@ -622,7 +627,7 @@ public struct CostUsageFetcher: Sendable {
                 historyDays: historyDays,
                 options: CodexLocalProjectUsageIndexer.Options(scannerOptions: options))
         }
-        return cachedSnapshot.flatMap(\.self)
+        return cachedSnapshot.flatMap(\.self)?.hidingPersonalInformation(hidePersonalInfo)
     }
 
     static func loadCodexLocalProjectUsageSnapshot(
@@ -630,6 +635,7 @@ public struct CostUsageFetcher: Sendable {
         forceRefresh: Bool = false,
         codexHomePath: String? = nil,
         historyDays: Int = 30,
+        hidePersonalInfo: Bool,
         progress: (@Sendable (CodexLocalProjectUsageIndexProgress) -> Void)? = nil,
         scannerOptions overrideScannerOptions: CostUsageScanner
             .Options? = nil) async throws -> CodexLocalProjectUsageSnapshot
@@ -638,7 +644,7 @@ public struct CostUsageFetcher: Sendable {
             codexHomePath: codexHomePath,
             overrideScannerOptions: overrideScannerOptions)
         let scanOptions = options
-        return try await CostUsageScanExecutor.run { checkCancellation in
+        let snapshot = try await CostUsageScanExecutor.run { checkCancellation in
             try CodexLocalProjectUsageIndexer.loadSnapshot(
                 now: now,
                 historyDays: historyDays,
@@ -647,6 +653,7 @@ public struct CostUsageFetcher: Sendable {
                 progress: progress,
                 checkCancellation: checkCancellation)
         }
+        return snapshot.hidingPersonalInformation(hidePersonalInfo)
     }
 
     static func clearCachedCodexLocalProjectUsageSnapshot(
@@ -657,9 +664,6 @@ public struct CostUsageFetcher: Sendable {
             let options = Self.codexLocalScannerOptions(
                 codexHomePath: codexHomePath,
                 overrideScannerOptions: overrideScannerOptions)
-            // The legacy JSON cache may still exist on development builds. Clear it
-            // alongside the owned sidecar, never the Codex cache or state database.
-            CodexLocalProjectUsageIndexStore(cacheRoot: options.cacheRoot).clear()
             CodexWorkspaceUsageSidecar(cacheRoot: options.cacheRoot).clear()
         }
     }

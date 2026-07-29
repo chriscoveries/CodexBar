@@ -252,22 +252,11 @@ struct CodexLocalProjectUsageTests {
         let options = CostUsageScanner.Options(
             codexSessionsRoot: env.codexSessionsRoot,
             cacheRoot: env.cacheRoot)
-        let legacyStore = CodexLocalProjectUsageIndexStore(cacheRoot: env.cacheRoot)
-        legacyStore.saveSnapshot(CodexLocalProjectUsageSnapshot(
-            updatedAt: day,
-            historyDays: 2,
-            scopeSignature: "legacy",
-            rootsFingerprint: [:],
-            indexedFileCount: 0,
-            skippedFileCount: 0,
-            total: .empty,
-            projects: [],
-            daily: []))
-        #expect(legacyStore.loadSnapshot() != nil)
         let snapshot = try await CostUsageFetcher.loadCodexLocalProjectUsageSnapshot(
             now: day,
             forceRefresh: true,
             historyDays: 2,
+            hidePersonalInfo: false,
             scannerOptions: options)
 
         #expect(snapshot.indexedFileCount == 2)
@@ -284,6 +273,22 @@ struct CodexLocalProjectUsageTests {
         #expect(snapshot.total.totalTokens == 190)
         #expect(snapshot.sessions.count == 2)
         #expect(snapshot.daily.first?.totalTokens == 190)
+        let hiddenSnapshot = try #require(await CostUsageFetcher.loadCachedCodexLocalProjectUsageSnapshot(
+            now: day,
+            historyDays: 2,
+            hidePersonalInfo: true,
+            scannerOptions: options))
+        #expect(hiddenSnapshot.rootsFingerprint.isEmpty)
+        #expect(hiddenSnapshot.projects.first?.displayName == "Workspace")
+        #expect(hiddenSnapshot.projects.first?.path == nil)
+        #expect(hiddenSnapshot.projects.first?.topSessions.first?.displayTitle
+            == CodexLocalSessionUsage.localChatFallbackTitle)
+        #expect(hiddenSnapshot.projects.first?.topSessions.first?.cwd == nil)
+        #expect(hiddenSnapshot.sessions.allSatisfy {
+            $0.displayTitle == CodexLocalSessionUsage.localChatFallbackTitle && $0.cwd == nil
+        })
+        #expect(snapshot.projects.first?.displayName == "CodexBar")
+        #expect(snapshot.projects.first?.path == project.standardizedFileURL.path)
         let allModels = try #require(snapshot.modelsAnalytics?.allWorkspaces)
         #if canImport(SQLite3) || canImport(CSQLite3)
         #expect(snapshot.sourceStatus == .catalogMissing)
@@ -293,11 +298,6 @@ struct CodexLocalProjectUsageTests {
         #expect(snapshot.sourceStatus == .complete)
         #expect(allModels.currentIsComplete == true)
         #expect(allModels.previousIsComplete == true)
-        #endif
-        #if canImport(SQLite3) || canImport(CSQLite3)
-        #expect(legacyStore.loadSnapshot() == nil)
-        #else
-        #expect(legacyStore.loadSnapshot() != nil)
         #endif
     }
 
@@ -1216,9 +1216,9 @@ extension CodexLocalProjectUsageTests {
             modelBreakdowns: [],
             usageSeverity: .high)
 
-        let encoded = try JSONEncoder.codexLocalProjectUsage.encode(project)
+        let encoded = try JSONEncoder.codexLocalProjectUsageSidecar.encode(project)
         let json = try #require(String(data: encoded, encoding: .utf8))
-        let decoded = try JSONDecoder.codexLocalProjectUsage.decode(CodexLocalProjectUsage.self, from: encoded)
+        let decoded = try JSONDecoder.codexLocalProjectUsageSidecar.decode(CodexLocalProjectUsage.self, from: encoded)
 
         #expect(!json.contains("usageSeverity"))
         #expect(decoded.severity == .normal)
@@ -1237,14 +1237,14 @@ extension CodexLocalProjectUsageTests {
             projects: [],
             daily: [])
 
-        let encoded = try JSONEncoder.codexLocalProjectUsage.encode(snapshot)
+        let encoded = try JSONEncoder.codexLocalProjectUsageSidecar.encode(snapshot)
         let currentJSON = try #require(String(data: encoded, encoding: .utf8))
         var legacyObject = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
         legacyObject["stale"] = true
         legacyObject["indexing"] = true
         legacyObject["errorMessage"] = "previous refresh failed"
         let legacyData = try JSONSerialization.data(withJSONObject: legacyObject)
-        let decoded = try JSONDecoder.codexLocalProjectUsage.decode(
+        let decoded = try JSONDecoder.codexLocalProjectUsageSidecar.decode(
             CodexLocalProjectUsageSnapshot.self,
             from: legacyData)
 
@@ -1268,8 +1268,8 @@ extension CodexLocalProjectUsageTests {
             daily: [],
             sourceStatus: .catalogLocked)
 
-        let encoded = try JSONEncoder.codexLocalProjectUsage.encode(snapshot)
-        let decoded = try JSONDecoder.codexLocalProjectUsage.decode(
+        let encoded = try JSONEncoder.codexLocalProjectUsageSidecar.encode(snapshot)
+        let decoded = try JSONDecoder.codexLocalProjectUsageSidecar.decode(
             CodexLocalProjectUsageSnapshot.self,
             from: encoded)
         #expect(decoded.sourceStatus == .catalogLocked)
@@ -1277,7 +1277,7 @@ extension CodexLocalProjectUsageTests {
         var legacyObject = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
         legacyObject.removeValue(forKey: "sourceStatus")
         let legacyData = try JSONSerialization.data(withJSONObject: legacyObject)
-        let decodedLegacy = try JSONDecoder.codexLocalProjectUsage.decode(
+        let decodedLegacy = try JSONDecoder.codexLocalProjectUsageSidecar.decode(
             CodexLocalProjectUsageSnapshot.self,
             from: legacyData)
         #expect(decodedLegacy.sourceStatus == .complete)
@@ -1387,8 +1387,8 @@ extension CodexLocalProjectUsageTests {
             topModel: "gpt-5.4",
             daily: daily)
 
-        let encoded = try JSONEncoder.codexLocalProjectUsage.encode(session)
-        let decoded = try JSONDecoder.codexLocalProjectUsage.decode(
+        let encoded = try JSONEncoder.codexLocalProjectUsageSidecar.encode(session)
+        let decoded = try JSONDecoder.codexLocalProjectUsageSidecar.decode(
             CodexLocalSessionUsage.self,
             from: encoded)
         #expect(decoded.daily == daily)
@@ -1396,266 +1396,41 @@ extension CodexLocalProjectUsageTests {
         var legacyObject = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
         legacyObject.removeValue(forKey: "daily")
         let legacyData = try JSONSerialization.data(withJSONObject: legacyObject)
-        let decodedLegacy = try JSONDecoder.codexLocalProjectUsage.decode(
+        let decodedLegacy = try JSONDecoder.codexLocalProjectUsageSidecar.decode(
             CodexLocalSessionUsage.self,
             from: legacyData)
         #expect(decodedLegacy.daily.isEmpty)
     }
 
     @Test
-    func `sidecar migrates version two additively and preserves the database`() throws {
+    func `sidecar rejects unreleased schema versions`() throws {
         #if canImport(SQLite3)
-        let env = try CostUsageTestEnvironment()
-        defer { env.cleanup() }
-        let databaseDirectory = env.cacheRoot.appendingPathComponent("local-usage", isDirectory: true)
-        try FileManager.default.createDirectory(at: databaseDirectory, withIntermediateDirectories: true)
-        let databaseURL = databaseDirectory.appendingPathComponent("codex-workspaces-v1.sqlite")
-        var database: OpaquePointer?
-        #expect(sqlite3_open(databaseURL.path, &database) == SQLITE_OK)
-        try self.execSQLite(database, """
-        CREATE TABLE usage_rollouts (
-            rollout_path TEXT PRIMARY KEY,
-            fingerprint TEXT NOT NULL,
-            session_id TEXT,
-            cwd TEXT,
-            title TEXT,
-            started_at_ms INTEGER,
-            latest_activity_ms INTEGER,
-            last_model TEXT,
-            project_path TEXT,
-            canonical_project_path TEXT,
-            forked_from_id TEXT,
-            is_present INTEGER NOT NULL DEFAULT 1,
-            last_seen_generation TEXT NOT NULL
-        );
-        PRAGMA user_version = 2;
-        """)
-        sqlite3_close(database)
+        for version in [2, 3, 4] {
+            let env = try CostUsageTestEnvironment()
+            defer { env.cleanup() }
+            let databaseDirectory = env.cacheRoot.appendingPathComponent("local-usage", isDirectory: true)
+            try FileManager.default.createDirectory(at: databaseDirectory, withIntermediateDirectories: true)
+            let databaseURL = databaseDirectory.appendingPathComponent("codex-workspaces-v1.sqlite")
+            var database: OpaquePointer?
+            #expect(sqlite3_open(databaseURL.path, &database) == SQLITE_OK)
+            try self.execSQLite(database, "PRAGMA user_version = \(version);")
+            sqlite3_close(database)
 
-        try CodexWorkspaceUsageSidecar(cacheRoot: env.cacheRoot).synchronizeSources(
-            cache: CostUsageCache(),
-            catalog: .empty)
-
-        database = nil
-        #expect(sqlite3_open(databaseURL.path, &database) == SQLITE_OK)
-        defer { sqlite3_close(database) }
-        var statement: OpaquePointer?
-        #expect(sqlite3_prepare_v2(database, "PRAGMA user_version", -1, &statement, nil) == SQLITE_OK)
-        #expect(sqlite3_step(statement) == SQLITE_ROW)
-        #expect(sqlite3_column_int(statement, 0) == 5)
-        sqlite3_finalize(statement)
-
-        statement = nil
-        #expect(sqlite3_prepare_v2(database, "PRAGMA table_info(usage_rollouts)", -1, &statement, nil) == SQLITE_OK)
-        var columnNames: [String] = []
-        while sqlite3_step(statement) == SQLITE_ROW {
-            if let text = sqlite3_column_text(statement, 1) {
-                columnNames.append(String(cString: text))
+            #expect(throws: (any Error).self) {
+                try CodexWorkspaceUsageSidecar(cacheRoot: env.cacheRoot).synchronizeSources(
+                    cache: CostUsageCache(),
+                    catalog: .empty)
             }
+
+            database = nil
+            #expect(sqlite3_open(databaseURL.path, &database) == SQLITE_OK)
+            var statement: OpaquePointer?
+            #expect(sqlite3_prepare_v2(database, "PRAGMA user_version", -1, &statement, nil) == SQLITE_OK)
+            #expect(sqlite3_step(statement) == SQLITE_ROW)
+            #expect(sqlite3_column_int(statement, 0) == Int32(version))
+            sqlite3_finalize(statement)
+            sqlite3_close(database)
         }
-        sqlite3_finalize(statement)
-        #expect(columnNames.contains("event_detail_complete"))
-        #expect(columnNames.contains("source_mtime_ms"))
-        #expect(columnNames.contains("content_fingerprint"))
-
-        statement = nil
-        #expect(sqlite3_prepare_v2(
-            database,
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='usage_events'",
-            -1,
-            &statement,
-            nil) == SQLITE_OK)
-        #expect(sqlite3_step(statement) == SQLITE_ROW)
-        sqlite3_finalize(statement)
-
-        statement = nil
-        #expect(sqlite3_prepare_v2(database, "PRAGMA table_info(usage_events)", -1, &statement, nil) == SQLITE_OK)
-        columnNames = []
-        while sqlite3_step(statement) == SQLITE_ROW {
-            if let text = sqlite3_column_text(statement, 1) {
-                columnNames.append(String(cString: text))
-            }
-        }
-        sqlite3_finalize(statement)
-        #expect(columnNames.contains("reasoning_tokens"))
-
-        statement = nil
-        #expect(sqlite3_prepare_v2(database, "PRAGMA table_info(snapshot_payloads)", -1, &statement, nil) == SQLITE_OK)
-        columnNames = []
-        while sqlite3_step(statement) == SQLITE_ROW {
-            if let text = sqlite3_column_text(statement, 1) {
-                columnNames.append(String(cString: text))
-            }
-        }
-        sqlite3_finalize(statement)
-        #expect(columnNames.contains("payload_format_version"))
-
-        statement = nil
-        #expect(sqlite3_prepare_v2(
-            database,
-            "SELECT name FROM sqlite_master WHERE type='index' AND name='catalog_threads_rollout'",
-            -1,
-            &statement,
-            nil) == SQLITE_OK)
-        #expect(sqlite3_step(statement) == SQLITE_ROW)
-        sqlite3_finalize(statement)
-
-        statement = nil
-        #expect(sqlite3_prepare_v2(
-            database,
-            """
-            EXPLAIN QUERY PLAN
-            SELECT r.rollout_path
-            FROM usage_rollouts r
-            LEFT JOIN catalog_threads c ON c.id = r.session_id OR c.rollout_path = r.rollout_path
-            JOIN usage_daily d ON d.rollout_path = r.rollout_path
-            """,
-            -1,
-            &statement,
-            nil) == SQLITE_OK)
-        var planDetails: [String] = []
-        while sqlite3_step(statement) == SQLITE_ROW {
-            if let text = sqlite3_column_text(statement, 3) {
-                planDetails.append(String(cString: text))
-            }
-        }
-        sqlite3_finalize(statement)
-        #expect(planDetails.contains { $0.contains("catalog_threads_rollout") })
-        #endif
-    }
-
-    @Test
-    func `sidecar migrates version three event rows with nullable reasoning`() throws {
-        #if canImport(SQLite3)
-        let env = try CostUsageTestEnvironment()
-        defer { env.cleanup() }
-        let databaseDirectory = env.cacheRoot.appendingPathComponent("local-usage", isDirectory: true)
-        try FileManager.default.createDirectory(at: databaseDirectory, withIntermediateDirectories: true)
-        let databaseURL = databaseDirectory.appendingPathComponent("codex-workspaces-v1.sqlite")
-        var database: OpaquePointer?
-        #expect(sqlite3_open(databaseURL.path, &database) == SQLITE_OK)
-        try self.execSQLite(database, """
-        CREATE TABLE usage_events (
-            rollout_path TEXT NOT NULL,
-            event_index INTEGER NOT NULL,
-            timestamp_ms INTEGER NOT NULL,
-            day TEXT NOT NULL,
-            canonical_model TEXT NOT NULL,
-            raw_model TEXT,
-            turn_id TEXT,
-            input_tokens INTEGER NOT NULL,
-            cached_input_tokens INTEGER NOT NULL,
-            output_tokens INTEGER NOT NULL,
-            known_cost_nanos INTEGER,
-            unpriced_tokens INTEGER NOT NULL,
-            pricing_model TEXT,
-            pricing_mode TEXT,
-            PRIMARY KEY (rollout_path, event_index)
-        );
-        PRAGMA user_version = 3;
-        """)
-        sqlite3_close(database)
-
-        try CodexWorkspaceUsageSidecar(cacheRoot: env.cacheRoot).synchronizeSources(
-            cache: CostUsageCache(),
-            catalog: .empty)
-
-        database = nil
-        #expect(sqlite3_open(databaseURL.path, &database) == SQLITE_OK)
-        defer { sqlite3_close(database) }
-        var statement: OpaquePointer?
-        #expect(sqlite3_prepare_v2(database, "PRAGMA user_version", -1, &statement, nil) == SQLITE_OK)
-        #expect(sqlite3_step(statement) == SQLITE_ROW)
-        #expect(sqlite3_column_int(statement, 0) == 5)
-        sqlite3_finalize(statement)
-
-        statement = nil
-        #expect(sqlite3_prepare_v2(database, "PRAGMA table_info(usage_events)", -1, &statement, nil) == SQLITE_OK)
-        var columnNames: [String] = []
-        while sqlite3_step(statement) == SQLITE_ROW {
-            if let text = sqlite3_column_text(statement, 1) {
-                columnNames.append(String(cString: text))
-            }
-        }
-        sqlite3_finalize(statement)
-        #expect(columnNames.contains("reasoning_tokens"))
-        #endif
-    }
-
-    @Test
-    func `sidecar migrates version four rows to explicit source identities`() throws {
-        #if canImport(SQLite3)
-        let env = try CostUsageTestEnvironment()
-        defer { env.cleanup() }
-        let databaseDirectory = env.cacheRoot.appendingPathComponent("local-usage", isDirectory: true)
-        try FileManager.default.createDirectory(at: databaseDirectory, withIntermediateDirectories: true)
-        let databaseURL = databaseDirectory.appendingPathComponent("codex-workspaces-v1.sqlite")
-        var database: OpaquePointer?
-        #expect(sqlite3_open(databaseURL.path, &database) == SQLITE_OK)
-        try self.execSQLite(database, """
-        CREATE TABLE usage_rollouts (
-            rollout_path TEXT PRIMARY KEY,
-            fingerprint TEXT NOT NULL,
-            session_id TEXT,
-            cwd TEXT,
-            title TEXT,
-            started_at_ms INTEGER,
-            latest_activity_ms INTEGER,
-            last_model TEXT,
-            project_path TEXT,
-            canonical_project_path TEXT,
-            forked_from_id TEXT,
-            event_detail_complete INTEGER NOT NULL DEFAULT 0,
-            is_present INTEGER NOT NULL DEFAULT 1,
-            last_seen_generation TEXT NOT NULL
-        );
-        CREATE TABLE usage_daily (
-            rollout_path TEXT NOT NULL,
-            day TEXT NOT NULL,
-            model TEXT NOT NULL,
-            input_tokens INTEGER NOT NULL,
-            cached_input_tokens INTEGER NOT NULL,
-            output_tokens INTEGER NOT NULL,
-            cost_nanos INTEGER,
-            standard_tokens INTEGER,
-            priority_tokens INTEGER,
-            standard_cost_nanos INTEGER,
-            priority_cost_nanos INTEGER,
-            priority_surcharge_nanos INTEGER,
-            PRIMARY KEY (rollout_path, day, model)
-        );
-        INSERT INTO usage_rollouts (rollout_path, fingerprint, last_seen_generation)
-        VALUES ('legacy.jsonl', 'legacy', 'generation');
-        INSERT INTO usage_daily (rollout_path, day, model, input_tokens, cached_input_tokens, output_tokens)
-        VALUES ('legacy.jsonl', '2026-07-25', 'model', 1, 0, 1);
-        PRAGMA user_version = 4;
-        """)
-        sqlite3_close(database)
-
-        try CodexWorkspaceUsageSidecar(cacheRoot: env.cacheRoot).synchronizeSources(
-            cache: CostUsageCache(),
-            catalog: .empty)
-
-        database = nil
-        #expect(sqlite3_open(databaseURL.path, &database) == SQLITE_OK)
-        defer { sqlite3_close(database) }
-        var statement: OpaquePointer?
-        #expect(sqlite3_prepare_v2(database, "PRAGMA user_version", -1, &statement, nil) == SQLITE_OK)
-        #expect(sqlite3_step(statement) == SQLITE_ROW)
-        #expect(sqlite3_column_int(statement, 0) == 5)
-        sqlite3_finalize(statement)
-
-        statement = nil
-        #expect(sqlite3_prepare_v2(database, "SELECT COUNT(*) FROM usage_rollouts", -1, &statement, nil) == SQLITE_OK)
-        #expect(sqlite3_step(statement) == SQLITE_ROW)
-        #expect(sqlite3_column_int(statement, 0) == 1)
-        sqlite3_finalize(statement)
-
-        statement = nil
-        #expect(sqlite3_prepare_v2(database, "SELECT COUNT(*) FROM usage_daily", -1, &statement, nil) == SQLITE_OK)
-        #expect(sqlite3_step(statement) == SQLITE_ROW)
-        #expect(sqlite3_column_int(statement, 0) == 1)
-        sqlite3_finalize(statement)
         #endif
     }
 
