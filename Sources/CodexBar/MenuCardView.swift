@@ -1302,6 +1302,8 @@ extension UsageMenuCardView.Model {
         var primaryResetText = Self.resetText(for: primary, style: input.resetTimeDisplayStyle, now: input.now)
         var primaryDetailLeft: String?
         var primaryDetailRight: String?
+        let crofShowsRequestQuota = input.provider == .crof && input.snapshot?.secondary != nil
+        let crofShowsCreditsOnly = input.provider == .crof && !crofShowsRequestQuota
         if input.provider == .openrouter,
            let openRouterQuotaDetail
         {
@@ -1313,10 +1315,22 @@ extension UsageMenuCardView.Model {
         {
             primaryDetailLeft = detail
         }
-        if [.warp, .kilo, .mimo, .deepseek, .deepinfra, .qoder, .mistral, .neuralwatt, .litellm, .crof, .chutes]
+        if [.warp, .kilo, .mimo, .deepseek, .deepinfra, .qoder, .mistral, .neuralwatt, .litellm, .chutes]
             .contains(input.provider),
             let detail = primary.resetDescription,
             !detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        {
+            primaryDetailText = detail
+        }
+        if crofShowsRequestQuota,
+           let detail = primary.resetDescription?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !detail.isEmpty
+        {
+            primaryDetailRight = detail
+        }
+        if crofShowsCreditsOnly,
+           let detail = primary.resetDescription?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !detail.isEmpty
         {
             primaryDetailText = detail
         }
@@ -1343,11 +1357,13 @@ extension UsageMenuCardView.Model {
                 primaryResetText = nil
             }
         }
-        if [.warp, .kilo, .mimo, .deepseek, .deepinfra, .qoder, .mistral, .neuralwatt, .litellm, .zenmux, .crof,
-            .chutes]
+        if [.warp, .kilo, .mimo, .deepseek, .deepinfra, .qoder, .mistral, .neuralwatt, .litellm, .zenmux, .chutes]
             .contains(input.provider),
             primary.resetsAt == nil
         {
+            primaryResetText = nil
+        }
+        if crofShowsCreditsOnly {
             primaryResetText = nil
         }
         // Abacus: show credits as detail, compute pace on the primary monthly window
@@ -1418,7 +1434,7 @@ extension UsageMenuCardView.Model {
             primaryPaceOnTop = regen.pace.paceOnTop
         }
         let usesBalanceStatusText = input.provider == .deepseek || input.provider == .deepinfra ||
-            input.provider == .crof
+            crofShowsCreditsOnly
         let primaryStatusText = usesBalanceStatusText ? primaryDetailText : nil
         if usesBalanceStatusText {
             primaryDetailText = nil
@@ -1512,6 +1528,12 @@ extension UsageMenuCardView.Model {
            !detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         {
             weeklyDetailText = detail
+        }
+        if input.provider == .crof,
+           let detail = weekly.resetDescription?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !detail.isEmpty
+        {
+            weeklyResetText = detail
         }
         if [.copilot, .zenmux].contains(input.provider),
            let detail = weekly.resetDescription?.trimmingCharacters(in: .whitespacesAndNewlines),

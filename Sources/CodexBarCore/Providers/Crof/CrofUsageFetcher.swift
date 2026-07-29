@@ -5,9 +5,13 @@ import FoundationNetworking
 
 public struct CrofUsageResponse: Decodable, Sendable {
     public let credits: Double
+    public let requestsPlan: Double?
+    public let usableRequests: Double?
 
     enum CodingKeys: String, CodingKey {
         case credits
+        case requestsPlan = "requests_plan"
+        case usableRequests = "usable_requests"
     }
 }
 
@@ -78,6 +82,8 @@ public enum CrofUsageFetcher {
 
         return CrofUsageSnapshot(
             credits: decoded.credits,
+            requestsPlan: decoded.requestsPlan,
+            usableRequests: decoded.usableRequests,
             updatedAt: Date())
     }
 }

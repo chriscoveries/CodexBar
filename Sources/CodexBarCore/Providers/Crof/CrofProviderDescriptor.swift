@@ -14,7 +14,7 @@ public enum CrofProviderDescriptor {
                 opusLabel: nil,
                 supportsOpus: false,
                 supportsCredits: false,
-                creditsHint: "PAYG credit balance from the Crof usage API",
+                creditsHint: "Credit balance from the Crof usage API",
                 toggleTitle: "Show Crof usage",
                 cliName: "crof",
                 defaultEnabled: false,
@@ -47,5 +47,9 @@ public enum CrofProviderDescriptor {
                 name: "crof",
                 aliases: ["crofai"],
                 versionDetector: nil))
+    }
+
+    public static func primaryLabel(snapshot: UsageSnapshot) -> String {
+        snapshot.secondary == nil ? "Credits" : "Requests"
     }
 }

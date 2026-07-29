@@ -10,7 +10,7 @@ struct CrofUsageFetcherTests {
     }
 
     @Test
-    func `usage response parses credits and ignores null request quota fields`() throws {
+    func `usage response parses credits with null request quota fields`() throws {
         let json = """
         {
           "credits":9.0441,
@@ -30,10 +30,12 @@ struct CrofUsageFetcherTests {
         let snapshot = try CrofUsageFetcher._parseSnapshotForTesting(Data(json.utf8))
 
         #expect(snapshot.credits == 9.0441)
+        #expect(snapshot.requestsPlan == nil)
+        #expect(snapshot.usableRequests == nil)
     }
 
     @Test
-    func `usage response still parses credits when legacy request fields are present`() throws {
+    func `usage response preserves request quota fields when present`() throws {
         let json = """
         {"credits":10.0,"requests_plan":1000,"usable_requests":998}
         """
@@ -41,6 +43,8 @@ struct CrofUsageFetcherTests {
         let snapshot = try CrofUsageFetcher._parseSnapshotForTesting(Data(json.utf8))
 
         #expect(snapshot.credits == 10)
+        #expect(snapshot.requestsPlan == 1000)
+        #expect(snapshot.usableRequests == 998)
     }
 
     @Test
@@ -58,6 +62,24 @@ struct CrofUsageFetcherTests {
         #expect(usage.secondary == nil)
         #expect(usage.identity?.providerID == .crof)
         #expect(usage.identity?.loginMethod == "API key")
+    }
+
+    @Test
+    func `usage snapshot prefers request quota when present`() {
+        let snapshot = CrofUsageSnapshot(
+            credits: 10,
+            requestsPlan: 1000,
+            usableRequests: 998,
+            updatedAt: Date(timeIntervalSince1970: 1_777_800_000))
+
+        let usage = snapshot.toUsageSnapshot()
+
+        #expect(usage.primary?.usedPercent == 1)
+        #expect(usage.primary?.windowMinutes == 1440)
+        #expect(usage.primary?.resetsAt != nil)
+        #expect(usage.primary?.resetDescription == "998 requests left")
+        #expect(usage.secondary?.usedPercent == 0)
+        #expect(usage.secondary?.resetDescription == "$10.00")
     }
 
     @Test
@@ -94,6 +116,8 @@ struct CrofUsageFetcherTests {
         let snapshot = try await CrofUsageFetcher.fetchUsage(apiKey: "crof-test", session: Self.makeSession())
 
         #expect(snapshot.credits == 9.0441)
+        #expect(snapshot.requestsPlan == nil)
+        #expect(snapshot.usableRequests == nil)
         #expect(CrofStubURLProtocol.requests.map(\.url?.absoluteString) == ["https://crof.ai/usage_api/"])
     }
 

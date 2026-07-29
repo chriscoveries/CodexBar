@@ -839,6 +839,8 @@ enum CLIRenderer {
         }
         let primaryLabel = if provider == .grok {
             GrokProviderDescriptor.primaryLabel(window: snapshot.primary) ?? metadata.sessionLabel
+        } else if provider == .crof {
+            CrofProviderDescriptor.primaryLabel(snapshot: snapshot)
         } else if provider == .sub2api {
             Sub2APIProviderDescriptor.primaryLabel(details: snapshot.sub2APIUsage) ?? metadata.sessionLabel
         } else if provider == .amp {

@@ -232,12 +232,13 @@ struct MenuDescriptor {
         if let snap = store.snapshot(for: provider) {
             let resetStyle = settings.resetTimeDisplayStyle
             let labels = Self.rateWindowLabels(provider: provider, metadata: meta, snapshot: snap)
+            let crofShowsCreditsOnly = provider == .crof && snap.secondary == nil
             if let primary = snap.primary {
                 let primaryDetail = primary.resetDescription?.trimmingCharacters(in: .whitespacesAndNewlines)
                 let primaryDescriptionIsDetail = provider == .warp || provider == .kilo || provider == .abacus ||
                     provider == .deepseek || provider == .deepinfra || provider == .neuralwatt ||
                     provider == .azureopenai || provider == .mimo || provider == .qoder || provider == .sub2api ||
-                    provider == .crof || provider == .chutes
+                    crofShowsCreditsOnly || provider == .chutes
                 let primaryWindow = if primaryDescriptionIsDetail {
                     // Some providers use resetDescription for non-reset detail
                     // (e.g., "Unlimited", "X/Y credits"). Avoid rendering it as a "Resets ..." line.
@@ -256,6 +257,13 @@ struct MenuDescriptor {
                     resetStyle: resetStyle,
                     showUsed: settings.usageBarsShowUsed)
                 if primaryDescriptionIsDetail,
+                   let primaryDetail,
+                   !primaryDetail.isEmpty
+                {
+                    entries.append(.text(primaryDetail, .secondary))
+                }
+                if provider == .crof,
+                   primary.resetsAt != nil,
                    let primaryDetail,
                    !primaryDetail.isEmpty
                 {
@@ -673,6 +681,8 @@ struct MenuDescriptor {
         }
         let primaryLabel = if provider == .grok {
             GrokProviderDescriptor.primaryLabel(window: snapshot.primary) ?? metadata.sessionLabel
+        } else if provider == .crof {
+            CrofProviderDescriptor.primaryLabel(snapshot: snapshot)
         } else if provider == .doubao {
             DoubaoProviderDescriptor.primaryLabel(window: snapshot.primary) ?? metadata.sessionLabel
         } else if provider == .sub2api {

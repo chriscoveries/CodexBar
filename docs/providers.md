@@ -466,8 +466,8 @@ provider-specific cookie validation, endpoints, login detection, and error trans
 
 ## Crof
 - API key from `~/.codexbar/config.json`, `CROF_API_KEY`, or `CROFAI_API_KEY`.
-- Reads `credits` from `GET https://crof.ai/usage_api/` (PAYG-only; ignores null request-quota fields and per-model usage totals).
-- Shows dollar credits as the primary usage window.
+- Reads `credits` and optional `requests_plan` / `usable_requests` from `GET https://crof.ai/usage_api/`.
+- Prefers request quota plus a secondary dollar-balance row when quota fields are present; otherwise shows dollar credits as the primary window.
 - Status: none yet.
 - Details: `docs/crof.md`.
 
