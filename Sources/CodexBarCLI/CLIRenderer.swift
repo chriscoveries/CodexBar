@@ -46,6 +46,11 @@ enum CLIRenderer {
             snapshot: snapshot,
             useColor: context.useColor,
             lines: &lines)
+        self.appendClaudeExtraUsageBalanceLine(
+            provider: provider,
+            snapshot: snapshot,
+            useColor: context.useColor,
+            lines: &lines)
         self.appendLimitsUnavailableLine(
             provider: provider,
             snapshot: snapshot,
@@ -105,6 +110,11 @@ enum CLIRenderer {
         self.appendDeepgramLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendAmpBalanceLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendDevinOverageBalanceLine(
+            provider: provider,
+            snapshot: snapshot,
+            useColor: context.useColor,
+            lines: &lines)
+        self.appendClaudeExtraUsageBalanceLine(
             provider: provider,
             snapshot: snapshot,
             useColor: context.useColor,
@@ -491,6 +501,11 @@ enum CLIRenderer {
             snapshot: snapshot,
             useColor: context.useColor,
             lines: &lines)
+        self.appendClaudeExtraUsageBalanceLine(
+            provider: provider,
+            snapshot: snapshot,
+            useColor: context.useColor,
+            lines: &lines)
         self.appendLimitsUnavailableLine(
             provider: provider,
             snapshot: snapshot,
@@ -597,7 +612,8 @@ enum CLIRenderer {
         guard
             provider != .clawrouter,
             let cost = snapshot.providerCost,
-            !(provider == .devin && cost.period == "Extra usage balance")
+            !(provider == .devin && cost.period == "Extra usage balance"),
+            !(provider == .claude && cost.used == 0 && cost.limit == 0 && cost.balance != nil)
         else { return }
         // Fallback to cost/quota display if no primary rate window.
         let label = cost.currencyCode == "Quota" ? "Quota" : "Cost"
@@ -646,6 +662,20 @@ enum CLIRenderer {
         else { return }
         let balance = UsageFormatter.currencyString(cost.used, currencyCode: cost.currencyCode)
         lines.append(self.labelValueLine("Extra usage", value: balance, useColor: useColor))
+    }
+
+    private static func appendClaudeExtraUsageBalanceLine(
+        provider: UsageProvider,
+        snapshot: UsageSnapshot,
+        useColor: Bool,
+        lines: inout [String])
+    {
+        guard provider == .claude,
+              let cost = snapshot.providerCost,
+              let balance = cost.balance
+        else { return }
+        let value = UsageFormatter.currencyString(balance, currencyCode: cost.currencyCode)
+        lines.append(self.labelValueLine("Extra usage balance", value: value, useColor: useColor))
     }
 
     private static func appendClawRouterUsageLines(

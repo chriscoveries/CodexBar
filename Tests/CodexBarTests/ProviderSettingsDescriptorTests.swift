@@ -8,6 +8,24 @@ import Testing
 @Suite(.serialized)
 struct ProviderSettingsDescriptorTests {
     @Test
+    func `provider settings refresh enables explicit browser retry`() async {
+        var observedInteraction: ProviderInteraction?
+        var browserRetryAllowed = false
+
+        await KeychainAccessGate.withTaskOverrideForTesting(false) {
+            await BrowserCookieAccessGate.withDeniedBrowsersForTesting([.chrome]) {
+                await ProviderSettingsRefreshInteraction.perform {
+                    observedInteraction = ProviderInteractionContext.current
+                    browserRetryAllowed = BrowserCookieAccessGate.shouldAttempt(.chrome)
+                }
+            }
+        }
+
+        #expect(observedInteraction == .userInitiated)
+        #expect(browserRetryAllowed)
+    }
+
+    @Test
     func `toggle I ds are unique across providers`() throws {
         let fixture = try self.makeSettingsFixture(suite: "ProviderSettingsDescriptorTests-unique")
         var seenToggleIDs: Set<String> = []
@@ -308,6 +326,25 @@ struct ProviderSettingsDescriptorTests {
     }
 
     @Test
+    func `claude daily routines toggle follows global optional usage setting`() throws {
+        let fixture = try self.makeSettingsFixture(suite: "ProviderSettingsDescriptorTests-claude-routines")
+        let context = fixture.settingsContext(provider: .claude)
+        let toggles = ClaudeProviderImplementation().settingsToggles(context: context)
+        let routinesToggle = try #require(toggles.first {
+            $0.id == "claude-daily-routines-usage-visible"
+        })
+
+        #expect(routinesToggle.binding.wrappedValue)
+        #expect(routinesToggle.isEnabled?() == true)
+
+        routinesToggle.binding.wrappedValue = false
+        #expect(fixture.settings.claudeDailyRoutinesUsageVisible == false)
+
+        fixture.settings.showOptionalCreditsAndExtraUsage = false
+        #expect(routinesToggle.isEnabled?() == false)
+    }
+
+    @Test
     func `claude single swap account toggle persists and follows integration visibility`() throws {
         let fixture = try self.makeSettingsFixture(suite: "ProviderSettingsDescriptorTests-claude-swap-single")
         let context = fixture.settingsContext(provider: .claude)
@@ -546,8 +583,10 @@ extension ProviderSettingsDescriptorTests {
         let implementation = AlibabaTokenPlanProviderImplementation()
         let pickers = implementation.settingsPickers(context: context)
         let fields = implementation.settingsFields(context: context)
+        let regionPicker = try #require(pickers.first(where: { $0.id == "alibaba-token-plan-region" }))
 
         #expect(pickers.contains(where: { $0.id == "alibaba-token-plan-cookie-source" }))
+        #expect(Set(regionPicker.options.map(\.id)) == ["intl", "cn", "intl-personal", "cn-personal"])
         #expect(fields.contains(where: { $0.id == "alibaba-token-plan-cookie" }))
         #expect(fields.first?.actions.contains(where: { $0.id == "alibaba-token-plan-open-dashboard" }) == true)
     }
