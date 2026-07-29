@@ -121,7 +121,10 @@ struct UsageMenuCardView: View {
             let percentUsed: Double?
             let spendLine: String
             let percentLine: String?
+            var balanceLine: String?
             var personalSpendLine: String?
+            var presentation: Presentation = .detail
+            var showsInProviderDetails = true
         }
 
         let provider: UsageProvider
@@ -192,10 +195,10 @@ struct UsageMenuCardView: View {
                 let hasCost = liveModel.tokenUsage != nil || hasProviderCost
 
                 VStack(alignment: .leading, spacing: 12) {
-                    if hasUsage {
+                    if hasUsage, !liveModel.creditsOnlyInlineUsageDashboard {
                         UsageMenuCardUsageContentView(model: liveModel, showBottomDivider: false)
                     }
-                    if hasUsage, hasCredits || hasCost {
+                    if hasUsage, !liveModel.creditsOnlyInlineUsageDashboard, hasCredits || hasCost {
                         Divider()
                     }
                     if let credits = liveModel.creditsText {
@@ -207,6 +210,9 @@ struct UsageMenuCardView: View {
                             hintText: liveModel.creditsHintText,
                             hintCopyText: liveModel.creditsHintCopyText,
                             progressColor: liveModel.progressColor)
+                    }
+                    if liveModel.creditsOnlyInlineUsageDashboard, let dashboard = liveModel.inlineUsageDashboard {
+                        InlineUsageDashboardContent(model: dashboard)
                     }
                     if hasCredits, hasCost {
                         Divider()
@@ -457,40 +463,6 @@ private struct TokenUsageSectionContent: View {
                     .overlay {
                         ClickToCopyOverlay(copyText: self.tokenUsage.errorCopyText ?? error)
                     }
-            }
-        }
-    }
-}
-
-private struct ProviderCostContent: View {
-    let section: UsageMenuCardView.Model.ProviderCostSection
-    let progressColor: Color
-    @Environment(\.menuItemHighlighted) private var isHighlighted
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(self.section.title)
-                .font(.body)
-                .fontWeight(.medium)
-            if let percentUsed = self.section.percentUsed {
-                UsageProgressBar(
-                    percent: percentUsed,
-                    tint: self.progressColor,
-                    accessibilityLabel: L("Extra usage spent"))
-            }
-            HStack(alignment: .firstTextBaseline) {
-                Text(self.section.spendLine).font(.footnote).lineLimit(1)
-                Spacer()
-                if let percentLine = self.section.percentLine {
-                    Text(percentLine)
-                        .font(.footnote)
-                        .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
-                        .lineLimit(1)
-                }
-            }
-            if let personalSpendLine = self.section.personalSpendLine {
-                Text(personalSpendLine)
-                    .font(.footnote).foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted)).lineLimit(1)
             }
         }
     }
@@ -925,7 +897,7 @@ extension UsageMenuCardView.Model {
         let creditsScaleText = Self.creditsScaleText(credits: input.credits)
         let codexCreditLimitDetail = Self.codexCreditLimitDetail(credits: input.credits, now: input.now)
         let isClaudeAdminAPI = input.provider == .claude &&
-            input.snapshot?.identity?.loginMethod == "Admin API"
+            input.snapshot?.claudeAdminAPIUsage != nil
         let isRequiredOpenCodeZenBalance = Self.isRequiredOpenCodeZenBalance(input.snapshot)
         let hidesOptionalProviderCost = ((input.provider == .claude && !isClaudeAdminAPI) ||
             input.provider == .factory ||
@@ -941,7 +913,10 @@ extension UsageMenuCardView.Model {
         {
             nil
         } else {
-            Self.providerCostSection(provider: input.provider, cost: input.snapshot?.providerCost)
+            Self.providerCostSection(
+                provider: input.provider,
+                cost: input.snapshot?.providerCost,
+                isClaudeAdminAPI: isClaudeAdminAPI)
         }
         let tokenUsageSnapshot = Self.tokenUsageSnapshot(input: input)
         let tokenUsage = Self.tokenUsageSection(
