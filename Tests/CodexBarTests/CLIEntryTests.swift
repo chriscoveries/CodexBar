@@ -92,39 +92,43 @@ final class CLIEntryTests: XCTestCase {
         try self.expectAdjacentVersionFile(raw: "version-3.2.3\n", expected: "version-3.2.3")
     }
 
-    func test_cliVersionUsesBundleExecutableWhenArgvPathIsUnavailable() throws {
+    func test_cliVersionFindsAdjacentVersionWhenInvokedViaRelativePathAndSymlink() throws {
         let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("codexbar-cli-version-bundle-executable-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("codexbar-cli-version-invocation-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let appURL = root.appendingPathComponent("CodexBar.app", isDirectory: true)
-        let contentsURL = appURL.appendingPathComponent("Contents", isDirectory: true)
-        let macOSURL = contentsURL.appendingPathComponent("MacOS", isDirectory: true)
-        try FileManager.default.createDirectory(at: macOSURL, withIntermediateDirectories: true)
+        let installURL = root.appendingPathComponent("install/bin", isDirectory: true)
+        let linksURL = root.appendingPathComponent("links", isDirectory: true)
+        let workingDirectoryURL = root.appendingPathComponent("work", isDirectory: true)
+        try FileManager.default.createDirectory(at: installURL, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: linksURL, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: workingDirectoryURL, withIntermediateDirectories: true)
 
-        let infoURL = contentsURL.appendingPathComponent("Info.plist")
-        let plist: [String: Any] = [
-            "CFBundleExecutable": "CodexBarCLI",
-            "CFBundleIdentifier": "com.example.CodexBarCLI",
-            "CFBundlePackageType": "APPL",
-            "CFBundleShortVersionString": "CodexBar",
-        ]
-        let data = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
-        try data.write(to: infoURL)
-
-        let executableURL = macOSURL.appendingPathComponent("CodexBarCLI")
-        try Data().write(to: executableURL)
+        let executableURL = installURL.appendingPathComponent("CodexBarCLI")
+        try FileManager.default.copyItem(at: Self.cliExecutableURL, to: executableURL)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executableURL.path)
         try "8.7.6\n".write(
-            to: macOSURL.appendingPathComponent("VERSION"),
+            to: installURL.appendingPathComponent("VERSION"),
             atomically: false,
             encoding: .utf8)
 
-        guard let bundle = Bundle(url: appURL) else {
-            XCTFail("Expected test app bundle to load")
-            return
-        }
+        XCTAssertEqual(
+            try Self.runVersionCommand(
+                executableURL: executableURL,
+                argv0: "install/bin/CodexBarCLI",
+                currentDirectoryURL: workingDirectoryURL),
+            "CodexBar 8.7.6\n")
 
-        XCTAssertEqual(CodexBarCLI.currentVersion(bundle: bundle, executablePath: nil), "8.7.6")
+        let symlinkURL = linksURL.appendingPathComponent("codexbar")
+        try FileManager.default.createSymbolicLink(
+            atPath: symlinkURL.path,
+            withDestinationPath: "../install/bin/CodexBarCLI")
+        XCTAssertEqual(
+            try Self.runVersionCommand(
+                executableURL: symlinkURL,
+                argv0: "codexbar",
+                currentDirectoryURL: workingDirectoryURL),
+            "CodexBar 8.7.6\n")
     }
 
     func test_cliVersionPrefersAdjacentVersionOverStandaloneBundleName() throws {
@@ -163,6 +167,48 @@ final class CLIEntryTests: XCTestCase {
             encoding: .utf8)
 
         XCTAssertEqual(CodexBarCLI.currentVersion(bundleVersion: nil, executablePath: helperURL.path), expected)
+    }
+
+    private static func runVersionCommand(
+        executableURL: URL,
+        argv0: String,
+        currentDirectoryURL: URL) throws -> String
+    {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.arguments = [
+            "-c",
+            "exec -a \"$1\" \"$2\" --version",
+            "codexbar-version-test",
+            argv0,
+            executableURL.path,
+        ]
+        process.currentDirectoryURL = currentDirectoryURL
+
+        let stdout = Pipe()
+        let stderr = Pipe()
+        process.standardOutput = stdout
+        process.standardError = stderr
+        try process.run()
+        process.waitUntilExit()
+
+        let output = stdout.fileHandleForReading.readDataToEndOfFile()
+        let errorOutput = stderr.fileHandleForReading.readDataToEndOfFile()
+        guard process.terminationStatus == 0 else {
+            let message = String(data: errorOutput, encoding: .utf8) ?? "CodexBarCLI exited without an error message"
+            throw NSError(domain: "CLIEntryTests", code: Int(process.terminationStatus), userInfo: [
+                NSLocalizedDescriptionKey: message,
+            ])
+        }
+        return String(decoding: output, as: UTF8.self)
+    }
+
+    private static var cliExecutableURL: URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent(".build/debug/CodexBarCLI")
     }
 
     func test_renderOpenAIWebDashboardTextIncludesSummary() {
