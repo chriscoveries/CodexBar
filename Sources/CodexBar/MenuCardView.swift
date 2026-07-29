@@ -2,8 +2,6 @@ import AppKit
 import CodexBarCore
 import SwiftUI
 
-// swiftlint:disable file_length
-
 /// SwiftUI card used inside the NSMenu to mirror Apple's rich menu panels.
 struct UsageMenuCardView: View {
     struct Model {
