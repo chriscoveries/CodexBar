@@ -138,6 +138,7 @@ struct GeneralPane: View {
                         Text(verbatim: PreferredCurrencyOption(rawValue: rawValue)?.label ?? rawValue)
                     })
                     .onChange(of: self.settings.preferredCurrencyCode) { _, newValue in
+                        guard CurrencyExchange.requiresLiveRates(preferredCurrencyCode: newValue) else { return }
                         Task {
                             await CurrencyExchange.shared.fetchLatestRatesIfNeeded(
                                 preferredCurrencyCode: newValue)

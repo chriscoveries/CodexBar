@@ -424,6 +424,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             AppNotifications.shared.requestAuthorizationOnStartup()
             // A persisted non-USD choice opts into the daily exchange-rate refresh. The service
             // returns before networking for the default USD setting and Auto.
+            guard CurrencyExchange.requiresLiveRates(
+                preferredCurrencyCode: settings.preferredCurrencyCode)
+            else { return }
             await CurrencyExchange.shared.fetchLatestRatesIfNeeded(
                 preferredCurrencyCode: settings.preferredCurrencyCode)
         }
