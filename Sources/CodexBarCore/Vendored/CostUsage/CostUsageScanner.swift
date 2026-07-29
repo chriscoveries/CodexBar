@@ -2888,13 +2888,30 @@ enum CostUsageScanner {
             context.scanBudget?.consume(workBytes: allowedWorkBytes)
             return
         }
+        let fullRescanWorkBytes = max(0, metadata.size)
+        let fullRescanAllowedBytes: Int64
+        if fullRescanWorkBytes == pendingWorkBytes {
+            fullRescanAllowedBytes = allowedWorkBytes
+        } else if let budget = context.scanBudget {
+            switch budget.admit(workBytes: fullRescanWorkBytes) {
+            case let .allow(allowance):
+                fullRescanAllowedBytes = allowance
+            case .deferBudget:
+                // No work was consumed by the rejected incremental path, so this is only
+                // reachable when the refresh budget has no allowance for the full rescan.
+                return
+            }
+        } else {
+            fullRescanAllowedBytes = fullRescanWorkBytes
+        }
+
         try Self.rescanCodexFile(
             input: input,
             context: context,
             cache: &cache,
             state: &state,
-            maxBytesToRead: allowedWorkBytes)
-        context.scanBudget?.consume(workBytes: allowedWorkBytes)
+            maxBytesToRead: fullRescanAllowedBytes)
+        context.scanBudget?.consume(workBytes: fullRescanAllowedBytes)
     }
 
     static func pendingCodexScanWorkBytes(metadata: CodexFileMetadata, cached: CostUsageFileUsage?) -> Int64 {
