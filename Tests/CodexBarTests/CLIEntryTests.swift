@@ -195,12 +195,18 @@ final class CLIEntryTests: XCTestCase {
         let output = stdout.fileHandleForReading.readDataToEndOfFile()
         let errorOutput = stderr.fileHandleForReading.readDataToEndOfFile()
         guard process.terminationStatus == 0 else {
-            let message = String(data: errorOutput, encoding: .utf8) ?? "CodexBarCLI exited without an error message"
+            let message = String(bytes: errorOutput, encoding: .utf8)
+                ?? "CodexBarCLI exited without an error message"
             throw NSError(domain: "CLIEntryTests", code: Int(process.terminationStatus), userInfo: [
                 NSLocalizedDescriptionKey: message,
             ])
         }
-        return String(decoding: output, as: UTF8.self)
+        guard let text = String(bytes: output, encoding: .utf8) else {
+            throw NSError(domain: "CLIEntryTests", code: -1, userInfo: [
+                NSLocalizedDescriptionKey: "CodexBarCLI produced non-UTF-8 output",
+            ])
+        }
+        return text
     }
 
     private static var cliExecutableURL: URL {
