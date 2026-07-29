@@ -326,7 +326,8 @@ struct MenuDescriptor {
             Self.appendProviderUsageSummaries(
                 entries: &entries,
                 snapshot: snap,
-                showOptionalUsage: settings.showOptionalCreditsAndExtraUsage)
+                showOptionalUsage: settings.showOptionalCreditsAndExtraUsage,
+                preferredCurrencyCode: settings.preferredCurrencyCode)
             if snap.rateLimitsUnavailable(for: provider) {
                 entries.append(.text(L("Limits not available"), .secondary))
             }
@@ -353,7 +354,8 @@ struct MenuDescriptor {
     private static func appendProviderUsageSummaries(
         entries: inout [Entry],
         snapshot: UsageSnapshot,
-        showOptionalUsage: Bool)
+        showOptionalUsage: Bool,
+        preferredCurrencyCode: String = "auto")
     {
         if let cost = snapshot.providerCost {
             if cost.currencyCode == "Quota" {
@@ -363,13 +365,22 @@ struct MenuDescriptor {
             }
         }
         if let openAIAPIUsage = snapshot.openAIAPIUsage {
-            Self.appendOpenAIAPIUsageSummary(entries: &entries, usage: openAIAPIUsage)
+            Self.appendOpenAIAPIUsageSummary(
+                entries: &entries,
+                usage: openAIAPIUsage,
+                preferredCurrencyCode: preferredCurrencyCode)
         }
         if let claudeAdminAPIUsage = snapshot.claudeAdminAPIUsage {
-            Self.appendClaudeAdminAPIUsageSummary(entries: &entries, usage: claudeAdminAPIUsage)
+            Self.appendClaudeAdminAPIUsageSummary(
+                entries: &entries,
+                usage: claudeAdminAPIUsage,
+                preferredCurrencyCode: preferredCurrencyCode)
         }
         if let openRouterUsage = snapshot.openRouterUsage {
-            Self.appendOpenRouterUsageSummary(entries: &entries, usage: openRouterUsage)
+            Self.appendOpenRouterUsageSummary(
+                entries: &entries,
+                usage: openRouterUsage,
+                preferredCurrencyCode: preferredCurrencyCode)
         }
         if let clawRouterUsage = snapshot.clawRouterUsage {
             entries.append(.text(
@@ -387,10 +398,16 @@ struct MenuDescriptor {
             Self.appendWayfinderUsageSummary(entries: &entries, usage: wayfinderUsage)
         }
         if let poeUsage = snapshot.poeUsage, !poeUsage.daily.isEmpty {
-            Self.appendPoeUsageSummary(entries: &entries, usage: poeUsage)
+            Self.appendPoeUsageSummary(
+                entries: &entries,
+                usage: poeUsage,
+                preferredCurrencyCode: preferredCurrencyCode)
         }
         if let mistralUsage = snapshot.mistralUsage, !mistralUsage.daily.isEmpty {
-            Self.appendMistralUsageSummary(entries: &entries, usage: mistralUsage)
+            Self.appendMistralUsageSummary(
+                entries: &entries,
+                usage: mistralUsage,
+                preferredCurrencyCode: preferredCurrencyCode)
         }
         if let mimoUsage = snapshot.mimoUsage {
             entries.append(.text("\(L("Balance")): \(mimoUsage.balanceDetail)", .primary))
@@ -402,8 +419,12 @@ struct MenuDescriptor {
         if showOptionalUsage, let sakanaPayAsYouGo = snapshot.sakanaPayAsYouGo {
             entries.append(.text("\(L("Balance")): \(sakanaPayAsYouGo.balanceDetail)", .primary))
             if let periodUsageTotal = sakanaPayAsYouGo.periodUsageTotal {
+                let cost = UsageFormatter.convertedCostString(
+                    periodUsageTotal,
+                    preferredCurrency: preferredCurrencyCode,
+                    providerCurrency: "USD")
                 entries.append(.text(
-                    "\(L("Usage")): \(UsageFormatter.usdString(periodUsageTotal))",
+                    "\(L("Usage")): \(cost)",
                     .secondary))
             }
         }
