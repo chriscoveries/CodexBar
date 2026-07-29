@@ -281,7 +281,7 @@ struct ZoomMateCreditsHistoryFetcherTests {
                 isDeleted: false),
         ]
         let snapshot = ZoomMateCreditsHistorySnapshot(records: records, updatedAt: Self.now)
-        let breakdown = snapshot.dailyBreakdown(calendar: Self.utcCalendar)
+        let breakdown = snapshot.dailyBreakdown(calendar: Self.utcCalendar, now: Self.now)
 
         #expect(breakdown.count == 2)
         #expect(breakdown[0].day == "2026-06-29")
@@ -309,7 +309,7 @@ struct ZoomMateCreditsHistoryFetcherTests {
                 isDeleted: true),
         ]
         let snapshot = ZoomMateCreditsHistorySnapshot(records: records, updatedAt: Self.now)
-        let breakdown = snapshot.dailyBreakdown(calendar: Self.utcCalendar)
+        let breakdown = snapshot.dailyBreakdown(calendar: Self.utcCalendar, now: Self.now)
 
         #expect(breakdown.count == 1)
         #expect(breakdown[0].totalCreditsUsed == 5)
@@ -327,7 +327,7 @@ struct ZoomMateCreditsHistoryFetcherTests {
                 isDeleted: false),
         ]
         let snapshot = ZoomMateCreditsHistorySnapshot(records: records, updatedAt: Self.now)
-        let breakdown = snapshot.dailyBreakdown(calendar: Self.utcCalendar)
+        let breakdown = snapshot.dailyBreakdown(calendar: Self.utcCalendar, now: Self.now)
 
         #expect(breakdown.count == 1)
         #expect(breakdown[0].totalCreditsUsed == 1.5)
@@ -366,7 +366,7 @@ struct ZoomMateCreditsHistoryFetcherTests {
                 isDeleted: false),
         ]
         let snapshot = ZoomMateCreditsHistorySnapshot(records: records, updatedAt: Self.now)
-        let breakdown = snapshot.dailyBreakdown(calendar: Self.utcCalendar)
+        let breakdown = snapshot.dailyBreakdown(calendar: Self.utcCalendar, now: Self.now)
 
         #expect(breakdown.isEmpty)
     }
@@ -374,7 +374,7 @@ struct ZoomMateCreditsHistoryFetcherTests {
     @Test
     func `daily breakdown returns empty for no records`() {
         let snapshot = ZoomMateCreditsHistorySnapshot(records: [], updatedAt: Self.now)
-        #expect(snapshot.dailyBreakdown(calendar: Self.utcCalendar).isEmpty)
+        #expect(snapshot.dailyBreakdown(calendar: Self.utcCalendar, now: Self.now).isEmpty)
     }
 
     @Test
