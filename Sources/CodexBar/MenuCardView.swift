@@ -912,7 +912,9 @@ extension UsageMenuCardView.Model {
             !input.showOptionalCreditsAndExtraUsage
         let providerCost: ProviderCostSection? = if input.provider == .sakana {
             input.showOptionalCreditsAndExtraUsage
-                ? Self.sakanaPayAsYouGoSection(input.snapshot?.sakanaPayAsYouGo, preferredCurrencyCode: input.preferredCurrencyCode)
+                ? Self.sakanaPayAsYouGoSection(
+                    input.snapshot?.sakanaPayAsYouGo,
+                    preferredCurrencyCode: input.preferredCurrencyCode)
                 : nil
         } else if hidesOptionalProviderCost ||
             (input.provider == .openai && openAIAPIUsage != nil)
@@ -1175,7 +1177,10 @@ extension UsageMenuCardView.Model {
         let zaiTokenDetail = Self.zaiLimitDetailText(limit: zaiUsage?.tokenLimit)
         let zaiTimeDetail = Self.zaiLimitDetailText(limit: zaiUsage?.timeLimit)
         let zaiSessionDetail = Self.zaiLimitDetailText(limit: zaiUsage?.sessionTokenLimit)
-        let openRouterQuotaDetail = Self.openRouterQuotaDetail(provider: input.provider, snapshot: snapshot, preferredCurrencyCode: input.preferredCurrencyCode)
+        let openRouterQuotaDetail = Self.openRouterQuotaDetail(
+            provider: input.provider,
+            snapshot: snapshot,
+            preferredCurrencyCode: input.preferredCurrencyCode)
         let labels = Self.rateWindowLabels(input: input, snapshot: snapshot)
         if input.provider == .mistral, let credits = snapshot.mistralUsage?.credits {
             metrics.append(Metric(

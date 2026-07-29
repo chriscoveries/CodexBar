@@ -365,13 +365,22 @@ struct MenuDescriptor {
             }
         }
         if let openAIAPIUsage = snapshot.openAIAPIUsage {
-            Self.appendOpenAIAPIUsageSummary(entries: &entries, usage: openAIAPIUsage, preferredCurrencyCode: preferredCurrencyCode)
+            Self.appendOpenAIAPIUsageSummary(
+                entries: &entries,
+                usage: openAIAPIUsage,
+                preferredCurrencyCode: preferredCurrencyCode)
         }
         if let claudeAdminAPIUsage = snapshot.claudeAdminAPIUsage {
-            Self.appendClaudeAdminAPIUsageSummary(entries: &entries, usage: claudeAdminAPIUsage, preferredCurrencyCode: preferredCurrencyCode)
+            Self.appendClaudeAdminAPIUsageSummary(
+                entries: &entries,
+                usage: claudeAdminAPIUsage,
+                preferredCurrencyCode: preferredCurrencyCode)
         }
         if let openRouterUsage = snapshot.openRouterUsage {
-            Self.appendOpenRouterUsageSummary(entries: &entries, usage: openRouterUsage, preferredCurrencyCode: preferredCurrencyCode)
+            Self.appendOpenRouterUsageSummary(
+                entries: &entries,
+                usage: openRouterUsage,
+                preferredCurrencyCode: preferredCurrencyCode)
         }
         if let clawRouterUsage = snapshot.clawRouterUsage {
             entries.append(.text(
@@ -389,7 +398,10 @@ struct MenuDescriptor {
             Self.appendWayfinderUsageSummary(entries: &entries, usage: wayfinderUsage)
         }
         if let poeUsage = snapshot.poeUsage, !poeUsage.daily.isEmpty {
-            Self.appendPoeUsageSummary(entries: &entries, usage: poeUsage, preferredCurrencyCode: preferredCurrencyCode)
+            Self.appendPoeUsageSummary(
+                entries: &entries,
+                usage: poeUsage,
+                preferredCurrencyCode: preferredCurrencyCode)
         }
         if let mistralUsage = snapshot.mistralUsage, !mistralUsage.daily.isEmpty {
             Self.appendMistralUsageSummary(entries: &entries, usage: mistralUsage)

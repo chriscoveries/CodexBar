@@ -11,17 +11,23 @@ extension MenuDescriptor {
         let last7 = usage.last7Days
         let last30 = usage.last30Days
         let historyLabel = usage.historyWindowLabel
+        let todayCost = UsageFormatter.convertedCostString(
+            today.costUSD, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")
+        let last7Cost = UsageFormatter.convertedCostString(
+            last7.costUSD, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")
+        let last30Cost = UsageFormatter.convertedCostString(
+            last30.costUSD, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")
 
         entries.append(.text(
-            "\(L("Today")): \(UsageFormatter.convertedCostString(today.costUSD, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")) · " +
+            "\(L("Today")): \(todayCost) · " +
                 "\(UsageFormatter.tokenCountString(today.totalTokens)) \(L("tokens"))",
             .secondary))
         entries.append(.text(
-            "7d: \(UsageFormatter.convertedCostString(last7.costUSD, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")) · " +
+            "7d: \(last7Cost) · " +
                 "\(UsageFormatter.tokenCountString(last7.requests)) \(L("requests"))",
             .secondary))
         entries.append(.text(
-            "\(historyLabel): \(UsageFormatter.convertedCostString(last30.costUSD, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")) · " +
+            "\(historyLabel): \(last30Cost) · " +
                 "\(UsageFormatter.tokenCountString(last30.requests)) \(L("requests"))",
             .secondary))
         if let topModel = usage.topModels.first?.name {
@@ -37,17 +43,23 @@ extension MenuDescriptor {
         let today = usage.currentDay
         let last7 = usage.last7Days
         let last30 = usage.last30Days
+        let todayCost = UsageFormatter.convertedCostString(
+            today.costUSD, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")
+        let last7Cost = UsageFormatter.convertedCostString(
+            last7.costUSD, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")
+        let last30Cost = UsageFormatter.convertedCostString(
+            last30.costUSD, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")
 
         entries.append(.text(
-            "\(L("Today")): \(UsageFormatter.convertedCostString(today.costUSD, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")) · " +
+            "\(L("Today")): \(todayCost) · " +
                 "\(UsageFormatter.tokenCountString(today.totalTokens)) \(L("tokens"))",
             .secondary))
         entries.append(.text(
-            "7d: \(UsageFormatter.convertedCostString(last7.costUSD, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")) · " +
+            "7d: \(last7Cost) · " +
                 "\(UsageFormatter.tokenCountString(last7.totalTokens)) \(L("tokens"))",
             .secondary))
         entries.append(.text(
-            "30d: \(UsageFormatter.convertedCostString(last30.costUSD, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")) · " +
+            "30d: \(last30Cost) · " +
                 "\(UsageFormatter.tokenCountString(last30.totalTokens)) \(L("tokens"))",
             .secondary))
         if let topModel = usage.topModels.first?.name {
@@ -61,13 +73,19 @@ extension MenuDescriptor {
         preferredCurrencyCode: String = "auto")
     {
         if let daily = usage.keyUsageDaily {
-            entries.append(.text("\(L("Today")): \(UsageFormatter.convertedCostString(daily, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD"))", .secondary))
+            let cost = UsageFormatter.convertedCostString(
+                daily, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")
+            entries.append(.text("\(L("Today")): \(cost)", .secondary))
         }
         if let weekly = usage.keyUsageWeekly {
-            entries.append(.text("\(L("Week")): \(UsageFormatter.convertedCostString(weekly, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD"))", .secondary))
+            let cost = UsageFormatter.convertedCostString(
+                weekly, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")
+            entries.append(.text("\(L("Week")): \(cost)", .secondary))
         }
         if let monthly = usage.keyUsageMonthly {
-            entries.append(.text("\(L("Month")): \(UsageFormatter.convertedCostString(monthly, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD"))", .secondary))
+            let cost = UsageFormatter.convertedCostString(
+                monthly, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")
+            entries.append(.text("\(L("Month")): \(cost)", .secondary))
         }
     }
 
@@ -100,9 +118,21 @@ extension MenuDescriptor {
         let today = usage.currentDay()
         let week = usage.last7Days
         let month = usage.last30Days
-        let todayCostSuffix = today.costUSD.map { " · \(UsageFormatter.convertedCostString($0, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD"))" } ?? ""
-        let weekCostSuffix = week.costUSD.map { " · \(UsageFormatter.convertedCostString($0, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD"))" } ?? ""
-        let monthCostSuffix = month.costUSD.map { " · \(UsageFormatter.convertedCostString($0, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD"))" } ?? ""
+        let todayCostSuffix = today.costUSD.map { value in
+            let cost = UsageFormatter.convertedCostString(
+                value, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")
+            return " · \(cost)"
+        } ?? ""
+        let weekCostSuffix = week.costUSD.map { value in
+            let cost = UsageFormatter.convertedCostString(
+                value, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")
+            return " · \(cost)"
+        } ?? ""
+        let monthCostSuffix = month.costUSD.map { value in
+            let cost = UsageFormatter.convertedCostString(
+                value, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")
+            return " · \(cost)"
+        } ?? ""
         entries.append(.text(
             "\(L("Today")): \(Self.pointsString(today.points)) · " +
                 "\(UsageFormatter.tokenCountString(today.requests)) \(L("requests"))\(todayCostSuffix)",

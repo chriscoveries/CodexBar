@@ -97,8 +97,10 @@ extension UsageMenuCardView.Model {
             title: L("Extra usage"),
             percentUsed: nil,
             spendLine: "\(L("Balance")): \(usage.balanceDetail)",
-            percentLine: usage.periodUsageTotal.map {
-                "\(L("Usage")): \(UsageFormatter.convertedCostString($0, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD"))"
+            percentLine: usage.periodUsageTotal.map { value in
+                let cost = UsageFormatter.convertedCostString(
+                    value, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")
+                return "\(L("Usage")): \(cost)"
             })
     }
 
@@ -166,12 +168,14 @@ extension UsageMenuCardView.Model {
                                        preferredCurrencyCode: String = "auto") -> String? {
         var lines: [String] = []
         if let individualCredits = usage.individualCredits {
-            lines.append(
-                "\(L("Individual credits")): \(UsageFormatter.convertedCostString(individualCredits, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD"))")
+            let cost = UsageFormatter.convertedCostString(
+                individualCredits, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")
+            lines.append("\(L("Individual credits")): \(cost)")
         }
         lines.append(contentsOf: usage.workspaceBalances.map { workspace in
             "\(L("Workspace")) \(workspace.name): " +
-                UsageFormatter.convertedCostString(workspace.remaining, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")
+                UsageFormatter.convertedCostString(
+                    workspace.remaining, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")
         })
         return lines.isEmpty ? nil : lines.joined(separator: "\n")
     }
