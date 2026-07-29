@@ -784,10 +784,12 @@ extension CodexBarCLI {
             guard sourceMode == .auto || sourceMode == .cli else { return false }
             return environment.map { FactorySettingsReader.apiKey(environment: $0) != nil } == true
         case .minimax:
-            // The MiniMax API fetch is plain HTTPS + Bearer auth; only its web/cookie path
-            // needs macOS, so a configured API key works off macOS too.
-            guard sourceMode == .auto else { return false }
-            return environment.map { MiniMaxAPISettingsReader.apiToken(environment: $0) != nil } == true
+            // The MiniMax API fetch is plain HTTPS + Bearer auth, so a configured key works off
+            // macOS. Standard `sk-api-` keys are the exception: Auto resolves them to the Coding
+            // Plan web strategy, which still needs the macOS-only web path.
+            guard sourceMode == .auto, let environment else { return false }
+            guard MiniMaxAPISettingsReader.apiToken(environment: environment) != nil else { return false }
+            return MiniMaxAPISettingsReader.apiKeyKind(environment: environment) != .standard
         case .mimo:
             guard sourceMode == .auto, let environment else { return false }
             return MiMoLocalUsageFallback.cacheExists(environment: environment)

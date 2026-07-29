@@ -6,23 +6,23 @@ import Testing
 
 struct MiniMaxLinuxTests {
     @Test
-    func `configured API key does not require macOS web support`() {
-        // The MiniMax API fetch is plain HTTPS + Bearer auth, so a configured API key must
-        // be usable off macOS (matches the Factory/Kimi credential exemptions).
-        #expect(!CodexBarCLI.sourceModeRequiresWebSupport(
-            .auto,
-            provider: .minimax,
-            environment: [MiniMaxAPISettingsReader.apiTokenKey: "sk-api-test"]))
-    }
-
-    @Test
-    func `coding plan API key also skips the web-support gate`() {
-        // `config set-api-key --provider minimax` resolves through the same reader, which
-        // accepts the coding-plan key as well.
+    func `coding plan API key does not require macOS web support`() {
+        // A coding-plan key resolves to the plain HTTPS + Bearer API strategy, so it must be
+        // usable off macOS (matches the Factory/Kimi credential exemptions).
         #expect(!CodexBarCLI.sourceModeRequiresWebSupport(
             .auto,
             provider: .minimax,
             environment: [MiniMaxAPISettingsReader.codingPlanAPITokenKey: "sk-cp-test"]))
+    }
+
+    @Test
+    func `standard API key still requires web support because Auto resolves to the coding plan page`() {
+        // `MiniMaxAPIFetchStrategy` refuses standard `sk-api-` keys, so Auto falls back to the
+        // Coding Plan web strategy. Exempting it here would only produce `noAvailableStrategy`.
+        #expect(CodexBarCLI.sourceModeRequiresWebSupport(
+            .auto,
+            provider: .minimax,
+            environment: [MiniMaxAPISettingsReader.apiTokenKey: "sk-api-test"]))
     }
 
     @Test
@@ -42,7 +42,33 @@ struct MiniMaxLinuxTests {
         #expect(CodexBarCLI.sourceModeRequiresWebSupport(
             .web,
             provider: .minimax,
-            environment: [MiniMaxAPISettingsReader.apiTokenKey: "sk-api-test"]))
+            environment: [MiniMaxAPISettingsReader.codingPlanAPITokenKey: "sk-cp-test"]))
+    }
+
+    @Test
+    func `exempted coding plan key actually resolves a linux capable strategy`() async {
+        // Gate agreement is not enough: the Auto plan must contain a strategy that can run
+        // without the macOS web path, otherwise the exemption ends in `noAvailableStrategy`.
+        let env = [MiniMaxAPISettingsReader.codingPlanAPITokenKey: "sk-cp-test"]
+        let browserDetection = BrowserDetection(cacheTTL: 0)
+        let context = ProviderFetchContext(
+            runtime: .cli,
+            sourceMode: .auto,
+            includeCredits: false,
+            webTimeout: 1,
+            webDebugDumpHTML: false,
+            verbose: false,
+            env: env,
+            settings: ProviderSettingsSnapshot.make(),
+            fetcher: UsageFetcher(environment: env),
+            claudeFetcher: ClaudeUsageFetcher(browserDetection: browserDetection),
+            browserDetection: browserDetection)
+        let strategies = await ProviderDescriptorRegistry
+            .descriptor(for: .minimax)
+            .fetchPlan
+            .pipeline
+            .resolveStrategies(context)
+        #expect(strategies.contains { $0.id == "minimax.api" })
     }
 }
 #endif
