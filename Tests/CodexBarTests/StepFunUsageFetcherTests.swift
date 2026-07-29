@@ -352,6 +352,53 @@ struct StepFunUsageFetcherParsingTests {
     }
 
     @Test
+    func `classifies exhausted zero-credit pool without a family id`() throws {
+        let json = """
+        {
+            "status": 1,
+            "five_hour_usage_left_rate": 0,
+            "five_hour_usage_reset_time": "0",
+            "weekly_usage_left_rate": 0,
+            "weekly_usage_reset_time": "0",
+            "plan_credit_rate_limit": {
+                "subscription_credit_left_rate": 0,
+                "subscription_credit_reset_time": "1786288293"
+            }
+        }
+        """
+        let snapshot = try StepFunUsageFetcher._parseSnapshotForTesting(Data(json.utf8))
+
+        #expect(snapshot.isCreditPlan == true)
+        #expect(snapshot.creditLeftRate == 0)
+        let usage = snapshot.toUsageSnapshot()
+        #expect(usage.primary?.usedPercent == 100)
+        #expect(usage.secondary == nil)
+    }
+
+    @Test
+    func `classifies zero-credit pool when only top-up field is present`() throws {
+        let json = """
+        {
+            "status": 1,
+            "five_hour_usage_left_rate": 0,
+            "five_hour_usage_reset_time": "0",
+            "weekly_usage_left_rate": 0,
+            "weekly_usage_reset_time": "0",
+            "plan_credit_rate_limit": {
+                "topup_credit_left_rate": 0
+            }
+        }
+        """
+        let snapshot = try StepFunUsageFetcher._parseSnapshotForTesting(Data(json.utf8))
+
+        #expect(snapshot.isCreditPlan == true)
+        #expect(snapshot.creditLeftRate == 0)
+        let usage = snapshot.toUsageSnapshot()
+        #expect(usage.primary?.usedPercent == 100)
+        #expect(usage.secondary == nil)
+    }
+
+    @Test
     func `weights mixed subscription and top-up credit buckets`() throws {
         let json = """
         {

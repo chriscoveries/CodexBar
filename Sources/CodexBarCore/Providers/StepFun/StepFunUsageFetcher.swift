@@ -99,7 +99,8 @@ public struct StepFunRateLimitResponse: Decodable, Sendable {
         if hasLiveWindow {
             return false
         }
-        let hasCreditPool = (self.planCreditRateLimit?.subscriptionCreditLeftRate?.value ?? 0) > 0
+        let hasCreditPool = self.planCreditRateLimit?.subscriptionCreditLeftRate != nil
+            || self.planCreditRateLimit?.topupCreditLeftRate != nil
             || !(self.planCreditRateLimit?.creditBuckets?.isEmpty ?? true)
         if hasCreditPool {
             return true
