@@ -515,6 +515,16 @@ struct UsageFormatterTests {
     }
 
     @Test
+    func `live exchange rates require an explicit non USD currency`() {
+        #expect(!CurrencyExchange.requiresLiveRates(preferredCurrencyCode: "USD"))
+        #expect(!CurrencyExchange.requiresLiveRates(preferredCurrencyCode: " usd "))
+        #expect(!CurrencyExchange.requiresLiveRates(preferredCurrencyCode: "auto"))
+        #expect(!CurrencyExchange.requiresLiveRates(preferredCurrencyCode: "CHF"))
+        #expect(CurrencyExchange.requiresLiveRates(preferredCurrencyCode: "GBP"))
+        #expect(CurrencyExchange.requiresLiveRates(preferredCurrencyCode: " eur "))
+    }
+
+    @Test
     func `usage formatter localization keys exist in en and zh Hans with matching placeholders`() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

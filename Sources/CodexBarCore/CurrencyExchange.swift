@@ -114,12 +114,19 @@ public final class CurrencyExchange: @unchecked Sendable {
         }
     }
 
-    /// Asynchronously fetches latest rates from open.er-api.com if cache is older than 24 hours.
+    public static func requiresLiveRates(preferredCurrencyCode: String) -> Bool {
+        let code = preferredCurrencyCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        return code != "AUTO" && code != "USD" && Self.supportedCurrencies.contains(code)
+    }
+
+    /// Asynchronously fetches latest rates from open.er-api.com if the user selected a
+    /// non-USD currency and the cache is older than 24 hours.
     ///
     /// The ExchangeRate-API free tier provides daily-updated rates sourced from central banks
     /// and financial data providers. This is sufficient for cost estimation purposes.
     /// On failure, the previously cached (or hardcoded fallback) rates remain in use.
-    public func fetchLatestRatesIfNeeded() async {
+    public func fetchLatestRatesIfNeeded(preferredCurrencyCode: String) async {
+        guard Self.requiresLiveRates(preferredCurrencyCode: preferredCurrencyCode) else { return }
         if let lastFetch = self.getLastFetchTime(), Date().timeIntervalSince(lastFetch) < 86400 {
             return
         }

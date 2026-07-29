@@ -422,9 +422,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let settings = self?.settings else { return }
             AdaptiveActivityConsentPresenter.presentIfNeeded(settings: settings)
             AppNotifications.shared.requestAuthorizationOnStartup()
-            // Prefetch exchange rates at launch so conversion is instant when the user
-            // switches to a non-USD currency. Uses a 24 h cache so subsequent calls are no-ops.
-            await CurrencyExchange.shared.fetchLatestRatesIfNeeded()
+            // A persisted non-USD choice opts into the daily exchange-rate refresh. The service
+            // returns before networking for the default USD setting and Auto.
+            await CurrencyExchange.shared.fetchLatestRatesIfNeeded(
+                preferredCurrencyCode: settings.preferredCurrencyCode)
         }
         KeyboardShortcuts.onKeyUp(for: .openMenu) { [weak self] in
             // KeyboardShortcuts dispatches both normal and menu-tracking hotkeys on the main event loop.

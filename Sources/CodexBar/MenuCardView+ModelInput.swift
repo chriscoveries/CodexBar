@@ -101,7 +101,7 @@ extension UsageMenuCardView.Model {
             self.tokenCostUsageEnabled = tokenCostUsageEnabled
             self.codexLocalSessionCostLedgerEnabled = codexLocalSessionCostLedgerEnabled
             self.tokenCostInlineDashboardEnabled = tokenCostInlineDashboardEnabled ?? tokenCostUsageEnabled
-            self.tokenCostMenuSectionEnabled = tokenCostMenuSectionEnabled ?? (tokenCostUsageEnabled && snapshot != nil)
+            self.tokenCostMenuSectionEnabled = tokenCostMenuSectionEnabled ?? tokenCostUsageEnabled
             self.costComparisonPeriodsEnabled = costComparisonPeriodsEnabled
             self.showOptionalCreditsAndExtraUsage = showOptionalCreditsAndExtraUsage
             self.claudeDailyRoutinesUsageVisible = claudeDailyRoutinesUsageVisible
