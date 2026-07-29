@@ -761,7 +761,8 @@ extension UsageMenuCardView.Model {
         window: RateWindow,
         input: Input) -> PaceDetail?
     {
-        guard provider == .codex || provider == .antigravity else { return nil }
+        if provider == .claude, window.windowMinutes != 10080 { return nil }
+        guard provider == .codex || provider == .claude || provider == .antigravity else { return nil }
         switch window.windowMinutes {
         case 300:
             return self.sessionPaceDetail(
