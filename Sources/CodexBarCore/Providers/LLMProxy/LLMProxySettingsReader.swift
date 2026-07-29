@@ -15,9 +15,9 @@ public enum LLMProxySettingsReader {
     {
         guard let raw = self.cleaned(environment[self.baseURLEnvironmentKey]) else { return nil }
         // The API key is sent to this URL as a bearer token, so validate it like every other
-        // provider override. Loopback HTTP stays allowed for self-hosted proxies; any other
-        // host must use HTTPS and carry no embedded credentials.
-        return ProviderEndpointOverrideValidator().validatedURLAllowingLoopbackHTTP(raw)
+        // provider override. HTTP stays allowed for loopback and private-network proxies; public
+        // hosts must use HTTPS, and no endpoint may carry embedded credentials.
+        return ProviderEndpointOverrideValidator().validatedURLAllowingPrivateNetworkHTTP(raw)
     }
 
     /// True when a base URL is configured at all, even if it fails validation.

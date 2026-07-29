@@ -20,7 +20,7 @@ public enum LiteLLMUsageError: LocalizedError, Sendable {
             "Missing LiteLLM base URL. Set enterpriseHost in ~/.codexbar/config.json or LITELLM_BASE_URL."
         case let .invalidEndpointOverride(key):
             "LiteLLM base URL override \(key) is invalid. Use an HTTPS URL, or plain HTTP for " +
-                "loopback addresses only, without embedded credentials."
+                "loopback or private-network addresses and .local hosts, without embedded credentials."
         case .missingUserID:
             "LiteLLM key info did not include a user_id or team_id."
         case .invalidURL:

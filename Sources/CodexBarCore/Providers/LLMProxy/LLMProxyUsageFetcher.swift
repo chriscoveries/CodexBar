@@ -19,7 +19,7 @@ public enum LLMProxyUsageError: LocalizedError, Sendable {
             "Missing LLM Proxy base URL. Set enterpriseHost in ~/.codexbar/config.json or LLM_PROXY_BASE_URL."
         case let .invalidEndpointOverride(key):
             "LLM Proxy base URL override \(key) is invalid. Use an HTTPS URL, or plain HTTP for " +
-                "loopback addresses only, without embedded credentials."
+                "loopback or private-network addresses and .local hosts, without embedded credentials."
         case .invalidURL:
             "LLM Proxy URL is invalid."
         case let .apiError(message):
