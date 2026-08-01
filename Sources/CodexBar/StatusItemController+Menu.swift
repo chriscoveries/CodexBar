@@ -159,6 +159,9 @@ extension StatusItemController {
         if wasHostedSubviewMenu {
             self.refreshOpenMenusAfterHostedSubviewClose()
         }
+        if self.openMenus.isEmpty {
+            self.cancelMergedSwitcherSiblingWarmup()
+        }
         self.resetCompactAccountMenuExpansionStateIfIdle()
     }
 
@@ -230,6 +233,9 @@ extension StatusItemController {
             breadcrumb: "populateMenu:\(provider?.rawValue ?? "merged")")
         defer { self.endMenuOperationTrace(trace, menu: menu, provider: provider) }
         defer { self.refreshMenuCardHeights(in: menu) }
+        // Re-warm sibling tab caches after every populate of the open merged menu so a
+        // tab switch attaches pre-rendered rows; no-ops for closed or non-merged menus.
+        defer { self.scheduleMergedSwitcherSiblingWarmup(for: menu) }
 
         let enabledProviders = self.store.enabledProvidersForDisplay()
         let includesOverview = self.includesOverviewTab(enabledProviders: enabledProviders)
@@ -468,7 +474,7 @@ extension StatusItemController {
         }
     }
 
-    private func openAIWebContext(
+    func openAIWebContext(
         currentProvider: UsageProvider,
         showAllAccounts: Bool) -> OpenAIWebContext
     {
@@ -1075,13 +1081,13 @@ extension StatusItemController {
         return enabled.first(where: { self.store.isProviderAvailable($0) }) ?? enabled.first
     }
 
-    private func includesOverviewTab(enabledProviders: [UsageProvider]) -> Bool {
+    func includesOverviewTab(enabledProviders: [UsageProvider]) -> Bool {
         !self.settings.resolvedMergedOverviewProviders(
             activeProviders: enabledProviders,
             maxVisibleProviders: Self.maxOverviewProviders).isEmpty
     }
 
-    private func resolvedSwitcherSelection(
+    func resolvedSwitcherSelection(
         enabledProviders: [UsageProvider],
         includesOverview: Bool) -> ProviderSwitcherSelection
     {
