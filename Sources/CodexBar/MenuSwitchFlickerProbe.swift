@@ -47,23 +47,31 @@ enum MenuSwitchFlickerProbe {
 
     /// Background frame grabber: samples the window's WindowServer composite and
     /// bounds on a dedicated thread so main-thread stalls cannot hide frames.
+    /// Frames are encoded to disk immediately — retaining full-resolution
+    /// captures in memory would grow to gigabytes over a session — so only the
+    /// lightweight bounds timeline is kept in memory.
     final class BackgroundFrameGrabber: @unchecked Sendable {
         struct Sample {
             let elapsedMs: Double
             let bounds: CGRect
-            let image: CGImage?
+            let wroteFrame: Bool
         }
+
+        private static let maxFrameCount = 2000
 
         private let windowID: CGWindowID
         private let start: DispatchTime
+        private let directory: URL
         private let lock = NSLock()
         private var storage: [Sample] = []
+        private var frameIndex = 0
         private var running = true
 
-        init(windowID: CGWindowID, start: DispatchTime) {
+        init(windowID: CGWindowID, start: DispatchTime, directory: URL) {
             self.windowID = windowID
             self.start = start
-            self.storage.reserveCapacity(2000)
+            self.directory = directory
+            self.storage.reserveCapacity(Self.maxFrameCount)
             Thread.detachNewThread { [weak self] in
                 Thread.current.name = "MenuSwitchFlickerProbe.grabber"
                 self?.loop()
@@ -82,8 +90,9 @@ enum MenuSwitchFlickerProbe {
             while true {
                 self.lock.lock()
                 let keepRunning = self.running
+                let index = self.frameIndex
                 self.lock.unlock()
-                guard keepRunning else { return }
+                guard keepRunning, index < Self.maxFrameCount else { return }
                 let elapsed = Double(DispatchTime.now().uptimeNanoseconds - self.start.uptimeNanoseconds)
                     / 1_000_000
                 let image = CGWindowListCreateImage(
@@ -92,10 +101,15 @@ enum MenuSwitchFlickerProbe {
                     self.windowID,
                     [.boundsIgnoreFraming, .bestResolution])
                 let bounds = self.currentBounds() ?? .null
-                self.lock.lock()
-                if self.storage.count < 2000 {
-                    self.storage.append(Sample(elapsedMs: elapsed, bounds: bounds, image: image))
+                var wroteFrame = false
+                if let image {
+                    let name = String(format: "frame-%04d-%07.1fms.png", index, elapsed)
+                    MenuSwitchFlickerProbe.writePNG(image, to: self.directory.appendingPathComponent(name))
+                    wroteFrame = true
                 }
+                self.lock.lock()
+                self.frameIndex += 1
+                self.storage.append(Sample(elapsedMs: elapsed, bounds: bounds, wroteFrame: wroteFrame))
                 self.lock.unlock()
                 usleep(3000)
             }
@@ -190,7 +204,8 @@ enum MenuSwitchFlickerProbe {
                 self.startedAt = start
                 self.grabber = BackgroundFrameGrabber(
                     windowID: CGWindowID(window.windowNumber),
-                    start: start)
+                    start: start,
+                    directory: self.directory)
                 self.log.append("menu located, windowNumber=\(window.windowNumber) " +
                     "frame=\(window.frame) original=\(String(describing: self.originalSegment)) " +
                     "target=\(String(describing: self.targetSegment))")
@@ -243,12 +258,7 @@ enum MenuSwitchFlickerProbe {
                     sample.elapsedMs,
                     String(describing: sample.bounds)))
             }
-            for (index, sample) in samples.enumerated() {
-                guard let image = sample.image else { continue }
-                let name = String(format: "frame-%04d-%07.1fms.png", index, sample.elapsedMs)
-                Self.writePNG(image, to: self.directory.appendingPathComponent(name))
-            }
-            let nilFrames = samples.count(where: { $0.image == nil })
+            let nilFrames = samples.count(where: { !$0.wroteFrame })
             self.log.append("nil captures: \(nilFrames)")
             let text = self.log.joined(separator: "\n") + "\n"
             try? text.write(
@@ -256,15 +266,15 @@ enum MenuSwitchFlickerProbe {
                 atomically: true,
                 encoding: .utf8)
         }
+    }
 
-        private static func writePNG(_ image: CGImage, to url: URL) {
-            guard let destination = CGImageDestinationCreateWithURL(
-                url as CFURL,
-                UTType.png.identifier as CFString,
-                1,
-                nil) else { return }
-            CGImageDestinationAddImage(destination, image, nil)
-            CGImageDestinationFinalize(destination)
-        }
+    nonisolated static func writePNG(_ image: CGImage, to url: URL) {
+        guard let destination = CGImageDestinationCreateWithURL(
+            url as CFURL,
+            UTType.png.identifier as CFString,
+            1,
+            nil) else { return }
+        CGImageDestinationAddImage(destination, image, nil)
+        CGImageDestinationFinalize(destination)
     }
 }

@@ -10,11 +10,38 @@ import CodexBarCore
 /// row between the usage content and the trailing action rows; this pass sizes
 /// those spacers so every provider tab matches the tallest one. Overview is
 /// excluded: it is a different mode and may be far taller.
+/// Runtime-measured native menu row metrics. Fixed estimates would drift with
+/// OS versions and accessibility text sizes; instead AppKit lays out a scratch
+/// menu once per text-size token and we derive exact row/separator heights
+/// (menu chrome padding cancels out of the differences).
+@MainActor
+private enum NativeMenuRowMetrics {
+    private static var cached: (textScale: Int, row: CGFloat, separator: CGFloat)?
+
+    static func current() -> (row: CGFloat, separator: CGFloat) {
+        let textScale = StatusItemController.menuCardHeightTextScaleToken()
+        if let cached, cached.textScale == textScale {
+            return (cached.row, cached.separator)
+        }
+        let probe = NSMenu()
+        probe.autoenablesItems = false
+        probe.addItem(NSMenuItem(title: "Row", action: nil, keyEquivalent: ""))
+        probe.addItem(NSMenuItem(title: "Row", action: nil, keyEquivalent: ""))
+        let twoRows = probe.size.height
+        probe.addItem(NSMenuItem(title: "Row", action: nil, keyEquivalent: ""))
+        probe.addItem(NSMenuItem(title: "Row", action: nil, keyEquivalent: ""))
+        let fourRows = probe.size.height
+        probe.insertItem(.separator(), at: 2)
+        let fourRowsPlusSeparator = probe.size.height
+        let row = max(1, (fourRows - twoRows) / 2)
+        let separator = max(1, fourRowsPlusSeparator - fourRows)
+        self.cached = (textScale, row, separator)
+        return (row, separator)
+    }
+}
+
 extension StatusItemController {
     static let stableMenuHeightSpacerID = "stableHeightSpacer"
-    /// Estimated heights for rows AppKit lays out natively (no custom view).
-    private static let nativeMenuRowHeightEstimate: CGFloat = 24
-    private static let menuSeparatorHeightEstimate: CGFloat = 13
 
     func makeStableMenuHeightSpacerItem() -> NSMenuItem {
         let item = NSMenuItem()
@@ -69,8 +96,10 @@ extension StatusItemController {
     }
 
     /// Content height excluding the spacer itself, plus the spacer item when present.
-    /// Internal for test access.
+    /// View-backed rows use their exact frame; native rows and separators use
+    /// AppKit-measured metrics for the current text size. Internal for test access.
     func measureTab(items: [NSMenuItem]) -> (spacer: NSMenuItem?, contentHeight: CGFloat) {
+        let metrics = NativeMenuRowMetrics.current()
         var spacer: NSMenuItem?
         var height: CGFloat = 0
         for item in items {
@@ -79,11 +108,11 @@ extension StatusItemController {
                 continue
             }
             if item.isSeparatorItem {
-                height += Self.menuSeparatorHeightEstimate
+                height += metrics.separator
             } else if let view = item.view {
                 height += view.frame.height
             } else {
-                height += Self.nativeMenuRowHeightEstimate
+                height += metrics.row
             }
         }
         return (spacer, height)
