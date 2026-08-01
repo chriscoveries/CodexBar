@@ -159,6 +159,7 @@ extension StatusItemController {
         if wasHostedSubviewMenu {
             self.refreshOpenMenusAfterHostedSubviewClose()
         }
+        self.resetClaudeSwapMenuExpansionStateIfIdle()
     }
 
     func forgetClosedMenu(_ menu: NSMenu) {
