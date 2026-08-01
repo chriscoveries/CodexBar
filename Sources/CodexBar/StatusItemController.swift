@@ -275,7 +275,8 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
     /// Tracks the visible token account switcher contents for merged-menu smart updates.
     var lastTokenAccountMenuDisplay: TokenAccountMenuDisplay?
     /// Debounced pre-build of sibling switcher tabs for flicker-free tab switches.
-    var mergedSwitcherWarmupTask: Task<Void, Never>?
+    /// A common-modes Timer (not a Task) so it fires during NSMenu tracking.
+    var mergedSwitcherWarmupTimer: Timer?
     /// Compact multi-account layout: accounts the user expanded to full cards this menu session.
     var compactAccountExpandedIDs: Set<ProviderAccountIdentity> = []
     /// Compact multi-account layout: providers whose collapsed healthy tail is revealed this menu session.
