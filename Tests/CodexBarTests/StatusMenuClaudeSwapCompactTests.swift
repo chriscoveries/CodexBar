@@ -111,7 +111,7 @@ final class StatusMenuClaudeSwapCompactTests: XCTestCase {
         let accounts = self.sixAccounts()
         let (controller, _) = self.makeController(accounts: accounts)
         defer { controller.releaseStatusItemsForTesting() }
-        controller.claudeSwapExpandedAccountIDs = [accounts[4].id]
+        controller.compactAccountExpandedIDs = [accounts[4].id]
 
         let menu = controller.makeMenu(for: .claude)
         controller.menuWillOpen(menu)
@@ -128,7 +128,7 @@ final class StatusMenuClaudeSwapCompactTests: XCTestCase {
     func test_expandedHealthyTailShowsAllCompactRows() {
         let (controller, _) = self.makeController(accounts: self.sixAccounts())
         defer { controller.releaseStatusItemsForTesting() }
-        controller.claudeSwapHealthyTailExpanded = true
+        controller.compactAccountExpandedHealthyTailProviders = [.claude]
 
         let menu = controller.makeMenu(for: .claude)
         controller.menuWillOpen(menu)
@@ -161,14 +161,14 @@ final class StatusMenuClaudeSwapCompactTests: XCTestCase {
         let accounts = self.sixAccounts()
         let (controller, _) = self.makeController(accounts: accounts)
         defer { controller.releaseStatusItemsForTesting() }
-        controller.claudeSwapExpandedAccountIDs = [accounts[4].id]
-        controller.claudeSwapHealthyTailExpanded = true
+        controller.compactAccountExpandedIDs = [accounts[4].id]
+        controller.compactAccountExpandedHealthyTailProviders = [.claude]
 
         let menu = controller.makeMenu(for: .claude)
         controller.menuWillOpen(menu)
         controller.menuDidClose(menu)
 
-        XCTAssertTrue(controller.claudeSwapExpandedAccountIDs.isEmpty)
-        XCTAssertFalse(controller.claudeSwapHealthyTailExpanded)
+        XCTAssertTrue(controller.compactAccountExpandedIDs.isEmpty)
+        XCTAssertTrue(controller.compactAccountExpandedHealthyTailProviders.isEmpty)
     }
 }
