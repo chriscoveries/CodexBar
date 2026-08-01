@@ -7,24 +7,35 @@ import CodexBarCore
 /// `NSHostingView` commits SwiftUI content asynchronously; a freshly built card
 /// swapped in during a switch paints a frame late, which reads as a flicker.
 extension StatusItemController {
-    private static let mergedSwitcherWarmupDelay: Duration = .milliseconds(120)
+    private static let mergedSwitcherWarmupDelaySeconds: TimeInterval = 0.12
 
+    /// Scheduled via a common-modes `Timer`, NOT Swift Concurrency: the menu is
+    /// open (tracking mode) for the entire window where warm caches matter, and
+    /// main-actor tasks do not run during NSMenu tracking — a `Task.sleep`-based
+    /// warmup would only ever fire after the menu closed, i.e. never usefully.
     func scheduleMergedSwitcherSiblingWarmup(for menu: NSMenu) {
         guard self.isMenuRefreshEnabled else { return }
         guard self.shouldMergeIcons, menu === self.mergedMenu else { return }
-        self.mergedSwitcherWarmupTask?.cancel()
-        self.mergedSwitcherWarmupTask = Task { @MainActor [weak self, weak menu] in
-            try? await Task.sleep(for: Self.mergedSwitcherWarmupDelay)
-            guard !Task.isCancelled, let self else { return }
-            self.mergedSwitcherWarmupTask = nil
-            guard let menu, self.openMenus[ObjectIdentifier(menu)] === menu else { return }
-            self.warmMergedSwitcherSiblingContent(in: menu)
+        self.mergedSwitcherWarmupTimer?.invalidate()
+        let menuKey = ObjectIdentifier(menu)
+        let timer = Timer(
+            timeInterval: Self.mergedSwitcherWarmupDelaySeconds,
+            repeats: false)
+        { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.mergedSwitcherWarmupTimer = nil
+                guard let menu = self.openMenus[menuKey] else { return }
+                self.warmMergedSwitcherSiblingContent(in: menu)
+            }
         }
+        RunLoop.main.add(timer, forMode: .common)
+        self.mergedSwitcherWarmupTimer = timer
     }
 
     func cancelMergedSwitcherSiblingWarmup() {
-        self.mergedSwitcherWarmupTask?.cancel()
-        self.mergedSwitcherWarmupTask = nil
+        self.mergedSwitcherWarmupTimer?.invalidate()
+        self.mergedSwitcherWarmupTimer = nil
     }
 
     func warmMergedSwitcherSiblingContent(in menu: NSMenu) {
@@ -45,6 +56,9 @@ extension StatusItemController {
                 in: menu,
                 enabledProviders: enabledProviders)
         }
+        // Freshly warmed tabs carry zero-height spacers; equalize provider-tab
+        // heights now so the first switch does not resize the menu window.
+        self.applyStableMenuHeightPadding(in: menu)
     }
 
     private func warmMergedSwitcherContentIfMissing(
