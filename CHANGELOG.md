@@ -2,6 +2,9 @@
 
 ## 0.46.1 — Unreleased
 
+### Added
+- Claude: compact multi-account menu for claude-swap — with four or more accounts the active account keeps its full card while the others become one-line rows sorted by remaining headroom, constrained accounts surface in red/amber, the healthiest switch target gets a star, and the healthy tail folds behind a summary row. Click a row to expand its full card.
+
 ### Changed
 - About: link the Website entry to codex.bar.
 
