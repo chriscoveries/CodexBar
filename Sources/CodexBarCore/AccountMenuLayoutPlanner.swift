@@ -159,12 +159,16 @@ public enum AccountMenuLayoutPlanner {
         for account: ProviderAccountUsageSnapshot) -> [(label: String, remainingPercent: Double)]
     {
         guard let snapshot = account.snapshot else { return [] }
+        let metadata = ProviderDefaults.metadata[account.provider]
         var windows: [(label: String, remainingPercent: Double)] = []
         if let primary = snapshot.primary, !primary.isSyntheticPlaceholder {
-            windows.append(("Session", primary.remainingPercent))
+            windows.append((metadata?.sessionLabel ?? "Session", primary.remainingPercent))
         }
         if let secondary = snapshot.secondary {
-            windows.append(("Weekly", secondary.remainingPercent))
+            windows.append((metadata?.weeklyLabel ?? "Weekly", secondary.remainingPercent))
+        }
+        if let tertiary = snapshot.tertiary {
+            windows.append((metadata?.opusLabel ?? "Monthly", tertiary.remainingPercent))
         }
         for extra in snapshot.extraRateWindows ?? [] where extra.usageKnown {
             windows.append((self.shortLabel(forWindowTitle: extra.title), extra.window.remainingPercent))

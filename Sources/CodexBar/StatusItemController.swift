@@ -274,10 +274,10 @@ final class StatusItemController: NSObject, NSMenuDelegate, StatusItemControllin
     var lastCodexAccountMenuDisplay: CodexAccountMenuDisplay?
     /// Tracks the visible token account switcher contents for merged-menu smart updates.
     var lastTokenAccountMenuDisplay: TokenAccountMenuDisplay?
-    /// Claude-swap compact layout: accounts the user expanded to full cards this menu session.
-    var claudeSwapExpandedAccountIDs: Set<ProviderAccountIdentity> = []
-    /// Claude-swap compact layout: whether the collapsed healthy tail is revealed this menu session.
-    var claudeSwapHealthyTailExpanded = false
+    /// Compact multi-account layout: accounts the user expanded to full cards this menu session.
+    var compactAccountExpandedIDs: Set<ProviderAccountIdentity> = []
+    /// Compact multi-account layout: providers whose collapsed healthy tail is revealed this menu session.
+    var compactAccountExpandedHealthyTailProviders: Set<UsageProvider> = []
     /// Keeps detached merged-menu tab content reusable while the same menu remains open.
     var mergedSwitcherContentCaches: [ObjectIdentifier: [ProviderSwitcherSelection: CachedMergedSwitcherMenuContent]]
         = [:]
