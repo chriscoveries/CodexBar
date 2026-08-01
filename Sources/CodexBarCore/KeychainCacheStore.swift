@@ -462,6 +462,7 @@ public enum KeychainCacheStore {
 
     /// True when the running executable has no `.app` bundle ancestor.
     static let isUnbundledProcess: Bool = {
+        #if os(macOS)
         if Self.appBundleURL(containing: Bundle.main.bundleURL) != nil {
             return false
         }
@@ -471,6 +472,11 @@ public enum KeychainCacheStore {
             return false
         }
         return true
+        #else
+        // No app bundles (or real keychain) exist off macOS; the memory store is
+        // the only sensible backing there anyway.
+        return true
+        #endif
     }()
 
     #if DEBUG
