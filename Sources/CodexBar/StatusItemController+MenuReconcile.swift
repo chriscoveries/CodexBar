@@ -149,11 +149,18 @@ extension StatusItemController {
     /// synchronously makes the content swap composite atomically with the menu
     /// update. Views without a window (closed or detached menus) are skipped.
     func flushHostedMenuRowRendering(in menu: NSMenu) {
+        // Freshly inserted item views may not be parented into the menu window yet
+        // when this runs, so lay out every hosted row unconditionally and then flush
+        // pending drawing once at the window level.
+        var menuWindow: NSWindow?
         for item in menu.items {
-            guard let view = item.view, view.window != nil else { continue }
+            guard let view = item.view else { continue }
             view.layoutSubtreeIfNeeded()
-            view.displayIfNeeded()
+            if menuWindow == nil {
+                menuWindow = view.window
+            }
         }
+        menuWindow?.displayIfNeeded()
     }
 
     private func finishReconciledHighlightTracking(in menu: NSMenu) {
