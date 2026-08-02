@@ -163,6 +163,7 @@ extension StatusItemController {
             self.cancelMergedSwitcherSiblingWarmup()
         }
         self.resetCompactAccountMenuExpansionStateIfIdle()
+        self.resetStableMenuHeightSessionFloor()
     }
 
     func forgetClosedMenu(_ menu: NSMenu) {
@@ -966,6 +967,7 @@ extension StatusItemController {
             },
             onSelect: { [weak self, weak menu] selection in
                 guard let self, let menu else { return }
+                MenuSwitchFlickerProbe.debugLog("onSelect \(selection)")
                 var provider: UsageProvider?
                 self.preservingMergedSwitcherContentCachesDuringInvalidation {
                     switch selection {

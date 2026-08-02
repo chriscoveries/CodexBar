@@ -19,13 +19,20 @@ import UniformTypeIdentifiers
 ///   reads the WindowServer's current composite without touching AppKit.
 @MainActor
 enum MenuSwitchFlickerProbe {
-    /// Appends diagnostic lines from production code paths while the probe env
-    /// var is set; inert otherwise.
+    private nonisolated static let processStart = DispatchTime.now()
+
+    /// Appends timestamped diagnostic lines from production code paths while the
+    /// probe env var is set; inert otherwise.
     nonisolated static func debugLog(_ line: @autoclosure () -> String) {
         guard let dir = ProcessInfo.processInfo.environment["CODEXBAR_FLICKER_PROBE_DIR"],
               !dir.isEmpty else { return }
         let url = URL(fileURLWithPath: dir).appendingPathComponent("padding-log.txt")
-        let text = line() + "\n"
+        // Read the start anchor before now(): the lazy static initializes on first
+        // access, so the reverse order makes start > now and underflows UInt64.
+        let startNs = self.processStart.uptimeNanoseconds
+        let nowNs = DispatchTime.now().uptimeNanoseconds
+        let elapsedMs = nowNs >= startNs ? Double(nowNs - startNs) / 1_000_000 : 0
+        let text = String(format: "[%9.1fms] ", elapsedMs) + line() + "\n"
         if let handle = try? FileHandle(forWritingTo: url) {
             handle.seekToEndOfFile()
             handle.write(Data(text.utf8))
@@ -39,9 +46,15 @@ enum MenuSwitchFlickerProbe {
         guard let dir = ProcessInfo.processInfo.environment["CODEXBAR_FLICKER_PROBE_DIR"],
               !dir.isEmpty else { return }
         let directory = URL(fileURLWithPath: dir, isDirectory: true)
+        // Two sessions: the second verifies open-time behavior with state carried
+        // over from the first (e.g. the stable-height session floor).
         DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
-            let session = ProbeSession(controller: controller, directory: directory)
-            session.begin()
+            ProbeSession(controller: controller, directory: directory).begin()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                ProbeSession(
+                    controller: controller,
+                    directory: directory.appendingPathComponent("second")).begin()
+            }
         }
     }
 
@@ -95,11 +108,12 @@ enum MenuSwitchFlickerProbe {
                 guard keepRunning, index < Self.maxFrameCount else { return }
                 let elapsed = Double(DispatchTime.now().uptimeNanoseconds - self.start.uptimeNanoseconds)
                     / 1_000_000
+                // Include framing so the window shadow / material edge is captured too.
                 let image = CGWindowListCreateImage(
                     .null,
                     .optionIncludingWindow,
                     self.windowID,
-                    [.boundsIgnoreFraming, .bestResolution])
+                    [.bestResolution])
                 let bounds = self.currentBounds() ?? .null
                 var wroteFrame = false
                 if let image {
@@ -137,8 +151,7 @@ enum MenuSwitchFlickerProbe {
         private var timer: Timer?
         private var log: [String] = []
         private var startedAt: DispatchTime?
-        private var didSwitchAway = false
-        private var didSwitchBack = false
+        private var switchScheduleIndex = 0
         private var searchTicks = 0
         private weak var menu: NSMenu?
         private var grabber: BackgroundFrameGrabber?
@@ -166,29 +179,28 @@ enum MenuSwitchFlickerProbe {
             self.finish()
         }
 
+        /// Three away/back cycles give slower external captures several chances
+        /// to land on any transient artifact. Always ends on the original segment.
+        private static let switchScheduleMs = [400, 1000, 1600, 2200, 2800, 3400]
+        private static let sessionEndMs = 4200
+
         private func tick() {
             guard let startedAt = self.startedAtOrLocateMenu() else { return }
             let now = Int((DispatchTime.now().uptimeNanoseconds - startedAt.uptimeNanoseconds) / 1_000_000)
-            if now >= 2400 {
+            if now >= Self.sessionEndMs {
                 self.timer?.invalidate()
                 self.timer = nil
                 self.menu?.cancelTracking()
                 return
             }
-            if now >= 400, !self.didSwitchAway {
-                self.didSwitchAway = true
-                let handled = self.targetSegment.map { self.switchSegment($0) } ?? false
-                self.log.append("switch-away to segment \(String(describing: self.targetSegment)) " +
-                    "at \(now)ms handled=\(handled)")
-                return
-            }
-            if now >= 1400, !self.didSwitchBack {
-                self.didSwitchBack = true
-                let handled = self.originalSegment.map { self.switchSegment($0) } ?? false
-                self.log.append("switch-back to segment \(String(describing: self.originalSegment)) " +
-                    "at \(now)ms handled=\(handled)")
-                return
-            }
+            guard self.switchScheduleIndex < Self.switchScheduleMs.count,
+                  now >= Self.switchScheduleMs[self.switchScheduleIndex] else { return }
+            let switchIndex = self.switchScheduleIndex
+            self.switchScheduleIndex += 1
+            let segment = switchIndex.isMultiple(of: 2) ? self.targetSegment : self.originalSegment
+            let handled = segment.map { self.switchSegment($0) } ?? false
+            self.log.append("switch#\(switchIndex) to segment \(String(describing: segment)) " +
+                "at \(now)ms handled=\(handled)")
         }
 
         private func startedAtOrLocateMenu() -> DispatchTime? {
