@@ -45,6 +45,7 @@ extension StatusItemController {
 
     func makeStableMenuHeightSpacerItem() -> NSMenuItem {
         let item = NSMenuItem()
+        item.title = ""
         item.isEnabled = false
         item.representedObject = Self.stableMenuHeightSpacerID
         let view = NSView(frame: NSRect(x: 0, y: 0, width: 1, height: 0))
