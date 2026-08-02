@@ -67,6 +67,7 @@ enum ClaudeOAuthUsageFetcher {
     static func fetchUsage(
         accessToken: String,
         detectClaudeVersion: Bool = true,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
         transport: any ProviderHTTPTransport = ProviderHTTPClient.shared) async throws -> OAuthUsageResponse
     {
         if let blockedUntil = ClaudeOAuthUsageRateLimitGate.blockedUntil(accessToken: accessToken) {
@@ -86,7 +87,9 @@ enum ClaudeOAuthUsageFetcher {
         // OAuth usage endpoint currently requires the beta header.
         request.setValue(Self.betaHeader, forHTTPHeaderField: "anthropic-beta")
         request.setValue(
-            Self.claudeCodeUserAgent(detectClaudeVersion: detectClaudeVersion),
+            Self.claudeCodeUserAgent(
+                detectClaudeVersion: detectClaudeVersion,
+                versionDetector: { ProviderVersionDetector.claudeVersion(environment: environment) }),
             forHTTPHeaderField: "User-Agent")
 
         do {

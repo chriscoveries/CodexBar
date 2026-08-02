@@ -159,10 +159,6 @@ public struct ClaudeUsageFetcher: ClaudeUsageFetching, Sendable {
         self.runtime == .app
     }
 
-    private var allowsOAuthClaudeVersionDetection: Bool {
-        self.runtime == .app
-    }
-
     private var allowBackgroundDelegatedRefresh: Bool {
         self.configuration.allowBackgroundDelegatedRefresh
     }
@@ -335,7 +331,8 @@ public struct ClaudeUsageFetcher: ClaudeUsageFetching, Sendable {
                 try self.validateRequiredOAuthScope(credentials)
                 let usage = try await ClaudeUsageFetcher.fetchOAuthUsage(
                     accessToken: credentials.accessToken,
-                    detectClaudeVersion: self.fetcher.allowsOAuthClaudeVersionDetection)
+                    detectClaudeVersion: self.fetcher.runtime == .app,
+                    environment: self.fetcher.environment)
                 // History is scoped by the credential's one-way owner identifier. Do not compare the winning
                 // credential with Claude Code's foreign Keychain item after a successful request.
                 let keychainMatch: ClaudeKeychainCredentialMatch = credentialRecord.owner == .claudeCLI
@@ -484,7 +481,8 @@ public struct ClaudeUsageFetcher: ClaudeUsageFetching, Sendable {
                 try self.validateRequiredOAuthScope(refreshedCredentials)
                 let usage = try await ClaudeUsageFetcher.fetchOAuthUsage(
                     accessToken: refreshedCredentials.accessToken,
-                    detectClaudeVersion: self.fetcher.allowsOAuthClaudeVersionDetection)
+                    detectClaudeVersion: self.fetcher.runtime == .app,
+                    environment: self.fetcher.environment)
                 let keychainMatch: ClaudeKeychainCredentialMatch = refreshedRecord.owner == .claudeCLI
                     ? .unavailable
                     : .notApplicable
@@ -844,7 +842,7 @@ extension ClaudeUsageFetcher {
     // MARK: - Public API
 
     public func detectVersion() -> String? {
-        ProviderVersionDetector.claudeVersion()
+        ProviderVersionDetector.claudeVersion(environment: self.environment)
     }
 
     public func debugRawProbe(model: String = "sonnet") async -> String {
@@ -926,7 +924,8 @@ extension ClaudeUsageFetcher {
 
     private static func fetchOAuthUsage(
         accessToken: String,
-        detectClaudeVersion: Bool) async throws -> OAuthUsageResponse
+        detectClaudeVersion: Bool,
+        environment: [String: String]) async throws -> OAuthUsageResponse
     {
         #if DEBUG
         if let override = fetchOAuthUsageOverride {
@@ -935,7 +934,8 @@ extension ClaudeUsageFetcher {
         #endif
         return try await ClaudeOAuthUsageFetcher.fetchUsage(
             accessToken: accessToken,
-            detectClaudeVersion: detectClaudeVersion)
+            detectClaudeVersion: detectClaudeVersion,
+            environment: environment)
     }
 
     private static func fetchOAuthProfile(accessToken: String) async throws -> OAuthProfileResponse {

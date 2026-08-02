@@ -792,15 +792,10 @@ struct ClaudeCLIFetchStrategy: ProviderFetchStrategy {
             // Every Claude child process is opaque to CodexBar's no-UI Keychain controls, including
             // `claude auth status`. Background Auto therefore reuses only availability established by a
             // successful user-initiated CLI fetch in this process; it never probes the CLI itself.
-            guard let binary = ClaudeCLIResolver.resolvedBinaryPath(environment: context.env),
-                  ClaudeCLIBackgroundAvailability.isEstablished(binary: binary, environment: context.env)
-            else {
-                return false
-            }
-            // Disable Keychain is a complete opt-out, so no prompt policy applies. With Keychain enabled,
-            // retain the explicit background opt-in introduced with the opaque-child safety gate.
-            return KeychainAccessGate.isExplicitlyDisabled
-                || ClaudeOAuthKeychainPromptPreference.storedMode() == .always
+            guard let binary = ClaudeCLIResolver.resolvedBinaryPath(environment: context.env) else { return false }
+            return ClaudeCLIBackgroundAvailability.allowsOpaqueChildExecution(
+                binary: binary,
+                environment: context.env)
         }
 
         // The interactive Claude REPL can open browser OAuth when it starts logged out. CLI-runtime paths
@@ -890,6 +885,15 @@ enum ClaudeCLIBackgroundAvailability {
     static func isEstablished(binary: String, environment: [String: String]) -> Bool {
         guard let marker = self.captureMarker(binary: binary, environment: environment) else { return false }
         return self.store.contains(marker)
+    }
+
+    static func allowsOpaqueChildExecution(binary: String, environment: [String: String]) -> Bool {
+        guard ProviderInteractionContext.current == .background else { return true }
+        guard self.isEstablished(binary: binary, environment: environment) else { return false }
+        // Disable Keychain is a complete opt-out, so no prompt policy applies. With Keychain enabled,
+        // retain the explicit background opt-in introduced with the opaque-child safety gate.
+        return KeychainAccessGate.isExplicitlyDisabled
+            || ClaudeOAuthKeychainPromptPreference.storedMode() == .always
     }
 
     static func establish(binary: String, environment: [String: String]) {
