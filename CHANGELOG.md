@@ -7,6 +7,7 @@
 - Menu: the compact multi-account layout now covers every stacked multi-account list — token accounts on any provider and Codex accounts (flat lists; workspace-grouped Codex lists keep their sections).
 
 ### Fixed
+- Claude: Auto cold boot with Keychain disabled loads without manual refresh (#2494, fixes #2493). Thanks @gmkbenjamin!
 - Menu: no more stray floating "Refresh" tooltip beside the menu when switching tabs with the cursor over the actions area.
 - Providers: write the Factory and Cursor session files (bearer/refresh tokens, auth cookies) owner-only (0600), matching the codex/kimi/antigravity credential stores.
 - Menu: keep Overview↔provider switches flash-free by hosting every card row in one reusable AppKit container, including GPU-selection Overview rows.

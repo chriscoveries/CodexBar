@@ -179,6 +179,26 @@ final class ProviderVersionDetectorTests: XCTestCase {
         XCTAssertEqual(state.callCount, 0)
     }
 
+    func test_claudeVersion_disabledKeychainWithoutMarkerStillSkipsChild() async throws {
+        let state = MockDetectorState()
+        self.configureClaudeVersionHooks(state: state)
+        let profile = try self.makeClaudeProfile(accountID: "account-a")
+        defer { try? FileManager.default.removeItem(at: profile.root) }
+
+        let version = await ClaudeCLIBackgroundAvailability.withIsolatedStoreForTesting {
+            KeychainAccessGate.withTaskOverrideForTesting(true) {
+                ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.always) {
+                    ProviderInteractionContext.$current.withValue(.background) {
+                        ProviderVersionDetector.claudeVersion(environment: profile.environment)
+                    }
+                }
+            }
+        }
+
+        XCTAssertNil(version)
+        XCTAssertEqual(state.callCount, 0)
+    }
+
     func test_claudeVersion_userInitiatedColdDetectionRunsChild() async {
         let state = MockDetectorState()
         self.configureClaudeVersionHooks(state: state)
