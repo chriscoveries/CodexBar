@@ -46,14 +46,20 @@ enum MenuSwitchFlickerProbe {
         guard let dir = ProcessInfo.processInfo.environment["CODEXBAR_FLICKER_PROBE_DIR"],
               !dir.isEmpty else { return }
         let directory = URL(fileURLWithPath: dir, isDirectory: true)
-        // Two sessions: the second verifies open-time behavior with state carried
-        // over from the first (e.g. the stable-height session floor).
+        // "hold" mode: open the menu and record for 30s without self-switching,
+        // so an external driver can exercise the real pointer path with
+        // synthesized mouse clicks. Default mode self-switches via the keyboard
+        // path across two sessions (the second verifies open-time behavior with
+        // carried-over state such as the stable-height session floor).
+        let holdMode = ProcessInfo.processInfo.environment["CODEXBAR_FLICKER_PROBE_MODE"] == "hold"
         DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
-            ProbeSession(controller: controller, directory: directory).begin()
+            ProbeSession(controller: controller, directory: directory, holdMode: holdMode).begin()
+            guard !holdMode else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                 ProbeSession(
                     controller: controller,
-                    directory: directory.appendingPathComponent("second")).begin()
+                    directory: directory.appendingPathComponent("second"),
+                    holdMode: false).begin()
             }
         }
     }
@@ -148,6 +154,7 @@ enum MenuSwitchFlickerProbe {
     final class ProbeSession {
         private let controller: StatusItemController
         private let directory: URL
+        private let holdMode: Bool
         private var timer: Timer?
         private var log: [String] = []
         private var startedAt: DispatchTime?
@@ -158,9 +165,10 @@ enum MenuSwitchFlickerProbe {
         private var originalSegment: Int?
         private var targetSegment: Int?
 
-        init(controller: StatusItemController, directory: URL) {
+        init(controller: StatusItemController, directory: URL, holdMode: Bool = false) {
             self.controller = controller
             self.directory = directory
+            self.holdMode = holdMode
         }
 
         func begin() {
@@ -183,21 +191,34 @@ enum MenuSwitchFlickerProbe {
         /// to land on any transient artifact. Always ends on the original segment.
         private static let switchScheduleMs = [400, 1000, 1600, 2200, 2800, 3400]
         private static let sessionEndMs = 4200
+        private static let holdSessionEndMs = 30000
 
         private func tick() {
             guard let startedAt = self.startedAtOrLocateMenu() else { return }
             let now = Int((DispatchTime.now().uptimeNanoseconds - startedAt.uptimeNanoseconds) / 1_000_000)
-            if now >= Self.sessionEndMs {
+            let endMs = self.holdMode ? Self.holdSessionEndMs : Self.sessionEndMs
+            if now >= endMs {
                 self.timer?.invalidate()
                 self.timer = nil
                 self.menu?.cancelTracking()
                 return
             }
-            guard self.switchScheduleIndex < Self.switchScheduleMs.count,
+            guard !self.holdMode,
+                  self.switchScheduleIndex < Self.switchScheduleMs.count,
                   now >= Self.switchScheduleMs[self.switchScheduleIndex] else { return }
             let switchIndex = self.switchScheduleIndex
             self.switchScheduleIndex += 1
-            let segment = switchIndex.isMultiple(of: 2) ? self.targetSegment : self.originalSegment
+            // Cycle through overview (segment 0) too so full-rebuild transitions
+            // are exercised alongside cached swaps.
+            let cycle: [Int?] = [
+                self.targetSegment,
+                0,
+                self.originalSegment,
+                0,
+                self.targetSegment,
+                self.originalSegment,
+            ]
+            let segment = cycle[switchIndex % cycle.count]
             let handled = segment.map { self.switchSegment($0) } ?? false
             self.log.append("switch#\(switchIndex) to segment \(String(describing: segment)) " +
                 "at \(now)ms handled=\(handled)")
@@ -221,6 +242,16 @@ enum MenuSwitchFlickerProbe {
                 self.log.append("menu located, windowNumber=\(window.windowNumber) " +
                     "frame=\(window.frame) original=\(String(describing: self.originalSegment)) " +
                     "target=\(String(describing: self.targetSegment))")
+                // Export CG (top-left origin) bounds for external click drivers;
+                // other processes cannot enumerate this menu window.
+                let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
+                let frame = window.frame
+                let cgY = primaryHeight - frame.maxY
+                let boundsLine = "\(Int(frame.minX)) \(Int(cgY)) \(Int(frame.width)) \(Int(frame.height))\n"
+                try? boundsLine.write(
+                    to: self.directory.appendingPathComponent("menu-bounds.txt"),
+                    atomically: true,
+                    encoding: .utf8)
                 return start
             }
             if self.searchTicks > 1200 {

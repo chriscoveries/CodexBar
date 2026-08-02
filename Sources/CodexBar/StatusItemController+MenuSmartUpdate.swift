@@ -80,6 +80,7 @@ extension StatusItemController {
             // unchanged, so an open tracked menu sees content mutations instead of item
             // churn. The fresh content is built into a detached scratch menu while its
             // interaction closures capture the live menu they will serve.
+            MenuSwitchFlickerProbe.debugLog("reconcile-path \(context.switcherSelection)")
             let shapes = self.menuContentShapes(in: menu, fromIndex: contentStartIndex)
             self.harvestRecyclableMenuCardViews(
                 in: menu,
