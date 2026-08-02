@@ -323,36 +323,6 @@ struct ClaudeBaselineCharacterizationTests {
     }
 
     @Test
-    func `app background auto does not launch Claude CLI when Keychain access is disabled`() async throws {
-        let settings = ProviderSettingsSnapshot.make(claude: .init(
-            usageDataSource: .auto,
-            webExtrasEnabled: false,
-            cookieSource: .off,
-            manualCookieHeader: nil))
-        let invocationLog = FileManager.default.temporaryDirectory
-            .appendingPathComponent("claude-invocations-\(UUID().uuidString).log")
-        let stubCLIPath = try self.makeStubClaudeCLI(loggedIn: false, invocationLog: invocationLog)
-        let env = ["CLAUDE_CLI_PATH": stubCLIPath]
-        let descriptor = ProviderDescriptorRegistry.descriptor(for: .claude)
-        let context = self.makeContext(runtime: .app, sourceMode: .auto, env: env, settings: settings)
-        let strategies = await descriptor.fetchPlan.pipeline.resolveStrategies(context)
-        let cli = try #require(strategies.first { $0.id == "claude.cli" })
-
-        let cliAvailable = await ClaudeCLIBackgroundAvailability.withIsolatedStoreForTesting {
-            await KeychainAccessGate.withTaskOverrideForTesting(true) {
-                await ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.always) {
-                    await ProviderInteractionContext.$current.withValue(.background) {
-                        await cli.isAvailable(context)
-                    }
-                }
-            }
-        }
-
-        #expect(!cliAvailable)
-        #expect(!FileManager.default.fileExists(atPath: invocationLog.path))
-    }
-
-    @Test
     func `app background auto falls back to web without probing Claude CLI`() async throws {
         let settings = ProviderSettingsSnapshot.make(claude: .init(
             usageDataSource: .auto,
@@ -429,7 +399,7 @@ struct ClaudeBaselineCharacterizationTests {
     }
 
     @Test
-    func `app background auto availability stops when Keychain access is disabled`() async throws {
+    func `app background auto availability uses owner CLI when Keychain access is disabled`() async throws {
         let settings = ProviderSettingsSnapshot.make(claude: .init(
             usageDataSource: .auto,
             webExtrasEnabled: false,
@@ -438,7 +408,16 @@ struct ClaudeBaselineCharacterizationTests {
         let invocationLog = FileManager.default.temporaryDirectory
             .appendingPathComponent("claude-invocations-\(UUID().uuidString).log")
         let stubCLIPath = try self.makeStubClaudeCLI(invocationLog: invocationLog)
-        let env = ["CLAUDE_CLI_PATH": stubCLIPath]
+        let profileRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codexbar-claude-disabled-keychain-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: profileRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: profileRoot) }
+        try Data(#"{"oauthAccount":{"accountUuid":"disabled-keychain-account"}}"#.utf8)
+            .write(to: profileRoot.appendingPathComponent(".config.json"), options: .atomic)
+        let env = [
+            "CLAUDE_CLI_PATH": stubCLIPath,
+            "CLAUDE_CONFIG_DIR": profileRoot.path,
+        ]
         let descriptor = ProviderDescriptorRegistry.descriptor(for: .claude)
         let context = self.makeContext(runtime: .app, sourceMode: .auto, env: env, settings: settings)
         let strategies = await descriptor.fetchPlan.pipeline.resolveStrategies(context)
@@ -450,7 +429,7 @@ struct ClaudeBaselineCharacterizationTests {
             }
         }
 
-        #expect(!available)
+        #expect(available)
         #expect(!FileManager.default.fileExists(atPath: invocationLog.path))
     }
 

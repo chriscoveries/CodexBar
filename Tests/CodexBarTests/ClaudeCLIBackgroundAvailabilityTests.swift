@@ -4,13 +4,35 @@ import Testing
 
 struct ClaudeCLIBackgroundAvailabilityTests {
     @Test
-    func `background Auto CLI is unavailable before a user establishes availability`() async {
+    func `disabled Keychain allows cold background Auto usage without an established marker`() async throws {
         let strategy = self.makeStrategy()
-        let context = self.makeContext()
+        let profile = try self.makeProfile(accountID: "account-a")
+        defer { try? FileManager.default.removeItem(at: profile.root) }
+        let context = self.makeContext(environment: profile.environment)
 
         await ClaudeCLIBackgroundAvailability.withIsolatedStoreForTesting {
             await KeychainAccessGate.withTaskOverrideForTesting(true) {
                 await ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.never) {
+                    await ClaudeCLIResolver.withResolvedBinaryPathOverrideForTesting("/bin/echo") {
+                        await ProviderInteractionContext.$current.withValue(.background) {
+                            #expect(await strategy.isAvailable(context))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    func `enabled Keychain rejects cold background Auto usage without an established marker`() async throws {
+        let strategy = self.makeStrategy()
+        let profile = try self.makeProfile(accountID: "account-a")
+        defer { try? FileManager.default.removeItem(at: profile.root) }
+        let context = self.makeContext(environment: profile.environment)
+
+        await ClaudeCLIBackgroundAvailability.withIsolatedStoreForTesting {
+            await KeychainAccessGate.withTaskOverrideForTesting(false) {
+                await ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.always) {
                     await ClaudeCLIResolver.withResolvedBinaryPathOverrideForTesting("/bin/echo") {
                         await ProviderInteractionContext.$current.withValue(.background) {
                             #expect(await !strategy.isAvailable(context))
@@ -90,10 +112,42 @@ struct ClaudeCLIBackgroundAvailabilityTests {
         let context = self.makeContext(sourceMode: .oauth)
 
         await ClaudeCLIBackgroundAvailability.withIsolatedStoreForTesting {
-            await ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(promptMode) {
-                await ClaudeCLIResolver.withResolvedBinaryPathOverrideForTesting("/bin/echo") {
-                    await ProviderInteractionContext.$current.withValue(.background) {
-                        #expect(await !strategy.isAvailable(context))
+            await KeychainAccessGate.withTaskOverrideForTesting(true) {
+                await ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(promptMode) {
+                    await ClaudeCLIResolver.withResolvedBinaryPathOverrideForTesting("/bin/echo") {
+                        await ProviderInteractionContext.$current.withValue(.background) {
+                            #expect(await !strategy.isAvailable(context))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    func `failed disabled Keychain exception revokes later background Auto usage`() async throws {
+        let strategy = self.makeStrategy()
+        let profile = try self.makeProfile(accountID: "account-a")
+        defer { try? FileManager.default.removeItem(at: profile.root) }
+        let context = self.makeContext(environment: profile.environment)
+        let fetchOverride: @Sendable (String, TimeInterval, Bool) async throws
+            -> ClaudeStatusSnapshot = { _, _, _ in
+                throw ExpectedFetchError.failed
+            }
+
+        await ClaudeCLIBackgroundAvailability.withIsolatedStoreForTesting {
+            await KeychainAccessGate.withTaskOverrideForTesting(true) {
+                await ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.never) {
+                    await ClaudeCLIResolver.withResolvedBinaryPathOverrideForTesting("/bin/echo") {
+                        await ProviderInteractionContext.$current.withValue(.background) {
+                            #expect(await strategy.isAvailable(context))
+                            await #expect(throws: ExpectedFetchError.self) {
+                                try await ClaudeStatusProbe.$fetchOverride.withValue(fetchOverride) {
+                                    try await strategy.fetch(context)
+                                }
+                            }
+                            #expect(await !strategy.isAvailable(context))
+                        }
                     }
                 }
             }
@@ -126,8 +180,8 @@ struct ClaudeCLIBackgroundAvailabilityTests {
 
         await ClaudeCLIBackgroundAvailability.withIsolatedStoreForTesting {
             ClaudeCLIBackgroundAvailability.establish(binary: "/bin/echo", environment: contextA.env)
-            await KeychainAccessGate.withTaskOverrideForTesting(true) {
-                await ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.never) {
+            await KeychainAccessGate.withTaskOverrideForTesting(false) {
+                await ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.always) {
                     await ClaudeCLIResolver.withResolvedBinaryPathOverrideForTesting("/bin/echo") {
                         await ProviderInteractionContext.$current.withValue(.background) {
                             #expect(await strategy.isAvailable(contextA))
@@ -148,8 +202,8 @@ struct ClaudeCLIBackgroundAvailabilityTests {
 
         try await ClaudeCLIBackgroundAvailability.withIsolatedStoreForTesting {
             ClaudeCLIBackgroundAvailability.establish(binary: "/bin/echo", environment: context.env)
-            try await KeychainAccessGate.withTaskOverrideForTesting(true) {
-                try await ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.never) {
+            try await KeychainAccessGate.withTaskOverrideForTesting(false) {
+                try await ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.always) {
                     try await ClaudeCLIResolver.withResolvedBinaryPathOverrideForTesting("/bin/echo") {
                         try await ProviderInteractionContext.$current.withValue(.background) {
                             #expect(await strategy.isAvailable(context))
@@ -172,6 +226,10 @@ struct ClaudeCLIBackgroundAvailabilityTests {
             manualCookieHeader: nil,
             browserDetection: BrowserDetection(cacheTTL: 0),
             hasWebFallback: false)
+    }
+
+    private enum ExpectedFetchError: Error {
+        case failed
     }
 
     private func makeContext(

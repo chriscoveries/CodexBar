@@ -791,9 +791,10 @@ struct ClaudeCLIFetchStrategy: ProviderFetchStrategy {
         if isBackgroundAutoRefresh {
             // Every Claude child process is opaque to CodexBar's no-UI Keychain controls, including
             // `claude auth status`. Background Auto therefore reuses only availability established by a
-            // successful user-initiated CLI fetch in this process; it never probes the CLI itself.
+            // successful user-initiated CLI fetch in this process. The narrow exception is the owner usage
+            // fetch when Keychain access is explicitly disabled; version/auth children retain the global gate.
             guard let binary = ClaudeCLIResolver.resolvedBinaryPath(environment: context.env) else { return false }
-            return ClaudeCLIBackgroundAvailability.allowsOpaqueChildExecution(
+            return ClaudeCLIBackgroundAvailability.allowsBackgroundAutoUsageFetch(
                 binary: binary,
                 environment: context.env)
         }
@@ -861,17 +862,28 @@ enum ClaudeCLIBackgroundAvailability {
     final class Store: @unchecked Sendable {
         private let lock = NSLock()
         private var markers: Set<Marker> = []
+        private var revokedMarkers: Set<Marker> = []
 
         func contains(_ marker: Marker) -> Bool {
             self.lock.withLock { self.markers.contains(marker) }
         }
 
         func insert(_ marker: Marker) {
-            self.lock.withLock { _ = self.markers.insert(marker) }
+            self.lock.withLock {
+                _ = self.markers.insert(marker)
+                self.revokedMarkers.remove(marker)
+            }
         }
 
         func remove(_ marker: Marker) {
-            self.lock.withLock { _ = self.markers.remove(marker) }
+            self.lock.withLock {
+                self.markers.remove(marker)
+                _ = self.revokedMarkers.insert(marker)
+            }
+        }
+
+        func isRevoked(_ marker: Marker) -> Bool {
+            self.lock.withLock { self.revokedMarkers.contains(marker) }
         }
     }
 
@@ -894,6 +906,17 @@ enum ClaudeCLIBackgroundAvailability {
         // retain the explicit background opt-in introduced with the opaque-child safety gate.
         return KeychainAccessGate.isExplicitlyDisabled
             || ClaudeOAuthKeychainPromptPreference.storedMode() == .always
+    }
+
+    static func allowsBackgroundAutoUsageFetch(binary: String, environment: [String: String]) -> Bool {
+        guard ProviderInteractionContext.current == .background else { return true }
+        guard KeychainAccessGate.isExplicitlyDisabled else {
+            return self.allowsOpaqueChildExecution(binary: binary, environment: environment)
+        }
+        // Disable Keychain explicitly permits one owner-CLI usage attempt on a cold profile. A failed attempt
+        // records revocation below, preventing each background timer tick from retrying until a foreground success.
+        guard let marker = self.captureMarker(binary: binary, environment: environment) else { return false }
+        return !self.store.isRevoked(marker)
     }
 
     static func establish(binary: String, environment: [String: String]) {
