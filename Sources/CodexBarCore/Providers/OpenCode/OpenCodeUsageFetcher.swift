@@ -134,7 +134,9 @@ public struct OpenCodeUsageFetcher: Sendable {
             throw error
         }
     }
+}
 
+extension OpenCodeUsageFetcher {
     /// Only subscription-shaped failures are worth retrying against billing. Credential and
     /// transport failures would fail the same way on the billing call.
     private static func canFallBackToBilling(from error: OpenCodeUsageError) -> Bool {
@@ -168,6 +170,10 @@ public struct OpenCodeUsageFetcher: Sendable {
         }
         guard let billing = OpenCodeZenBillingParser.parse(text: text) else {
             Self.log.error("OpenCode billing payload did not contain monthly usage fields.")
+            return nil
+        }
+        guard !billing.hasSubscription else {
+            Self.log.warning("OpenCode billing fallback still reports a subscription; preserving subscription error.")
             return nil
         }
         Self.log.info(
@@ -389,7 +395,9 @@ public struct OpenCodeUsageFetcher: Sendable {
         }
         return text
     }
+}
 
+extension OpenCodeUsageFetcher {
     static func parseSubscription(text: String, now: Date) throws -> OpenCodeUsageSnapshot {
         if let snapshot = self.parseSubscriptionJSON(text: text, now: now) {
             return snapshot

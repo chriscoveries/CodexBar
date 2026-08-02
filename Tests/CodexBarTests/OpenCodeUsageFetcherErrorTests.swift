@@ -203,6 +203,57 @@ struct OpenCodeUsageFetcherErrorTests {
     }
 
     @Test
+    func `subscription failure is preserved when billing still has a subscription`() async throws {
+        defer {
+            OpenCodeStubURLProtocol.handler = nil
+        }
+
+        var methods: [String] = []
+        OpenCodeStubURLProtocol.handler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            methods.append(request.httpMethod ?? "GET")
+
+            if request.value(forHTTPHeaderField: "X-Server-Id") == Self.billingServerID {
+                return Self.makeResponse(
+                    url: url,
+                    body: Self.subscriptionBillingPayload,
+                    statusCode: 200,
+                    contentType: "application/json")
+            }
+            if request.httpMethod?.uppercased() == "GET" {
+                return Self.makeResponse(
+                    url: url,
+                    body: #"{"ok":true}"#,
+                    statusCode: 200,
+                    contentType: "application/json")
+            }
+            return Self.makeResponse(
+                url: url,
+                body: #"{"status":500,"unhandled":true,"message":"HTTPError"}"#,
+                statusCode: 500,
+                contentType: "application/json")
+        }
+
+        do {
+            _ = try await OpenCodeUsageFetcher.fetchUsage(
+                cookieHeader: "auth=test",
+                timeout: 2,
+                workspaceIDOverride: "wrk_TEST123",
+                session: self.makeSession())
+            Issue.record("Expected the subscription API error to be preserved.")
+        } catch let error as OpenCodeUsageError {
+            switch error {
+            case let .apiError(message):
+                #expect(message.contains("HTTP 500"))
+            default:
+                Issue.record("Expected apiError, got: \(error)")
+            }
+        }
+
+        #expect(methods == ["GET", "POST", "GET"])
+    }
+
+    @Test
     func `billing fallback surfaces expired session as invalid credentials`() async throws {
         defer {
             OpenCodeStubURLProtocol.handler = nil
@@ -401,6 +452,16 @@ struct OpenCodeUsageFetcherErrorTests {
         #"reloadError:null,timeReloadError:null,subscription:null,subscriptionID:null,subscriptionPlan:null,"#,
         #"lite:$R[2]={},liteSubscriptionID:"sub_TEST"})($R["server-fn:test"]))"#,
     ].joined()
+
+    private static let subscriptionBillingPayload = """
+    {
+      "customerID": "cus_TEST",
+      "monthlyUsage": 1500000000,
+      "monthlyLimit": 20,
+      "balance": 1250000000,
+      "subscription": {"id": "sub_TEST"}
+    }
+    """
 
     private static func makeResponse(
         url: URL,
