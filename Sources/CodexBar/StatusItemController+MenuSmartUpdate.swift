@@ -40,6 +40,8 @@ extension StatusItemController {
                    codexAccountDisplay: context.codexAccountDisplay,
                    tokenAccountDisplay: context.tokenAccountDisplay)
             {
+                MenuSwitchFlickerProbe.debugLog("cached-swap begin \(context.switcherSelection)")
+                defer { MenuSwitchFlickerProbe.debugLog("cached-swap end") }
                 // Park the outgoing payloads for an equally instant switch-back. Compatible
                 // menu-item shells stay attached, avoiding the empty intermediate layout that
                 // AppKit can visibly render when the whole content block is removed first.
