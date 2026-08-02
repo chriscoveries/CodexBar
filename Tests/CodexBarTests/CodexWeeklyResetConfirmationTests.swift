@@ -271,6 +271,41 @@ struct CodexWeeklyResetConfirmationTests {
     }
 
     @Test
+    func `prior boundary due tolerance includes the exact two minute edge`() {
+        let previousBoundary = self.resetAt
+        let nextBoundary = previousBoundary.addingTimeInterval(7 * 24 * 60 * 60)
+        let previous = self.snapshot(
+            capturedAt: previousBoundary.addingTimeInterval(-10 * 60),
+            weeklyUsed: 100,
+            weeklyReset: previousBoundary)
+        let initial = self.snapshot(
+            capturedAt: previousBoundary.addingTimeInterval(-121),
+            weeklyUsed: 0,
+            weeklyReset: nextBoundary)
+        let atToleranceEdge = self.snapshot(
+            capturedAt: previousBoundary.addingTimeInterval(-120),
+            weeklyUsed: 0,
+            weeklyReset: nextBoundary)
+        let justBeforeToleranceEdge = self.snapshot(
+            capturedAt: previousBoundary.addingTimeInterval(-120.001),
+            weeklyUsed: 0,
+            weeklyReset: nextBoundary)
+
+        #expect(
+            CodexWeeklyResetConfirmation.confirmationDecision(
+                previous: previous,
+                initial: initial,
+                confirmation: atToleranceEdge)
+                == .publishConfirmation)
+        #expect(
+            CodexWeeklyResetConfirmation.confirmationDecision(
+                previous: previous,
+                initial: initial,
+                confirmation: justBeforeToleranceEdge)
+                == .preservePrevious)
+    }
+
+    @Test
     func `unchanged regressed and mismatched reset boundaries preserve the previous snapshot`() {
         let previous = self.snapshot(offset: 0, weeklyUsed: 50, weeklyReset: self.resetAt)
         let unchanged = self.snapshot(offset: 1, weeklyUsed: 0, weeklyReset: self.resetAt)

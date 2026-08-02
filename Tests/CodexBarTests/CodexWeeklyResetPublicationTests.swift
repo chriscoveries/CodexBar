@@ -408,8 +408,7 @@ extension CodexAccountScopedRefreshTests {
         let priorRevision = await self.seedCodexWeeklyPublicationState(
             store: store,
             settings: settings,
-            snapshot: prior,
-            error: nil)
+            snapshot: prior)
         self.installContextualCodexProvider(on: store) { _ in try await loader.load() }
         let recorder = CodexWeeklyPublicationEventRecorder(email: email)
         defer { recorder.invalidate() }
@@ -420,6 +419,12 @@ extension CodexAccountScopedRefreshTests {
         #expect(store.snapshots[.codex]?.updatedAt == prior.updatedAt)
         #expect(store.snapshots[.codex]?.secondary?.usedPercent == 100)
         #expect(store.lastKnownResetSnapshots[.codex]?.updatedAt == prior.updatedAt)
+        #expect(store.lastKnownResetSnapshots[.codex]?.secondary?.usedPercent == 100)
+        #expect(store.errors[.codex] == "prior error")
+        #expect(store.lastSourceLabels[.codex] == "prior-source")
+        #expect(store.lastFetchAttempts[.codex]?.count == 1)
+        #expect(store.lastFetchAttempts[.codex]?.first?.strategyID == "prior-strategy")
+        #expect(store.lastFetchAttempts[.codex]?.first?.errorDescription == "prior diagnostic")
         #expect(store.planUtilizationHistoryRevision == priorRevision)
         #expect(recorder.usedPercents.isEmpty)
     }

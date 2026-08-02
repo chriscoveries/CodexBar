@@ -4,7 +4,6 @@ import Foundation
 extension UsageStore {
     private nonisolated static let limitResetThreshold = 1.0
     private nonisolated static let claudeWeeklyRecoveryObservationCount = 2
-    private nonisolated static let codexWeeklyResetEarlyTolerance: TimeInterval = 2 * 60
 
     struct LimitResetDetectorState: Codable, Equatable {
         let wasAboveThreshold: Bool
@@ -125,9 +124,6 @@ extension UsageStore {
                 previous: previousState?.resetBoundary,
                 current: observation.resetBoundary,
                 requiresPreviousBoundary: true)
-                && previousState?.resetBoundary.map {
-                    currentObservedAt.timeIntervalSince($0) >= -Self.codexWeeklyResetEarlyTolerance
-                } == true
         } else {
             true
         }
@@ -145,7 +141,7 @@ extension UsageStore {
             && resetBoundaryAllowsPost
             && !claudeWeeklyRecoveryPending
         // Sessions retain the last non-regressed boundary on every guarded sample. Codex weekly crossings
-        // also retain a future prior boundary so an early rolling-boundary sample cannot erase the real reset.
+        // adopt a newly appearing boundary so a later genuine advance can still trigger once.
         let shouldPreserveBoundary = !sourceChanged && !resetBoundaryAllowsPost
             && (descriptor.seriesName == .session || previousState?.resetBoundary != nil)
         let shouldPreserveBaseline = suppressedGuardedCrossing

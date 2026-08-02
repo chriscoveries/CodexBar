@@ -305,7 +305,7 @@ extension UsageStorePlanUtilizationTests {
         let realReset = snapshot(
             weeklyUsed: 0,
             weeklyReset: weeklyReset.addingTimeInterval(7 * 24 * 3600),
-            updatedAt: weeklyReset.addingTimeInterval(1))
+            updatedAt: firstDate.addingTimeInterval(180))
 
         await store.recordPlanUtilizationHistorySample(
             provider: .codex,
@@ -389,7 +389,7 @@ extension UsageStorePlanUtilizationTests {
         let realReset = snapshot(
             weeklyUsed: 0,
             weeklyReset: weeklyReset.addingTimeInterval(7 * 24 * 3600),
-            updatedAt: weeklyReset.addingTimeInterval(1))
+            updatedAt: firstDate.addingTimeInterval(360))
 
         await store.recordPlanUtilizationHistorySample(
             provider: .codex,
@@ -448,7 +448,7 @@ extension UsageStorePlanUtilizationTests {
         let realReset = snapshot(
             weeklyUsed: 0,
             weeklyReset: weeklyReset.addingTimeInterval(7 * 24 * 3600),
-            updatedAt: weeklyReset.addingTimeInterval(1))
+            updatedAt: firstDate.addingTimeInterval(120))
 
         await store.recordPlanUtilizationHistorySample(
             provider: .codex,
@@ -671,12 +671,12 @@ extension UsageStorePlanUtilizationTests {
             accountLabel: accountLabel,
             usedPercent: 0,
             resetsAt: nextWeeklyReset,
-            updatedAt: weeklyReset.addingTimeInterval(1))
+            updatedAt: firstDate.addingTimeInterval(60))
         let repeatedLow = codexWeeklySnapshot(
             accountLabel: accountLabel,
             usedPercent: 0,
             resetsAt: nextWeeklyReset,
-            updatedAt: weeklyReset.addingTimeInterval(60))
+            updatedAt: firstDate.addingTimeInterval(120))
 
         for snapshot in [before, reset, repeatedLow] {
             await store.recordPlanUtilizationHistorySample(
@@ -721,7 +721,7 @@ extension UsageStorePlanUtilizationTests {
             accountLabel: accountLabel,
             usedPercent: 0,
             resetsAt: nextWeeklyReset,
-            updatedAt: weeklyReset.addingTimeInterval(1))
+            updatedAt: firstDate.addingTimeInterval(120))
 
         await store.recordPlanUtilizationHistorySample(
             provider: .codex,
@@ -824,7 +824,7 @@ extension UsageStorePlanUtilizationTests {
             accountLabel: accountLabel,
             usedPercent: 0,
             resetsAt: weeklyReset.addingTimeInterval(7 * 24 * 3600),
-            updatedAt: weeklyReset.addingTimeInterval(1))
+            updatedAt: firstDate.addingTimeInterval(180))
 
         for snapshot in [before, regressedHigh, transientLow] {
             await store.recordPlanUtilizationHistorySample(
