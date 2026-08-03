@@ -6,9 +6,13 @@ read_when:
   - Adjusting Kimi menu labels or settings
 ---
 
-# Kimi Provider
+# Kimi Code Provider
 
 Tracks usage for [Kimi For Coding](https://www.kimi.com/code) in CodexBar.
+
+Kimi Code is distinct from the Moonshot/Kimi Open Platform. China-issued Open Platform keys and balance
+belong under **Moonshot / Kimi Open Platform** with the China mainland region selected; they are not Kimi
+Code subscription credentials.
 
 ## Features
 

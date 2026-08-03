@@ -35,7 +35,7 @@ enum ProviderChoice: String, AppEnum {
         .qwencloud: DisplayRepresentation(title: "Qwen Cloud"),
         .antigravity: DisplayRepresentation(title: "Antigravity"),
         .cursor: DisplayRepresentation(title: "Cursor"),
-        .zai: DisplayRepresentation(title: "z.ai"),
+        .zai: DisplayRepresentation(title: "z.ai / GLM"),
         .copilot: DisplayRepresentation(title: "Copilot"),
         .devin: DisplayRepresentation(title: "Devin"),
         .minimax: DisplayRepresentation(title: "MiniMax"),
@@ -43,7 +43,7 @@ enum ProviderChoice: String, AppEnum {
         .opencode: DisplayRepresentation(title: "OpenCode"),
         .opencodego: DisplayRepresentation(title: "OpenCode Go"),
         .mistral: DisplayRepresentation(title: "Mistral"),
-        .kimi: DisplayRepresentation(title: "Kimi"),
+        .kimi: DisplayRepresentation(title: "Kimi Code"),
     ]
 
     var provider: UsageProvider {
