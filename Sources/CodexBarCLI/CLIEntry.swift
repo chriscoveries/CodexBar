@@ -186,13 +186,13 @@ enum CodexBarCLI {
                 signature: costSignature),
             CommandDescriptor(
                 name: "sessions",
-                abstract: "List live Codex and Claude Code sessions",
+                abstract: "List live Codex, Claude Code, pi, and OMP sessions",
                 discussion: nil,
                 signature: CommandSignature(),
                 subcommands: [
                     CommandDescriptor(
                         name: "list",
-                        abstract: "List live Codex and Claude Code sessions",
+                        abstract: "List live Codex, Claude Code, pi, and OMP sessions",
                         discussion: nil,
                         signature: sessionsSignature),
                     CommandDescriptor(

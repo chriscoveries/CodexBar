@@ -11,6 +11,7 @@ public enum ProviderPluginPrototype {
 
 public final class ScriptFetchStrategy: ProviderFetchStrategy, @unchecked Sendable {
     public typealias SecretResolver = @Sendable ([String: String]) -> String?
+    public typealias SecretsResolver = @Sendable (ProviderFetchContext) -> [String: String]?
     public typealias EnabledResolver = @Sendable ([String: String]) -> Bool
 
     public let id: String
@@ -19,7 +20,7 @@ public final class ScriptFetchStrategy: ProviderFetchStrategy, @unchecked Sendab
     private let provider: UsageProvider
     private let bundledPlugin: String
     private let secretKey: String
-    private let resolveSecret: SecretResolver
+    private let resolveSecrets: SecretsResolver
     private let isEnabled: EnabledResolver
     private let transport: any ProviderHTTPTransport
     private let timeout: TimeInterval
@@ -42,19 +43,43 @@ public final class ScriptFetchStrategy: ProviderFetchStrategy, @unchecked Sendab
         self.secretKey = secretKey
         self.transport = transport
         self.timeout = timeout
-        self.resolveSecret = resolveSecret
+        self.resolveSecrets = { context in
+            guard let secret = resolveSecret(context.env) else { return nil }
+            return [secretKey: secret]
+        }
+        self.isEnabled = isEnabled
+    }
+
+    public init(
+        id: String,
+        provider: UsageProvider,
+        bundledPlugin: String,
+        secretKey: String,
+        transport: any ProviderHTTPTransport = ProviderHTTPClient.shared,
+        timeout: TimeInterval = ProviderPluginRuntime.defaultTimeout,
+        resolveSecrets: @escaping SecretsResolver,
+        isEnabled: @escaping EnabledResolver = { ProviderPluginPrototype.isEnabled(environment: $0) })
+    {
+        self.id = id
+        self.provider = provider
+        self.bundledPlugin = bundledPlugin
+        self.secretKey = secretKey
+        self.transport = transport
+        self.timeout = timeout
+        self.resolveSecrets = resolveSecrets
         self.isEnabled = isEnabled
     }
 
     public func isAvailable(_ context: ProviderFetchContext) async -> Bool {
-        self.isEnabled(context.env) && self.resolveSecret(context.env) != nil
+        guard self.isEnabled(context.env), let secrets = self.resolveSecrets(context) else { return false }
+        return secrets[self.secretKey]?.isEmpty == false
     }
 
     public func fetch(_ context: ProviderFetchContext) async throws -> ProviderFetchResult {
         guard self.isEnabled(context.env) else {
             throw ProviderPluginError.load("JavaScript provider prototype is disabled")
         }
-        guard let secret = self.resolveSecret(context.env) else {
+        guard let secrets = self.resolveSecrets(context), secrets[self.secretKey]?.isEmpty == false else {
             throw ProviderPluginError.secretAccess("required provider secret is unavailable")
         }
         let runtime = try self.loadedRuntime()
@@ -62,7 +87,7 @@ public final class ScriptFetchStrategy: ProviderFetchStrategy, @unchecked Sendab
             throw ProviderPluginError.invalidManifest(
                 "bundled plugin id '\(runtime.manifest.id.rawValue)' does not match '\(self.provider.rawValue)'")
         }
-        let usage = try await runtime.fetchUsage(secrets: [self.secretKey: secret])
+        let usage = try await runtime.fetchUsage(secrets: secrets)
         return self.makeResult(usage: usage, sourceLabel: "js")
     }
 

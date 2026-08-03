@@ -117,17 +117,20 @@ extension CodexBarCLI {
         CodexBar \(version)
 
         Usage:
-          codexbar sessions [--json] [--pretty]
+          codexbar sessions [--json|--json-v2] [--pretty]
           codexbar sessions focus <id>
 
         Description:
-          List live local Codex and Claude Code agent sessions.
+          List live local Codex, Claude Code, pi, and OMP agent sessions.
+          --json emits the legacy v1 array with only Codex and Claude providers.
+          --json-v2 emits the complete current array, including Pi-family sessions.
           JSON uses stable AgentSession field names and ISO-8601 dates.
           Focus activates the owning terminal or desktop app on macOS.
 
         Examples:
           codexbar sessions
           codexbar sessions --json
+          codexbar sessions --json-v2
           codexbar sessions focus 019f3497-73bf-7df3-a173-4f67d968914a
         """
     }
@@ -426,7 +429,7 @@ extension CodexBarCLI {
                        [--json-output] [--log-level <trace|verbose|debug|info|warning|error|critical>] [-v|--verbose]
                        [--provider \(ProviderHelp.list)] [--no-color] [--pretty] [--refresh]
                        [--days <days>] [--group-by project]
-          codexbar sessions [--json] [--pretty]
+          codexbar sessions [--json|--json-v2] [--pretty]
           codexbar sessions focus <id>
           codexbar dashboard [--pretty] [--timeout <seconds>]
           codexbar serve [--host <host>] [--port <port>] [--refresh-interval <seconds>]
