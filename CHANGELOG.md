@@ -2,6 +2,9 @@
 
 ## 0.47.1 — Unreleased
 
+### Added
+- Kimi/GLM: distinguish Kimi Code from the regional Open Platform, bind China and international keys to their issuing hosts, and show GLM Coding Plan's 5-hour window as primary with MCP separate (#2351). Thanks @Leehow!
+
 ### Fixed
 
 ## 0.47.0 — 2026-08-03
