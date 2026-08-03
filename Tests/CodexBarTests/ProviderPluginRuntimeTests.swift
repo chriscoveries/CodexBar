@@ -132,7 +132,12 @@ struct ProviderPluginRuntimeTests {
         #"details: [{ rows: [{ label: "ok", value: 1 }] }]"#,
         #"details: [{ rows: [], chart: { kind: "pie", points: [] } }]"#,
         #"details: [{ rows: [], chart: { kind: "bars", points: [{ label: "x", value: NaN }] } }]"#,
-        #"details: [{ rows: [], chart: { kind: "bars", points: Array.from({length: 121}, (_, i) => ({label: String(i), value: i})) } }]"#,
+        #"""
+        details: [{
+          rows: [],
+          chart: { kind: "bars", points: Array.from({length: 121}, (_, i) => ({label: String(i), value: i})) },
+        }]
+        """#,
     ])
     func `present invalid details fail the fetch`(body: String) async throws {
         let runtime = try ProviderPluginRuntime(source: Self.plugin(fetchBody: "return { \(body) };"))

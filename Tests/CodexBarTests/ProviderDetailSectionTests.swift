@@ -82,6 +82,6 @@ struct ProviderDetailSectionTests {
         #expect(snapshot.identity?.providerID == .synthetic)
         #expect(snapshot.details.isEmpty)
         let encoded = try JSONEncoder().encode(snapshot)
-        #expect(!String(decoding: encoded, as: UTF8.self).contains("\"details\""))
+        #expect(String(bytes: encoded, encoding: .utf8)?.contains("\"details\"") == false)
     }
 }
