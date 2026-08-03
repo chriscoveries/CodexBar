@@ -34,6 +34,22 @@ struct ProviderRegistryTests {
     }
 
     @Test
+    func `every provider has a descriptor and implementation registration`() {
+        let expected = Set(UsageProvider.allCases)
+        let descriptors = Set(ProviderDescriptorRegistry.all.map(\.id))
+        let implementations = Set(ProviderImplementationRegistry.all.map(\.id))
+
+        let missingDescriptors = expected.subtracting(descriptors).map(\.rawValue).sorted()
+        let missingImplementations = expected.subtracting(implementations).map(\.rawValue).sorted()
+        #expect(
+            missingDescriptors.isEmpty,
+            "Missing descriptor manifest entries: \(missingDescriptors.joined(separator: ", "))")
+        #expect(
+            missingImplementations.isEmpty,
+            "Missing implementation manifest entries: \(missingImplementations.joined(separator: ", "))")
+    }
+
+    @Test
     func `minimax sorts after zai in registry`() {
         let ids = ProviderDescriptorRegistry.all.map(\.id)
         guard let zaiIndex = ids.firstIndex(of: .zai),
