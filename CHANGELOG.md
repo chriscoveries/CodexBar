@@ -2,6 +2,9 @@
 
 ## 0.47.1 — Unreleased
 
+### Added
+- Kimi: enrich Code API and CLI usage with the monthly membership pool from a signed-in Kimi Desktop session, using WAL-safe read-only cookie access (#2351). Thanks @Leehow!
+
 ### Fixed
 
 ## 0.47.0 — 2026-08-03

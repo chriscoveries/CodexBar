@@ -14,6 +14,7 @@ Tracks usage for [Kimi For Coding](https://www.kimi.com/code) in CodexBar.
 
 - Displays weekly request quota (from membership tier)
 - Shows current 5-hour rate limit usage
+- Enriches Code API/CLI usage with the monthly membership pool when a web session is available
 - API-key, Kimi Code CLI, automatic cookie, and manual cookie authentication methods
 - Automatic refresh countdown
 
@@ -64,6 +65,11 @@ reuse; use an explicit API key for endpoint-override testing.
 
 **Note**: Requires Full Disk Access to read browser cookies (System Settings → Privacy & Security → Full Disk Access → CodexBar).
 
+Automatic mode also checks the official Kimi Desktop app before importing browser cookies. Its Chromium
+Cookies database is opened read-only: active WAL databases use SQLite's normal WAL-aware path, while idle
+WAL-mode databases with no sidecars use an immutable read-only fallback. CodexBar never creates or modifies
+Kimi Desktop database files.
+
 ### Method 4: Manual Token Entry
 
 For advanced users or when automatic import fails:
@@ -92,7 +98,12 @@ When multiple sources are available, CodexBar uses this order:
 2. Fresh Kimi Code CLI access token (`~/.kimi-code/credentials/kimi-code.json`)
 3. Manual cookie/token (from Settings UI) when web fallback is used
 4. Cookie environment variable (`KIMI_AUTH_TOKEN`)
-5. Browser cookies (Arc → Chrome → Safari → Edge → Brave → Chromium)
+5. Kimi Desktop `kimi-auth` cookie
+6. Browser cookies (Arc → Chrome → Safari → Edge → Brave → Chromium)
+
+For Code API and CLI results, sources 3–6 are best-effort enrichment only: the required Code usage remains
+available if the membership request fails. Setting **Cookie source** to **Off** disables this enrichment and
+does not inspect Kimi Desktop or browser cookies.
 
 **Note**: Browser cookie import requires Full Disk Access permission.
 
