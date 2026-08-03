@@ -25,7 +25,7 @@ public enum PerplexityProviderDescriptor {
                 statusPageURL: nil,
                 statusLinkURL: "https://status.perplexity.com/"),
             branding: ProviderBranding(
-                iconStyle: .perplexity,
+                iconStyle: .init(provider: .perplexity),
                 iconResourceName: "ProviderIcon-perplexity",
                 color: ProviderColor(red: 32 / 255, green: 178 / 255, blue: 170 / 255),
                 confettiPalette: [

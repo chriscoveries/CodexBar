@@ -24,7 +24,7 @@ public enum AmpProviderDescriptor {
                 dashboardURL: "https://ampcode.com/settings/usage",
                 statusPageURL: nil),
             branding: ProviderBranding(
-                iconStyle: .amp,
+                iconStyle: .init(provider: .amp),
                 iconResourceName: "ProviderIcon-amp",
                 color: ProviderColor(red: 220 / 255, green: 38 / 255, blue: 38 / 255),
                 confettiPalette: [

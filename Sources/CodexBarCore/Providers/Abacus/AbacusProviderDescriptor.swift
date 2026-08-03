@@ -29,7 +29,7 @@ public enum AbacusProviderDescriptor {
                 statusPageURL: nil,
                 statusLinkURL: nil),
             branding: ProviderBranding(
-                iconStyle: .abacus,
+                iconStyle: .init(provider: .abacus),
                 iconResourceName: "ProviderIcon-abacus",
                 color: ProviderColor(red: 56 / 255, green: 189 / 255, blue: 248 / 255),
                 confettiPalette: [

@@ -24,7 +24,7 @@ public enum MiMoProviderDescriptor {
                 dashboardURL: "https://platform.xiaomimimo.com/#/console/balance",
                 statusPageURL: nil),
             branding: ProviderBranding(
-                iconStyle: .mimo,
+                iconStyle: .init(provider: .mimo),
                 iconResourceName: "ProviderIcon-mimo",
                 color: ProviderColor(red: 1.0, green: 105 / 255, blue: 0),
                 confettiPalette: [

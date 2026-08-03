@@ -24,7 +24,7 @@ public enum MoonshotProviderDescriptor {
                 dashboardURL: "https://platform.moonshot.ai/console/account",
                 statusPageURL: nil),
             branding: ProviderBranding(
-                iconStyle: .kimi,
+                iconStyle: .init(provider: .kimi),
                 iconResourceName: "ProviderIcon-kimi",
                 color: ProviderColor(red: 32 / 255, green: 93 / 255, blue: 235 / 255),
                 confettiPalette: [

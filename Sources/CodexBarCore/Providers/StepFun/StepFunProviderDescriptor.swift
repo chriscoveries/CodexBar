@@ -25,7 +25,7 @@ public enum StepFunProviderDescriptor {
                 statusPageURL: nil,
                 statusLinkURL: nil),
             branding: ProviderBranding(
-                iconStyle: .stepfun,
+                iconStyle: .init(provider: .stepfun),
                 iconResourceName: "ProviderIcon-stepfun",
                 color: ProviderColor(red: 0.13, green: 0.59, blue: 0.95),
                 confettiPalette: [

@@ -24,7 +24,7 @@ public enum BedrockProviderDescriptor {
                 statusPageURL: nil,
                 statusLinkURL: "https://health.aws.amazon.com/health/status"),
             branding: ProviderBranding(
-                iconStyle: .bedrock,
+                iconStyle: .init(provider: .bedrock),
                 iconResourceName: "ProviderIcon-bedrock",
                 color: ProviderColor(red: 1, green: 0.6, blue: 0),
                 confettiPalette: [

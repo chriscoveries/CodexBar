@@ -26,7 +26,7 @@ public enum GrokProviderDescriptor {
                 statusPageURL: nil,
                 statusLinkURL: "https://status.x.ai"),
             branding: ProviderBranding(
-                iconStyle: .grok,
+                iconStyle: .init(provider: .grok),
                 iconResourceName: "ProviderIcon-grok",
                 color: ProviderColor(red: 16 / 255, green: 163 / 255, blue: 127 / 255),
                 confettiPalette: [

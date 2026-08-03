@@ -22,7 +22,7 @@ public enum Sub2APIProviderDescriptor {
             dashboardURL: nil,
             statusPageURL: nil),
         branding: ProviderBranding(
-            iconStyle: .sub2api,
+            iconStyle: .init(provider: .sub2api),
             iconResourceName: "ProviderIcon-sub2api",
             color: ProviderColor(red: 45 / 255, green: 198 / 255, blue: 216 / 255),
             confettiPalette: [

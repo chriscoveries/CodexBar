@@ -25,7 +25,7 @@ public enum DeepgramProviderDescriptor {
                 statusPageURL: nil,
                 statusLinkURL: "https://status.deepgram.com"),
             branding: ProviderBranding(
-                iconStyle: .deepgram,
+                iconStyle: .init(provider: .deepgram),
                 iconResourceName: "ProviderIcon-deepgram",
                 color: ProviderColor(
                     red: 100 / 255,

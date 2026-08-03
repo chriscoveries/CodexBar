@@ -25,7 +25,7 @@ public enum GroqProviderDescriptor {
                 statusPageURL: nil,
                 statusLinkURL: "https://status.groq.com"),
             branding: ProviderBranding(
-                iconStyle: .groq,
+                iconStyle: .init(provider: .groq),
                 iconResourceName: "ProviderIcon-groq",
                 color: ProviderColor(red: 245 / 255, green: 104 / 255, blue: 68 / 255),
                 confettiPalette: [

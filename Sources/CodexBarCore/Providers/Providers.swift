@@ -73,72 +73,41 @@ public enum UsageProvider: String, CaseIterable, Sendable, Codable {
 
 // swiftformat:enable sortDeclarations
 
-public enum IconStyle: String, Sendable, CaseIterable {
-    case codex
-    case openai
-    case claude
-    case clinepass
-    case zai
-    case minimax
-    case manus
-    case gemini
-    case antigravity
-    case cursor
-    case opencode
-    case opencodego
-    case alibaba
-    case qwencloud
-    case factory
-    case copilot
-    case devin
-    case kimi
-    case kilo
-    case kiro
-    case vertexai
-    case augment
-    case jetbrains
-    case moonshot
-    case amp
-    case t3chat
-    case ollama
-    case synthetic
-    case warp
-    case openrouter
-    case elevenlabs
-    case windsurf
-    case zed
-    case perplexity
-    case mimo
-    case doubao
-    case sakana
-    case abacus
-    case mistral
-    case deepseek
-    case deepinfra
-    case codebuff
-    case crof
-    case venice
-    case commandcode
-    case qoder
-    case stepfun
-    case bedrock
-    case grok
-    case groq
-    case llmproxy
-    case litellm
-    case deepgram
-    case poe
-    case chutes
-    case neuralwatt
-    case clawrouter
-    case longcat
-    case sub2api
-    case wayfinder
-    case zenmux
-    case aiand
-    case zoommate
-    case xai
-    case combined
+public struct IconStyle: RawRepresentable, Hashable, Sendable, CaseIterable, CustomStringConvertible {
+    public let rawValue: String
+
+    public var description: String {
+        self.rawValue
+    }
+
+    public init(rawValue: String) {
+        self.rawValue = rawValue
+    }
+
+    public init(provider: UsageProvider) {
+        self.init(rawValue: provider.rawValue)
+    }
+
+    public static var allCases: [IconStyle] {
+        UsageProvider.allCases.map(Self.init(provider:)) + [.combined]
+    }
+
+    // Named styles below carry renderer behavior or preserve source-compatible call sites.
+    public static let codex = Self(provider: .codex)
+    public static let claude = Self(provider: .claude)
+    public static let gemini = Self(provider: .gemini)
+    public static let antigravity = Self(provider: .antigravity)
+    public static let cursor = Self(provider: .cursor)
+    public static let factory = Self(provider: .factory)
+    public static let copilot = Self(provider: .copilot)
+    public static let commandcode = Self(provider: .commandcode)
+    public static let kimi = Self(provider: .kimi)
+    public static let mimo = Self(provider: .mimo)
+    public static let mistral = Self(provider: .mistral)
+    public static let qoder = Self(provider: .qoder)
+    public static let warp = Self(provider: .warp)
+    public static let perplexity = Self(provider: .perplexity)
+    public static let combined = Self(rawValue: "combined")
 }
 
 public struct ProviderMetadata: Sendable {

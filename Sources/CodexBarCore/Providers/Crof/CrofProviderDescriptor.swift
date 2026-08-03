@@ -25,7 +25,7 @@ public enum CrofProviderDescriptor {
                 statusPageURL: nil,
                 statusLinkURL: nil),
             branding: ProviderBranding(
-                iconStyle: .crof,
+                iconStyle: .init(provider: .crof),
                 iconResourceName: "ProviderIcon-crof",
                 color: ProviderColor(red: 0.18, green: 0.67, blue: 0.58),
                 confettiPalette: [

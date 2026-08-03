@@ -24,7 +24,7 @@ public enum ManusProviderDescriptor {
                 dashboardURL: "https://manus.im",
                 statusPageURL: nil),
             branding: ProviderBranding(
-                iconStyle: .manus,
+                iconStyle: .init(provider: .manus),
                 iconResourceName: "ProviderIcon-manus",
                 color: ProviderColor(red: 52 / 255, green: 50 / 255, blue: 45 / 255),
                 confettiPalette: [

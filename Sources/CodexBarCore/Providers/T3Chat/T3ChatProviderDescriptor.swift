@@ -25,7 +25,7 @@ public enum T3ChatProviderDescriptor {
                 subscriptionDashboardURL: "https://t3.chat/settings/subscription",
                 statusPageURL: nil),
             branding: ProviderBranding(
-                iconStyle: .t3chat,
+                iconStyle: .init(provider: .t3chat),
                 iconResourceName: "ProviderIcon-t3chat",
                 color: ProviderColor(red: 245 / 255, green: 102 / 255, blue: 71 / 255),
                 confettiPalette: [

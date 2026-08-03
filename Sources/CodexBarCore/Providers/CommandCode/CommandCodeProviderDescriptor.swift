@@ -26,7 +26,7 @@ public enum CommandCodeProviderDescriptor {
                 statusPageURL: nil,
                 statusLinkURL: nil),
             branding: ProviderBranding(
-                iconStyle: .commandcode,
+                iconStyle: .init(provider: .commandcode),
                 iconResourceName: "ProviderIcon-commandcode",
                 color: ProviderColor(hex: 0xA04DFD),
                 confettiPalette: [

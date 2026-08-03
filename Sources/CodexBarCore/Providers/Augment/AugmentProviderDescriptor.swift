@@ -48,7 +48,7 @@ public enum AugmentProviderDescriptor {
                 dashboardURL: "https://app.augmentcode.com/account/subscription",
                 statusPageURL: "https://status.augmentcode.com"),
             branding: ProviderBranding(
-                iconStyle: .augment,
+                iconStyle: .init(provider: .augment),
                 iconResourceName: "ProviderIcon-augment",
                 color: ProviderColor(red: 99 / 255, green: 102 / 255, blue: 241 / 255),
                 confettiPalette: [

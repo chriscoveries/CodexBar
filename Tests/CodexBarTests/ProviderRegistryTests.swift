@@ -50,6 +50,23 @@ struct ProviderRegistryTests {
     }
 
     @Test
+    func `icon styles derive from provider identifiers while preserving shared styles`() {
+        #expect(IconStyle.allCases == UsageProvider.allCases.map(IconStyle.init(provider:)) + [.combined])
+
+        let sharedStyles: [UsageProvider: UsageProvider] = [
+            .azureopenai: .openai,
+            .alibabatokenplan: .alibaba,
+            .moonshot: .kimi,
+        ]
+        for descriptor in ProviderDescriptorRegistry.all {
+            let expectedProvider = sharedStyles[descriptor.id] ?? descriptor.id
+            #expect(
+                descriptor.branding.iconStyle == IconStyle(provider: expectedProvider),
+                "Unexpected icon style for \(descriptor.id.rawValue).")
+        }
+    }
+
+    @Test
     func `minimax sorts after zai in registry`() {
         let ids = ProviderDescriptorRegistry.all.map(\.id)
         guard let zaiIndex = ids.firstIndex(of: .zai),

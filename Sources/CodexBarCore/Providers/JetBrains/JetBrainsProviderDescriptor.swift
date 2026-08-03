@@ -23,7 +23,7 @@ public enum JetBrainsProviderDescriptor {
                 dashboardURL: nil,
                 statusPageURL: nil),
             branding: ProviderBranding(
-                iconStyle: .jetbrains,
+                iconStyle: .init(provider: .jetbrains),
                 iconResourceName: "ProviderIcon-jetbrains",
                 color: ProviderColor(red: 255 / 255, green: 51 / 255, blue: 153 / 255),
                 confettiPalette: [

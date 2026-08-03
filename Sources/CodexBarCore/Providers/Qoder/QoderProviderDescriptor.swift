@@ -25,7 +25,7 @@ public enum QoderProviderDescriptor {
                 statusPageURL: nil,
                 statusLinkURL: nil),
             branding: ProviderBranding(
-                iconStyle: .qoder,
+                iconStyle: .init(provider: .qoder),
                 iconResourceName: "ProviderIcon-qoder",
                 color: ProviderColor(red: 16 / 255, green: 185 / 255, blue: 129 / 255),
                 confettiPalette: [

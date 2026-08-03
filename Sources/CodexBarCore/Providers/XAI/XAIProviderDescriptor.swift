@@ -22,7 +22,7 @@ public enum XAIProviderDescriptor {
                 statusPageURL: nil,
                 statusLinkURL: "https://status.x.ai"),
             branding: ProviderBranding(
-                iconStyle: .xai,
+                iconStyle: .init(provider: .xai),
                 iconResourceName: "ProviderIcon-xai",
                 color: ProviderColor(red: 142 / 255, green: 142 / 255, blue: 147 / 255),
                 confettiPalette: [

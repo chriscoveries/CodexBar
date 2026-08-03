@@ -24,7 +24,7 @@ public enum VertexAIProviderDescriptor {
                 statusPageURL: nil,
                 statusLinkURL: "https://status.cloud.google.com"),
             branding: ProviderBranding(
-                iconStyle: .vertexai,
+                iconStyle: .init(provider: .vertexai),
                 iconResourceName: "ProviderIcon-vertexai",
                 color: ProviderColor(red: 66 / 255, green: 133 / 255, blue: 244 / 255),
                 confettiPalette: [

@@ -25,7 +25,7 @@ public enum AntigravityProviderDescriptor {
                 statusLinkURL: "https://www.google.com/appsstatus/dashboard/products/npdyhgECDJ6tB66MxXyo/history",
                 statusWorkspaceProductID: "npdyhgECDJ6tB66MxXyo"),
             branding: ProviderBranding(
-                iconStyle: .antigravity,
+                iconStyle: .init(provider: .antigravity),
                 iconResourceName: "ProviderIcon-antigravity",
                 color: ProviderColor(red: 96 / 255, green: 186 / 255, blue: 126 / 255),
                 confettiPalette: [

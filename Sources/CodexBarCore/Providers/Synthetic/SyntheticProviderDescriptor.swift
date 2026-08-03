@@ -23,7 +23,7 @@ public enum SyntheticProviderDescriptor {
                 dashboardURL: nil,
                 statusPageURL: nil),
             branding: ProviderBranding(
-                iconStyle: .synthetic,
+                iconStyle: .init(provider: .synthetic),
                 iconResourceName: "ProviderIcon-synthetic",
                 color: ProviderColor(red: 20 / 255, green: 20 / 255, blue: 20 / 255),
                 confettiPalette: [

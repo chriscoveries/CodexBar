@@ -25,7 +25,7 @@ public enum VeniceProviderDescriptor {
                 statusPageURL: nil,
                 statusLinkURL: nil),
             branding: ProviderBranding(
-                iconStyle: .venice,
+                iconStyle: .init(provider: .venice),
                 iconResourceName: "ProviderIcon-venice",
                 color: ProviderColor(red: 0.2, green: 0.6, blue: 1.0),
                 confettiPalette: [

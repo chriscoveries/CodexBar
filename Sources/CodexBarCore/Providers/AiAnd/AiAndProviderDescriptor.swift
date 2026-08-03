@@ -21,7 +21,7 @@ public enum AiAndProviderDescriptor {
                 dashboardURL: "https://console.aiand.com",
                 statusPageURL: nil),
             branding: ProviderBranding(
-                iconStyle: .aiand,
+                iconStyle: .init(provider: .aiand),
                 iconResourceName: "ProviderIcon-aiand",
                 color: ProviderColor(red: 226 / 255, green: 92 / 255, blue: 43 / 255),
                 confettiPalette: [

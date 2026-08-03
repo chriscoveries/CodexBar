@@ -26,7 +26,7 @@ public enum CursorProviderDescriptor {
                 statusPageURL: "https://status.cursor.com",
                 statusLinkURL: nil),
             branding: ProviderBranding(
-                iconStyle: .cursor,
+                iconStyle: .init(provider: .cursor),
                 iconResourceName: "ProviderIcon-cursor",
                 color: ProviderColor(red: 0 / 255, green: 191 / 255, blue: 165 / 255),
                 confettiPalette: [

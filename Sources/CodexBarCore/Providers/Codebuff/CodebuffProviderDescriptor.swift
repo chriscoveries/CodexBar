@@ -25,7 +25,7 @@ public enum CodebuffProviderDescriptor {
                 statusPageURL: nil,
                 statusLinkURL: nil),
             branding: ProviderBranding(
-                iconStyle: .codebuff,
+                iconStyle: .init(provider: .codebuff),
                 iconResourceName: "ProviderIcon-codebuff",
                 color: ProviderColor(red: 68 / 255, green: 255 / 255, blue: 0 / 255),
                 confettiPalette: [

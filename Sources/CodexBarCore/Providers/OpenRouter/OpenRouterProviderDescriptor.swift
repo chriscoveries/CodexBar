@@ -24,7 +24,7 @@ public enum OpenRouterProviderDescriptor {
                 statusPageURL: nil,
                 statusLinkURL: "https://status.openrouter.ai"),
             branding: ProviderBranding(
-                iconStyle: .openrouter,
+                iconStyle: .init(provider: .openrouter),
                 iconResourceName: "ProviderIcon-openrouter",
                 color: ProviderColor(red: 100 / 255, green: 103 / 255, blue: 242 / 255),
                 confettiPalette: [

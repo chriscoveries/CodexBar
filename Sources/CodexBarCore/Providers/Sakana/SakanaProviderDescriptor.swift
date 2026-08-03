@@ -24,7 +24,7 @@ public enum SakanaProviderDescriptor {
                 dashboardURL: "https://console.sakana.ai/billing",
                 statusPageURL: nil),
             branding: ProviderBranding(
-                iconStyle: .sakana,
+                iconStyle: .init(provider: .sakana),
                 iconResourceName: "ProviderIcon-sakana",
                 color: ProviderColor(red: 0.16, green: 0.46, blue: 0.86),
                 confettiPalette: [
