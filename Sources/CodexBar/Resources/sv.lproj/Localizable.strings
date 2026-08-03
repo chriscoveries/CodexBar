@@ -838,7 +838,7 @@
 "Pace: %@" = "Takt: %@";
 "Pace: %@ · %@" = "Takt: %@ · %@";
 "%@ · %@" = "%@ · %@";
-"≈ %d%% run-out risk" = "≈ %d %% risk att ta slut";
+"(%d%% risk)" = "(%d %% risk att ta slut)";
 "%d%% in deficit" = "%d %% underskott";
 "%d%% in reserve" = "%d %% reserv";
 "usage_percent_suffix_left" = "kvar";

@@ -805,7 +805,7 @@
 "Pace: %@" = "节奏：%@";
 "Pace: %@ · %@" = "节奏：%@ · %@";
 "%@ · %@" = "%@ · %@";
-"≈ %d%% run-out risk" = "≈ %d%% 耗尽风险";
+"(%d%% risk)" = "(%d%% 耗尽风险)";
 "%d%% in deficit" = "超额 %d%%";
 "%d%% in reserve" = "余量 %d%%";
 "usage_percent_suffix_left" = "剩余";
