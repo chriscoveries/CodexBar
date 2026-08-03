@@ -5,7 +5,20 @@ import WidgetKit
 #endif
 
 extension UsageStore {
+    /// Tests must never touch the real app-group container: the widget-snapshot
+    /// `open()` can block forever behind macOS 26 app-data (TCC) gating, hanging
+    /// the whole suite. Only a test that installs `_test_widgetSnapshotSaveOverride`
+    /// opts into snapshot persistence; its container load is already stubbed out.
+    static func shouldPersistWidgetSnapshot(isRunningTests: Bool, hasSaveOverride: Bool) -> Bool {
+        !isRunningTests || hasSaveOverride
+    }
+
     func persistWidgetSnapshot(reason: String) {
+        guard Self.shouldPersistWidgetSnapshot(
+            isRunningTests: SettingsStore.isRunningTests,
+            hasSaveOverride: self._test_widgetSnapshotSaveOverride != nil)
+        else { return }
+
         #if DEBUG
         // Unsigned test processes must not cross into the real app-group container. Snapshot tests
         // opt in with an in-memory save override or an injected file URL.
