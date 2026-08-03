@@ -86,6 +86,20 @@ struct AmpUsageParserTests {
     }
 
     @Test
+    func `does not infer daily reset from percentage alone`() throws {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let snapshot = try AmpUsageParser.parse(
+            displayText: "Signed in as user@example.com\nAmp Free: 61% remaining",
+            now: now)
+        let usage = snapshot.toUsageSnapshot(now: now)
+
+        #expect(snapshot.freeUsed == 39)
+        #expect(snapshot.freeResetDescription == nil)
+        #expect(usage.primary?.resetsAt == nil)
+        #expect(usage.primary?.resetDescription == nil)
+    }
+
+    @Test
     func `parses current amp subscription and resets free usage at 8 pm EDT`() throws {
         let now = Date(timeIntervalSince1970: 1_785_794_400) // 2026-08-03 18:00 EDT
         let output = """

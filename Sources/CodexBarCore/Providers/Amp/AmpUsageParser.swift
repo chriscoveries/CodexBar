@@ -30,7 +30,7 @@ enum AmpUsageParser {
             #"\s*/\s*\$?"# + amountPattern +
             #"\s+remaining(?:\s*\(replenishes\s*\+\$?"# + amountPattern + #"\s*/\s*hour\))?"#
         let freePercentPattern = #"(?im)^\s*Amp Free:\s*"# + amountPattern +
-            #"\s*%\s+remaining(?:\s+today)?(?:\s*\(resets\s+daily\))?"#
+            #"\s*%\s+remaining(?:\s+today)?(?:\s*(\(resets\s+daily\)))?"#
         let subscriptionPattern = #"(?im)^\s*Subscription\s+(.+?):\s*"# + amountPattern +
             #"\s*%\s+other\s+usage\s+and\s+"# + amountPattern +
             #"\s*%\s+orb\s+usage\s+remaining\s*-\s*resets\s+upon\s+renewal\s+in\s+"# +
@@ -65,8 +65,8 @@ enum AmpUsageParser {
                 resetDescription: nil)
         }()
         let freePercentUsage: FreeTierUsage? = {
-            guard let remainingText = self.captures(in: text, pattern: freePercentPattern)?.first,
-                  let remaining = self.number(from: remainingText)
+            guard let free = self.captures(in: text, pattern: freePercentPattern),
+                  let remaining = self.number(from: free[0])
             else { return nil }
             let clampedRemaining = min(100, max(0, remaining))
             return FreeTierUsage(
@@ -74,7 +74,7 @@ enum AmpUsageParser {
                 used: 100 - clampedRemaining,
                 hourlyReplenishment: 0,
                 windowHours: 24,
-                resetDescription: "resets daily")
+                resetDescription: self.nonEmpty(free[1]).map { _ in "resets daily" })
         }()
         let resolvedFreeUsage = freeUsage ?? freePercentUsage
         let subscriptionUsage: AmpSubscriptionUsage? = {
