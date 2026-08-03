@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.46.1 — Unreleased
+## 0.47.0 — 2026-08-03
 
 ### Added
 - Notion AI: add Business and Enterprise workspace allowance tracking for rolling and billing-period windows (#2552). Thanks @n0ah37!
