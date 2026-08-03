@@ -9,6 +9,7 @@ public enum MiMoProviderDescriptor {
             metadata: ProviderMetadata(
                 id: .mimo,
                 displayName: "Xiaomi MiMo",
+                shortDisplayName: "MiMo",
                 sessionLabel: "Credits",
                 weeklyLabel: "Window",
                 opusLabel: nil,
@@ -18,6 +19,7 @@ public enum MiMoProviderDescriptor {
                 toggleTitle: "Show Xiaomi MiMo token plan & balance",
                 cliName: "mimo",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: ProviderBrowserCookieDefaults.mimoCookieImportOrder,

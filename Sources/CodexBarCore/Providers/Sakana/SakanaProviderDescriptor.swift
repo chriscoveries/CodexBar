@@ -9,6 +9,7 @@ public enum SakanaProviderDescriptor {
             metadata: ProviderMetadata(
                 id: .sakana,
                 displayName: "Sakana AI",
+                shortDisplayName: "Sakana",
                 sessionLabel: "5-hour",
                 weeklyLabel: "Weekly",
                 opusLabel: nil,
@@ -18,6 +19,7 @@ public enum SakanaProviderDescriptor {
                 toggleTitle: "Show Sakana AI usage",
                 cliName: "sakana",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: nil,

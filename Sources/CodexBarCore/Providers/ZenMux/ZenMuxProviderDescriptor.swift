@@ -18,6 +18,7 @@ public enum ZenMuxProviderDescriptor {
                 toggleTitle: "Show ZenMux usage",
                 cliName: "zenmux",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 dashboardURL: "https://zenmux.ai/platform/management",
                 statusPageURL: nil),
             branding: ProviderBranding(

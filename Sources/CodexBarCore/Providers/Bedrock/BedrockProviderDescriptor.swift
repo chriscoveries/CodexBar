@@ -9,6 +9,7 @@ public enum BedrockProviderDescriptor {
             metadata: ProviderMetadata(
                 id: .bedrock,
                 displayName: "AWS Bedrock",
+                shortDisplayName: "Bedrock",
                 sessionLabel: "Budget",
                 weeklyLabel: "Cost",
                 opusLabel: nil,
@@ -18,6 +19,7 @@ public enum BedrockProviderDescriptor {
                 toggleTitle: "Show AWS Bedrock usage",
                 cliName: "bedrock",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 dashboardURL: "https://console.aws.amazon.com/bedrock",

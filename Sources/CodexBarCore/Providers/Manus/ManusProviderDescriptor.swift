@@ -18,6 +18,7 @@ public enum ManusProviderDescriptor {
                 toggleTitle: "Show Manus usage",
                 cliName: "manus",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: ProviderBrowserCookieDefaults.defaultImportOrder,

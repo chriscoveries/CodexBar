@@ -18,6 +18,7 @@ public enum FactoryProviderDescriptor {
                 toggleTitle: "Show Droid usage",
                 cliName: "factory",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: ProviderBrowserCookieDefaults.defaultImportOrder,

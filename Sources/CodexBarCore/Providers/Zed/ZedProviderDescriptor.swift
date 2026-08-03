@@ -18,6 +18,7 @@ public enum ZedProviderDescriptor {
                 toggleTitle: "Show Zed usage",
                 cliName: "zed",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 dashboardURL: nil,

@@ -18,6 +18,7 @@ public enum KiroProviderDescriptor {
                 toggleTitle: "Show Kiro usage",
                 cliName: "kiro",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 dashboardURL: "https://app.kiro.dev/account/usage",

@@ -18,6 +18,7 @@ public enum ChutesProviderDescriptor {
                 toggleTitle: "Show Chutes usage",
                 cliName: "chutes",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: nil,

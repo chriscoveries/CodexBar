@@ -18,6 +18,7 @@ public enum OpenAIAPIProviderDescriptor {
                 toggleTitle: "Show OpenAI usage",
                 cliName: "openai",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 dashboardURL: "https://platform.openai.com/usage",

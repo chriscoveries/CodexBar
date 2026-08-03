@@ -18,6 +18,7 @@ public enum QoderProviderDescriptor {
                 toggleTitle: "Show Qoder usage",
                 cliName: "qoder",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: ProviderBrowserCookieDefaults.qoderCookieImportOrder,

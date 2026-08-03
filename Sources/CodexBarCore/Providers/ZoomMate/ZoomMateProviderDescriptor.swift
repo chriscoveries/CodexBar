@@ -18,6 +18,7 @@ public enum ZoomMateProviderDescriptor {
                 toggleTitle: "Show ZoomMate usage",
                 cliName: "zoommate",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: ProviderBrowserCookieDefaults.chromeOnlyImportOrder,

@@ -9,6 +9,7 @@ public enum VertexAIProviderDescriptor {
             metadata: ProviderMetadata(
                 id: .vertexai,
                 displayName: "Vertex AI",
+                shortDisplayName: "Vertex",
                 sessionLabel: "Requests",
                 weeklyLabel: "Tokens",
                 opusLabel: nil,
@@ -18,6 +19,7 @@ public enum VertexAIProviderDescriptor {
                 toggleTitle: "Show Vertex AI usage",
                 cliName: "vertexai",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 dashboardURL: "https://console.cloud.google.com/vertex-ai",

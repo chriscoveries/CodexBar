@@ -19,6 +19,7 @@ public enum Sub2APIProviderDescriptor {
             toggleTitle: "Show sub2api usage",
             cliName: "sub2api",
             defaultEnabled: false,
+            widgetSelectable: false,
             dashboardURL: nil,
             statusPageURL: nil),
         branding: ProviderBranding(

@@ -18,6 +18,7 @@ public enum WayfinderProviderDescriptor {
                 toggleTitle: "Show Wayfinder usage",
                 cliName: "wayfinder",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 dashboardURL: WayfinderSettingsReader.dashboardURL(environment: [:]).absoluteString,
                 statusPageURL: nil),
             branding: ProviderBranding(

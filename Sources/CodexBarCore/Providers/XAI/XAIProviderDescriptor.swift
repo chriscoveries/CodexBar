@@ -18,6 +18,7 @@ public enum XAIProviderDescriptor {
                 toggleTitle: "Show xAI usage",
                 cliName: "xai",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 dashboardURL: "https://console.x.ai",
                 statusPageURL: nil,
                 statusLinkURL: "https://status.x.ai"),

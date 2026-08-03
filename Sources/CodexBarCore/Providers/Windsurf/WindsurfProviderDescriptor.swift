@@ -18,6 +18,7 @@ public enum WindsurfProviderDescriptor {
                 toggleTitle: "Show Windsurf usage",
                 cliName: "windsurf",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 dashboardURL: "https://windsurf.com/subscription/usage",

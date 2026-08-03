@@ -18,6 +18,7 @@ public enum T3ChatProviderDescriptor {
                 toggleTitle: "Show T3 Chat usage",
                 cliName: "t3chat",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: ProviderBrowserCookieDefaults.defaultImportOrder,

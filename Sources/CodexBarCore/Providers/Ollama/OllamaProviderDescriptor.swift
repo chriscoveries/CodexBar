@@ -18,6 +18,7 @@ public enum OllamaProviderDescriptor {
                 toggleTitle: "Show Ollama usage",
                 cliName: "ollama",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: ProviderBrowserCookieDefaults.defaultImportOrder,

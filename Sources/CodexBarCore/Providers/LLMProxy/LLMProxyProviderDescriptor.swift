@@ -18,6 +18,7 @@ public enum LLMProxyProviderDescriptor {
                 toggleTitle: "Show LLM Proxy usage",
                 cliName: "llmproxy",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: nil,

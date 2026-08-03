@@ -18,6 +18,7 @@ public enum DeepInfraProviderDescriptor {
                 toggleTitle: "Show DeepInfra usage",
                 cliName: "deepinfra",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: nil,

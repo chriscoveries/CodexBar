@@ -18,6 +18,7 @@ public enum ClinePassProviderDescriptor {
                 toggleTitle: "Show ClinePass usage",
                 cliName: "clinepass",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: nil,

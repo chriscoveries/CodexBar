@@ -18,6 +18,7 @@ public enum AzureOpenAIProviderDescriptor {
                 toggleTitle: "Show Azure OpenAI status",
                 cliName: "azure-openai",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: nil,

@@ -18,6 +18,7 @@ public enum GroqProviderDescriptor {
                 toggleTitle: "Show Groq usage",
                 cliName: "groqcloud",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: nil,

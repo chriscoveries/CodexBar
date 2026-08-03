@@ -18,6 +18,7 @@ public enum AmpProviderDescriptor {
                 toggleTitle: "Show Amp usage",
                 cliName: "amp",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: ProviderBrowserCookieDefaults.defaultImportOrder,

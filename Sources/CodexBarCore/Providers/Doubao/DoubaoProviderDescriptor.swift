@@ -27,6 +27,7 @@ public enum DoubaoProviderDescriptor {
                 toggleTitle: "Show Doubao usage",
                 cliName: "doubao",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: nil,

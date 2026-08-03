@@ -18,6 +18,7 @@ public enum SyntheticProviderDescriptor {
                 toggleTitle: "Show Synthetic usage",
                 cliName: "synthetic",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 dashboardURL: nil,

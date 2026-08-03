@@ -18,6 +18,7 @@ public enum GrokProviderDescriptor {
                 toggleTitle: "Show Grok usage",
                 cliName: "grok",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: ProviderBrowserCookieDefaults.grokCookieImportOrder,

@@ -18,6 +18,7 @@ public enum NeuralWattProviderDescriptor {
                 toggleTitle: "Show Neuralwatt usage",
                 cliName: "neuralwatt",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: nil,

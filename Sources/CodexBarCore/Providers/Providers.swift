@@ -113,6 +113,7 @@ public struct IconStyle: RawRepresentable, Hashable, Sendable, CaseIterable, Cus
 public struct ProviderMetadata: Sendable {
     public let id: UsageProvider
     public let displayName: String
+    public let shortDisplayName: String
     public let sessionLabel: String
     public let weeklyLabel: String
     public let opusLabel: String?
@@ -122,6 +123,7 @@ public struct ProviderMetadata: Sendable {
     public let toggleTitle: String
     public let cliName: String
     public let defaultEnabled: Bool
+    public let widgetSelectable: Bool
     public let isPrimaryProvider: Bool
     public let usesAccountFallback: Bool
     public let browserCookieOrder: BrowserCookieImportOrder?
@@ -141,6 +143,7 @@ public struct ProviderMetadata: Sendable {
     public init(
         id: UsageProvider,
         displayName: String,
+        shortDisplayName: String? = nil,
         sessionLabel: String,
         weeklyLabel: String,
         opusLabel: String?,
@@ -150,6 +153,7 @@ public struct ProviderMetadata: Sendable {
         toggleTitle: String,
         cliName: String,
         defaultEnabled: Bool,
+        widgetSelectable: Bool = true,
         isPrimaryProvider: Bool = false,
         usesAccountFallback: Bool = false,
         browserCookieOrder: BrowserCookieImportOrder? = nil,
@@ -163,6 +167,7 @@ public struct ProviderMetadata: Sendable {
     {
         self.id = id
         self.displayName = displayName
+        self.shortDisplayName = shortDisplayName ?? displayName
         self.sessionLabel = sessionLabel
         self.weeklyLabel = weeklyLabel
         self.opusLabel = opusLabel
@@ -172,6 +177,7 @@ public struct ProviderMetadata: Sendable {
         self.toggleTitle = toggleTitle
         self.cliName = cliName
         self.defaultEnabled = defaultEnabled
+        self.widgetSelectable = widgetSelectable
         self.isPrimaryProvider = isPrimaryProvider
         self.usesAccountFallback = usesAccountFallback
         self.browserCookieOrder = browserCookieOrder

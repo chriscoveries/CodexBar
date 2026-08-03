@@ -35,6 +35,7 @@ public enum AlibabaTokenPlanProviderDescriptor {
             metadata: ProviderMetadata(
                 id: .alibabatokenplan,
                 displayName: "Alibaba Token Plan",
+                shortDisplayName: "Token Plan",
                 sessionLabel: "Credits",
                 weeklyLabel: "Usage",
                 opusLabel: nil,

@@ -55,6 +55,7 @@ public enum DeepSeekProviderDescriptor {
                 toggleTitle: "Show DeepSeek usage",
                 cliName: "deepseek",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: nil,

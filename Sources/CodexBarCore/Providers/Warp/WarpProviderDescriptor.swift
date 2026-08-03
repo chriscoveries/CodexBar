@@ -18,6 +18,7 @@ public enum WarpProviderDescriptor {
                 toggleTitle: "Show Warp usage",
                 cliName: "warp",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: nil,

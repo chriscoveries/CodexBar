@@ -18,6 +18,7 @@ public enum LongCatProviderDescriptor {
                 toggleTitle: "Show LongCat usage",
                 cliName: "longcat",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: ProviderBrowserCookieDefaults.longcatCookieImportOrder,

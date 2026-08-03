@@ -18,6 +18,7 @@ public enum LiteLLMProviderDescriptor {
                 toggleTitle: "Show LiteLLM usage",
                 cliName: "litellm",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 dashboardURL: nil,

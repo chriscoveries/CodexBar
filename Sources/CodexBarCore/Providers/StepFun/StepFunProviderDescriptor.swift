@@ -18,6 +18,7 @@ public enum StepFunProviderDescriptor {
                 toggleTitle: "Show StepFun usage",
                 cliName: "stepfun",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: nil,

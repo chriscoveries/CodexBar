@@ -42,6 +42,7 @@ public enum AugmentProviderDescriptor {
                 toggleTitle: "Show Augment usage",
                 cliName: "augment",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: browserOrder,

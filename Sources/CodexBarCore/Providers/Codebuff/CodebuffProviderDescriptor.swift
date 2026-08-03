@@ -18,6 +18,7 @@ public enum CodebuffProviderDescriptor {
                 toggleTitle: "Show Codebuff usage",
                 cliName: "codebuff",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: nil,

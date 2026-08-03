@@ -18,6 +18,7 @@ public enum VeniceProviderDescriptor {
                 toggleTitle: "Show Venice usage",
                 cliName: "venice",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: nil,

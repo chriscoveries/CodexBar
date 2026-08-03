@@ -18,6 +18,7 @@ public enum CrofProviderDescriptor {
                 toggleTitle: "Show Crof usage",
                 cliName: "crof",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: nil,

@@ -18,6 +18,7 @@ public enum AiAndProviderDescriptor {
                 toggleTitle: "Show ai& usage",
                 cliName: "aiand",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 dashboardURL: "https://console.aiand.com",
                 statusPageURL: nil),
             branding: ProviderBranding(

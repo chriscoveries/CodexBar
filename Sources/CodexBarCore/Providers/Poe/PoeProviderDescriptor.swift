@@ -18,6 +18,7 @@ public enum PoeProviderDescriptor {
                 toggleTitle: "Show Poe usage",
                 cliName: "poe",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: nil,

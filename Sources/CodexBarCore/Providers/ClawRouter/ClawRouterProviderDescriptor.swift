@@ -18,6 +18,7 @@ public enum ClawRouterProviderDescriptor {
                 toggleTitle: "Show ClawRouter usage",
                 cliName: "clawrouter",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 dashboardURL: "https://clawrouter.openclaw.ai/dashboard/access",
                 statusPageURL: nil),
             branding: ProviderBranding(

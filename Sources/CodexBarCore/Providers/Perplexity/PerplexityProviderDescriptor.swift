@@ -9,6 +9,7 @@ public enum PerplexityProviderDescriptor {
             metadata: ProviderMetadata(
                 id: .perplexity,
                 displayName: "Perplexity",
+                shortDisplayName: "Pplx",
                 sessionLabel: "Credits",
                 weeklyLabel: "Bonus credits",
                 opusLabel: "Purchased",
@@ -18,6 +19,7 @@ public enum PerplexityProviderDescriptor {
                 toggleTitle: "Show Perplexity usage",
                 cliName: "perplexity",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: nil,

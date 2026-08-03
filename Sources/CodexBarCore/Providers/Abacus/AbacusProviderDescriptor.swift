@@ -13,6 +13,7 @@ public enum AbacusProviderDescriptor {
             metadata: ProviderMetadata(
                 id: .abacus,
                 displayName: "Abacus AI",
+                shortDisplayName: "Abacus",
                 sessionLabel: "Credits",
                 weeklyLabel: "Weekly",
                 opusLabel: nil,
@@ -22,6 +23,7 @@ public enum AbacusProviderDescriptor {
                 toggleTitle: "Show Abacus AI usage",
                 cliName: "abacusai",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: ProviderBrowserCookieDefaults.defaultImportOrder,

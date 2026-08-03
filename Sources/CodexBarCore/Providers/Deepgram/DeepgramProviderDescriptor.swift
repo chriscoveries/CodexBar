@@ -18,6 +18,7 @@ public enum DeepgramProviderDescriptor {
                 toggleTitle: "Show Deepgram usage",
                 cliName: "deepgram",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: nil,

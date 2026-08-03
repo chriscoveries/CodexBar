@@ -18,6 +18,7 @@ public enum ElevenLabsProviderDescriptor {
                 toggleTitle: "Show ElevenLabs usage",
                 cliName: "elevenlabs",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: nil,

@@ -18,6 +18,7 @@ public enum CommandCodeProviderDescriptor {
                 toggleTitle: "Show Command Code usage",
                 cliName: "commandcode",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: ProviderBrowserCookieDefaults.defaultImportOrder,
