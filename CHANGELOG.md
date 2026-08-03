@@ -13,6 +13,7 @@
 
 ### Fixed
 - Cursor: make on-demand extra usage follow the shared optional-usage setting and remove the unsupported credits placeholder (#2338). Thanks @Zihao-Qi!
+- Antigravity/Sessions: inspect processes in-process via libproc instead of spawning full-system ps/lsof, eliminating repeated macOS 26 “access data from other apps” prompts (#2267 hardening).
 - Doubao: show Agent Plan windows alongside Coding Plan usage for Volcengine AK/SK accounts that subscribe to both products (#2517). Thanks @Astro-Han!
 - Augment: store session cookies owner-only (0600), atomically publish updates, and repair permissions on legacy files (#2567).
 - Ollama: direct declined Chrome Keychain access recovery to the provider card's Refresh (⌘R) action instead of the ambiguous manual-cookie path (#2072).
