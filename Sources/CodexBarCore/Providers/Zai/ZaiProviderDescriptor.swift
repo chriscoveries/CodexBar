@@ -34,23 +34,62 @@ public enum ZaiProviderDescriptor {
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "z.ai cost summary is not supported." }),
-            fetchPlan: .apiToken(
-                strategyID: "zai.api",
-                resolveToken: { ProviderTokenResolver.zaiToken(environment: $0) },
-                missingCredentialsError: { ZaiSettingsError.missingToken },
-                loadUsage: { apiKey, context in
-                    let settings = context.settings?.zai
-                    let region = settings?.apiRegion ?? .global
-                    return try await ZaiUsageFetcher.fetchUsageWithModelUsage(
-                        apiKey: apiKey,
-                        region: region,
-                        usageScope: settings?.usageScope,
-                        teamContext: settings?.teamContext,
-                        environment: context.env).toUsageSnapshot()
-                }),
+            fetchPlan: ProviderFetchPlan(
+                sourceModes: [.auto, .api],
+                pipeline: ProviderFetchPipeline(resolveStrategies: { _ in [ZaiAPIFetchStrategy()] })),
             cli: ProviderCLIConfig(
                 name: "zai",
                 aliases: ["z.ai"],
                 versionDetector: nil))
+    }
+}
+
+struct ZaiAPIFetchStrategy: ProviderFetchStrategy {
+    let id = "zai.api"
+    let kind: ProviderFetchKind = .apiToken
+    private let transport: any ProviderHTTPTransport
+    private let homeDirectory: URL
+
+    init(
+        transport: any ProviderHTTPTransport = ProviderHTTPClient.shared,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser)
+    {
+        self.transport = transport
+        self.homeDirectory = homeDirectory
+    }
+
+    func isAvailable(_ context: ProviderFetchContext) async -> Bool {
+        ZaiSettingsReader.apiToken(
+            for: self.region(context),
+            environment: context.env,
+            homeDirectory: self.homeDirectory) != nil
+    }
+
+    func fetch(_ context: ProviderFetchContext) async throws -> ProviderFetchResult {
+        let settings = context.settings?.zai
+        let region = self.region(context)
+        guard let apiKey = ZaiSettingsReader.apiToken(
+            for: region,
+            environment: context.env,
+            homeDirectory: self.homeDirectory)
+        else {
+            throw ZaiSettingsError.missingToken
+        }
+        let usage = try await ZaiUsageFetcher.fetchUsageWithModelUsage(
+            apiKey: apiKey,
+            region: region,
+            usageScope: settings?.usageScope,
+            teamContext: settings?.teamContext,
+            environment: context.env,
+            transport: self.transport)
+        return self.makeResult(usage: usage.toUsageSnapshot(), sourceLabel: "api")
+    }
+
+    func shouldFallback(on _: Error, context _: ProviderFetchContext) -> Bool {
+        false
+    }
+
+    private func region(_ context: ProviderFetchContext) -> ZaiAPIRegion {
+        context.settings?.zai?.apiRegion ?? .global
     }
 }

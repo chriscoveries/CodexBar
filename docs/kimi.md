@@ -96,6 +96,9 @@ When multiple sources are available, CodexBar uses this order:
 
 **Note**: Browser cookie import requires Full Disk Access permission.
 
+Setting **Cookie source** to **Off** prevents browser import on every Kimi path. Context-free token resolution is
+limited to explicit environment values; only the provider's settings-aware web strategy may inspect browsers.
+
 ## API Details
 
 ### Kimi Code API key

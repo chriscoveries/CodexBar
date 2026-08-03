@@ -182,7 +182,7 @@ struct KimiWebFetchStrategy: ProviderFetchStrategy {
         }
 
         #if os(macOS)
-        if context.settings?.kimi?.cookieSource != .off {
+        if KimiBrowserImportPolicy.allowsImport(context) {
             return KimiCookieImporter.hasSession()
         }
         #endif
@@ -219,7 +219,7 @@ struct KimiWebFetchStrategy: ProviderFetchStrategy {
 
         // Try browser cookie import when auto mode is enabled
         #if os(macOS)
-        if context.settings?.kimi?.cookieSource != .off {
+        if KimiBrowserImportPolicy.allowsImport(context) {
             do {
                 let session = try KimiCookieImporter.importSession()
                 if let token = session.authToken {
@@ -240,5 +240,11 @@ struct KimiWebFetchStrategy: ProviderFetchStrategy {
 
     private static func resolveToken(environment: [String: String]) -> String? {
         ProviderTokenResolver.kimiAuthToken(environment: environment)
+    }
+}
+
+enum KimiBrowserImportPolicy {
+    static func allowsImport(_ context: ProviderFetchContext) -> Bool {
+        context.settings?.kimi?.cookieSource != .off
     }
 }

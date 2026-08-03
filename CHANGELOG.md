@@ -2,6 +2,9 @@
 
 ## 0.47.1 — Unreleased
 
+### Added
+- z.ai/GLM: route BigModel aliases and relay-file keys only to China endpoints, reject canonical cross-region overrides before bearer auth, and keep Kimi browser import disabled when Cookie Source is Off (#2351). Thanks @Leehow!
+
 ### Fixed
 - Sync: propagate provider configuration edits made by the CLI or directly in `config.json` to the iCloud fleet without echoing remotely applied writes.
 

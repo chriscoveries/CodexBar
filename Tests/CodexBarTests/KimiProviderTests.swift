@@ -18,7 +18,8 @@ private struct KimiStubClaudeFetcher: ClaudeUsageFetching {
 
 private func makeKimiFetchContext(
     sourceMode: ProviderSourceMode,
-    environment: [String: String] = [:]) -> ProviderFetchContext
+    environment: [String: String] = [:],
+    settings: ProviderSettingsSnapshot? = nil) -> ProviderFetchContext
 {
     let env = environment
     return ProviderFetchContext(
@@ -29,7 +30,7 @@ private func makeKimiFetchContext(
         webDebugDumpHTML: false,
         verbose: false,
         env: env,
-        settings: nil,
+        settings: settings,
         fetcher: UsageFetcher(environment: env),
         claudeFetcher: KimiStubClaudeFetcher(),
         browserDetection: BrowserDetection(cacheTTL: 0))
@@ -283,6 +284,20 @@ struct KimiSettingsReaderTests {
 }
 
 struct KimiAPIFetchStrategyTests {
+    @Test
+    func `cookie source off disables every browser import path`() {
+        let offContext = makeKimiFetchContext(
+            sourceMode: .auto,
+            settings: .make(kimi: .init(cookieSource: .off, manualCookieHeader: nil)))
+        let autoContext = makeKimiFetchContext(
+            sourceMode: .auto,
+            settings: .make(kimi: .init(cookieSource: .auto, manualCookieHeader: nil)))
+
+        #expect(KimiBrowserImportPolicy.allowsImport(offContext) == false)
+        #expect(KimiBrowserImportPolicy.allowsImport(autoContext))
+        #expect(ProviderTokenResolver.kimiAuthResolution(environment: [:]) == nil)
+    }
+
     @Test
     func `auto mode accepts CLI credential and reports expired remediation`() async throws {
         let home = try makeTemporaryKimiCodeHome()
