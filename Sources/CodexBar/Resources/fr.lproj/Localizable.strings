@@ -839,7 +839,7 @@
 "Pace: %@" = "Rythme : %@";
 "Pace: %@ · %@" = "Rythme : %@ · %@";
 "%@ · %@" = "%@ · %@";
-"≈ %d%% run-out risk" = "≈ %d%% risque d'épuisement";
+"(%d%% risk)" = "(%d%% risque d'épuisement)";
 "%d%% in deficit" = "%d%% en déficit";
 "%d%% in reserve" = "%d%% en réserve";
 "usage_percent_suffix_left" = "restant";

@@ -76,22 +76,13 @@ extension UsageMenuCardView.Model.SubtitleStyle {
 
 extension UsageMenuCardView.Model.Metric {
     fileprivate var heightFingerprint: String {
-        MenuCardHeightFingerprint.join([
+        let presentation = self.linePresentation(title: self.title)
+        return MenuCardHeightFingerprint.join([
             self.id,
-            MenuCardHeightFingerprint.field("title", self.title),
-            "percent=\(Int(self.percent.rounded()))",
-            "percentStyle=\(self.percentStyle.rawValue)",
-            MenuCardHeightFingerprint.field("status", self.statusText),
-            MenuCardHeightFingerprint.field("reset", self.resetText),
-            MenuCardHeightFingerprint.field("detail", self.detailText),
-            MenuCardHeightFingerprint.field("detailLeft", self.detailLeftText),
-            MenuCardHeightFingerprint.field("detailRight", self.detailRightText),
-            MenuCardHeightFingerprint.field(
-                "sessionEquivalentLeft",
-                self.sessionEquivalentDetail?.leftText),
-            MenuCardHeightFingerprint.field(
-                "sessionEquivalentRight",
-                self.sessionEquivalentDetail?.rightText),
+            self.statusText == nil ? "status=0" : "status=1",
+            presentation.resetText == nil ? "reset=0" : "reset=1",
+            presentation.metaText == nil ? "meta=0" : "meta=1",
+            self.detailText == nil ? "detail=0" : "detail=1",
             self.pacePercent == nil ? "pace=0" : "pace=1",
             self.paceOnTop ? "paceTop=1" : "paceTop=0",
             self.cardStyle ? "card=1" : "card=0",
