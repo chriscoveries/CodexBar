@@ -344,14 +344,29 @@ struct CostUsagePricingTests {
             cacheWriteInputTokens: 20,
             outputTokens: 5)
 
-        let expectedSol = ((70.0 * 5e-6) + (10.0 * 5e-7) + (20.0 * 6.25e-6) + (5.0 * 3e-5)) * 2
-        let expectedTerra = ((70.0 * 2e-6) + (10.0 * 2e-7) + (20.0 * 2.5e-6) + (5.0 * 1.2e-5)) * 2
-        let expectedLuna = ((70.0 * 2e-7) + (10.0 * 2e-8) + (20.0 * 2.5e-7) + (5.0 * 1.2e-6)) * 2
+        let solInput = 70.0 * 5e-6
+        let solCached = 10.0 * 5e-7
+        let solWrite = 20.0 * 6.25e-6
+        let solOutput = 5.0 * 3e-5
+        let expectedSol: Double = (solInput + solCached + solWrite + solOutput) * 2
+        let terraInput = 70.0 * 2e-6
+        let terraCached = 10.0 * 2e-7
+        let terraWrite = 20.0 * 2.5e-6
+        let terraOutput = 5.0 * 1.2e-5
+        let expectedTerra: Double = (terraInput + terraCached + terraWrite + terraOutput) * 2
+        let lunaInput = 70.0 * 2e-7
+        let lunaCached = 10.0 * 2e-8
+        let lunaWrite = 20.0 * 2.5e-7
+        let lunaOutput = 5.0 * 1.2e-6
+        let expectedLuna: Double = (lunaInput + lunaCached + lunaWrite + lunaOutput) * 2
         #expect(abs((sol ?? 0) - expectedSol) < 1e-12)
         #expect(abs((terra ?? 0) - expectedTerra) < 1e-12)
         #expect(abs((luna ?? 0) - expectedLuna) < 1e-12)
         // A legacy model without a Standard cache-write price folds writes into uncached input.
-        let expectedLegacy = (90.0 * 1.25e-5) + (10.0 * 1.25e-6) + (5.0 * 7.5e-5)
+        let legacyInput = 90.0 * 1.25e-5
+        let legacyCached = 10.0 * 1.25e-6
+        let legacyOutput = 5.0 * 7.5e-5
+        let expectedLegacy: Double = legacyInput + legacyCached + legacyOutput
         #expect(abs((modelWithoutCacheWriteSupport ?? 0) - expectedLegacy) < 1e-12)
     }
 
