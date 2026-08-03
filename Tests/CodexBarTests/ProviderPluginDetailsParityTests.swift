@@ -150,11 +150,13 @@ struct ProviderPluginDetailsParityTests {
             environment: [:],
             transport: transport).toUsageSnapshot()
         let script = try await ProviderPluginRuntime(bundledPlugin: "zai", transport: transport)
-            .fetchUsage(secrets: [
-                "Z_AI_API_KEY": "fixture-key",
-                "Z_AI_REGION": "global",
-                "Z_AI_USAGE_SCOPE": "personal",
-            ], now: now)
+            .fetchUsage(
+                settings: [
+                    "Z_AI_REGION": "global",
+                    "Z_AI_USAGE_SCOPE": "personal",
+                ],
+                secrets: ["Z_AI_API_KEY": "fixture-key"],
+                now: now)
 
         Self.expectCoreParity(swift, script)
         #expect(try script.details == [
@@ -204,11 +206,13 @@ struct ProviderPluginDetailsParityTests {
             now: now,
             historyDays: 30).toUsageSnapshot()
         let script = try await ProviderPluginRuntime(bundledPlugin: "openai", transport: transport)
-            .fetchUsage(secrets: [
-                "OPENAI_API_KEY": "fixture-key",
-                "OPENAI_HISTORY_DAYS": "30",
-                "OPENAI_ALLOW_BALANCE_FALLBACK": "1",
-            ], now: now)
+            .fetchUsage(
+                settings: [
+                    "OPENAI_HISTORY_DAYS": "30",
+                    "OPENAI_ALLOW_BALANCE_FALLBACK": "1",
+                ],
+                secrets: ["OPENAI_API_KEY": "fixture-key"],
+                now: now)
 
         Self.expectCoreParity(swift, script)
         #expect(try script.details == [

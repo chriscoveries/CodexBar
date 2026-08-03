@@ -68,20 +68,21 @@ public enum ZaiProviderDescriptor {
                         provider: .zai,
                         bundledPlugin: "zai",
                         secretKey: ZaiSettingsReader.apiTokenKey,
-                        resolveSecrets: { context in
+                        resolveValues: { context in
                             guard let token = ProviderTokenResolver.zaiToken(environment: context.env)
                             else { return nil }
                             let settings = context.settings?.zai
-                            var values = [
-                                ZaiSettingsReader.apiTokenKey: token,
+                            var plainValues = [
                                 "Z_AI_REGION": (settings?.apiRegion ?? .global).rawValue,
                                 "Z_AI_USAGE_SCOPE": (settings?.usageScope ?? .personal).rawValue,
                             ]
                             if let team = settings?.teamContext {
-                                values["Z_AI_ORGANIZATION"] = team.organizationID
-                                values["Z_AI_PROJECT"] = team.projectID
+                                plainValues["Z_AI_ORGANIZATION"] = team.organizationID
+                                plainValues["Z_AI_PROJECT"] = team.projectID
                             }
-                            return values
+                            return ScriptFetchStrategy.Values(
+                                settings: plainValues,
+                                secrets: [ZaiSettingsReader.apiTokenKey: token])
                         }),
                     swift,
                 ]

@@ -6,6 +6,8 @@ import FoundationNetworking
 @preconcurrency import JavaScriptCore
 
 public final class ProviderPluginRuntime: @unchecked Sendable {
+    public typealias CookieResolver = @Sendable (UsageProvider, String) async throws -> String
+
     public static let defaultTimeout: TimeInterval = 20
     public static let maximumResponseBytes = 5 * 1024 * 1024
 
@@ -61,19 +63,34 @@ public final class ProviderPluginRuntime: @unchecked Sendable {
         self.manifest = worker.manifest
     }
 
-    public func fetchUsage(secrets: [String: String], now: Date = Date()) async throws -> UsageSnapshot {
+    public func fetchUsage(
+        settings: [String: String] = [:],
+        secrets: [String: String] = [:],
+        now: Date = Date(),
+        cookieResolver: CookieResolver? = nil) async throws -> UsageSnapshot
+    {
+        let sanitizedSettings = settings.mapValues {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
         let sanitizedSecrets = secrets.mapValues {
             $0.trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        guard let authSecret = sanitizedSecrets[self.manifest.auth.secret], !authSecret.isEmpty else {
-            throw ProviderPluginError.secretAccess("required secret '\(self.manifest.auth.secret)' is unavailable")
+        if let auth = self.manifest.auth,
+           sanitizedSecrets[auth.secret]?.isEmpty != false
+        {
+            throw ProviderPluginError.secretAccess("required secret '\(auth.secret)' is unavailable")
         }
 
         let worker = try self.currentWorker()
         let gate = ProviderPluginCompletionGate<UsageSnapshot>()
         return try await withCheckedThrowingContinuation { continuation in
             gate.install(continuation)
-            worker.fetch(secrets: sanitizedSecrets, now: now) { result in
+            worker.fetch(
+                settings: sanitizedSettings,
+                secrets: sanitizedSecrets,
+                now: now,
+                cookieResolver: cookieResolver)
+            { result in
                 gate.finish(result.mapError { self.redactedError($0, secrets: sanitizedSecrets.values) })
             }
             Task.detached { [weak self, weak worker] in
@@ -205,8 +222,31 @@ private struct ProviderPluginHTTPRequestCallbacks: @unchecked Sendable {
     let reject: ProviderPluginJSValueBox
 }
 
+private final class ProviderPluginRedactionValues: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: Set<String>
+
+    init(_ values: some Sequence<String>) {
+        self.values = Set(values.filter { !$0.isEmpty })
+    }
+
+    func insert(_ value: String) {
+        guard !value.isEmpty else { return }
+        _ = self.lock.withLock { self.values.insert(value) }
+    }
+
+    func redact(_ message: String) -> String {
+        self.lock.withLock {
+            self.values.reduce(message) { partial, value in
+                partial.replacingOccurrences(of: value, with: "<redacted>")
+            }
+        }
+    }
+}
+
 private final class ProviderPluginWorker: @unchecked Sendable {
-    private typealias HTTPBlock = @convention(block) (String, JSValue, Bool, JSValue, JSValue) -> Void
+    private typealias HTTPBlock = @convention(block) (String, JSValue, String, Bool, JSValue, JSValue) -> Void
+    private typealias CookieBlock = @convention(block) (String, JSValue, JSValue) -> Void
 
     let manifest: ProviderPluginManifest
 
@@ -287,22 +327,36 @@ private final class ProviderPluginWorker: @unchecked Sendable {
     }
 
     func fetch(
+        settings: [String: String],
         secrets: [String: String],
         now: Date,
+        cookieResolver: ProviderPluginRuntime.CookieResolver?,
         completion: @escaping @Sendable (Result<UsageSnapshot, Error>) -> Void)
     {
         self.queue.async {
-            self.beginFetch(secrets: secrets, now: now, completion: completion)
+            self.beginFetch(
+                settings: settings,
+                secrets: secrets,
+                now: now,
+                cookieResolver: cookieResolver,
+                completion: completion)
         }
     }
 
     private func beginFetch(
+        settings: [String: String],
         secrets: [String: String],
         now: Date,
+        cookieResolver: ProviderPluginRuntime.CookieResolver?,
         completion: @escaping @Sendable (Result<UsageSnapshot, Error>) -> Void)
     {
         self.context.exception = nil
-        let ctx = self.makeContext(secrets: secrets)
+        let redactionValues = ProviderPluginRedactionValues(secrets.values)
+        let ctx = self.makeContext(
+            settings: settings,
+            secrets: secrets,
+            cookieResolver: cookieResolver,
+            redactionValues: redactionValues)
         guard self.context.exception == nil else {
             completion(.failure(ProviderPluginError.script(Self.exceptionMessage(self.context) ?? "ctx setup failed")))
             return
@@ -316,13 +370,14 @@ private final class ProviderPluginWorker: @unchecked Sendable {
                 let snapshot = try ProviderPluginSnapshotMapper.map(value, provider: self.manifest.id, now: now)
                 completion(.success(snapshot))
             } catch {
-                completion(.failure(error))
+                completion(.failure(ProviderPluginError
+                        .invalidSnapshot(redactionValues.redact(error.localizedDescription))))
             }
         }
         let reject: @convention(block) (JSValue) -> Void = { [weak self] value in
             guard let self else { return }
             defer { self.retainedCallbacks[callbackID] = nil }
-            completion(.failure(ProviderPluginError.script(self.message(from: value))))
+            completion(.failure(ProviderPluginError.script(redactionValues.redact(self.message(from: value)))))
         }
         self.retainedCallbacks[callbackID] = [resolve, reject]
 
@@ -349,27 +404,39 @@ private final class ProviderPluginWorker: @unchecked Sendable {
         }
     }
 
-    private func makeContext(secrets: [String: String]) -> JSValue {
+    private func makeContext(
+        settings: [String: String],
+        secrets: [String: String],
+        cookieResolver: ProviderPluginRuntime.CookieResolver?,
+        redactionValues: ProviderPluginRedactionValues) -> JSValue
+    {
         let ctx = JSValue(newObjectIn: self.context)!
         let host = JSValue(newObjectIn: self.context)!
 
-        let secretGet: @convention(block) (String) -> JSValue = { [weak self] key in
+        let settingGet: @convention(block) (String, Bool) -> JSValue = { [weak self] key, secure in
             guard let self else { return JSValue(undefinedIn: nil) }
-            guard self.manifest.settings.contains(where: { $0.key == key }) else {
+            let expectedKind: ProviderPluginSetting.Kind = secure ? .secure : .plain
+            guard self.manifest.settings.contains(where: { $0.key == key && $0.kind == expectedKind }) else {
                 self.context.exception = JSValue(
-                    newErrorFromMessage: "secret key '\(key)' is not declared in settings",
+                    newErrorFromMessage: "\(secure ? "secret" : "plain") setting '\(key)' is not declared",
                     in: self.context)
                 return JSValue(undefinedIn: self.context)
             }
-            guard let secret = secrets[key], !secret.isEmpty else {
+            let values = secure ? secrets : settings
+            guard let value = values[key], !value.isEmpty else {
                 return JSValue(nullIn: self.context)
             }
-            return JSValue(object: secret, in: self.context)
+            return JSValue(object: value, in: self.context)
         }
-        host.setObject(secretGet, forKeyedSubscript: "secretGet" as NSString)
+        host.setObject(settingGet, forKeyedSubscript: "settingGet" as NSString)
 
-        let http = self.makeHTTPBlock(secrets: secrets)
+        let http = self.makeHTTPBlock(settings: settings, secrets: secrets, redactionValues: redactionValues)
         host.setObject(http, forKeyedSubscript: "http" as NSString)
+
+        let cookieHeader = self.makeCookieBlock(
+            resolver: cookieResolver,
+            redactionValues: redactionValues)
+        host.setObject(cookieHeader, forKeyedSubscript: "cookieHeader" as NSString)
 
         let cacheGet: @convention(block) (String) -> JSValue = { [weak self] key in
             guard let self else { return JSValue(undefinedIn: nil) }
@@ -388,7 +455,7 @@ private final class ProviderPluginWorker: @unchecked Sendable {
 
         let log: @convention(block) (String) -> Void = { [manifest] message in
             let logger = CodexBarLog.logger(LogCategories.provider(manifest.id, scope: "plugin"))
-            logger.debug("\(message)")
+            logger.debug("\(redactionValues.redact(message))")
         }
         host.setObject(log, forKeyedSubscript: "log" as NSString)
 
@@ -396,12 +463,19 @@ private final class ProviderPluginWorker: @unchecked Sendable {
         return ctx
     }
 
-    private func makeHTTPBlock(secrets: [String: String]) -> HTTPBlock {
-        { [weak self] rawURL, options, wantsJSON, resolve, reject in
+    private func makeHTTPBlock(
+        settings: [String: String],
+        secrets: [String: String],
+        redactionValues: ProviderPluginRedactionValues) -> HTTPBlock
+    {
+        { [weak self] rawURL, options, method, wantsJSON, resolve, reject in
             self?.startHTTPRequest(
                 rawURL: rawURL,
                 options: options,
+                method: method,
+                settings: settings,
                 secrets: secrets,
+                redactionValues: redactionValues,
                 callbacks: ProviderPluginHTTPRequestCallbacks(
                     wantsJSON: wantsJSON,
                     resolve: ProviderPluginJSValueBox(resolve),
@@ -409,15 +483,25 @@ private final class ProviderPluginWorker: @unchecked Sendable {
         }
     }
 
+    // Keep the JavaScript bridge inputs explicit at the executor boundary.
+    // swiftlint:disable:next function_parameter_count
     private func startHTTPRequest(
         rawURL: String,
         options: JSValue,
+        method: String,
+        settings: [String: String],
         secrets: [String: String],
+        redactionValues: ProviderPluginRedactionValues,
         callbacks: ProviderPluginHTTPRequestCallbacks)
     {
         let request: URLRequest
         do {
-            request = try self.makeRequest(rawURL: rawURL, options: options, secrets: secrets)
+            request = try self.makeRequest(
+                rawURL: rawURL,
+                options: options,
+                method: method,
+                settings: settings,
+                secrets: secrets)
         } catch {
             self.reject(callbacks.reject, error: error)
             return
@@ -440,7 +524,7 @@ private final class ProviderPluginWorker: @unchecked Sendable {
                     _ = callbacks.resolve.value.call(withArguments: [value as Any])
                 }
             } catch {
-                let failure = ProviderPluginError.http(error.localizedDescription)
+                let failure = ProviderPluginError.http(redactionValues.redact(error.localizedDescription))
                 worker.queue.async {
                     worker.reject(callbacks.reject, error: failure)
                 }
@@ -448,19 +532,83 @@ private final class ProviderPluginWorker: @unchecked Sendable {
         }
     }
 
-    private func makeRequest(rawURL: String, options: JSValue, secrets: [String: String]) throws -> URLRequest {
+    private func makeCookieBlock(
+        resolver: ProviderPluginRuntime.CookieResolver?,
+        redactionValues: ProviderPluginRedactionValues) -> CookieBlock
+    {
+        { [weak self] rawDomain, resolve, reject in
+            guard let self else { return }
+            let domain = rawDomain.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard self.manifest.capabilities.contains(.browserCookies),
+                  self.manifest.cookieDomains.contains(domain)
+            else {
+                self.reject(
+                    ProviderPluginJSValueBox(reject),
+                    error: ProviderPluginError.secretAccess("cookie domain is not declared"))
+                return
+            }
+            guard let resolver else {
+                self.reject(
+                    ProviderPluginJSValueBox(reject),
+                    error: ProviderPluginError.secretAccess("browser cookie access is unavailable"))
+                return
+            }
+
+            let provider = self.manifest.id
+            let worker = self
+            let resolveBox = ProviderPluginJSValueBox(resolve)
+            let rejectBox = ProviderPluginJSValueBox(reject)
+            Task.detached {
+                do {
+                    let header = try await resolver(provider, domain)
+                    redactionValues.insert(header)
+                    for pair in CookieHeaderNormalizer.pairs(from: header) {
+                        redactionValues.insert(pair.value)
+                    }
+                    worker.queue.async {
+                        _ = resolveBox.value.call(withArguments: [header])
+                    }
+                } catch {
+                    let failure = ProviderPluginError.secretAccess(redactionValues.redact(error.localizedDescription))
+                    worker.queue.async {
+                        worker.reject(rejectBox, error: failure)
+                    }
+                }
+            }
+        }
+    }
+
+    private func makeRequest(
+        rawURL: String,
+        options: JSValue,
+        method: String,
+        settings: [String: String],
+        secrets: [String: String]) throws -> URLRequest
+    {
         guard let url = URL(string: rawURL) else {
             throw ProviderPluginError.networkPolicy("request URL is invalid")
         }
-        let origin = try ProviderPluginOrigin.normalizedOrigin(of: url)
-        guard self.manifest.endpoints.contains(origin) else {
-            throw ProviderPluginError.networkPolicy("origin '\(origin)' is not declared")
+        guard try self.allowedOrigin(for: url, settings: settings) else {
+            let rejectedOrigin = (try? ProviderPluginOrigin.normalizedOrigin(
+                of: url,
+                policy: url.scheme?.lowercased() == "http" ? .httpsOrLoopbackHTTP : .https)) ?? "invalid"
+            throw ProviderPluginError.networkPolicy("origin '\(rejectedOrigin)' is not declared")
         }
 
         var request = URLRequest(url: url)
-        request.httpMethod = "GET"
+        guard method == "GET" || method == "POST" else {
+            throw ProviderPluginError.networkPolicy("HTTP method is not allowed")
+        }
+        request.httpMethod = method
         request.timeoutInterval = 15
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if method == "POST" {
+            guard let bodyJSON = options.forProperty("bodyJSON"), bodyJSON.isString else {
+                throw ProviderPluginError.http("POST JSON body is missing")
+            }
+            request.httpBody = Data(bodyJSON.toString().utf8)
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
         if options.isObject,
            let headers = options.forProperty("headers"),
            headers.isObject,
@@ -470,19 +618,52 @@ private final class ProviderPluginWorker: @unchecked Sendable {
                 guard let value = rawValue as? String else {
                     throw ProviderPluginError.http("request header '\(name)' must be a string")
                 }
-                if name.caseInsensitiveCompare(self.manifest.auth.header) == .orderedSame {
+                if let auth = self.manifest.auth,
+                   name.caseInsensitiveCompare(auth.header) == .orderedSame
+                {
                     throw ProviderPluginError.networkPolicy("plugins may not override the auth header")
                 }
                 request.setValue(value, forHTTPHeaderField: name)
             }
         }
 
-        guard let secret = secrets[self.manifest.auth.secret], !secret.isEmpty else {
-            throw ProviderPluginError.secretAccess("required auth secret is unavailable")
+        if let auth = self.manifest.auth {
+            guard let secret = secrets[auth.secret], !secret.isEmpty else {
+                throw ProviderPluginError.secretAccess("required auth secret is unavailable")
+            }
+            let authValue = switch auth.type {
+            case .bearer:
+                "Bearer \(secret)"
+            case .authorizationScheme:
+                "\(auth.scheme!) \(secret)"
+            case .xAPIKey, .header:
+                secret
+            }
+            request.setValue(authValue, forHTTPHeaderField: auth.header)
         }
-        let authValue = self.manifest.auth.type == .bearer ? "Bearer \(secret)" : secret
-        request.setValue(authValue, forHTTPHeaderField: self.manifest.auth.header)
         return request
+    }
+
+    private func allowedOrigin(for url: URL, settings: [String: String]) throws -> Bool {
+        for endpoint in self.manifest.endpoints {
+            switch endpoint {
+            case let .fixed(declared):
+                if (try? ProviderPluginOrigin.normalizedOrigin(of: url)) == declared {
+                    return true
+                }
+            case let .setting(key, policy):
+                guard let rawValue = settings[key], !rawValue.isEmpty,
+                      let configuredURL = URL(string: rawValue), configuredURL.fragment == nil
+                else { continue }
+                let configuredOrigin = try ProviderPluginOrigin.normalizedOrigin(of: configuredURL, policy: policy)
+                if try ProviderPluginOrigin
+                    .normalizedOrigin(of: url, policy: policy) == configuredOrigin
+                {
+                    return true
+                }
+            }
+        }
+        return false
     }
 
     private static func responsePayload(_ response: ProviderHTTPResponse, wantsJSON: Bool) throws -> [String: Any] {
