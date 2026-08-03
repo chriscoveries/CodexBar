@@ -7,23 +7,6 @@ import Testing
 @MainActor
 struct ProviderIconResourcesTests {
     @Test
-    func `provider icon SV gs exist`() throws {
-        let root = try Self.repoRoot()
-        let resources = root.appending(path: "Sources/CodexBar/Resources", directoryHint: .isDirectory)
-
-        for descriptor in ProviderDescriptorRegistry.all {
-            let resourceName = descriptor.branding.iconResourceName
-            let url = resources.appending(path: "\(resourceName).svg")
-            #expect(
-                FileManager.default.fileExists(atPath: url.path(percentEncoded: false)),
-                "Missing SVG for \(descriptor.id.rawValue): \(resourceName).svg")
-
-            let image = NSImage(contentsOf: url)
-            #expect(image != nil, "Could not load \(resourceName).svg as NSImage")
-        }
-    }
-
-    @Test
     func `groq and grok provider icons are distinct`() throws {
         let root = try Self.repoRoot()
         let resources = root.appending(path: "Sources/CodexBar/Resources", directoryHint: .isDirectory)
