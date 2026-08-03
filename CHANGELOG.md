@@ -10,6 +10,7 @@
 - Menu: move each usage window's used percentage and reset time into its title row, with all pace detail on one line (#2182). Thanks @jack24254029!
 
 ### Fixed
+- Usage & Spend: keep validated Codex totals visible while the local scanner catches up, with refresh indicators in the dashboard and menu cost rows (#2397). Thanks @hhh2210!
 - Sync: propagate provider configuration edits made by the CLI or directly in `config.json` to the iCloud fleet without echoing remotely applied writes.
 
 ## 0.47.0 — 2026-08-03

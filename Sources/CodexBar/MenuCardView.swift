@@ -112,6 +112,7 @@ struct UsageMenuCardView: View {
         }
 
         struct TokenUsageSection {
+            let isRefreshing: Bool
             let sessionLine: String
             let monthLine: String
             let meteredLine: String?
@@ -123,6 +124,7 @@ struct UsageMenuCardView: View {
             /// Explicit initializer so `meteredLine`/`comparisonLines` default to empty: callers
             /// that predate them (and providers that never report them) keep their call sites.
             init(
+                isRefreshing: Bool = false,
                 sessionLine: String,
                 monthLine: String,
                 meteredLine: String? = nil,
@@ -131,6 +133,7 @@ struct UsageMenuCardView: View {
                 errorLine: String?,
                 errorCopyText: String?)
             {
+                self.isRefreshing = isRefreshing
                 self.sessionLine = sessionLine
                 self.monthLine = monthLine
                 self.meteredLine = meteredLine
@@ -451,9 +454,16 @@ private struct TokenUsageSectionContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(UsageMenuCardView.Model.tokenUsageHeader(provider: self.provider))
-                .font(.body)
-                .fontWeight(.medium)
+            HStack(spacing: 6) {
+                Text(UsageMenuCardView.Model.tokenUsageHeader(provider: self.provider))
+                    .font(.body)
+                    .fontWeight(.medium)
+                if self.tokenUsage.isRefreshing {
+                    ProgressView()
+                        .controlSize(.mini)
+                        .accessibilityLabel(L("Refreshing"))
+                }
+            }
             Text(self.tokenUsage.sessionLine)
                 .font(self.lineFont)
                 .lineLimit(1)
@@ -936,6 +946,7 @@ extension UsageMenuCardView.Model {
         let tokenUsage = Self.tokenUsageSection(
             provider: input.provider,
             enabled: input.tokenCostMenuSectionEnabled,
+            isRefreshing: input.tokenCostIsRefreshing,
             comparisonPeriodsEnabled: input.costComparisonPeriodsEnabled,
             snapshot: tokenUsageSnapshot,
             error: input.tokenError,
