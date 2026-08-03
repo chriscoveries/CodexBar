@@ -11,49 +11,15 @@ struct ProviderIconResourcesTests {
         let root = try Self.repoRoot()
         let resources = root.appending(path: "Sources/CodexBar/Resources", directoryHint: .isDirectory)
 
-        let slugs = [
-            "codex",
-            "claude",
-            "clinepass",
-            "zai",
-            "minimax",
-            "cursor",
-            "opencode",
-            "opencodego",
-            "alibaba",
-            "gemini",
-            "antigravity",
-            "factory",
-            "copilot",
-            "devin",
-            "crof",
-            "commandcode",
-            "t3chat",
-            "kimi",
-            "longcat",
-            "bedrock",
-            "elevenlabs",
-            "groq",
-            "llmproxy",
-            "litellm",
-            "deepgram",
-            "ollama",
-            "clawrouter",
-            "sub2api",
-            "wayfinder",
-            "zenmux",
-            "aiand",
-            "zoommate",
-            "xai",
-        ]
-        for slug in slugs {
-            let url = resources.appending(path: "ProviderIcon-\(slug).svg")
+        for descriptor in ProviderDescriptorRegistry.all {
+            let resourceName = descriptor.branding.iconResourceName
+            let url = resources.appending(path: "\(resourceName).svg")
             #expect(
                 FileManager.default.fileExists(atPath: url.path(percentEncoded: false)),
-                "Missing SVG for \(slug)")
+                "Missing SVG for \(descriptor.id.rawValue): \(resourceName).svg")
 
             let image = NSImage(contentsOf: url)
-            #expect(image != nil, "Could not load SVG as NSImage for \(slug)")
+            #expect(image != nil, "Could not load \(resourceName).svg as NSImage")
         }
     }
 

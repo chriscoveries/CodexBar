@@ -67,6 +67,17 @@ struct ProviderRegistryTests {
     }
 
     @Test
+    func `provider log categories derive byte identical names`() {
+        #expect(LogCategories.provider(.codex) == "codex")
+        #expect(LogCategories.provider(.deepseek, scope: "usage") == "deepseek-usage")
+        #expect(LogCategories.provider(.opencodego, scope: "usage") == "opencode-go-usage")
+        #expect(LogCategories.codexRPC == "codex-rpc")
+        #expect(LogCategories.openAIWebview == "openai-webview")
+        #expect(LogCategories.minimaxAPITokenStore == "minimax-api-token-store")
+        #expect(LogCategories.neuralWattUsage == "neuralwatt-usage")
+    }
+
+    @Test
     func `minimax sorts after zai in registry`() {
         let ids = ProviderDescriptorRegistry.all.map(\.id)
         guard let zaiIndex = ids.firstIndex(of: .zai),
