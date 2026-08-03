@@ -199,7 +199,15 @@ private final class ProviderPluginObjectBox: @unchecked Sendable {
     }
 }
 
+private struct ProviderPluginHTTPRequestCallbacks: @unchecked Sendable {
+    let wantsJSON: Bool
+    let resolve: ProviderPluginJSValueBox
+    let reject: ProviderPluginJSValueBox
+}
+
 private final class ProviderPluginWorker: @unchecked Sendable {
+    private typealias HTTPBlock = @convention(block) (String, JSValue, Bool, JSValue, JSValue) -> Void
+
     let manifest: ProviderPluginManifest
 
     private let queue: DispatchQueue
@@ -360,16 +368,7 @@ private final class ProviderPluginWorker: @unchecked Sendable {
         }
         host.setObject(secretGet, forKeyedSubscript: "secretGet" as NSString)
 
-        let http: @convention(block) (String, JSValue, Bool, JSValue, JSValue) -> Void = {
-            [weak self] rawURL, options, wantsJSON, resolve, reject in
-            self?.startHTTPRequest(
-                rawURL: rawURL,
-                options: options,
-                wantsJSON: wantsJSON,
-                secrets: secrets,
-                resolve: resolve,
-                reject: reject)
-        }
+        let http = self.makeHTTPBlock(secrets: secrets)
         host.setObject(http, forKeyedSubscript: "http" as NSString)
 
         let cacheGet: @convention(block) (String) -> JSValue = { [weak self] key in
@@ -397,21 +396,30 @@ private final class ProviderPluginWorker: @unchecked Sendable {
         return ctx
     }
 
+    private func makeHTTPBlock(secrets: [String: String]) -> HTTPBlock {
+        { [weak self] rawURL, options, wantsJSON, resolve, reject in
+            self?.startHTTPRequest(
+                rawURL: rawURL,
+                options: options,
+                secrets: secrets,
+                callbacks: ProviderPluginHTTPRequestCallbacks(
+                    wantsJSON: wantsJSON,
+                    resolve: ProviderPluginJSValueBox(resolve),
+                    reject: ProviderPluginJSValueBox(reject)))
+        }
+    }
+
     private func startHTTPRequest(
         rawURL: String,
         options: JSValue,
-        wantsJSON: Bool,
         secrets: [String: String],
-        resolve: JSValue,
-        reject: JSValue)
+        callbacks: ProviderPluginHTTPRequestCallbacks)
     {
-        let resolveBox = ProviderPluginJSValueBox(resolve)
-        let rejectBox = ProviderPluginJSValueBox(reject)
         let request: URLRequest
         do {
             request = try self.makeRequest(rawURL: rawURL, options: options, secrets: secrets)
         } catch {
-            self.reject(rejectBox, error: error)
+            self.reject(callbacks.reject, error: error)
             return
         }
 
@@ -424,15 +432,17 @@ private final class ProviderPluginWorker: @unchecked Sendable {
                 guard response.data.count <= responseSizeLimit else {
                     throw ProviderPluginError.http("response exceeded the 5 MiB limit")
                 }
-                let payload = try ProviderPluginObjectBox(Self.responsePayload(response, wantsJSON: wantsJSON))
+                let payload = try ProviderPluginObjectBox(Self.responsePayload(
+                    response,
+                    wantsJSON: callbacks.wantsJSON))
                 worker.queue.async {
                     let value = JSValue(object: payload.value, in: worker.context) ?? JSValue(nullIn: worker.context)
-                    _ = resolveBox.value.call(withArguments: [value as Any])
+                    _ = callbacks.resolve.value.call(withArguments: [value as Any])
                 }
             } catch {
                 let failure = ProviderPluginError.http(error.localizedDescription)
                 worker.queue.async {
-                    worker.reject(rejectBox, error: failure)
+                    worker.reject(callbacks.reject, error: failure)
                 }
             }
         }

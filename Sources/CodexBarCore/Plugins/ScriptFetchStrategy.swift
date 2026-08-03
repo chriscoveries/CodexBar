@@ -86,13 +86,33 @@ public final class ScriptFetchStrategy: ProviderFetchStrategy, @unchecked Sendab
 }
 
 extension ProviderFetchPlan {
+    struct ScriptPrototypeAPIConfiguration: Sendable {
+        let provider: UsageProvider
+        let plugin: String
+        let secretKey: String
+        let strategyID: String
+        let sourceLabel: String
+        let reportsMissingCredentials: Bool
+
+        init(
+            provider: UsageProvider,
+            plugin: String,
+            secretKey: String,
+            strategyID: String,
+            sourceLabel: String = "api",
+            reportsMissingCredentials: Bool = false)
+        {
+            self.provider = provider
+            self.plugin = plugin
+            self.secretKey = secretKey
+            self.strategyID = strategyID
+            self.sourceLabel = sourceLabel
+            self.reportsMissingCredentials = reportsMissingCredentials
+        }
+    }
+
     static func scriptPrototypeAPI(
-        provider: UsageProvider,
-        plugin: String,
-        secretKey: String,
-        strategyID: String,
-        sourceLabel: String = "api",
-        reportsMissingCredentials: Bool = false,
+        configuration: ScriptPrototypeAPIConfiguration,
         resolveToken: @escaping APITokenFetchStrategy.TokenResolver,
         missingCredentialsError: @escaping APITokenFetchStrategy.MissingCredentialsError,
         loadUsage: @escaping APITokenFetchStrategy.UsageLoader) -> ProviderFetchPlan
@@ -101,9 +121,9 @@ extension ProviderFetchPlan {
             sourceModes: [.auto, .api],
             pipeline: ProviderFetchPipeline(resolveStrategies: { context in
                 let swift = APITokenFetchStrategy(
-                    id: strategyID,
-                    sourceLabel: sourceLabel,
-                    reportsMissingCredentials: reportsMissingCredentials,
+                    id: configuration.strategyID,
+                    sourceLabel: configuration.sourceLabel,
+                    reportsMissingCredentials: configuration.reportsMissingCredentials,
                     resolveToken: resolveToken,
                     missingCredentialsError: missingCredentialsError,
                     loadUsage: loadUsage)
@@ -112,10 +132,10 @@ extension ProviderFetchPlan {
                 }
                 return [
                     ScriptFetchStrategy(
-                        id: "\(provider.rawValue).js",
-                        provider: provider,
-                        bundledPlugin: plugin,
-                        secretKey: secretKey,
+                        id: "\(configuration.provider.rawValue).js",
+                        provider: configuration.provider,
+                        bundledPlugin: configuration.plugin,
+                        secretKey: configuration.secretKey,
                         resolveSecret: resolveToken),
                     swift,
                 ]

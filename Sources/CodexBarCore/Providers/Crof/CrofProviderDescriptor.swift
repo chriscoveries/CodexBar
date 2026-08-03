@@ -47,10 +47,11 @@ public enum CrofProviderDescriptor {
     private static func fetchPlan() -> ProviderFetchPlan {
         #if canImport(JavaScriptCore)
         .scriptPrototypeAPI(
-            provider: .crof,
-            plugin: "crof",
-            secretKey: CrofSettingsReader.apiKeyEnvironmentKeys[0],
-            strategyID: "crof.api",
+            configuration: .init(
+                provider: .crof,
+                plugin: "crof",
+                secretKey: CrofSettingsReader.apiKeyEnvironmentKeys[0],
+                strategyID: "crof.api"),
             resolveToken: { ProviderTokenResolver.crofToken(environment: $0) },
             missingCredentialsError: { CrofUsageError.missingCredentials },
             loadUsage: { apiKey, _ in

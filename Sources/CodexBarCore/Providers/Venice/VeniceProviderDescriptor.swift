@@ -47,10 +47,11 @@ public enum VeniceProviderDescriptor {
     private static func fetchPlan() -> ProviderFetchPlan {
         #if canImport(JavaScriptCore)
         .scriptPrototypeAPI(
-            provider: .venice,
-            plugin: "venice",
-            secretKey: VeniceSettingsReader.apiKeyEnvironmentKey,
-            strategyID: "venice.api",
+            configuration: .init(
+                provider: .venice,
+                plugin: "venice",
+                secretKey: VeniceSettingsReader.apiKeyEnvironmentKey,
+                strategyID: "venice.api"),
             resolveToken: { ProviderTokenResolver.veniceToken(environment: $0) },
             missingCredentialsError: { VeniceUsageError.missingCredentials },
             loadUsage: { apiKey, _ in

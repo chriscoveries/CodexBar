@@ -28,7 +28,7 @@ struct ProviderPluginRuntimeTests {
         await #expect(throws: ProviderPluginError.self) {
             _ = try await runtime.fetchUsage(secrets: ["TEST_KEY": "secret"])
         }
-        #expect(await requests.count == 0)
+        #expect(await requests.isEmpty)
     }
 
     @Test
@@ -66,7 +66,16 @@ struct ProviderPluginRuntimeTests {
     @Test(arguments: [
         "defineProvider({",
         "defineProvider({ id: 'synthetic' });",
-        "defineProvider({ id: 'not-a-provider', name: 'Bad', endpoints: ['https://api.example.test'], auth: { type: 'bearer', secret: 'TEST_KEY' }, settings: [{ key: 'TEST_KEY', title: 'Key' }], fetchUsage: async () => ({ primary: { usedPercent: 0 } }) });",
+        """
+        defineProvider({
+          id: "not-a-provider",
+          name: "Bad",
+          endpoints: ["https://api.example.test"],
+          auth: { type: "bearer", secret: "TEST_KEY" },
+          settings: [{ key: "TEST_KEY", title: "Key" }],
+          fetchUsage: async () => ({ primary: { usedPercent: 0 } }),
+        });
+        """,
     ])
     func `malformed plugins have descriptive load errors`(source: String) {
         #expect(throws: ProviderPluginError.self) {
@@ -168,8 +177,8 @@ struct ProviderPluginRuntimeTests {
 private actor RequestRecorder {
     private var requests: [URLRequest] = []
 
-    var count: Int {
-        self.requests.count
+    var isEmpty: Bool {
+        self.requests.isEmpty
     }
 
     var first: URLRequest? {
