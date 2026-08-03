@@ -15,20 +15,23 @@ the default.
 
 ## Enable and test
 
-Set `CODEXBAR_JS_PROVIDERS=1` in CodexBar's environment. Synthetic, Venice, and Crof then prepend a script strategy to
-their existing API pipeline. A missing required secret leaves the script strategy unavailable and permits the Swift
-strategy to run; a loaded script that fails does not fall back, so parity defects stay visible. Without the variable,
-the resolver returns the original Swift strategy only and does not load JavaScriptCore or a plugin resource.
+Set `CODEXBAR_JS_PROVIDERS=1` in CodexBar's environment. Synthetic, Venice, Crof, OpenAI, z.ai, OpenRouter, Poe, and
+ClawRouter then prepend a script strategy to their existing API pipeline. A missing required secret leaves the script
+strategy unavailable and permits the Swift strategy to run; a loaded script that fails does not fall back, so parity
+defects stay visible. Without the variable, the resolver returns the original Swift strategy only and does not load
+JavaScriptCore or a plugin resource.
 
 Run the focused proof with:
 
 ```sh
 swift test --filter ProviderPluginRuntimeTests
 swift test --filter ProviderPluginParityTests
+swift test --filter ProviderPluginDetailsParityTests
 ```
 
-The second suite sends the same canned response through an injected `ProviderHTTPTransport` to both implementations and
-compares core windows, percentages, reset dates, cost, subscription dates, and identity fields.
+The parity suites send the same canned responses through an injected `ProviderHTTPTransport` to both implementations
+and compare core windows, percentages, reset dates, cost, subscription dates, and identity fields. Details-provider
+fixtures additionally characterize the complete declarative section output.
 
 ## Manifest
 
