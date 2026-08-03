@@ -822,7 +822,7 @@
 "Pace: %@" = "Pace: %@";
 "Pace: %@ · %@" = "Pace: %@ · %@";
 "%@ · %@" = "%@ · %@";
-"≈ %d%% run-out risk" = "≈ %d%% run-out risk";
+"(%d%% risk)" = "(%d%% risk)";
 "%d%% in deficit" = "%d%% in deficit";
 "%d%% in reserve" = "%d%% in reserve";
 "usage_percent_suffix_left" = "left";

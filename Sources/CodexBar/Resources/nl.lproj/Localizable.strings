@@ -839,7 +839,7 @@
 "Pace: %@" = "Tempo: %@";
 "Pace: %@ · %@" = "Tempo: %@ · %@";
 "%@ · %@" = "%@ · %@";
-"≈ %d%% run-out risk" = "≈ %d%% uitlooprisico";
+"(%d%% risk)" = "(%d%% uitlooprisico)";
 "%d%% in deficit" = "%d%% tekort";
 "%d%% in reserve" = "%d%% in reserve";
 "usage_percent_suffix_left" = "over";

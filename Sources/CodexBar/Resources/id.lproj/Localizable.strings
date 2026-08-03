@@ -847,7 +847,7 @@
 "Pace: %@" = "Pace: %@";
 "Pace: %@ · %@" = "Pace: %@ · %@";
 "%@ · %@" = "%@ · %@";
-"≈ %d%% run-out risk" = "≈ %d%% risiko habis";
+"(%d%% risk)" = "(%d%% risiko habis)";
 "%d%% in deficit" = "%d%% defisit";
 "%d%% in reserve" = "%d%% cadangan";
 "usage_percent_suffix_left" = "tersisa";
