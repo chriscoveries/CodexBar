@@ -69,11 +69,14 @@ public enum ZaiProviderDescriptor {
                         bundledPlugin: "zai",
                         secretKey: ZaiSettingsReader.apiTokenKey,
                         resolveValues: { context in
-                            guard let token = ProviderTokenResolver.zaiToken(environment: context.env)
-                            else { return nil }
                             let settings = context.settings?.zai
+                            let region = settings?.apiRegion ?? .global
+                            guard let token = ZaiSettingsReader.apiToken(
+                                for: region,
+                                environment: context.env)
+                            else { return nil }
                             var plainValues = [
-                                "Z_AI_REGION": (settings?.apiRegion ?? .global).rawValue,
+                                "Z_AI_REGION": region.rawValue,
                                 "Z_AI_USAGE_SCOPE": (settings?.usageScope ?? .personal).rawValue,
                             ]
                             if let team = settings?.teamContext {
