@@ -53,7 +53,7 @@ struct CostUsageScannerPriorityTests {
     }
 
     @Test
-    func `codex daily report applies priority multiplier to models dev pricing`() throws {
+    func `codex daily report applies API fast pricing from brief`() throws {
         let env = try CostUsageTestEnvironment()
         defer { env.cleanup() }
 
@@ -63,9 +63,9 @@ struct CostUsageScannerPriorityTests {
           "openai": {
             "id": "openai",
             "models": {
-              "gpt-5.5": {
-                "id": "gpt-5.5",
-                "cost": { "input": 7, "output": 31, "cache_read": 1 }
+              "gpt-5.6-sol": {
+                "id": "gpt-5.6-sol",
+                "cost": { "input": 5, "output": 30, "cache_read": 0.5 }
               }
             }
           }
@@ -76,15 +76,15 @@ struct CostUsageScannerPriorityTests {
         let iso0 = env.isoString(for: day)
         let iso1 = env.isoString(for: day.addingTimeInterval(1))
         let entries: [[String: Any]] = [
-            ["type": "turn_context", "timestamp": iso0, "payload": ["model": "gpt-5.5"]],
+            ["type": "turn_context", "timestamp": iso0, "payload": ["model": "gpt-5.6-sol"]],
             ["type": "event_msg", "timestamp": iso1, "payload": ["type": "task_started", "turn_id": "priority-turn"]],
-            self.tokenCount(timestamp: iso1, input: 100, cached: 20, output: 10),
+            self.tokenCount(timestamp: iso1, input: 100_000, cached: 20000, output: 20000),
         ]
         _ = try env.writeCodexSessionFile(day: day, filename: "session.jsonl", contents: env.jsonl(entries))
 
         let dbURL = env.root.appendingPathComponent("logs_2.sqlite")
         try CostUsageScannerCodexPriorityTests.createTestLogsDatabase(at: dbURL)
-        try self.insertPriorityTrace(dbURL: dbURL, timestamp: iso1)
+        try self.insertPriorityTrace(dbURL: dbURL, timestamp: iso1, model: "gpt-5.6-sol")
 
         var options = CostUsageScanner.Options(
             codexSessionsRoot: env.codexSessionsRoot,
@@ -98,9 +98,9 @@ struct CostUsageScannerPriorityTests {
             now: day,
             options: options)
 
-        // models.dev Standard is $0.00089 for this token mix; GPT-5.5 Priority is 2.5x.
+        // The brief's models.dev Standard total is $1.01; API Fast is 2x for GPT-5.6.
         let breakdown = try #require(report.data.first?.modelBreakdowns?.first)
-        #expect(abs((breakdown.priorityCostUSD ?? 0) - 0.002225) < 1e-12)
+        #expect(abs((breakdown.priorityCostUSD ?? 0) - 2.02) < 1e-12)
     }
 
     @Test

@@ -176,7 +176,7 @@ enum CostUsagePricing {
             displayLabel: nil),
         // GPT-5.6 Sol/Terra/Luna (OpenAI pricing page + model cards).
         // Long context: prompts with >272K input tokens are 2x input / 1.5x output for the full
-        // request. Cache writes: 1.25x uncached input. Priority support and multipliers are applied
+        // request. Cache writes: 1.25x uncached input. API Fast support and multipliers are applied
         // separately after Standard pricing resolves from models.dev or this bundled fallback.
         "gpt-5.6-sol": CodexPricing(
             inputCostPerToken: 5e-6,
@@ -190,31 +190,34 @@ enum CostUsagePricing {
             cacheReadInputCostPerTokenAboveThreshold: 1e-6,
             cacheWriteInputCostPerTokenAboveThreshold: 1.25e-5),
         "gpt-5.6-terra": CodexPricing(
-            inputCostPerToken: 2.5e-6,
-            outputCostPerToken: 1.5e-5,
-            cacheReadInputCostPerToken: 2.5e-7,
+            inputCostPerToken: 2e-6,
+            outputCostPerToken: 1.2e-5,
+            cacheReadInputCostPerToken: 2e-7,
             displayLabel: nil,
-            cacheWriteInputCostPerToken: 3.125e-6,
+            cacheWriteInputCostPerToken: 2.5e-6,
             thresholdTokens: 272_000,
-            inputCostPerTokenAboveThreshold: 5e-6,
-            outputCostPerTokenAboveThreshold: 2.25e-5,
-            cacheReadInputCostPerTokenAboveThreshold: 5e-7,
-            cacheWriteInputCostPerTokenAboveThreshold: 6.25e-6),
+            inputCostPerTokenAboveThreshold: 4e-6,
+            outputCostPerTokenAboveThreshold: 1.8e-5,
+            cacheReadInputCostPerTokenAboveThreshold: 4e-7,
+            cacheWriteInputCostPerTokenAboveThreshold: 5e-6),
         "gpt-5.6-luna": CodexPricing(
-            inputCostPerToken: 1e-6,
-            outputCostPerToken: 6e-6,
-            cacheReadInputCostPerToken: 1e-7,
+            inputCostPerToken: 2e-7,
+            outputCostPerToken: 1.2e-6,
+            cacheReadInputCostPerToken: 2e-8,
             displayLabel: nil,
-            cacheWriteInputCostPerToken: 1.25e-6,
+            cacheWriteInputCostPerToken: 2.5e-7,
             thresholdTokens: 272_000,
-            inputCostPerTokenAboveThreshold: 2e-6,
-            outputCostPerTokenAboveThreshold: 9e-6,
-            cacheReadInputCostPerTokenAboveThreshold: 2e-7,
-            cacheWriteInputCostPerTokenAboveThreshold: 2.5e-6),
+            inputCostPerTokenAboveThreshold: 4e-7,
+            outputCostPerTokenAboveThreshold: 1.8e-6,
+            cacheReadInputCostPerTokenAboveThreshold: 4e-8,
+            cacheWriteInputCostPerTokenAboveThreshold: 5e-7),
     ]
 
     static func codexBuiltInPricingFingerprint() -> String {
-        var parts = ["priorityInputTokenLimit=\(self.codexPriorityInputTokenLimit)"]
+        var parts = [
+            "priorityInputTokenLimit=\(self.codexPriorityInputTokenLimit)",
+            "fastPricingDefinition=api-fast-usd-v1",
+        ]
         for model in self.codex.keys.sorted() {
             guard let pricing = self.codex[model] else { continue }
             parts.append([
@@ -229,7 +232,7 @@ enum CostUsagePricing {
                 self.optionalPricingFingerprint(pricing.outputCostPerTokenAboveThreshold),
                 self.optionalPricingFingerprint(pricing.cacheReadInputCostPerTokenAboveThreshold),
                 self.optionalPricingFingerprint(pricing.cacheWriteInputCostPerTokenAboveThreshold),
-                self.optionalPricingFingerprint(self.codexPriorityMultiplier(model: model)),
+                self.optionalPricingFingerprint(self.codexAPIFastMultiplier(model: model)),
             ].joined(separator: "|"))
         }
         return parts.joined(separator: "\n")
@@ -558,9 +561,9 @@ enum CostUsagePricing {
         modelsDevCatalog: ModelsDevCatalog? = nil,
         modelsDevCacheRoot: URL? = nil) -> Double?
     {
-        guard let multiplier = self.codexPriorityMultiplier(model: model) else { return nil }
-        // OpenAI does not support Priority processing for long-context requests. Do not combine
-        // the independent Standard long-context and Priority short-context rate tables.
+        guard let multiplier = self.codexAPIFastMultiplier(model: model) else { return nil }
+        // OpenAI does not support API Fast processing for long-context requests. Do not combine
+        // the independent Standard long-context and Fast short-context rate tables.
         if max(0, inputTokens) > self.codexPriorityInputTokenLimit {
             return nil
         }
@@ -576,10 +579,12 @@ enum CostUsagePricing {
             .map { $0 * multiplier }
     }
 
-    static func codexPriorityMultiplier(model: String) -> Double? {
+    /// Current public API Fast rates normalized against Standard API pricing. These are deliberately
+    /// distinct from ChatGPT/Codex Fast credit multipliers, which do not represent a USD charge.
+    static func codexAPIFastMultiplier(model: String) -> Double? {
         switch self.normalizeCodexModel(model) {
-        case "gpt-5.4", "gpt-5.4-mini": 2
-        case "gpt-5.5", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna": 2.5
+        case "gpt-5.4", "gpt-5.4-mini", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna": 2
+        case "gpt-5.5": 2.5
         default: nil
         }
     }

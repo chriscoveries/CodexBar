@@ -185,11 +185,7 @@ extension CostUsageScanner {
         priorityMetadata: CodexPriorityTurnMetadata) -> String
     {
         guard let model = priorityMetadata.model,
-              CostUsagePricing.codexPriorityCostUSD(
-                  model: model,
-                  inputTokens: row.input,
-                  cachedInputTokens: row.cached,
-                  outputTokens: row.output) != nil
+              CostUsagePricing.codexAPIFastMultiplier(model: model) != nil
         else { return row.model }
         return model
     }
@@ -482,7 +478,9 @@ extension CostUsageScanner {
                                             model: pricedModel,
                                             inputTokens: row.input,
                                             cachedInputTokens: row.cached,
-                                            outputTokens: row.output)
+                                            outputTokens: row.output,
+                                            modelsDevCatalog: modelsDevCatalog,
+                                            modelsDevCacheRoot: modelsDevCacheRoot)
             {
                 max(priorityCost, baseCost ?? priorityCost)
             } else {
