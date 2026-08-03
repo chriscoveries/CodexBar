@@ -323,6 +323,16 @@ struct MenuDescriptor {
                     showUsed: settings.usageBarsShowUsed,
                     resetOverride: opusResetOverride)
             }
+            if provider == .zai {
+                for extra in snap.extraRateWindows ?? [] where extra.id == "zai-mcp" {
+                    Self.appendRateWindow(
+                        entries: &entries,
+                        title: extra.title,
+                        window: extra.window,
+                        resetStyle: resetStyle,
+                        showUsed: settings.usageBarsShowUsed)
+                }
+            }
 
             Self.appendProviderUsageSummaries(
                 entries: &entries,

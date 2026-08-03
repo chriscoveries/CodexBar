@@ -928,7 +928,6 @@ final class UsageStore {
     enum SessionQuotaWindowSource: String {
         case primary
         case copilotSecondaryFallback
-        case zaiTertiary
         case antigravityQuotaSummary
         case antigravityLegacy
     }

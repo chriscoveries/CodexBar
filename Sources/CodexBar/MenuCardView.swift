@@ -1181,9 +1181,10 @@ extension UsageMenuCardView.Model {
         var metrics: [Metric] = []
         let percentStyle: PercentStyle = input.usageBarsShowUsed ? .used : .left
         let zaiUsage = input.provider == .zai ? snapshot.zaiUsage : nil
-        let zaiTokenDetail = Self.zaiLimitDetailText(limit: zaiUsage?.tokenLimit)
-        let zaiTimeDetail = Self.zaiLimitDetailText(limit: zaiUsage?.timeLimit)
-        let zaiSessionDetail = Self.zaiLimitDetailText(limit: zaiUsage?.sessionTokenLimit)
+        let zaiPrimaryDetail = Self.zaiLimitDetailText(limit: zaiUsage?.sessionTokenLimit ?? zaiUsage?.tokenLimit)
+        let zaiSecondaryDetail = zaiUsage?.sessionTokenLimit == nil
+            ? nil
+            : Self.zaiLimitDetailText(limit: zaiUsage?.tokenLimit)
         let openRouterQuotaDetail = Self.openRouterQuotaDetail(
             provider: input.provider,
             snapshot: snapshot,
@@ -1214,7 +1215,7 @@ extension UsageMenuCardView.Model {
                 primary: primary,
                 percentStyle: percentStyle,
                 title: labels.primary,
-                zaiTokenDetail: zaiTokenDetail,
+                zaiTokenDetail: zaiPrimaryDetail,
                 openRouterQuotaDetail: openRouterQuotaDetail))
         }
         if input.provider != .codex, let weekly = snapshot.secondary {
@@ -1223,7 +1224,7 @@ extension UsageMenuCardView.Model {
                 weekly: weekly,
                 percentStyle: percentStyle,
                 title: labels.secondary,
-                zaiTimeDetail: zaiTimeDetail))
+                zaiTimeDetail: zaiSecondaryDetail))
         }
         if input.provider == .mimo, let mimoUsage = snapshot.mimoUsage {
             metrics.append(Metric(
@@ -1245,9 +1246,6 @@ extension UsageMenuCardView.Model {
                let detail = opus.resetDescription,
                !detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             {
-                tertiaryDetailText = detail
-            }
-            if input.provider == .zai, let detail = zaiSessionDetail {
                 tertiaryDetailText = detail
             }
             // Perplexity purchased credits don't reset; show balance without "Resets" prefix.

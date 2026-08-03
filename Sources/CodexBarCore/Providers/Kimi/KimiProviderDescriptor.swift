@@ -10,14 +10,14 @@ public enum KimiProviderDescriptor {
             id: .kimi,
             metadata: ProviderMetadata(
                 id: .kimi,
-                displayName: "Kimi",
+                displayName: "Kimi Code",
                 sessionLabel: "Weekly",
                 weeklyLabel: "Rate Limit",
                 opusLabel: nil,
                 supportsOpus: false,
                 supportsCredits: false,
                 creditsHint: "",
-                toggleTitle: "Show Kimi usage",
+                toggleTitle: "Show Kimi Code usage",
                 cliName: "kimi",
                 defaultEnabled: false,
                 isPrimaryProvider: false,
@@ -36,7 +36,7 @@ public enum KimiProviderDescriptor {
                 ]),
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
-                noDataMessage: { "Kimi cost summary is not supported." }),
+                noDataMessage: { "Kimi Code cost summary is not supported." }),
             pace: ProviderPaceCapability(
                 resetWindowPace: .windowDuration(minutes: self.weeklyWindowMinutes)),
             fetchPlan: ProviderFetchPlan(
