@@ -42,9 +42,9 @@ struct AgentSessionJSONTests {
     }
 
     @Test
-    func `legacy v1 JSON excludes OhMyPi and remains decodable by closed provider clients`() throws {
+    func `legacy v1 JSON excludes Pi-family sessions and remains decodable by closed provider clients`() throws {
         let sessions = self.makeProtocolFixture()
-        let legacySessions = CodexBarCLI.sessionsForJSON(sessions, includeOhMyPi: false)
+        let legacySessions = CodexBarCLI.sessionsForJSON(sessions, includePiFamily: false)
         #expect(legacySessions.map(\.provider) == [.codex, .claude])
 
         let legacyData = try self.encode(legacySessions)
@@ -53,12 +53,12 @@ struct AgentSessionJSONTests {
     }
 
     @Test
-    func `versioned JSON flags preserve legacy compatibility and expose OhMyPi only in v2`() throws {
+    func `versioned JSON flags preserve legacy compatibility and expose Pi-family sessions only in v2`() throws {
         let sessions = self.makeProtocolFixture()
         let parser = CommandParser(signature: CommandSignature.describe(SessionsOptions()))
         let expectations = [
-            (flag: "--json", version: 1, includesOhMyPi: false),
-            (flag: "--json-v2", version: 2, includesOhMyPi: true),
+            (flag: "--json", version: 1, includesPiFamily: false),
+            (flag: "--json-v2", version: 2, includesPiFamily: true),
         ]
 
         for expectation in expectations {
@@ -68,14 +68,14 @@ struct AgentSessionJSONTests {
 
             let currentSessions = CodexBarCLI.sessionsForJSON(
                 sessions,
-                includeOhMyPi: protocolVersion == 2)
+                includePiFamily: protocolVersion == 2)
             let currentData = try self.encode(currentSessions)
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
             let decoded = try decoder.decode([AgentSession].self, from: currentData)
 
-            #expect(decoded == (expectation.includesOhMyPi ? sessions : sessions.filter { $0.provider != .ohMyPi }))
-            #expect(decoded.contains { $0.provider == .ohMyPi } == expectation.includesOhMyPi)
+            #expect(decoded == (expectation.includesPiFamily ? sessions : sessions.filter { $0.provider != .pi }))
+            #expect(decoded.contains { $0.provider == .pi } == expectation.includesPiFamily)
         }
     }
 
@@ -86,14 +86,14 @@ struct AgentSessionJSONTests {
         let newHostLegacyFlag = try parser.parse(arguments: ["--json"])
         #expect(CodexBarCLI.sessionsJSONProtocolVersion(from: newHostLegacyFlag) == 1)
 
-        // A new host answering an old client keeps OhMyPi out of the legacy payload.
-        let newHostLegacySessions = CodexBarCLI.sessionsForJSON(sessions, includeOhMyPi: false)
+        // A new host answering an old client keeps Pi-family rows out of the legacy payload.
+        let newHostLegacySessions = CodexBarCLI.sessionsForJSON(sessions, includePiFamily: false)
         let newHostLegacyData = try self.encode(newHostLegacySessions)
         let oldClientSessions = try JSONDecoder().decode([LegacyAgentSession].self, from: newHostLegacyData)
         #expect(oldClientSessions.map(\.provider) == [.codex, .claude])
 
         // A new client falling back to an old host can decode that same v1 payload.
-        let oldHostLegacyData = try self.encode(sessions.filter { $0.provider != .ohMyPi })
+        let oldHostLegacyData = try self.encode(sessions.filter { $0.provider != .pi })
         let newClientDecoder = JSONDecoder()
         newClientDecoder.dateDecodingStrategy = .iso8601
         let newClientSessions = try newClientDecoder.decode([AgentSession].self, from: oldHostLegacyData)
@@ -101,22 +101,29 @@ struct AgentSessionJSONTests {
     }
 
     @Test
-    func `human-readable sessions table still includes OhMyPi`() {
-        #expect(CodexBarCLI.renderSessionsTable(self.makeProtocolFixture()).contains("oh-my-pi"))
+    func `human-readable sessions table includes Pi-family dialect tags`() {
+        let table = CodexBarCLI.renderSessionsTable(self.makeProtocolFixture())
+        #expect(table.contains("DIALECT"))
+        #expect(table.contains("omp"))
     }
 
     private func makeProtocolFixture() -> [AgentSession] {
         [
             self.makeSession(id: "codex-session", provider: .codex),
             self.makeSession(id: "claude-session", provider: .claude),
-            self.makeSession(id: "omp-session", provider: .ohMyPi),
+            self.makeSession(id: "omp-session", provider: .pi, dialect: .omp),
         ]
     }
 
-    private func makeSession(id: String, provider: AgentSession.Provider) -> AgentSession {
+    private func makeSession(
+        id: String,
+        provider: AgentSession.Provider,
+        dialect: AgentSession.Dialect? = nil) -> AgentSession
+    {
         AgentSession(
             id: id,
             provider: provider,
+            dialect: dialect,
             source: .cli,
             state: .active,
             pid: 42,

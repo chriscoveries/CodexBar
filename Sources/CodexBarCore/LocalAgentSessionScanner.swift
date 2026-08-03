@@ -23,8 +23,6 @@ final class FutureModificationDateClamp: @unchecked Sendable {
 public struct LocalAgentSessionScanner: Sendable {
     typealias ProcessOutputProvider = @Sendable ([String: String]) async -> String
     typealias CWDProvider = @Sendable ([Int32], [String: String]) async -> [Int32: String]
-    typealias ProcessEnvironmentProvider =
-        @Sendable ([Int32], [String: String]) async -> [Int32: [String: String]]
 
     private struct Rollout: Sendable {
         let url: URL
@@ -39,32 +37,19 @@ public struct LocalAgentSessionScanner: Sendable {
         let codexAppServerPresent: Bool
         let includeFileOnlySessions: Bool
         let threadMetadata: [String: CodexThreadMetadata]
-        let ohMyPiSessions: [AgentSession]
+        let piFamilySessions: [AgentSession]
     }
-
-    private static let processEnvironmentKeys: Set<String> = [
-        "HOME",
-        "PI_CONFIG_DIR",
-        "PI_CODING_AGENT_DIR",
-        "XDG_DATA_HOME",
-        "OMP_PROFILE",
-        "PI_PROFILE",
-    ]
-    private static let maximumProcessEnvironmentBytes = 64 * 1024
-    private static let processEnvironmentReadTimeout: TimeInterval = 2
 
     public let config: SessionScanConfig
     private let futureModificationDateClamp = FutureModificationDateClamp()
     private let processOutputProvider: ProcessOutputProvider?
     private let cwdProvider: CWDProvider?
-    private let processEnvironmentProvider: ProcessEnvironmentProvider?
     private let didVisitDirectoryEntry: (@Sendable () -> Void)?
 
     public init(config: SessionScanConfig = SessionScanConfig()) {
         self.config = config
         self.processOutputProvider = nil
         self.cwdProvider = nil
-        self.processEnvironmentProvider = nil
         self.didVisitDirectoryEntry = nil
     }
 
@@ -72,13 +57,11 @@ public struct LocalAgentSessionScanner: Sendable {
         config: SessionScanConfig = SessionScanConfig(),
         processOutputProvider: @escaping ProcessOutputProvider,
         cwdProvider: @escaping CWDProvider,
-        processEnvironmentProvider: ProcessEnvironmentProvider? = nil,
         didVisitDirectoryEntry: (@Sendable () -> Void)? = nil)
     {
         self.config = config
         self.processOutputProvider = processOutputProvider
         self.cwdProvider = cwdProvider
-        self.processEnvironmentProvider = processEnvironmentProvider
         self.didVisitDirectoryEntry = didVisitDirectoryEntry
     }
 
@@ -106,20 +89,6 @@ public struct LocalAgentSessionScanner: Sendable {
         } else {
             await self.cwdByPID(processes.map(\ .pid), environment: environment)
         }
-        var seenOhMyPiPIDs = Set<Int32>()
-        let ohMyPiPIDs = processes.compactMap { process -> Int32? in
-            guard AgentPSOutputParser.provider(for: process) == .ohMyPi,
-                  seenOhMyPiPIDs.insert(process.pid).inserted
-            else { return nil }
-            return process.pid
-        }
-        let environmentByPID: [Int32: [String: String]] = if ohMyPiPIDs.isEmpty {
-            [:]
-        } else if let processEnvironmentProvider = self.processEnvironmentProvider {
-            await processEnvironmentProvider(ohMyPiPIDs, environment)
-        } else {
-            await self.processEnvironmentByPID(ohMyPiPIDs, environment: environment)
-        }
         let codexCWDs = processes.compactMap { process -> String? in
             guard AgentPSOutputParser.provider(for: process) == .codex else { return nil }
             return cwdByPID[process.pid]
@@ -136,23 +105,22 @@ public struct LocalAgentSessionScanner: Sendable {
                 ? self.config.directoryScanBudget
                 : min(self.config.directoryScanBudget, self.config.adaptiveDirectoryScanBudget),
             didVisitEntry: self.didVisitDirectoryEntry)
-        var ohMyPiDirectoryBudget = DirectoryMetadataScanBudget(
+        var piFamilyDirectoryBudget = DirectoryMetadataScanBudget(
             maxEntryCount: self.config.maxDirectoryEntryCount,
             maxDepth: self.config.maxDirectoryDepth,
             timeLimit: includeFileOnlySessions
                 ? self.config.directoryScanBudget
                 : min(self.config.directoryScanBudget, self.config.adaptiveDirectoryScanBudget),
             didVisitEntry: self.didVisitDirectoryEntry)
-        let ohMyPiSessions = OhMyPiSessionScanner.scan(
-            input: OhMyPiSessionScanner.ScanInput(
+        let piFamilySessions = PiFamilySessionScanner.scan(
+            input: PiFamilySessionScanner.ScanInput(
                 processes: processes,
                 cwdByPID: cwdByPID,
                 environment: environment,
-                environmentByPID: ohMyPiPIDs.isEmpty ? nil : environmentByPID,
                 now: now,
                 host: host,
                 config: self.config),
-            directoryBudget: &ohMyPiDirectoryBudget)
+            directoryBudget: &piFamilyDirectoryBudget)
         let rollouts: [Rollout] = if includeFileOnlySessions || !codexCWDs.isEmpty {
             self.codexRollouts(
                 now: now,
@@ -177,7 +145,7 @@ public struct LocalAgentSessionScanner: Sendable {
                 codexAppServerPresent: codexAppServerPresent,
                 includeFileOnlySessions: includeFileOnlySessions,
                 threadMetadata: threadMetadata,
-                ohMyPiSessions: ohMyPiSessions),
+                piFamilySessions: piFamilySessions),
             directoryBudget: &directoryBudget)
     }
 
@@ -304,7 +272,7 @@ public struct LocalAgentSessionScanner: Sendable {
                     lastActivityAt: rollout?.modifiedAt,
                     transcriptPath: rollout?.url.path,
                     host: context.host))
-            case .ohMyPi:
+            case .pi:
                 continue
             }
         }
@@ -327,7 +295,7 @@ public struct LocalAgentSessionScanner: Sendable {
                 appServerPresent: context.codexAppServerPresent)
             sessions.append(session)
         }
-        sessions.append(contentsOf: context.ohMyPiSessions)
+        sessions.append(contentsOf: context.piFamilySessions)
 
         var seen = Set<String>()
         return sessions
@@ -340,130 +308,6 @@ public struct LocalAgentSessionScanner: Sendable {
             }
             .filter { seen.insert("\($0.host):\($0.id)").inserted }
     }
-
-    private func processEnvironmentByPID(
-        _ pids: [Int32],
-        environment: [String: String]) async -> [Int32: [String: String]]
-    {
-        guard !pids.isEmpty else { return [:] }
-
-        #if os(macOS)
-        let ps = ["/bin/ps", "/usr/bin/ps"]
-            .first { FileManager.default.isExecutableFile(atPath: $0) }
-            ?? self.findExecutable("ps", environment: environment)
-        guard let ps else { return [:] }
-        return await withTaskGroup(of: (Int32, [String: String]?).self) { group in
-            for pid in pids {
-                group.addTask {
-                    guard pid > 0,
-                          let result = try? await SubprocessRunner.run(
-                              binary: ps,
-                              arguments: ["eww", "-p", String(pid), "-o", "command="],
-                              environment: environment,
-                              timeout: Self.processEnvironmentReadTimeout,
-                              maxOutputBytes: Self.maximumProcessEnvironmentBytes,
-                              label: "agent session environment scan")
-                    else {
-                        return (pid, nil)
-                    }
-                    return (pid, Self.parseProcessEnvironmentOutput(result.stdout))
-                }
-            }
-
-            var environments: [Int32: [String: String]] = [:]
-            for await (pid, processEnvironment) in group {
-                if let processEnvironment {
-                    environments[pid] = processEnvironment
-                }
-            }
-            return environments
-        }
-        #elseif os(Linux)
-        var environments: [Int32: [String: String]] = [:]
-        for pid in pids {
-            if let processEnvironment = Self.readLinuxProcessEnvironment(pid: pid) {
-                environments[pid] = processEnvironment
-            }
-        }
-        return environments
-        #else
-        return [:]
-        #endif
-    }
-
-    private static func parseProcessEnvironmentOutput(_ output: String) -> [String: String]? {
-        guard !output.isEmpty else { return nil }
-
-        var matches: [(key: String, keyStart: String.Index, valueStart: String.Index)] = []
-        var cursor = output.startIndex
-        while cursor < output.endIndex {
-            let atTokenBoundary = cursor == output.startIndex
-                || output[output.index(before: cursor)].isWhitespace
-            if atTokenBoundary {
-                var keyEnd = cursor
-                while keyEnd < output.endIndex, !output[keyEnd].isWhitespace, output[keyEnd] != "=" {
-                    keyEnd = output.index(after: keyEnd)
-                }
-                if keyEnd < output.endIndex,
-                   output[keyEnd] == "=",
-                   Self.isEnvironmentKey(output[cursor..<keyEnd])
-                {
-                    matches.append((
-                        key: String(output[cursor..<keyEnd]),
-                        keyStart: cursor,
-                        valueStart: output.index(after: keyEnd)))
-                }
-            }
-            cursor = output.index(after: cursor)
-        }
-        guard !matches.isEmpty else { return nil }
-
-        var environment: [String: String] = [:]
-        for index in matches.indices {
-            let match = matches[index]
-            let valueEnd = index + 1 < matches.count
-                ? matches[index + 1].keyStart
-                : output.endIndex
-            let value = output[match.valueStart..<valueEnd]
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            guard Self.processEnvironmentKeys.contains(match.key) else { continue }
-            environment[match.key] = value
-        }
-        return environment
-    }
-
-    private static func isEnvironmentKey(_ key: Substring) -> Bool {
-        guard let first = key.first,
-              first == "_" || (first.isASCII && first.isLetter)
-        else { return false }
-        return key.dropFirst().allSatisfy {
-            $0 == "_" || ($0.isASCII && ($0.isLetter || $0.isNumber))
-        }
-    }
-
-    #if os(Linux)
-    private static func readLinuxProcessEnvironment(pid: Int32) -> [String: String]? {
-        guard pid > 0 else { return nil }
-        let url = URL(fileURLWithPath: "/proc/\(pid)/environ")
-        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
-        defer { try? handle.close() }
-        guard let data = try? handle.read(upToCount: Self.maximumProcessEnvironmentBytes + 1),
-              !data.isEmpty,
-              data.count <= Self.maximumProcessEnvironmentBytes,
-              data.last == 0,
-              let output = String(data: data, encoding: .utf8)
-        else { return nil }
-
-        var environment: [String: String] = [:]
-        for entry in output.split(separator: "\0", omittingEmptySubsequences: true) {
-            guard let separator = entry.firstIndex(of: "=") else { continue }
-            let key = String(entry[..<separator])
-            guard Self.processEnvironmentKeys.contains(key) else { continue }
-            environment[key] = String(entry[entry.index(after: separator)...])
-        }
-        return environment
-    }
-    #endif
 
     private func processRecords(environment: [String: String]) async -> [AgentProcessRecord] {
         #if canImport(Darwin)

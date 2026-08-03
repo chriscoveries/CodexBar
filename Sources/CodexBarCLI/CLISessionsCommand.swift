@@ -7,7 +7,7 @@ extension CodexBarCLI {
         let sessions = await LocalAgentSessionScanner().scan()
         if let jsonVersion = Self.sessionsJSONProtocolVersion(from: values) {
             Self.printJSON(
-                Self.sessionsForJSON(sessions, includeOhMyPi: jsonVersion == 2),
+                Self.sessionsForJSON(sessions, includePiFamily: jsonVersion == 2),
                 pretty: values.flags.contains("pretty"))
         } else {
             print(Self.renderSessionsTable(sessions))
@@ -24,8 +24,8 @@ extension CodexBarCLI {
         return nil
     }
 
-    static func sessionsForJSON(_ sessions: [AgentSession], includeOhMyPi: Bool) -> [AgentSession] {
-        guard !includeOhMyPi else { return sessions }
+    static func sessionsForJSON(_ sessions: [AgentSession], includePiFamily: Bool) -> [AgentSession] {
+        guard !includePiFamily else { return sessions }
         return sessions.filter { $0.provider == .codex || $0.provider == .claude }
     }
 
@@ -63,13 +63,14 @@ extension CodexBarCLI {
             [
                 session.state == .active ? "active" : "idle",
                 session.provider.rawValue,
+                session.dialect?.rawValue ?? "—",
                 session.source.rawValue,
                 session.projectName ?? "—",
                 Self.sessionAge(session, now: now),
                 session.id,
             ]
         }
-        let headers = ["STATE", "PROVIDER", "SOURCE", "PROJECT", "ACTIVITY", "ID"]
+        let headers = ["STATE", "PROVIDER", "DIALECT", "SOURCE", "PROJECT", "ACTIVITY", "ID"]
         let widths = headers.indices.map { index in
             ([headers[index]] + rows.map { $0[index] }).map(\ .count).max() ?? headers[index].count
         }
@@ -101,7 +102,7 @@ struct SessionsOptions: CommanderParsable {
     @Flag(name: .long("json"), help: "Emit legacy JSON compatible with older clients")
     var jsonShortcut: Bool = false
 
-    @Flag(name: .long("json-v2"), help: "Emit complete JSON, including OhMyPi sessions")
+    @Flag(name: .long("json-v2"), help: "Emit complete JSON, including Pi-family sessions")
     var jsonV2: Bool = false
 
     @Flag(name: .long("pretty"), help: "Pretty-print JSON output")

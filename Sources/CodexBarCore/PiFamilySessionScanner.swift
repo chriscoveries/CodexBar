@@ -1,6 +1,6 @@
 import Foundation
 
-struct OhMyPiSessionRecord: Equatable, Sendable {
+struct PiFamilySessionRecord: Equatable, Sendable {
     let id: String
     let cwd: String?
     let sessionName: String?
@@ -9,10 +9,15 @@ struct OhMyPiSessionRecord: Equatable, Sendable {
     let url: URL
 }
 
-enum OhMyPiSessionFileParser {
+enum PiFamilySessionFileParser {
     private static let maximumReadSize = 16 * 1024
 
-    static func parse(url: URL, modifiedAt: Date, now: Date) -> OhMyPiSessionRecord? {
+    static func parse(
+        url: URL,
+        dialect: AgentSession.Dialect,
+        modifiedAt: Date,
+        now: Date) -> PiFamilySessionRecord?
+    {
         guard let data = readPrefix(from: url),
               let lines = completeLines(in: data)
         else { return nil }
@@ -22,7 +27,8 @@ enum OhMyPiSessionFileParser {
 
         var titleSlotWasPresent = false
         var titleSlot: String?
-        if let first = Self.jsonObject(from: nonEmptyLines[0]),
+        if dialect == .omp,
+           let first = Self.jsonObject(from: nonEmptyLines[0]),
            first["type"] as? String == "title"
         {
             titleSlotWasPresent = true
@@ -35,18 +41,60 @@ enum OhMyPiSessionFileParser {
               header["type"] as? String == "session",
               let id = header["id"] as? String
         else { return nil }
+        if dialect == .pi, header["version"] as? Int != 3 {
+            return nil
+        }
 
-        let rawTitle = titleSlotWasPresent ? titleSlot : header["title"] as? String
+        let rawTitle = switch dialect {
+        case .pi:
+            Self.latestPiSessionName(in: url, prefixLines: nonEmptyLines)
+        case .omp:
+            titleSlotWasPresent ? titleSlot : header["title"] as? String
+        }
         let sessionName = rawTitle.flatMap(Self.sanitizedTitle)
         let startedAt = (header["timestamp"] as? String).flatMap(Self.parseDate)
 
-        return OhMyPiSessionRecord(
+        return PiFamilySessionRecord(
             id: id,
             cwd: header["cwd"] as? String,
             sessionName: sessionName,
             startedAt: startedAt,
             modifiedAt: min(modifiedAt, now),
             url: url)
+    }
+
+    private static func latestPiSessionName(in url: URL, prefixLines: [Data]) -> String? {
+        var latest = Self.latestPiSessionName(in: prefixLines)
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return latest }
+        defer { try? handle.close() }
+        guard let size = try? handle.seekToEnd(), size > UInt64(Self.maximumReadSize) else { return latest }
+
+        let tailReadSize = 64 * 1024
+        let offset = size > UInt64(tailReadSize) ? size - UInt64(tailReadSize) : 0
+        do {
+            try handle.seek(toOffset: offset)
+            guard let tail = try handle.read(upToCount: tailReadSize), !tail.isEmpty else { return latest }
+            var lines: [Data] = []
+            for line in [UInt8](tail).split(separator: 0x0A, omittingEmptySubsequences: true) {
+                lines.append(Data(line))
+            }
+            if offset > 0, !lines.isEmpty {
+                lines.removeFirst()
+            }
+            latest = Self.latestPiSessionName(in: lines) ?? latest
+        } catch {
+            return latest
+        }
+        return latest
+    }
+
+    private static func latestPiSessionName(in lines: [Data]) -> String? {
+        lines.reversed().compactMap { line -> String? in
+            guard let entry = Self.jsonObject(from: line),
+                  entry["type"] as? String == "session_info"
+            else { return nil }
+            return entry["name"] as? String
+        }.first
     }
 
     private static func readPrefix(from url: URL) -> Data? {
@@ -104,7 +152,7 @@ enum OhMyPiSessionFileParser {
     }
 }
 
-struct OhMyPiSessionRootResolver: Sendable {
+struct OMPSessionRootResolver: Sendable {
     static func sessionRoots(
         environment: [String: String],
         fileManager: FileManager = .default) -> [URL]
@@ -436,15 +484,24 @@ struct OhMyPiSessionRootResolver: Sendable {
     }
 }
 
-struct OhMyPiSessionScanner: Sendable {
+struct PiFamilySessionScanner: Sendable {
     struct ScanInput: Sendable {
         let processes: [AgentProcessRecord]
         let cwdByPID: [Int32: String]
         let environment: [String: String]
-        let environmentByPID: [Int32: [String: String]]?
         let now: Date
         let host: String
         let config: SessionScanConfig
+    }
+
+    private enum RootLayout: Hashable, Sendable {
+        case projectDirectories
+        case direct
+    }
+
+    private struct SessionRoot: Hashable, Sendable {
+        let url: URL
+        let layout: RootLayout
     }
 
     static func scan(
@@ -456,58 +513,48 @@ struct OhMyPiSessionScanner: Sendable {
         let now = input.now
         let host = input.host
         let config = input.config
-        let liveProcesses = Array(
-            AgentSessionCorrelation.newestProcessesFirst(
-                processes.filter { AgentPSOutputParser.provider(for: $0) == .ohMyPi })
-                .prefix(max(0, config.maxProcessCount)))
+        let liveProcesses = Array(AgentSessionCorrelation.newestProcessesFirst(
+            processes.filter { AgentPSOutputParser.provider(for: $0) == .pi })
+            .prefix(max(0, config.maxProcessCount)))
         guard !liveProcesses.isEmpty else {
-            // OhMyPi sessions are process-backed in the local scanner. Never
+            // Pi-family sessions are process-backed in the local scanner. Never
             // turn an old session file into a file-only AgentSession.
             return []
         }
 
-        var recordsByRoot: [String: [OhMyPiSessionRecord]] = [:]
+        var recordsByRoot: [String: [PiFamilySessionRecord]] = [:]
         var usedRecordURLs = Set<String>()
         var sessions: [AgentSession] = []
 
         for process in liveProcesses {
+            guard let dialect = AgentPSOutputParser.piDialect(for: process) else { continue }
             let processCWD = cwdByPID[process.pid]
             let processStandardizedCWD = processCWD
                 .flatMap { $0.isEmpty ? nil : Self.standardizedPath($0) }
-            let processCWDURL = processCWD
-                .flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0, isDirectory: true) }
 
-            var record: OhMyPiSessionRecord?
+            var record: PiFamilySessionRecord?
             if let processStartedAt = process.startedAt,
                let processStandardizedCWD,
-               let processCWDURL
+               let processCWD
             {
-                let roots: [URL] = if let processEnvironments = input.environmentByPID,
-                                      let processEnvironment = processEnvironments[process.pid],
-                                      !processEnvironment.isEmpty
-                {
-                    OhMyPiSessionRootResolver.sessionRoots(
-                        environment: processEnvironment,
-                        baseDirectory: processCWDURL)
-                } else if input.environmentByPID == nil {
-                    OhMyPiSessionRootResolver.defaultProfileSessionRoots(
-                        environment: input.environment,
-                        baseDirectory: processCWDURL)
-                } else {
-                    []
-                }
-
+                let roots = Self.sessionRoots(
+                    for: process,
+                    dialect: dialect,
+                    cwd: processCWD,
+                    environment: input.environment)
                 for root in roots {
                     guard directoryBudget.hasTimeRemaining() else { break }
-                    let canonicalRoot = Self.canonicalURL(root)
-                    let rootKey = canonicalRoot.path
-                    let rootRecords: [OhMyPiSessionRecord]
+                    let canonicalRoot = Self.canonicalURL(root.url)
+                    let rootKey = "\(dialect.rawValue):\(root.layout):\(canonicalRoot.path)"
+                    let rootRecords: [PiFamilySessionRecord]
                     if let cached = recordsByRoot[rootKey] {
                         rootRecords = cached
                     } else {
                         let discovered = Self.records(
                             in: canonicalRoot,
                             now: now,
+                            dialect: dialect,
+                            layout: root.layout,
                             directoryBudget: &directoryBudget)
                         recordsByRoot[rootKey] = discovered
                         rootRecords = discovered
@@ -534,7 +581,8 @@ struct OhMyPiSessionScanner: Sendable {
 
             sessions.append(AgentSession(
                 id: id,
-                provider: .ohMyPi,
+                provider: .pi,
+                dialect: dialect,
                 source: .cli,
                 state: config.state(
                     lastActivityAt: record?.modifiedAt,
@@ -566,21 +614,224 @@ struct OhMyPiSessionScanner: Sendable {
             .filter { seen.insert("\($0.host):\($0.id)").inserted }
     }
 
+    private static func sessionRoots(
+        for process: AgentProcessRecord,
+        dialect: AgentSession.Dialect,
+        cwd: String,
+        environment: [String: String]) -> [SessionRoot]
+    {
+        if let explicit = commandLineValue("--session-dir", in: process.command),
+           let url = pathURL(explicit, cwd: cwd, home: environment["HOME"])
+        {
+            return [SessionRoot(url: url, layout: .direct)]
+        }
+        if let configured = environment["PI_CODING_AGENT_SESSION_DIR"],
+           let url = pathURL(configured, cwd: cwd, home: environment["HOME"])
+        {
+            return [SessionRoot(url: url, layout: .direct)]
+        }
+
+        switch dialect {
+        case .pi:
+            if let agentDirectory = environment["PI_CODING_AGENT_DIR"],
+               let agentRoot = pathURL(agentDirectory, cwd: cwd, home: environment["HOME"])
+            {
+                return [SessionRoot(
+                    url: agentRoot.appendingPathComponent("sessions", isDirectory: true),
+                    layout: .projectDirectories)]
+            }
+            if let configured = Self.piSettingsSessionDirectory(cwd: cwd, environment: environment) {
+                return [SessionRoot(url: configured, layout: .direct)]
+            }
+            guard let home = Self.homeURL(environment) else { return [] }
+            return [SessionRoot(
+                url: home
+                    .appendingPathComponent(".pi", isDirectory: true)
+                    .appendingPathComponent("agent", isDirectory: true)
+                    .appendingPathComponent("sessions", isDirectory: true),
+                layout: .projectDirectories)]
+        case .omp:
+            return Self.ompSessionRoots(process: process, cwd: cwd, environment: environment)
+        }
+    }
+
+    private static func ompSessionRoots(
+        process: AgentProcessRecord,
+        cwd: String,
+        environment: [String: String]) -> [SessionRoot]
+    {
+        guard let home = homeURL(environment) else { return [] }
+        var safeEnvironment = ["HOME": home.path]
+        for key in [
+            "PI_CONFIG_DIR",
+            "PI_CODING_AGENT_DIR",
+            "XDG_DATA_HOME",
+            "OMP_PROFILE",
+            "PI_PROFILE",
+        ] {
+            safeEnvironment[key] = environment[key]
+        }
+        if let profile = Self.commandLineValue("--profile", in: process.command) {
+            safeEnvironment["OMP_PROFILE"] = profile
+        }
+
+        let baseDirectory = URL(fileURLWithPath: cwd, isDirectory: true)
+        var urls = OMPSessionRootResolver.sessionRoots(
+            environment: safeEnvironment,
+            baseDirectory: baseDirectory)
+
+        if safeEnvironment["OMP_PROFILE"] == nil {
+            let profileParents = [
+                home
+                    .appendingPathComponent(".omp", isDirectory: true)
+                    .appendingPathComponent("profiles", isDirectory: true),
+                Self.xdgDataHome(environment, home: home)
+                    .appendingPathComponent("omp", isDirectory: true)
+                    .appendingPathComponent("profiles", isDirectory: true),
+            ]
+            for parent in profileParents {
+                urls.append(contentsOf: Self.profileSessionRoots(in: parent))
+            }
+        }
+
+        var seen = Set<String>()
+        return urls.compactMap { url in
+            let canonical = Self.canonicalURL(url)
+            guard seen.insert(canonical.path).inserted else { return nil }
+            return SessionRoot(url: canonical, layout: .projectDirectories)
+        }
+    }
+
+    private static func profileSessionRoots(in profilesDirectory: URL) -> [URL] {
+        guard let enumerator = FileManager.default.enumerator(
+            at: profilesDirectory,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants])
+        else { return [] }
+
+        var roots: [URL] = []
+        let canonicalProfilesDirectory = Self.canonicalURL(profilesDirectory)
+        while roots.count < 64, let profile = enumerator.nextObject() as? URL {
+            let canonicalProfile = Self.canonicalURL(profile)
+            guard (try? canonicalProfile.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true,
+                  OMPSessionRootResolver.isWithin(
+                      root: canonicalProfilesDirectory,
+                      candidate: canonicalProfile)
+            else { continue }
+            let xdgLayout = canonicalProfile.appendingPathComponent("sessions", isDirectory: true)
+            if Self.isDirectory(xdgLayout) {
+                roots.append(xdgLayout)
+                continue
+            }
+            roots.append(canonicalProfile
+                .appendingPathComponent("agent", isDirectory: true)
+                .appendingPathComponent("sessions", isDirectory: true))
+        }
+        return roots.sorted { $0.path < $1.path }
+    }
+
+    private static func piSettingsSessionDirectory(cwd: String, environment: [String: String]) -> URL? {
+        guard let home = homeURL(environment) else { return nil }
+        let globalSettings = home
+            .appendingPathComponent(".pi", isDirectory: true)
+            .appendingPathComponent("agent", isDirectory: true)
+            .appendingPathComponent("settings.json")
+        let projectSettings = URL(fileURLWithPath: cwd, isDirectory: true)
+            .appendingPathComponent(".pi", isDirectory: true)
+            .appendingPathComponent("settings.json")
+
+        let configured = Self.sessionDirectory(in: projectSettings) ?? Self.sessionDirectory(in: globalSettings)
+        return configured.flatMap { Self.pathURL($0, cwd: cwd, home: home.path) }
+    }
+
+    private static func sessionDirectory(in settingsURL: URL) -> String? {
+        guard let values = try? settingsURL.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey]),
+              values.isRegularFile == true,
+              let fileSize = values.fileSize,
+              fileSize <= 1024 * 1024,
+              let data = try? Data(contentsOf: settingsURL, options: [.mappedIfSafe]),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let sessionDir = object["sessionDir"] as? String,
+              !sessionDir.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return nil }
+        return sessionDir
+    }
+
+    private static func commandLineValue(_ flag: String, in command: String) -> String? {
+        let tokens = command.split(whereSeparator: \ .isWhitespace).map(String.init)
+        for index in tokens.indices {
+            if tokens[index] == flag, index + 1 < tokens.count {
+                let value = tokens[index + 1]
+                return value.hasPrefix("-") ? nil : value
+            }
+            let prefix = flag + "="
+            if tokens[index].hasPrefix(prefix) {
+                let value = String(tokens[index].dropFirst(prefix.count))
+                return value.isEmpty ? nil : value
+            }
+        }
+        return nil
+    }
+
+    private static func pathURL(_ path: String, cwd: String, home: String?) -> URL? {
+        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let expanded: String = if trimmed == "~", let home {
+            home
+        } else if trimmed.hasPrefix("~/"), let home {
+            URL(fileURLWithPath: home, isDirectory: true)
+                .appendingPathComponent(String(trimmed.dropFirst(2)), isDirectory: true).path
+        } else {
+            trimmed
+        }
+        if expanded.hasPrefix("/") {
+            return URL(fileURLWithPath: expanded, isDirectory: true).standardizedFileURL
+        }
+        return URL(fileURLWithPath: cwd, isDirectory: true)
+            .appendingPathComponent(expanded, isDirectory: true).standardizedFileURL
+    }
+
+    private static func homeURL(_ environment: [String: String]) -> URL? {
+        guard let home = environment["HOME"], !home.isEmpty else { return nil }
+        return URL(fileURLWithPath: home, isDirectory: true).standardizedFileURL
+    }
+
+    private static func xdgDataHome(_ environment: [String: String], home: URL) -> URL {
+        if let configured = environment["XDG_DATA_HOME"], !configured.isEmpty {
+            return URL(fileURLWithPath: configured, isDirectory: true).standardizedFileURL
+        }
+        return home
+            .appendingPathComponent(".local", isDirectory: true)
+            .appendingPathComponent("share", isDirectory: true)
+    }
+
+    private static func isDirectory(_ url: URL) -> Bool {
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) && isDirectory.boolValue
+    }
+
     private static func records(
         in root: URL,
         now: Date,
-        directoryBudget: inout DirectoryMetadataScanBudget) -> [OhMyPiSessionRecord]
+        dialect: AgentSession.Dialect,
+        layout: RootLayout,
+        directoryBudget: inout DirectoryMetadataScanBudget) -> [PiFamilySessionRecord]
     {
         let fileManager = FileManager.default
-        var records: [OhMyPiSessionRecord] = []
+        var records: [PiFamilySessionRecord] = []
         let canonicalRoot = Self.canonicalURL(root)
 
         guard directoryBudget.hasTimeRemaining() else { return [] }
-        let projectDirectories = directoryBudget
-            .childDirectories(in: canonicalRoot, fileManager: fileManager)
-            .map(Self.canonicalURL)
-            .filter { OhMyPiSessionRootResolver.isWithin(root: canonicalRoot, candidate: $0) }
-            .sorted { $0.path < $1.path }
+        let projectDirectories: [URL] = switch layout {
+        case .direct:
+            [canonicalRoot]
+        case .projectDirectories:
+            directoryBudget
+                .childDirectories(in: canonicalRoot, fileManager: fileManager)
+                .map(Self.canonicalURL)
+                .filter { OMPSessionRootResolver.isWithin(root: canonicalRoot, candidate: $0) }
+                .sorted { $0.path < $1.path }
+        }
 
         for projectDirectory in projectDirectories {
             guard directoryBudget.hasTimeRemaining() else { break }
@@ -589,7 +840,7 @@ struct OhMyPiSessionScanner: Sendable {
                 .filter { $0.pathExtension == "jsonl" }
                 .map(Self.canonicalURL)
                 .filter { file in
-                    OhMyPiSessionRootResolver.isWithin(root: canonicalRoot, candidate: file) &&
+                    OMPSessionRootResolver.isWithin(root: canonicalRoot, candidate: file) &&
                         Self.isDirectFile(in: file, projectDirectory: projectDirectory)
                 }
                 .sorted { $0.path < $1.path }
@@ -600,8 +851,9 @@ struct OhMyPiSessionScanner: Sendable {
                     forKeys: [.contentModificationDateKey, .isRegularFileKey]),
                     values.isRegularFile == true,
                     let modifiedAt = values.contentModificationDate,
-                    let record = OhMyPiSessionFileParser.parse(
+                    let record = PiFamilySessionFileParser.parse(
                         url: file,
+                        dialect: dialect,
                         modifiedAt: modifiedAt,
                         now: now)
                 else { continue }

@@ -196,10 +196,11 @@ struct MenuDescriptor {
         let providerGlyph = switch session.provider {
         case .codex: "⌘"
         case .claude: "✦"
-        case .ohMyPi: "π"
+        case .pi: "π"
         }
         let label = labelStyle.label(for: session)
-        return "\(state) \(providerGlyph) \(label) — \(session.provider.rawValue) · " +
+        let providerTag = session.dialect?.rawValue ?? session.provider.rawValue
+        return "\(state) \(providerGlyph) \(label) — \(providerTag) · " +
             "\(session.source.rawValue) · \(self.agentSessionAge(session, now: now))"
     }
 

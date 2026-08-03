@@ -9,17 +9,21 @@ struct AgentSessionParserTests {
         let records = AgentPSOutputParser.parse(output)
         let agents = AgentPSOutputParser.agentProcesses(from: records)
 
-        #expect(records.count == 17)
-        #expect(agents.map(\ .pid) == [102, 201, 501, 502])
+        #expect(records.count == 18)
+        #expect(agents.map(\ .pid) == [102, 201, 501, 502, 509])
         #expect(AgentPSOutputParser.provider(for: agents[0]) == .claude)
         #expect(AgentPSOutputParser.source(for: agents[0]) == .desktopApp)
         #expect(AgentPSOutputParser.provider(for: agents[1]) == .codex)
         #expect(agents[1].command.hasSuffix("strange argv here"))
         #expect(AgentPSOutputParser.hasCodexAppServer(in: records))
-        #expect(AgentPSOutputParser.provider(for: agents[2]) == .ohMyPi)
+        #expect(AgentPSOutputParser.provider(for: agents[2]) == .pi)
+        #expect(AgentPSOutputParser.piDialect(for: agents[2]) == .omp)
         #expect(AgentPSOutputParser.source(for: agents[2]) == .cli)
-        #expect(AgentPSOutputParser.provider(for: agents[3]) == .ohMyPi)
+        #expect(AgentPSOutputParser.provider(for: agents[3]) == .pi)
+        #expect(AgentPSOutputParser.piDialect(for: agents[3]) == .omp)
         #expect(AgentPSOutputParser.source(for: agents[3]) == .cli)
+        #expect(AgentPSOutputParser.provider(for: agents[4]) == .pi)
+        #expect(AgentPSOutputParser.piDialect(for: agents[4]) == .pi)
         let unrelatedBun = try #require(records.first { $0.pid == 507 })
         let unrelatedNpm = try #require(records.first { $0.pid == 508 })
         #expect(AgentPSOutputParser.provider(for: unrelatedBun) == nil)
@@ -32,11 +36,13 @@ struct AgentSessionParserTests {
     }
 
     @Test
-    func `oh-my-pi provider uses its Codable raw value`() throws {
-        let encoded = try JSONEncoder().encode(AgentSession.Provider.ohMyPi)
+    func `pi dialects use stable Codable raw values`() throws {
+        let provider = try JSONEncoder().encode(AgentSession.Provider.pi)
+        let dialects = try JSONEncoder().encode([AgentSession.Dialect.pi, .omp])
 
-        #expect(String(data: encoded, encoding: .utf8) == "\"oh-my-pi\"")
-        #expect(try JSONDecoder().decode(AgentSession.Provider.self, from: encoded) == .ohMyPi)
+        #expect(String(data: provider, encoding: .utf8) == "\"pi\"")
+        #expect(String(data: dialects, encoding: .utf8) == "[\"pi\",\"omp\"]")
+        #expect(try JSONDecoder().decode(AgentSession.Provider.self, from: provider) == .pi)
     }
 
     @Test

@@ -121,9 +121,9 @@ extension CodexBarCLI {
           codexbar sessions focus <id>
 
         Description:
-          List live local Codex, Claude Code, and OhMyPi agent sessions.
+          List live local Codex, Claude Code, pi, and OMP agent sessions.
           --json emits the legacy v1 array with only Codex and Claude providers.
-          --json-v2 emits the complete current array, including OhMyPi.
+          --json-v2 emits the complete current array, including Pi-family sessions.
           JSON uses stable AgentSession field names and ISO-8601 dates.
           Focus activates the owning terminal or desktop app on macOS.
 

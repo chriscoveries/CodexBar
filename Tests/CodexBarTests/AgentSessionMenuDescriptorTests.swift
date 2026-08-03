@@ -209,11 +209,12 @@ struct AgentSessionMenuDescriptorTests {
     }
 
     @Test
-    func `oh my pi session rows use the dedicated provider glyph`() {
+    func `Pi-family session rows use the dedicated glyph and dialect tag`() {
         let now = Date(timeIntervalSince1970: 1000)
         let session = AgentSession(
             id: "omp",
-            provider: .ohMyPi,
+            provider: .pi,
+            dialect: .omp,
             source: .cli,
             state: .active,
             pid: 42,
@@ -225,7 +226,7 @@ struct AgentSessionMenuDescriptorTests {
             host: "local-mac")
 
         let title = Self.actionTitle(for: session, style: .project, now: now)
-        #expect(title.contains("π alpha — oh-my-pi · cli · 0s"))
+        #expect(title.contains("π alpha — omp · cli · 0s"))
     }
 
     @Test

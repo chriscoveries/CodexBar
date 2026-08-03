@@ -1,116 +1,42 @@
-# Agent Sessions (prototype)
+# Agent Sessions design
 
-Track live Codex, Claude Code, and OhMyPi agent sessions — local Mac first, other Macs on the tailnet second — and surface them in the CodexBar menu with click-to-focus of the owning terminal, editor, or desktop window. Discovery is process-backed: a session file or terminal breadcrumb by itself is not evidence that a live session exists.
+CodexBar tracks live Codex, Claude Code, and Pi-family agent sessions locally and over SSH. Discovery is process-backed: a transcript, session file, or terminal breadcrumb by itself is not evidence that a session is live.
 
-## Why in CodexBar
+## Data model
 
-CodexBar already parses local agent metadata and ships a bundled CLI on macOS + Linux. Sessions reuse both: the local scanner feeds the menu UI. For programmatic callers, `codexbar sessions --json-v2` is the complete current normalized array; `codexbar sessions --json` is the legacy v1 projection restricted to `codex` and `claude` so older clients remain decodable. Remote Macs negotiate v2 first and fall back to v1. No daemon, no new app.
+`AgentSession.Provider` contains `codex`, `claude`, and `pi`. Pi-family rows additionally carry `AgentSession.Dialect.pi` or `.omp`; other providers leave `dialect` absent. A resolved upstream session ID is preferred, while an unmatched process uses `pid:<pid>`.
 
-## Data model (CodexBarCore)
+The v1 JSON protocol remains a top-level array restricted to `codex` and `claude`. The v2 protocol retains the same array shape and adds current providers and optional fields, including Pi-family dialects. Remote fetching negotiates v2 first and falls back to v1 for mixed-version compatibility.
 
-```swift
-public struct AgentSession: Codable, Sendable, Identifiable {
-    public enum Provider: String, Codable, Sendable {
-        case codex
-        case claude
-        case ohMyPi = "oh-my-pi"
-    }
-    public enum Source: String, Codable, Sendable { case cli, desktopApp, ide, unknown }
-    public enum State: String, Codable, Sendable { case active, idle }
+## Local scanner
 
-    public var id: String // session UUID when resolvable, else "pid:<pid>"
-    public var provider: Provider
-    public var source: Source
-    public var state: State
-    public var pid: Int32? // nil only for providers that support a file-only session
-    public var cwd: String?
-    public var projectName: String?  // last path component of cwd
-    public var sessionName: String?  // bounded descriptive title when available
-    public var startedAt: Date?
-    public var lastActivityAt: Date?
-    public var transcriptPath: String?
-    public var host: String          // local hostname, or remote host label
-}
-```
+`LocalAgentSessionScanner` combines bounded process and metadata signals. macOS process and cwd discovery stays in-process through libproc; Linux uses the existing guarded `ps` and `/proc` paths.
 
-The normalized JSON provider values are `codex`, `claude`, and `oh-my-pi`. `active` means last activity is within the configured active window; an older live process is `idle`. File-only windows apply only to providers and records that explicitly support them: OhMyPi never becomes a file-only session.
+Pi-family processes are handed to one `PiFamilySessionScanner`:
 
-## Local scanner (CodexBarCore, no new deps)
+- Plain pi uses process title `pi`; upstream also marks the process with `PI_CODING_AGENT=true`, which CodexBar does not need to read. Its default root is `~/.pi/agent/sessions`, whose project buckets encode cwd as `--<escaped-cwd>--`. A version-3 `session` header supplies id, timestamp, and cwd. The latest bounded `session_info.name` supplies the optional label.
+- OMP uses process title/executable `omp`, including its Bun launcher form. It supports default, named-profile, and XDG roots; hashed `home|tmp|abs-<basename>-<sha256>` buckets; legacy bucket names; title-slot headers; and the legacy header-title form.
+- `--session-dir` resolves to a direct session directory for either dialect. The scanner also honors custom-directory/profile values already present in its own environment, and plain pi resolves project-over-global `settings.json` `sessionDir` values. Relative paths use the live process cwd and leading `~` uses the scanner home.
+- Profile flags are read from argv. Standard OMP profile directories can also be enumerated from their bounded roots. Custom roots and profiles that exist only in the target process remain unresolved because reading that process's environment would capture unrelated secrets. Those processes still produce PID-only rows.
+- A record matches only when its normalized cwd equals the process cwd, its modification time is no older than process start, and its URL has not already been assigned. Records sort newest-first with deterministic id/path tie-breaks.
+- Pi-family records never become file-only rows. This is especially important for plain pi, which creates its filename before launch but delays materializing JSONL until the first assistant message.
 
-`LocalAgentSessionScanner` combines process and bounded metadata signals:
+The Pi-family scan receives its own directory entry/time budget, preserving the independent Codex rollout and Claude transcript budgets. Header reads are bounded, pi name lookup uses bounded head/tail windows, future modification dates are clamped to scan time, and displayed titles are stripped of control characters and limited to 64 Unicode scalars.
 
-1. **Process scan** — parse `ps -axo pid=,ppid=,lstart=,command=`.
-   - Claude Code: command basename `claude` (skip obvious non-agent helpers). Source: path contains `Application Support/Claude/claude-code` → `.desktopApp`, else `.cli`. Deduplicate the wrapper/child pair (desktop can spawn a `disclaimer` parent plus `claude` child with the same argv; keep the child).
-   - Codex: basename `codex` with no `app-server`, `--help`, or `--version` argument → `.cli` (TUI or `exec`). `codex app-server` marks the desktop app as present but is not itself a session.
-   - OhMyPi: recognize an executable whose basename is `omp`, or a Bun launcher whose command line contains an `omp` executable argument. Obvious helpers such as help/version, smoke-test, and internal worker commands are excluded. This is a process heuristic, not a stable OhMyPi API; launcher and helper behavior is implementation-detail/version-sensitive.
-   - Resolve cwd per pid via one batched `lsof -a -d cwd -Fn -p <pid,pid,…>` call (parse `p`/`n` records). Failure → cwd nil, session still listed.
+## Presentation and focus
 
-2. **Transcript/session correlation**
-   - Claude Code: map cwd to `~/.claude/projects/<escaped-cwd>/` (escape every non-alphanumeric ASCII character to `-`) and select the newest bounded-known JSONL metadata for the live process. Reuse desktop project roots where applicable.
-   - Codex: enumerate `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` for today and yesterday (`$CODEX_HOME` respected). Read the first line (`session_meta`: session id, cwd, originator, source). A recent unmatched rollout may be file-only; live `codex` pids match rollouts by cwd (newest wins), and an unmatched live pid is still listed.
-   - OhMyPi: resolve roots independently for every live `omp` process. A bounded, best-effort environment lookup supplies only `HOME`, `PI_CONFIG_DIR`, `PI_CODING_AGENT_DIR`, `XDG_DATA_HOME`, `OMP_PROFILE`, and `PI_PROFILE`; the process's exact profile selects its roots, and relative custom-agent paths are resolved against that process's cwd. If the environment is unavailable, the per-process entry is missing or empty, or `HOME` is unusable, ambient profile selectors and custom/config/XDG values are discarded and no transcript metadata is matched; with a valid process `HOME` but missing other keys, only the safe default-profile root derived from that `HOME` is considered, and the process falls back to `pid:<pid>` when no safe root can be proven. A root or named profile learned from another process is never reused. Records are accepted only when `modifiedAt >= process.startedAt` (equal timestamps are valid), allocated in deterministic order (newest mtime, then id, then URL), and a URL is used by at most one process. Use only the session id, cwd, timestamp, and a sanitized bounded title; an unmatched live process uses the `pid:<pid>` fallback. An OhMyPi file, breadcrumb, or stale record without a matched live process never creates an AgentSession.
-   - The OhMyPi session schema, root layout, profile variables, and process/launcher recognition are implementation details and version-sensitive. They are deliberately not a public compatibility contract.
-   - Never read whole Codex, Claude Code, or OhMyPi transcripts. Directory enumeration, file metadata, and title/session-header parsing are bounded by the scanner budget and entry/record limits. OhMyPi has a separate directory-metadata budget initialized with the same configured entry/depth/time limits (including the adaptive limit), so its traversal cannot consume the budget reserved for Codex rollouts and Claude transcript discovery. Future timestamps are clamped to the scan time.
+The menu uses `⌘` for Codex, `✦` for Claude Code, and `π` for the Pi family. Pi rows show their dialect tag (`pi` or `omp`) rather than a second provider name. The CLI table includes a `DIALECT` column. Project labels remain the default because descriptive titles can contain sensitive text.
 
-The scanner is `Sendable`; ps/lsof parsing and session-header parsing are dedicated pure parser types fed by strings or bounded fixture data so tests do not need live processes. Process command lines, cwd values, and the allowlisted process-environment values are sensitive metadata and are retained only long enough to correlate a row under the privacy rules below. Environment reads are bounded and fail closed; raw environment, stdout, and stderr contents are never logged.
+Local focus walks from the session PID to the owning terminal/editor application and raises the best matching window when Accessibility permission is available. Remote focus invokes the same command over SSH. Pi-family sessions have no file-only focus target.
 
-## CLI (CodexBarCLI)
+## Privacy and safety
 
-- `codexbar sessions` — table with all providers; human-readable output is unchanged.
-- `codexbar sessions --json` — legacy v1 JSON: a top-level `[AgentSession]` array with stable field names, ISO-8601 dates, and only the closed `codex`/`claude` provider set so older clients remain decodable.
-- `codexbar sessions --json-v2` — complete current JSON, including `oh-my-pi`; it preserves the same top-level array and does not add an envelope.
-- `codexbar sessions focus <id>` — macOS only: focus the session's terminal window (see Focus). Exit 1 if id unknown, 2 if focus failed.
-- Follows existing `CLI*Command.swift` conventions. Works on Linux for listing (ps/proc paths guarded), focus is Darwin-only.
+CodexBar never invokes `ps eww`, reads `/proc/<pid>/environ`, or otherwise captures full target-process environments for session discovery. It reads only bounded session metadata under resolved roots, never loads prompt/tool transcript bodies for this feature, never changes upstream session state, and never persists extracted titles separately.
 
-## Remote hosts (CodexBarCore + app)
+## Tests
 
-`RemoteSessionFetcher`:
-- Host list = manual entries (settings, SSH destinations like `steipete@clawmac`) ∪ automatic Tailscale discovery (no-op when tailscale is absent): run `tailscale status --json` (PATH, then `/Applications/Tailscale.app/Contents/MacOS/Tailscale`), take online peers with `"OS": "macOS"|"linux"`, use the first `DNSName` label as host. Local host excluded.
-- Fetch per host (parallel, 5 s budget): `ssh -o BatchMode=yes -o ConnectTimeout=3 <host> sh -lc 'codexbar sessions --json-v2 || codexbar sessions --json || <bundled-path> sessions --json-v2 || <bundled-path> sessions --json'`. The v2-first order lets current hosts expose OhMyPi; an older host rejects v2 and falls back to its legacy Codex/Claude-only `--json` projection, which the current client decodes. Keeping `--json` legacy-only also lets older installed clients query a newly upgraded host without encountering the unknown `oh-my-pi` provider value. Host errors are non-fatal: host shown as unreachable, others still render.
-- Remote focus: fire-and-forget `ssh <host> sh -lc 'codexbar sessions focus <id>'`.
-- Refresh: local scan every 30 s while the status item exists, remote every 60 s and immediately on menu open; both are skipped when Agent Sessions is off. Reuse existing refresh loop plumbing rather than new timers if it fits.
+Fixture directories cover pi version-3 headers and `session_info`, OMP title slots, hashed and legacy project buckets, XDG roots, resolvable custom directories, missing-JSONL PID fallbacks, process classification/correlation, one-record allocation, 64-scalar title bounds, JSON protocol compatibility, menu dialect tags, and remote v2-before-v1 negotiation. Tests use stubs and temporary roots; they do not probe live accounts, Keychain, or Accessibility.
 
-## Menu UI (CodexBar app)
+## Non-goals
 
-- New menu section **Agent Sessions (N)** (N = total, all hosts) above the settings/footer area, built through the existing `MenuDescriptor` seam so it is testable headlessly.
-- Local sessions first, then one group per remote host (`clawmac — 2`; unreachable hosts greyed with a tooltip). Row: state dot (● active / ○ idle), provider glyph (`⌘` Codex, `✦` Claude Code, `π` OhMyPi), project or descriptive label — provider · source · age.
-- Click local row → `SessionWindowFocuser`. Click remote row → the existing remote focus SSH call.
-- Settings: the **Agent sessions** group contains one enable toggle (default off), a label-style picker, and a manual hosts text field (comma-separated); Tailscale discovery is on while the feature is enabled.
-
-The setting is intentionally separate from adaptive activity awareness. When Agent Sessions is enabled, local rows are retained and remote discovery/fetching is allowed. Turning it off clears published local and remote session rows and suppresses remote fetches. If the user separately grants adaptive-agent-aware refresh, local metadata may still be sampled for the activity timestamp used by refresh policy, but session identities, paths, and rows remain cleared while Agent Sessions is off.
-
-## Focus (macOS, app + CLI shared in Core or app-adjacent target)
-
-`SessionWindowFocuser`:
-
-1. pid → walk the ppid chain to the nearest ancestor whose `NSRunningApplication.bundleIdentifier` is a known terminal/editor host: Ghostty, iTerm2, Apple Terminal, Warp, WezTerm, kitty, Alacritty, VS Code, Cursor, Zed, Claude desktop (`com.anthropic.claudefordesktop`). Fallback: the app owning the pid.
-2. Activate the app, then AX (`AXUIElementCreateApplication` → `AXWindows`): raise the window whose title contains projectName or the cwd tail; fallback to the frontmost window of that app. Requires Accessibility permission — call `AXIsProcessTrustedWithOptions` with prompt on first use; degrade gracefully (activate app only) when untrusted.
-3. File-only sessions (no pid): Claude desktop → activate Claude.app; Codex desktop → activate Codex.app; OhMyPi has no file-only focus target.
-
-Tmux pane / terminal-tab precision is out of scope for the prototype.
-
-## Privacy
-
-Project labels remain the default because thread/session titles, cwd values, process command lines, and process-environment values can contain sensitive text. Descriptive labels are opt-in. CodexBar reads only bounded metadata needed for correlation and display; it does not load prompts, tool payloads, or whole transcripts, does not modify provider state, and does not persist title text separately. OhMyPi metadata is read only under the root resolved for that process and only contributes to a row associated with a live process. Environment acquisition is best-effort and allowlisted to the six root/profile keys; raw environment, stdout, and stderr are never logged. Remote discovery and SSH fetching occur only while Agent Sessions is enabled.
-
-## Tests (Tests/CodexBarTests)
-
-Fixture-driven, no live processes, no Keychain/AX:
-
-- ps output parser: desktop `disclaimer`+`claude` dedupe, codex vs `codex app-server`, OhMyPi `omp` and Bun launcher recognition, and helper exclusion.
-- lsof `-Fn` parser.
-- Claude cwd escaping → project dir mapping; newest-jsonl selection (temporary dirs).
-- Codex rollout first-line parse → AgentSession, file-only window cutoff.
-- OhMyPi per-process environment/profile resolution (including same-cwd isolation), inaccessible-environment safe fallback/PID-only behavior, process-start freshness (including equal mtime), deterministic one-URL allocation, bounded metadata parsing, and independent-budget preservation of Codex/Claude metadata.
-- Tailscale status JSON → host list (fixture; offline/iOS peers excluded).
-- Remote session command builder verifies `--json-v2`-before-`--json` ordering for both the PATH and bundled CLI candidates.
-- Sessions JSON compatibility: `--json` preserves the legacy top-level array and closed `codex`/`claude` provider set, while `--json-v2` includes `oh-my-pi`; both decode with the current model, and the v1 projection decodes with an older closed provider enum. Bidirectional mixed-version upgrade coverage proves old-client/new-host and new-client/old-host behavior; human-readable output still shows all providers.
-- Menu section descriptor: provider glyphs, counts, grouping, unreachable-host rendering, focus action mapping, and settings privacy cases.
-
-## Non-goals (prototype)
-
-Claude.ai chat sessions; Codex cloud tasks; historical session browsing/analytics; “waiting on permission” state; tmux pane/tab focus; Bonjour/mDNS; persistent remote daemon or push transport; widget changes. No new SPM dependencies. OhMyPi's on-disk schema and launcher heuristics are not promised as a stable integration API.
-
-## Verification targets
-
-Focused parser/metadata fixtures should cover the behavior above. The CLI should produce a legacy Codex/Claude-only array from `codexbar sessions --json` and a complete current array from `codexbar sessions --json-v2` on a host where the relevant live processes are present; mixed-version verification should separately cover an old client reading a new host and a new client falling back to an old host. No claim is made that a stale session file or breadcrumb is live.
+Historical browsing/analytics, cloud chat/task sessions, permission-waiting state, exact tmux pane focus, a persistent remote daemon, and treating either upstream on-disk dialect as a public compatibility guarantee are out of scope.
