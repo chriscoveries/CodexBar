@@ -162,6 +162,7 @@ struct UsageMenuCardView: View {
         let metrics: [Metric]
         let usageNotes: [String]
         var subscriptionNotes: [String] = []
+        var providerDetails: [ProviderDetailSection] = []
         let openAIAPIUsage: OpenAIAPIUsageSnapshot?
         let inlineUsageDashboard: InlineUsageDashboardModel?
         let creditsText: String?
@@ -213,6 +214,11 @@ struct UsageMenuCardView: View {
                     Text(placeholder)
                         .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
                         .font(.subheadline)
+                }
+                if !liveModel.providerDetails.isEmpty {
+                    ProviderDetailSectionsContent(
+                        sections: liveModel.providerDetails,
+                        chartColor: liveModel.progressColor)
                 }
             } else {
                 let hasUsage = liveModel.hasUsageContent
@@ -674,6 +680,11 @@ private struct UsageMenuCardUsageContentView: View {
                     .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
                     .font(.subheadline)
             }
+            if !self.model.providerDetails.isEmpty {
+                ProviderDetailSectionsContent(
+                    sections: self.model.providerDetails,
+                    chartColor: self.model.progressColor)
+            }
             if self.showBottomDivider {
                 Divider()
             }
@@ -960,6 +971,7 @@ extension UsageMenuCardView.Model {
             metrics: metrics,
             usageNotes: usageNotes,
             subscriptionNotes: Self.subscriptionMetadataNotes(snapshot: input.snapshot, provider: input.provider),
+            providerDetails: input.snapshot?.details ?? [],
             openAIAPIUsage: openAIAPIUsage,
             inlineUsageDashboard: inlineUsageDashboard,
             creditsText: creditsText,

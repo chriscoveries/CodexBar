@@ -6,6 +6,7 @@
 - z.ai/GLM: route BigModel aliases and relay-file keys only to China endpoints, reject canonical cross-region overrides before bearer auth, and keep Kimi browser import disabled when Cookie Source is Off (#2351). Thanks @Leehow!
 - Kimi: enrich Code API and CLI usage with the monthly membership pool from a signed-in Kimi Desktop session, using WAL-safe read-only cookie access (#2351). Thanks @Leehow!
 - Kimi/GLM: distinguish Kimi Code from the regional Open Platform, bind China and international keys to their issuing hosts, and show GLM Coding Plan's 5-hour window as primary with MCP separate (#2351). Thanks @Leehow!
+- Provider plugins: declarative detail rows/charts plus bundled JavaScript conversions for OpenAI, z.ai, OpenRouter, Poe, and ClawRouter behind `CODEXBAR_JS_PROVIDERS=1`.
 
 ### Changed
 - Menu: move each usage window's used percentage and reset time into its title row, with all pace detail on one line (#2182). Thanks @jack24254029!

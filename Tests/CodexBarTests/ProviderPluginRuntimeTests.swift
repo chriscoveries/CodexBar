@@ -95,6 +95,59 @@ struct ProviderPluginRuntimeTests {
     }
 
     @Test
+    func `details map strictly and trim display strings`() async throws {
+        let runtime = try ProviderPluginRuntime(source: Self.plugin(fetchBody: """
+        return {
+          details: [{
+            title: " Summary ",
+            rows: [{ label: " Requests ", value: " 42 ", secondaryValue: " Today " }],
+            chart: {
+              kind: "line",
+              title: " Daily ",
+              unit: " tokens ",
+              points: [{ label: " Mon ", value: 12.5 }],
+            },
+          }],
+        };
+        """))
+
+        let snapshot = try await runtime.fetchUsage(secrets: ["TEST_KEY": "secret"])
+
+        let section = try #require(snapshot.details.first)
+        #expect(section.title == "Summary")
+        #expect(try section.rows == [ProviderDetailSection.Row(
+            label: "Requests",
+            value: "42",
+            secondaryValue: "Today")])
+        let expectedChart = try ProviderDetailSection.Chart(
+            kind: .line,
+            title: "Daily",
+            unit: "tokens",
+            points: [ProviderDetailSection.Chart.Point(label: "Mon", value: 12.5)])
+        #expect(section.chart == expectedChart)
+    }
+
+    @Test(arguments: [
+        #"details: {}"#,
+        #"details: [{ rows: [{ label: "ok", value: 1 }] }]"#,
+        #"details: [{ rows: [], chart: { kind: "pie", points: [] } }]"#,
+        #"details: [{ rows: [], chart: { kind: "bars", points: [{ label: "x", value: NaN }] } }]"#,
+        #"""
+        details: [{
+          rows: [],
+          chart: { kind: "bars", points: Array.from({length: 121}, (_, i) => ({label: String(i), value: i})) },
+        }]
+        """#,
+    ])
+    func `present invalid details fail the fetch`(body: String) async throws {
+        let runtime = try ProviderPluginRuntime(source: Self.plugin(fetchBody: "return { \(body) };"))
+
+        await #expect(throws: ProviderPluginError.self) {
+            _ = try await runtime.fetchUsage(secrets: ["TEST_KEY": "secret"])
+        }
+    }
+
+    @Test
     func `promise rejection preserves message`() async throws {
         let runtime = try ProviderPluginRuntime(source: Self.plugin(fetchBody: """
         throw new Error("fixture rejected");

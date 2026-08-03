@@ -15,20 +15,23 @@ the default.
 
 ## Enable and test
 
-Set `CODEXBAR_JS_PROVIDERS=1` in CodexBar's environment. Synthetic, Venice, and Crof then prepend a script strategy to
-their existing API pipeline. A missing required secret leaves the script strategy unavailable and permits the Swift
-strategy to run; a loaded script that fails does not fall back, so parity defects stay visible. Without the variable,
-the resolver returns the original Swift strategy only and does not load JavaScriptCore or a plugin resource.
+Set `CODEXBAR_JS_PROVIDERS=1` in CodexBar's environment. Synthetic, Venice, Crof, OpenAI, z.ai, OpenRouter, Poe, and
+ClawRouter then prepend a script strategy to their existing API pipeline. A missing required secret leaves the script
+strategy unavailable and permits the Swift strategy to run; a loaded script that fails does not fall back, so parity
+defects stay visible. Without the variable, the resolver returns the original Swift strategy only and does not load
+JavaScriptCore or a plugin resource.
 
 Run the focused proof with:
 
 ```sh
 swift test --filter ProviderPluginRuntimeTests
 swift test --filter ProviderPluginParityTests
+swift test --filter ProviderPluginDetailsParityTests
 ```
 
-The second suite sends the same canned response through an injected `ProviderHTTPTransport` to both implementations and
-compares core windows, percentages, reset dates, cost, subscription dates, and identity fields.
+The parity suites send the same canned responses through an injected `ProviderHTTPTransport` to both implementations
+and compare core windows, percentages, reset dates, cost, subscription dates, and identity fields. Details-provider
+fixtures additionally characterize the complete declarative section output.
 
 ## Manifest
 
@@ -95,6 +98,38 @@ be positive integers.
 `subscriptionRenewsAt` and `subscriptionExpiresAt` accept a JavaScript `Date` or ISO-8601 string. Missing optionals are
 fine, while a present value of the wrong type fails the entire fetch with its property path.
 
+### Declarative details
+
+`details` is an optional array of sections rendered generically in the provider menu card. A snapshot may contain
+details without a rate window or cost. Each section has optional `title`, required `rows`, and an optional simple chart:
+
+```js
+return {
+  primary: { usedPercent: 25 },
+  details: [{
+    title: "Usage summary",
+    rows: [
+      { label: "Requests", value: "1,240", secondaryValue: "Last 30 days" },
+      { label: "Top model", value: "gpt-5" },
+    ],
+    chart: {
+      kind: "bars", // bars | line
+      title: "Daily spend",
+      unit: "USD",
+      points: [
+        { label: "2026-08-01", value: 4.25 },
+        { label: "2026-08-02", value: 6.50 },
+      ],
+    },
+  }],
+};
+```
+
+The bridge rejects rather than truncates more than 8 sections, 24 rows per section, or 120 points per chart. Section,
+row, chart, and point strings are trimmed and limited to 120 characters; required row/point strings must remain
+non-empty. Point values must be finite numbers. A present value with the wrong type, an unknown chart kind, or any
+bound violation fails the entire fetch with its property path.
+
 ## Concurrency and execution limit
 
 Each runtime owns one `JSContext` confined to a dedicated serial dispatch queue; `JSContext` and every `JSValue` remain
@@ -110,7 +145,14 @@ runtime needs a public interrupt API or a killable helper-process boundary befor
 ## Current limitations
 
 The runtime is macOS-only and compiled out when JavaScriptCore is unavailable. It supports bundled first-party IDs and
-the generic snapshot only: no runtime identities, user-installed files, install UI, TypeScript/Sucrase, provider-specific
-dashboard payloads, cookies, OAuth/refresh broker, local files or databases, subprocesses, POST bodies, PTY, WebView,
+the generic snapshot and declarative details only: no runtime identities, user-installed files, install UI,
+TypeScript/Sucrase, provider-specific Swift payloads, cookies, OAuth/refresh broker, local files or databases,
+subprocesses, POST bodies, PTY, WebView,
 binary/protobuf responses, localhost HTTP, or dynamic endpoint origins. See
 [`plugin-conversion-matrix.md`](plugin-conversion-matrix.md) for the provider-by-provider impact.
+
+## Future work
+
+Migrating existing Swift providers' roughly 25 bespoke `UsageSnapshot` payload fields onto the details model is
+intentionally not part of this prototype slice. Those fields and their current views remain intact for the flag-off
+path and for providers not yet converted.

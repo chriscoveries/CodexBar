@@ -17,12 +17,19 @@ is inherently a user-chosen origin (LLM Proxy and LiteLLM) do not qualify. The c
 current Swift request methods and snapshot projections; Azure OpenAI, StepFun, and Warp were removed from the audit's
 earlier “fully expressible” baseline because their current implementations issue POST requests.
 
+`convertible-now (details)` means the bundled JavaScript conversion is present behind `CODEXBAR_JS_PROVIDERS=1` and its
+provider-specific dashboard projection is expressed through declarative detail sections. `needs-plugin-host-extension`
+marks providers uncovered during implementation whose canonical flow needs a runtime primitive beyond declared-origin
+GET, declared settings/secrets, and details.
+
 ## Totals
 
 | Status | Count |
 |---|---:|
 | `convertible-now` | 11 |
-| `needs-details-model` | 8 |
+| `convertible-now (details)` | 5 |
+| `needs-details-model` | 0 |
+| `needs-plugin-host-extension` | 3 |
 | `needs-cookie-import` | 23 |
 | `needs-files/subprocess/oauth-broker` | 15 |
 | `needs-pty/webview/native` | 10 |
@@ -33,7 +40,7 @@ earlier “fully expressible” baseline because their current implementations i
 | Provider | Status | Reason |
 |---|---|---|
 | codex | `needs-pty/webview/native` | PTY CLI, OAuth files/refresh, browser cookies, WKWebView scraping, local logs, and reset-credit details exceed this host. |
-| openai | `needs-details-model` | GET pagination fits, but daily/model/line-item cost and token history does not fit the generic snapshot. |
+| openai | `convertible-now (details)` | Converted: fixed-origin bearer GET pagination with daily spend, model, line-item, and token details. |
 | azureopenai | `needs-pty/webview/native` | The current quota probe is a POST chat completion against a user-configured deployment origin. |
 | claude | `needs-files/subprocess/oauth-broker` | Full parity needs credential files/Keychain, OAuth refresh, CLI/PTY, cookies, local logs, and admin details. |
 | clinepass | `convertible-now` | Verified fixed-origin bearer GET; limits and identity map to generic windows. |
@@ -48,7 +55,7 @@ earlier “fully expressible” baseline because their current implementations i
 | antigravity | `needs-pty/webview/native` | Process/port discovery, localhost IDE RPC, OAuth files, and a persistent PTY make this a native integration. |
 | copilot | `needs-cookie-import` | API-token usage fits, but billing budgets require GitHub cookies/nonces and the device flow needs POST. |
 | devin | `needs-files/subprocess/oauth-broker` | Full auth discovery reads Chromium localStorage and organization state; manual bearer alone is partial. |
-| zai | `needs-details-model` | Generic quota windows fit, but model/time-limit details and the hourly chart require a details schema. |
+| zai | `convertible-now (details)` | Converted: both fixed regional origins, personal/team settings, quota lanes, model totals, and hourly/daily token charts. |
 | minimax | `needs-cookie-import` | Browser cookies/storage and group discovery feed a large service/billing/history-specific payload. |
 | manus | `needs-cookie-import` | Full session acquisition imports browser cookies; a manually supplied bearer covers only one path. |
 | kimi | `needs-cookie-import` | Browser cookies plus Kimi credential/device files and regional identity headers exceed the current broker. |
@@ -63,7 +70,7 @@ earlier “fully expressible” baseline because their current implementations i
 | ollama | `needs-cookie-import` | The full hosted flow imports cookies and scrapes HTML; the API-key model-count probe is only partial. |
 | synthetic | `convertible-now` | Converted: fixed-origin bearer GET with generic windows, cost, dates, and identity. |
 | warp | `needs-pty/webview/native` | Warp sends a POST GraphQL operation, which the GET-only HTTP broker cannot express. |
-| openrouter | `needs-details-model` | The bearer GET fits, but credits, per-key budgets, and rate-limit detail require a provider detail model. |
+| openrouter | `convertible-now (details)` | Converted: bearer GET credits plus best-effort key budget, period spend, rate-limit rows, and a spend chart. |
 | elevenlabs | `convertible-now` | Verified `xi-api-key` GET; heterogeneous character/minute quotas map to named generic windows. |
 | windsurf | `needs-files/subprocess/oauth-broker` | Chromium localStorage, IDE databases, and binary protobuf decoding supply the current session. |
 | zed | `needs-files/subprocess/oauth-broker` | Zed server settings and a named Keychain credential must be read locally. |
@@ -86,16 +93,16 @@ earlier “fully expressible” baseline because their current implementations i
 | groq | `needs-cookie-import` | The API-token Prometheus path is partial; console parity imports Stytch/browser sessions and history details. |
 | llmproxy | `needs-pty/webview/native` | Its origin is user-selected and may be private HTTP, conflicting with the manifest's fixed HTTPS origins. |
 | litellm | `needs-pty/webview/native` | Its required user-selected proxy origin and optional private HTTP cannot be declared by a bundled static manifest. |
-| deepgram | `needs-details-model` | GET acquisition fits, but project and heterogeneous hours/tokens/characters/request totals need details. |
-| poe | `needs-details-model` | Bearer GET pagination fits, but raw/daily/model/type point history does not fit the generic snapshot. |
+| deepgram | `needs-plugin-host-extension` | Skipped: Deepgram requires `Authorization: Token <key>`; the prototype can inject bearer or a raw custom-header value but cannot prefix a custom auth scheme. |
+| poe | `convertible-now (details)` | Converted: fixed-origin bearer GET balance/history pagination with daily points and model/type summaries. |
 | chutes | `convertible-now` | Verified bearer GET fan-out on the canonical origin; dynamic quota lanes map to named windows. |
 | neuralwatt | `convertible-now` | Verified canonical bearer GET; quota lanes and prepaid cost/energy project generically. |
-| clawrouter | `needs-details-model` | Bearer JSON acquisition fits, but budget ledger, request/token totals, and upstream summaries need details. |
+| clawrouter | `convertible-now (details)` | Converted for the canonical origin: monthly budget, ledger, request/token totals, routed-provider rows, and cost chart. |
 | longcat | `needs-cookie-import` | Account, token use, and pending fuel merge behind an imported browser/manual cookie session. |
-| sub2api | `needs-details-model` | Bearer JSON acquisition fits, but balance/quota/rate/subscription/today/total fields need details. |
+| sub2api | `needs-plugin-host-extension` | Skipped: every instance requires a user-selected origin and may use loopback HTTP; bundled manifests allow only predeclared HTTPS origins. |
 | wayfinder | `needs-pty/webview/native` | The local unauthenticated HTTP gateway, metrics text, and routing/savings model violate HTTPS-only generic scope. |
 | zenmux | `convertible-now` | Verified fixed-origin bearer GET pair; subscription and optional PAYG balance map generically. |
 | aiand | `convertible-now` | Verified fixed-origin bearer GET pagination; 30-day spend maps to generic cost. |
 | zoommate | `needs-cookie-import` | Host-specific cookies are exchanged for a JWT, then paginated credit history requires details. |
-| xai | `needs-details-model` | Management-key GETs fit, but prepaid balance, limit state, and daily cost history need details. |
+| xai | `needs-plugin-host-extension` | Skipped: prepaid balance is GET, but canonical daily usage history is a POST request with a JSON body. |
 | notion | `needs-cookie-import` | Workspace selection and AI allowance calls require imported Notion cookies and forwarded session headers. |
