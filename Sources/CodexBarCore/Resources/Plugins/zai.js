@@ -1,6 +1,6 @@
 defineProvider({
   id: "zai",
-  name: "z.ai",
+  name: "z.ai / GLM",
   endpoints: ["https://api.z.ai", "https://open.bigmodel.cn"],
   auth: { type: "bearer", secret: "Z_AI_API_KEY" },
   settings: [
@@ -65,18 +65,18 @@ defineProvider({
       return { raw, usage, current, remaining, percent, windowMinutes, reset, details };
     }
     function window(limit) {
-      const monthlyMarker = limit.raw.type === "TIME_LIMIT" && limit.raw.unit === 5 && limit.raw.number === 1;
-      let minutes = limit.windowMinutes;
-      if (monthlyMarker || (limit.raw.type === "TIME_LIMIT" && minutes === null)) minutes = 43200;
       const result = { usedPercent: limit.percent };
-      if (minutes !== null) result.windowMinutes = minutes;
+      if (limit.raw.type === "TOKENS_LIMIT" && limit.windowMinutes !== null) {
+        result.windowMinutes = limit.windowMinutes;
+      }
       if (limit.reset !== null) result.resetsAt = ctx.date.unixMillis(limit.reset);
-      if (monthlyMarker) result.resetDescription = "Monthly";
+      if (limit.raw.type === "TIME_LIMIT") result.resetDescription = "MCP";
+      else if (limit.windowMinutes === 300) result.resetDescription = "5-hour";
       else if (limit.windowMinutes !== null) {
         const units = { 1: "day", 3: "hour", 5: "minute", 6: "week" };
         const name = units[limit.raw.unit];
         if (name) result.resetDescription = `${limit.raw.number} ${name}${limit.raw.number === 1 ? "" : "s"} window`;
-      } else if (limit.raw.type === "TIME_LIMIT") result.resetDescription = "Monthly";
+      }
       return result;
     }
     function limitRow(label, limit) {
@@ -92,14 +92,16 @@ defineProvider({
     const timeLimit = limits.filter(item => item.raw.type === "TIME_LIMIT").pop() || null;
     const tokenLimit = tokenLimits.length ? tokenLimits[tokenLimits.length - 1] : null;
     const sessionLimit = tokenLimits.length >= 2 ? tokenLimits[0] : null;
-    const primaryLimit = tokenLimit || timeLimit;
+    const primaryLimit = sessionLimit || tokenLimit || timeLimit;
     const result = {
       primary: primaryLimit ? window(primaryLimit) : { usedPercent: 0 },
       identity: {},
       details: [{ title: "Quota details", rows: [] }],
     };
-    if (tokenLimit && timeLimit) result.secondary = window(timeLimit);
-    if (sessionLimit) result.tertiary = window(sessionLimit);
+    if (sessionLimit && tokenLimit) result.secondary = window(tokenLimit);
+    if ((tokenLimit || sessionLimit) && timeLimit) {
+      result.extraWindows = [{ id: "zai-mcp", title: "MCP", window: window(timeLimit) }];
+    }
     if (tokenLimit) result.details[0].rows.push(limitRow("Token quota", tokenLimit));
     if (sessionLimit) result.details[0].rows.push(limitRow("Session token quota", sessionLimit));
     if (timeLimit) {
