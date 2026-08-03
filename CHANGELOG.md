@@ -2,6 +2,9 @@
 
 ## 0.47.1 — Unreleased
 
+### Changed
+- Menu: move each usage window's used percentage and reset time into its title row, with all pace detail on one line (#2182). Thanks @jack24254029!
+
 ### Fixed
 
 ## 0.47.0 — 2026-08-03

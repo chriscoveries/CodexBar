@@ -810,7 +810,7 @@
 "Pace: %@" = "사용 속도: %@";
 "Pace: %@ · %@" = "사용 속도: %@ · %@";
 "%@ · %@" = "%@ · %@";
-"≈ %d%% run-out risk" = "≈ %d%% 소진 위험";
+"(%d%% risk)" = "(%d%% 소진 위험)";
 "%d%% in deficit" = "%d%% 부족";
 "%d%% in reserve" = "%d%% 여유";
 "usage_percent_suffix_left" = "남음";

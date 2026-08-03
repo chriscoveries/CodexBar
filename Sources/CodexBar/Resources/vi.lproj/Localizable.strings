@@ -835,7 +835,7 @@
 "Pace: %@" = "Tốc độ: %@";
 "Pace: %@ · %@" = "Pace: %@ · %@";
 "%@ · %@" = "%@ · %@";
-"≈ %d%% run-out risk" = "≈ %d %% rủi ro cạn kiệt";
+"(%d%% risk)" = "(%d %% rủi ro cạn kiệt)";
 "%d%% in deficit" = "%d %% thâm hụt";
 "%d%% in reserve" = "%d %% dự trữ";
 "usage_percent_suffix_left" = "left";

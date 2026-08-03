@@ -841,7 +841,7 @@
 "Pace: %@" = "Hız: %@";
 "Pace: %@ · %@" = "Hız: %@ · %@";
 "%@ · %@" = "%@ · %@";
-"≈ %d%% run-out risk" = "≈ %%%d tükenme riski";
+"(%d%% risk)" = "(%d%% tükenme riski)";
 "%d%% in deficit" = "%%%d açıkta";
 "%d%% in reserve" = "%%%d rezervde";
 "usage_percent_suffix_left" = "kaldı";
