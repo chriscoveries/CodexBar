@@ -8,19 +8,22 @@ struct SpendDashboardModel: Equatable, Sendable {
         let displayName: String
         let modelProviderName: String
         let snapshot: CostUsageTokenSnapshot
+        let tokenActivityCache: CostUsageTokenActivityCache?
 
         init(
             id: String? = nil,
             provider: UsageProvider,
             displayName: String,
             modelProviderName: String? = nil,
-            snapshot: CostUsageTokenSnapshot)
+            snapshot: CostUsageTokenSnapshot,
+            tokenActivityCache: CostUsageTokenActivityCache? = nil)
         {
             self.id = id ?? provider.rawValue
             self.provider = provider
             self.displayName = displayName
             self.modelProviderName = modelProviderName ?? displayName
             self.snapshot = snapshot
+            self.tokenActivityCache = tokenActivityCache
         }
     }
 
@@ -622,20 +625,19 @@ struct SpendDashboardModel: Equatable, Sendable {
         bounds: ClosedRange<Date>,
         calendar: Calendar) -> TokenActivityInputSummary
     {
-        let coveredInterval = Self.coverageInterval(
+        let coveredInterval = Self.tokenActivityCoverageInterval(
             input: input,
             bounds: bounds,
             displayCalendar: calendar)
-        let sourceCoverage = Self.sourceCoverageInterval(input: input, displayCalendar: calendar)
         var totalsByDay: [Date: Int] = [:]
         var invalidDays: Set<Date> = []
         var hasUnplacedTokens = false
-        for entry in input.snapshot.daily {
+        for entry in input.tokenActivityCache?.daily ?? input.snapshot.daily {
             guard let day = Self.day(entry.date, provider: input.provider, displayCalendar: calendar) else {
                 hasUnplacedTokens = hasUnplacedTokens || !Self.hasProvenZeroTokens(entry)
                 continue
             }
-            guard sourceCoverage.contains(day) else { continue }
+            guard coveredInterval?.contains(day) == true else { continue }
             guard let tokens = Self.nonnegative(entry.totalTokens) else {
                 invalidDays.insert(day)
                 continue
@@ -650,14 +652,39 @@ struct SpendDashboardModel: Equatable, Sendable {
             }
         }
 
-        let hasCompleteHistory = Self.hasCompleteTokenHistory(input, displayCalendar: calendar)
-        let aggregateIsInconsistent = input.snapshot.last30DaysTokens != nil && !hasCompleteHistory
+        let hasCompleteHistory = input.tokenActivityCache != nil
+            || Self.hasCompleteTokenHistory(input, displayCalendar: calendar)
+        let aggregateIsInconsistent = input.tokenActivityCache == nil
+            && input.snapshot.last30DaysTokens != nil
+            && !hasCompleteHistory
         return TokenActivityInputSummary(
             coveredInterval: coveredInterval,
             totalsByDay: totalsByDay,
             invalidDays: invalidDays,
             hasCompleteHistory: hasCompleteHistory,
             isGloballyInvalid: hasUnplacedTokens || aggregateIsInconsistent)
+    }
+
+    private static func tokenActivityCoverageInterval(
+        input: ProviderInput,
+        bounds: ClosedRange<Date>,
+        displayCalendar: Calendar) -> ClosedRange<Date>?
+    {
+        guard let cache = input.tokenActivityCache else {
+            return self.coverageInterval(input: input, bounds: bounds, displayCalendar: displayCalendar)
+        }
+        guard let start = Self.day(
+            cache.coverageSinceKey,
+            provider: input.provider,
+            displayCalendar: displayCalendar),
+            let end = Self.day(
+                cache.coverageUntilKey,
+                provider: input.provider,
+                displayCalendar: displayCalendar)
+        else { return nil }
+        let overlapStart = max(bounds.lowerBound, start)
+        let overlapEnd = min(bounds.upperBound, end)
+        return overlapStart <= overlapEnd ? overlapStart...overlapEnd : nil
     }
 
     private static func bounds(days: Int, now: Date, calendar: Calendar) -> ClosedRange<Date> {

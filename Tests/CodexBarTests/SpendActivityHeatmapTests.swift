@@ -132,6 +132,67 @@ struct SpendActivityHeatmapTests {
     }
 
     @Test
+    func `shared cache activity uses its wider partial coverage without widening spend`() throws {
+        let now = try #require(Self.calendar.date(from: DateComponents(year: 2026, month: 7, day: 16)))
+        let oldDay = try #require(Self.calendar.date(from: DateComponents(year: 2026, month: 5, day: 1)))
+        let snapshot = Self.snapshot(
+            entries: [Self.entry(day: "2026-07-16", cost: 2, tokens: 10)],
+            historyDays: 30,
+            last30DaysTokens: 10)
+        let cache = CostUsageTokenActivityCache(
+            daily: [
+                Self.entry(day: "2026-05-01", cost: nil, tokens: 40),
+                Self.entry(day: "2026-07-16", cost: nil, tokens: 10),
+            ],
+            coverageSinceKey: "2026-05-01",
+            coverageUntilKey: "2026-07-16")
+        let model = SpendDashboardModel.build(
+            inputs: [
+                .init(
+                    provider: .codex,
+                    displayName: "Codex",
+                    snapshot: snapshot,
+                    tokenActivityCache: cache),
+            ],
+            requestedDays: 30,
+            now: now,
+            calendar: Self.calendar)
+
+        #expect(model.requestedDays == 30)
+        #expect(model.groups.first?.dailyPoints.map(\.day) == [now])
+        #expect(model.tokenActivity.first { $0.day == oldDay }?.totalTokens == 40)
+    }
+
+    @Test
+    func `empty shared cache marks only its partial range as confirmed zero`() throws {
+        let now = try #require(Self.calendar.date(from: DateComponents(year: 2026, month: 7, day: 16)))
+        let beforeCoverage = try #require(Self.calendar.date(
+            from: DateComponents(year: 2026, month: 7, day: 13)))
+        let cache = CostUsageTokenActivityCache(
+            daily: [],
+            coverageSinceKey: "2026-07-14",
+            coverageUntilKey: "2026-07-16")
+        let model = SpendDashboardModel.build(
+            inputs: [
+                .init(
+                    provider: .codex,
+                    displayName: "Codex",
+                    snapshot: Self.snapshot(
+                        entries: [],
+                        historyDays: 30,
+                        last30DaysTokens: nil,
+                        historyCoverageIsEstablished: false),
+                    tokenActivityCache: cache),
+            ],
+            requestedDays: 30,
+            now: now,
+            calendar: Self.calendar)
+
+        #expect(model.tokenActivity.first { $0.day == beforeCoverage }?.totalTokens == nil)
+        #expect(model.tokenActivity.suffix(3).allSatisfy { $0.totalTokens == 0 })
+    }
+
+    @Test
     func `weekly and cumulative activity preserve unavailable coverage`() throws {
         let start = try #require(Self.calendar.date(from: DateComponents(year: 2026, month: 7, day: 5)))
         let today = try #require(Self.calendar.date(byAdding: .day, value: 13, to: start))
@@ -156,6 +217,7 @@ struct SpendActivityHeatmapTests {
         let now = try #require(Self.calendar.date(from: DateComponents(year: 2026, month: 7, day: 16)))
         let formatter = DateFormatter()
         formatter.calendar = Self.calendar
+        formatter.timeZone = Self.calendar.timeZone
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd"
         let entries = try (0..<SpendDashboardModel.tokenActivityDayCount).map { offset in
@@ -232,7 +294,8 @@ struct SpendActivityHeatmapTests {
 
     @Test
     func `weekday and date formatting follow the selected resource locale`() throws {
-        let date = try #require(Self.calendar.date(from: DateComponents(year: 2026, month: 8, day: 1)))
+        let date = try #require(Self.calendar.date(
+            from: DateComponents(year: 2026, month: 8, day: 1, hour: 12)))
         let english = Locale(identifier: "en_US")
         let chinese = Locale(identifier: "zh_Hans")
 
@@ -242,6 +305,22 @@ struct SpendActivityHeatmapTests {
         #expect(SpendActivityDateFormatting.mediumDateString(date, locale: english).contains("Aug"))
         #expect(!SpendActivityDateFormatting.mediumDateString(date, locale: english).contains("年"))
         #expect(SpendActivityDateFormatting.mediumDateString(date, locale: chinese).contains("年"))
+    }
+
+    @Test
+    func `accessibility descriptions publish localized dates and availability values`() throws {
+        let date = try #require(Self.calendar.date(
+            from: DateComponents(year: 2026, month: 8, day: 1, hour: 12)))
+        let locale = Locale(identifier: "en_US")
+
+        #expect(SpendActivityAccessibility.description(
+            date: date,
+            value: "1.2K",
+            locale: locale) == "Aug 1, 2026: 1.2K")
+        #expect(SpendActivityAccessibility.description(
+            date: date,
+            value: "Unavailable",
+            locale: locale) == "Aug 1, 2026: Unavailable")
     }
 
     private static var calendar: Calendar {

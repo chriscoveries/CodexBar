@@ -150,9 +150,15 @@ enum SpendActivityLevels {
         return values.map { value in
             guard value > 0, maxValue > 0 else { return 0 }
             let ratio = Double(value) / Double(maxValue)
-            if ratio > 0.75 { return 4 }
-            if ratio > 0.5 { return 3 }
-            if ratio > 0.25 { return 2 }
+            if ratio > 0.75 {
+                return 4
+            }
+            if ratio > 0.5 {
+                return 3
+            }
+            if ratio > 0.25 {
+                return 2
+            }
             return 1
         }
     }
@@ -283,6 +289,12 @@ enum SpendActivityDateFormatting {
         formatter.dateStyle = .medium
         formatter.timeStyle = .none
         return formatter.string(from: date)
+    }
+}
+
+enum SpendActivityAccessibility {
+    static func description(date: Date, value: String, locale: Locale? = nil) -> String {
+        "\(SpendActivityDateFormatting.mediumDateString(date, locale: locale)): \(value)"
     }
 }
 
@@ -592,7 +604,9 @@ private struct SpendActivityDailyGrid: View {
     }
 
     private var activeIndex: Int? {
-        if let hoveredIndex { return hoveredIndex }
+        if let hoveredIndex {
+            return hoveredIndex
+        }
         return self.keyboardIndex
     }
 
@@ -677,7 +691,7 @@ private struct SpendActivityDailyGrid: View {
     }
 
     private func accessibilityDescription(at index: Int, date: Date) -> String {
-        "\(SpendActivityDateFormatting.mediumDateString(date)): \(self.accessibilityTokenValue(at: index))"
+        SpendActivityAccessibility.description(date: date, value: self.accessibilityTokenValue(at: index))
     }
 
     private func accessibilityTokenValue(at index: Int) -> String {
@@ -807,7 +821,9 @@ private struct SpendActivityWeekGrid: View {
     }
 
     private var accessibilityTokenTotal: Int {
-        if self.cumulative { return self.activity.values.last ?? 0 }
+        if self.cumulative {
+            return self.activity.values.last ?? 0
+        }
         return self.activity.values.reduce(0) { total, value in
             let result = total.addingReportingOverflow(value)
             return result.overflow ? Int.max : result.partialValue
@@ -830,7 +846,7 @@ private struct SpendActivityWeekGrid: View {
         let value = self.activity.isCovered[index]
             ? UsageFormatter.tokenCountString(self.activity.values[index])
             : L("Unavailable")
-        return "\(SpendActivityDateFormatting.mediumDateString(weekStart)): \(value)"
+        return SpendActivityAccessibility.description(date: weekStart, value: value)
     }
 }
 

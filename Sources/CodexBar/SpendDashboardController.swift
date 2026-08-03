@@ -120,8 +120,11 @@ struct CodexSpendSnapshotLoadContext: Sendable {
 enum SpendDashboardSource {
     typealias CodexSnapshotLoader = @Sendable (CodexSpendSnapshotLoadContext) async throws
         -> CostUsageTokenSnapshot
+    typealias CodexActivityLoader = @Sendable (CodexSpendSnapshotLoadContext) async
+        -> CostUsageTokenActivityCache?
 
-    static let scanDays = 365
+    static let scanDays = 30
+    static let activityDays = 365
 
     @MainActor
     static func configuration(settings: SettingsStore, store: UsageStore) -> SpendDashboardConfiguration {
@@ -250,14 +253,23 @@ enum SpendDashboardSource {
     }
 
     static func load(_ request: SpendDashboardLoadRequest) async -> SpendDashboardLoadResult {
-        await self.load(request, codexSnapshotLoader: { context in
-            try await self.loadCodexSnapshot(context)
-        })
+        await self.load(
+            request,
+            codexSnapshotLoader: { context in try await self.loadCodexSnapshot(context) },
+            codexActivityLoader: { context in await self.loadCodexActivity(context) })
     }
 
     static func load(
         _ request: SpendDashboardLoadRequest,
         codexSnapshotLoader: CodexSnapshotLoader) async -> SpendDashboardLoadResult
+    {
+        await self.load(request, codexSnapshotLoader: codexSnapshotLoader, codexActivityLoader: { _ in nil })
+    }
+
+    static func load(
+        _ request: SpendDashboardLoadRequest,
+        codexSnapshotLoader: CodexSnapshotLoader,
+        codexActivityLoader: CodexActivityLoader) async -> SpendDashboardLoadResult
     {
         var inputs = request.capturedInputs
         var failedSourceIDs = request.unavailableSourceIDs
@@ -280,6 +292,15 @@ enum SpendDashboardSource {
                     refreshPricingInBackground: false,
                     includePiSessions: false))
                 try Task.checkCancellation()
+                let tokenActivityCache = await codexActivityLoader(CodexSpendSnapshotLoadContext(
+                    account: account,
+                    cacheRoot: cacheRoot,
+                    now: request.now,
+                    force: false,
+                    historyDays: Self.activityDays,
+                    refreshPricingInBackground: false,
+                    includePiSessions: false))
+                try Task.checkCancellation()
                 guard self.codexAuthFingerprintMatches(account) else {
                     failedSourceIDs.insert(sourceID)
                     invalidatedSourceIDs.insert(sourceID)
@@ -290,7 +311,8 @@ enum SpendDashboardSource {
                     provider: .codex,
                     displayName: account.displayName,
                     modelProviderName: ProviderDescriptorRegistry.descriptor(for: .codex).metadata.displayName,
-                    snapshot: snapshot))
+                    snapshot: snapshot,
+                    tokenActivityCache: tokenActivityCache))
             } catch is CancellationError {
                 failedSourceIDs.formUnion(request.codexRequests.map { "codex:\($0.id)" })
                 return SpendDashboardLoadResult(
@@ -327,6 +349,15 @@ enum SpendDashboardSource {
             historyDays: context.historyDays,
             refreshPricingInBackground: context.refreshPricingInBackground,
             includePiSessions: context.includePiSessions)
+    }
+
+    private static func loadCodexActivity(
+        _ context: CodexSpendSnapshotLoadContext) async -> CostUsageTokenActivityCache?
+    {
+        await CostUsageFetcher(cacheRoot: context.cacheRoot).loadCachedCodexTokenActivity(
+            now: context.now,
+            codexHomePath: context.account.homePath,
+            maximumDays: context.historyDays)
     }
 
     @MainActor
