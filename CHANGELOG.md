@@ -12,6 +12,7 @@
 - Menu: move each usage window's used percentage and reset time into its title row, with all pace detail on one line (#2182). Thanks @jack24254029!
 
 ### Fixed
+- Command Code: parse and display 5-hour and weekly rolling limits alongside monthly credits and reset times (#2466). Thanks @derekszen!
 - ZoomMate: preserve browser cookie scope so parent-domain sessions reach both API hosts without leaking host-only cookies (fixes #2507). Thanks @weddle!
 - Sync: propagate provider configuration edits made by the CLI or directly in `config.json` to the iCloud fleet without echoing remotely applied writes.
 
