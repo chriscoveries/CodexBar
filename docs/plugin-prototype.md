@@ -13,6 +13,11 @@ parsing, and generic `UsageSnapshot` projection in one bundled JavaScript file. 
 system: IDs remain compile-time `UsageProvider` cases, scripts ship inside CodexBar, and the normal Swift path remains
 the default.
 
+Plugin manifests and their projected snapshots now carry a validated `ProviderInstanceID`. The prototype still maps
+that instance ID to an existing first-party `UsageProvider` before using browser-cookie brokerage or other bespoke
+provider paths; provider-specific snapshot payloads remain enum-typed, and the widget's `AppEnum` still lists only
+first-party cases. User-installed plugins without an enum case therefore remain out of scope for this prototype.
+
 ## Enable and test
 
 Set `CODEXBAR_JS_PROVIDERS=1` in CodexBar's environment. Synthetic, Venice, Crof, OpenAI, z.ai, OpenRouter, Poe,
