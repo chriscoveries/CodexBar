@@ -41,7 +41,7 @@ public struct CodexBarConfig: Codable, Sendable {
             let providerContainer = try providerDecoder.container(keyedBy: ProviderCodingKeys.self)
             let rawID = try providerContainer.decode(String.self, forKey: .id)
             guard let instanceID = ProviderInstanceID(rawValue: rawID),
-                  instanceID.firstPartyProvider != nil || UserProviderPluginRegistry.plugin(for: instanceID) != nil
+                  Self.isKnownProviderInstance(instanceID)
             else {
                 Self.log.warning("Ignoring unknown provider in config", metadata: ["provider": rawID])
                 continue
@@ -50,6 +50,16 @@ public struct CodexBarConfig: Codable, Sendable {
         }
         self.providers = providers
         self.hooks = try container.decodeIfPresent(HooksConfig.self, forKey: .hooks)
+    }
+
+    /// User plugins exist only where JavaScriptCore does; other platforms drop their config entries.
+    private static func isKnownProviderInstance(_ instanceID: ProviderInstanceID) -> Bool {
+        if instanceID.firstPartyProvider != nil { return true }
+        #if canImport(JavaScriptCore)
+        return UserProviderPluginRegistry.plugin(for: instanceID) != nil
+        #else
+        return false
+        #endif
     }
 
     public static func makeDefault(
