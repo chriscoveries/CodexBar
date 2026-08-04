@@ -77,6 +77,7 @@ struct ProviderPluginExtensionParityTests {
 
         #expect(script.primary == swift.primary)
         #expect(script.identity?.loginMethod == swift.identity?.loginMethod)
+        #expect(script.details == swift.details)
         #expect(try script.details == [ProviderDetailSection(
             title: "Usage summary",
             rows: [
@@ -137,6 +138,7 @@ struct ProviderPluginExtensionParityTests {
         #expect(script.primary == swift.primary)
         #expect(script.providerCost == swift.providerCost)
         #expect(script.identity?.loginMethod == swift.identity?.loginMethod)
+        #expect(script.details == swift.details)
         let details = try #require(script.details.first)
         #expect(details.title == "Billing summary")
         #expect(try details.rows.first == .init(label: "Prepaid balance", value: "$10.00"))

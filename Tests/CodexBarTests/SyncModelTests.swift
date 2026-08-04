@@ -197,6 +197,13 @@ struct SyncModelTests {
             "sub2APIUsage": {"kind": "wallet"},
             "wayfinderUsage": {"gatewayStatus": "ok"},
             "cursorRequests": {"used": 3, "limit": 10},
+            "zaiUsage": {"legacy": true},
+            "zoommateCreditsHistory": {"records": []},
+            "minimaxUsage": {"planName": "legacy"},
+            "groqConsoleUsage": {"daily": []},
+            "deepgramUsage": {"requests": 3},
+            "poeUsage": {"daily": []},
+            "xaiUsage": {"balanceUSD": 4},
             "updatedAt": "2026-08-04T12:00:00Z"
           }
         }

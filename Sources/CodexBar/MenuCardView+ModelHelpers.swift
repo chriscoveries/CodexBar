@@ -783,8 +783,6 @@ extension UsageMenuCardView.Model {
                 : resolvedResetText
             let detailText: String? = if input.provider == .sub2api {
                 namedWindow.window.resetDescription
-            } else if input.provider == .zai, namedWindow.id == "zai-mcp" {
-                Self.zaiLimitDetailText(limit: input.snapshot?.zaiUsage?.timeLimit)
             } else {
                 nil
             }
@@ -977,22 +975,6 @@ extension UsageMenuCardView.Model {
             detailRightText: paceDetail?.rightLabel,
             pacePercent: paceDetail?.pacePercent,
             paceOnTop: paceDetail?.paceOnTop ?? true)
-    }
-
-    static func zaiLimitDetailText(limit: ZaiLimitEntry?) -> String? {
-        guard let limit else { return nil }
-
-        if let currentValue = limit.currentValue,
-           let usage = limit.usage,
-           let remaining = limit.remaining
-        {
-            let currentStr = UsageFormatter.tokenCountString(currentValue)
-            let usageStr = UsageFormatter.tokenCountString(usage)
-            let remainingStr = UsageFormatter.tokenCountString(remaining)
-            return String(format: L("%@ / %@ (%@ remaining)"), currentStr, usageStr, remainingStr)
-        }
-
-        return nil
     }
 
     static func syntheticRegenDetail(

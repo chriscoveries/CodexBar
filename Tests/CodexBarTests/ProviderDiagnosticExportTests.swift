@@ -558,16 +558,7 @@ struct ProviderDiagnosticExportTests {
             updatedAt: now)
 
         let result = ProviderFetchResult(
-            usage: UsageSnapshot(
-                primary: RateWindow(
-                    usedPercent: 25,
-                    windowMinutes: 300,
-                    resetsAt: now.addingTimeInterval(18000),
-                    resetDescription: nil),
-                secondary: nil,
-                tertiary: nil,
-                minimaxUsage: snapshot,
-                updatedAt: now),
+            usage: snapshot.toUsageSnapshot(),
             credits: nil,
             dashboard: nil,
             sourceLabel: "api",
@@ -598,11 +589,8 @@ struct ProviderDiagnosticExportTests {
         #expect(diag.usage != nil)
         #expect(diag.error == nil)
 
-        guard case let .minimax(details) = diag.details else {
-            Issue.record("Expected MiniMax diagnostic details")
-            return
-        }
-        #expect(details.planName == "Max")
+        #expect(diag.details == nil)
+        #expect(diag.usage?.detailSections == snapshot.toUsageSnapshot().details)
     }
 
     private func json(_ value: some Encodable) throws -> String {

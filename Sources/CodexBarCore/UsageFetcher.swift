@@ -149,21 +149,14 @@ public struct UsageSnapshot: Codable, Sendable {
     public let details: [ProviderDetailSection]
     public let kiroUsage: KiroUsageDetails?
     public let ampUsage: AmpUsageDetails?
-    public let zaiUsage: ZaiUsageSnapshot?
-    public let zoommateCreditsHistory: ZoomMateCreditsHistorySnapshot?
-    public let minimaxUsage: MiniMaxUsageSnapshot?
     public let deepseekUsage: DeepSeekUsageSummary?
     public let deepseekDetailedUsageState: DeepSeekDetailedUsageState
     public let deepseekPlatformProfiles: [DeepSeekPlatformProfile]
     public let opencodegoUsage: OpenCodeGoUsageSnapshot?
     public let openAIAPIUsage: OpenAIAPIUsageSnapshot?
-    public let groqConsoleUsage: GroqConsoleUsageSnapshot?
     public let codexResetCredits: CodexRateLimitResetCreditsSnapshot?
     public let claudeAdminAPIUsage: ClaudeAdminAPIUsageSnapshot?
     public let mistralUsage: MistralUsageSnapshot?
-    public let deepgramUsage: DeepgramUsageSnapshot?
-    public let poeUsage: PoeUsageHistorySnapshot?
-    public let xaiUsage: XAIUsageSnapshot?
     /// Live-only marker for optional Command Code subscription lookup failure.
     public let commandCodeSubscriptionEnrichmentUnavailable: Bool
     /// Live-only marker that Command Code returned a recognized subscription plan.
@@ -186,13 +179,9 @@ public struct UsageSnapshot: Codable, Sendable {
         case kiroUsage
         case ampUsage
         case openAIAPIUsage
-        case groqConsoleUsage
         case codexResetCredits
         case claudeAdminAPIUsage
         case mistralUsage
-        case deepgramUsage
-        case poeUsage
-        case xaiUsage
         case subscriptionExpiresAt
         case subscriptionRenewsAt
         case updatedAt
@@ -212,21 +201,14 @@ public struct UsageSnapshot: Codable, Sendable {
         ampUsage: AmpUsageDetails? = nil,
         providerCost: ProviderCostSnapshot? = nil,
         details: [ProviderDetailSection] = [],
-        zaiUsage: ZaiUsageSnapshot? = nil,
-        zoommateCreditsHistory: ZoomMateCreditsHistorySnapshot? = nil,
-        minimaxUsage: MiniMaxUsageSnapshot? = nil,
         deepseekUsage: DeepSeekUsageSummary? = nil,
         deepseekDetailedUsageState: DeepSeekDetailedUsageState = .notRequested,
         deepseekPlatformProfiles: [DeepSeekPlatformProfile] = [],
         opencodegoUsage: OpenCodeGoUsageSnapshot? = nil,
         openAIAPIUsage: OpenAIAPIUsageSnapshot? = nil,
-        groqConsoleUsage: GroqConsoleUsageSnapshot? = nil,
         codexResetCredits: CodexRateLimitResetCreditsSnapshot? = nil,
         claudeAdminAPIUsage: ClaudeAdminAPIUsageSnapshot? = nil,
         mistralUsage: MistralUsageSnapshot? = nil,
-        deepgramUsage: DeepgramUsageSnapshot? = nil,
-        poeUsage: PoeUsageHistorySnapshot? = nil,
-        xaiUsage: XAIUsageSnapshot? = nil,
         commandCodeSubscriptionEnrichmentUnavailable: Bool = false,
         commandCodeHasSubscriptionPlan: Bool = false,
         commandCodeMonthlyGrantDepleted: Bool = false,
@@ -247,21 +229,14 @@ public struct UsageSnapshot: Codable, Sendable {
         self.ampUsage = ampUsage
         self.providerCost = providerCost
         self.details = details
-        self.zaiUsage = zaiUsage
-        self.zoommateCreditsHistory = zoommateCreditsHistory
-        self.minimaxUsage = minimaxUsage
         self.deepseekUsage = deepseekUsage
         self.deepseekDetailedUsageState = deepseekDetailedUsageState
         self.deepseekPlatformProfiles = deepseekPlatformProfiles
         self.opencodegoUsage = opencodegoUsage
         self.openAIAPIUsage = openAIAPIUsage
-        self.groqConsoleUsage = groqConsoleUsage
         self.codexResetCredits = codexResetCredits
         self.claudeAdminAPIUsage = claudeAdminAPIUsage
         self.mistralUsage = mistralUsage
-        self.deepgramUsage = deepgramUsage
-        self.poeUsage = poeUsage
-        self.xaiUsage = xaiUsage
         self.commandCodeSubscriptionEnrichmentUnavailable = commandCodeSubscriptionEnrichmentUnavailable
         self.commandCodeHasSubscriptionPlan = commandCodeHasSubscriptionPlan
         self.commandCodeMonthlyGrantDepleted = commandCodeMonthlyGrantDepleted
@@ -307,17 +282,11 @@ public struct UsageSnapshot: Codable, Sendable {
         try ProviderDetailSection.validateSections(self.details)
         self.kiroUsage = try container.decodeIfPresent(KiroUsageDetails.self, forKey: .kiroUsage)
         self.ampUsage = try container.decodeIfPresent(AmpUsageDetails.self, forKey: .ampUsage)
-        self.zaiUsage = nil // Not persisted, fetched fresh each time
-        self.zoommateCreditsHistory = nil // Not persisted, fetched fresh each time
-        self.minimaxUsage = nil // Not persisted, fetched fresh each time
         self.deepseekUsage = nil // Not persisted, fetched fresh each time
         self.deepseekDetailedUsageState = .notRequested // Live-only fetch state
         self.deepseekPlatformProfiles = [] // Live-only browser profile catalog
         self.opencodegoUsage = nil // Not persisted, fetched fresh each time
         self.openAIAPIUsage = try container.decodeIfPresent(OpenAIAPIUsageSnapshot.self, forKey: .openAIAPIUsage)
-        self.groqConsoleUsage = try container.decodeIfPresent(
-            GroqConsoleUsageSnapshot.self,
-            forKey: .groqConsoleUsage)
         self.codexResetCredits = try container.decodeIfPresent(
             CodexRateLimitResetCreditsSnapshot.self,
             forKey: .codexResetCredits)
@@ -325,9 +294,6 @@ public struct UsageSnapshot: Codable, Sendable {
             ClaudeAdminAPIUsageSnapshot.self,
             forKey: .claudeAdminAPIUsage)
         self.mistralUsage = try container.decodeIfPresent(MistralUsageSnapshot.self, forKey: .mistralUsage)
-        self.deepgramUsage = try container.decodeIfPresent(DeepgramUsageSnapshot.self, forKey: .deepgramUsage)
-        self.poeUsage = try container.decodeIfPresent(PoeUsageHistorySnapshot.self, forKey: .poeUsage)
-        self.xaiUsage = try container.decodeIfPresent(XAIUsageSnapshot.self, forKey: .xaiUsage)
         self.commandCodeSubscriptionEnrichmentUnavailable = false // Live-only fetch state
         self.commandCodeHasSubscriptionPlan = false // Live-only fetch state
         self.commandCodeMonthlyGrantDepleted = false // Live-only fetch state
@@ -371,13 +337,9 @@ public struct UsageSnapshot: Codable, Sendable {
         try container.encodeIfPresent(self.kiroUsage, forKey: .kiroUsage)
         try container.encodeIfPresent(self.ampUsage, forKey: .ampUsage)
         try container.encodeIfPresent(self.openAIAPIUsage, forKey: .openAIAPIUsage)
-        try container.encodeIfPresent(self.groqConsoleUsage, forKey: .groqConsoleUsage)
         try container.encodeIfPresent(self.codexResetCredits, forKey: .codexResetCredits)
         try container.encodeIfPresent(self.claudeAdminAPIUsage, forKey: .claudeAdminAPIUsage)
         try container.encodeIfPresent(self.mistralUsage, forKey: .mistralUsage)
-        try container.encodeIfPresent(self.deepgramUsage, forKey: .deepgramUsage)
-        try container.encodeIfPresent(self.poeUsage, forKey: .poeUsage)
-        try container.encodeIfPresent(self.xaiUsage, forKey: .xaiUsage)
         try container.encodeIfPresent(self.subscriptionExpiresAt, forKey: .subscriptionExpiresAt)
         try container.encodeIfPresent(self.subscriptionRenewsAt, forKey: .subscriptionRenewsAt)
         try container.encode(self.updatedAt, forKey: .updatedAt)
@@ -543,21 +505,14 @@ public struct UsageSnapshot: Codable, Sendable {
             ampUsage: self.ampUsage,
             providerCost: self.providerCost,
             details: self.details,
-            zaiUsage: self.zaiUsage,
-            zoommateCreditsHistory: self.zoommateCreditsHistory,
-            minimaxUsage: self.minimaxUsage,
             deepseekUsage: deepseekUsage.resolving(self.deepseekUsage),
             deepseekDetailedUsageState: deepseekDetailedUsageState.resolving(self.deepseekDetailedUsageState),
             deepseekPlatformProfiles: deepseekPlatformProfiles.resolving(self.deepseekPlatformProfiles),
             opencodegoUsage: self.opencodegoUsage,
             openAIAPIUsage: self.openAIAPIUsage,
-            groqConsoleUsage: self.groqConsoleUsage,
             codexResetCredits: codexResetCredits.resolving(self.codexResetCredits),
             claudeAdminAPIUsage: self.claudeAdminAPIUsage,
             mistralUsage: self.mistralUsage,
-            deepgramUsage: self.deepgramUsage,
-            poeUsage: self.poeUsage,
-            xaiUsage: self.xaiUsage,
             commandCodeSubscriptionEnrichmentUnavailable: self.commandCodeSubscriptionEnrichmentUnavailable,
             commandCodeHasSubscriptionPlan: self.commandCodeHasSubscriptionPlan,
             commandCodeMonthlyGrantDepleted: self.commandCodeMonthlyGrantDepleted,

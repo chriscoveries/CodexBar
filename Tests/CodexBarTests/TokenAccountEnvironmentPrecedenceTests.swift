@@ -1167,16 +1167,6 @@ extension TokenAccountEnvironmentPrecedenceTests {
     fileprivate static func makeSnapshotWithAllFields(provider: UsageProvider) throws -> UsageSnapshot {
         let now = Date(timeIntervalSince1970: 1_700_000_000)
         let reset = Date(timeIntervalSince1970: 1_700_003_600)
-        let tokenLimit = ZaiLimitEntry(
-            type: .tokensLimit,
-            unit: .hours,
-            number: 6,
-            usage: 200,
-            currentValue: 40,
-            remaining: 160,
-            percentage: 20,
-            usageDetails: [ZaiUsageDetail(modelCode: "glm-4", usage: 40)],
-            nextResetTime: reset)
         let identity = ProviderIdentitySnapshot(
             providerID: provider.instanceID,
             accountEmail: nil,
@@ -1198,20 +1188,6 @@ extension TokenAccountEnvironmentPrecedenceTests {
                 ProviderDetailSection.Row(label: "Remaining", value: "$40.00"),
                 ProviderDetailSection.Row(label: "Request quota", value: "7 / 70"),
             ])],
-            zaiUsage: ZaiUsageSnapshot(
-                tokenLimit: tokenLimit,
-                timeLimit: nil,
-                planName: "Z.ai Pro",
-                updatedAt: now),
-            minimaxUsage: MiniMaxUsageSnapshot(
-                planName: "MiniMax",
-                availablePrompts: 500,
-                currentPrompts: 120,
-                remainingPrompts: 380,
-                windowMinutes: 1440,
-                usedPercent: 24,
-                resetsAt: reset,
-                updatedAt: now),
             subscriptionExpiresAt: reset.addingTimeInterval(86400),
             subscriptionRenewsAt: reset.addingTimeInterval(43200),
             updatedAt: now,
@@ -1225,10 +1201,6 @@ extension TokenAccountEnvironmentPrecedenceTests {
         #expect(after.providerCost?.used == before.providerCost?.used)
         #expect(after.providerCost?.limit == before.providerCost?.limit)
         #expect(after.providerCost?.currencyCode == before.providerCost?.currencyCode)
-        #expect(after.zaiUsage?.planName == before.zaiUsage?.planName)
-        #expect(after.zaiUsage?.tokenLimit?.usage == before.zaiUsage?.tokenLimit?.usage)
-        #expect(after.minimaxUsage?.planName == before.minimaxUsage?.planName)
-        #expect(after.minimaxUsage?.availablePrompts == before.minimaxUsage?.availablePrompts)
         #expect(after.details == before.details)
         #expect(after.subscriptionExpiresAt == before.subscriptionExpiresAt)
         #expect(after.subscriptionRenewsAt == before.subscriptionRenewsAt)

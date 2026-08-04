@@ -120,6 +120,11 @@ defineProvider({
         section.chart = { kind: "bars", title: "Key spend", unit: "USD", points };
       }
       details.push(section);
+    } else {
+      details.push({
+        title: "API key",
+        rows: [{ label: "API key budget", value: "Unavailable right now" }],
+      });
     }
 
     const result = {

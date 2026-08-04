@@ -64,7 +64,16 @@ public struct XAIUsageSnapshot: Codable, Equatable, Sendable {
                 currencyCode: "USD",
                 period: "Prepaid credits",
                 updatedAt: self.updatedAt),
-            xaiUsage: self,
+            details: [.makeSection(
+                title: "Billing summary",
+                rows: [
+                    .makeRow(label: "Prepaid balance", value: UsageFormatter.usdString(self.balanceUSD)),
+                    .makeRow(label: "History", value: self.historyWindowPeriodLabel),
+                ],
+                chart: self.daily.isEmpty ? nil : .makeChart(
+                    title: "Daily spend",
+                    unit: "USD",
+                    points: self.daily.map { ($0.day, $0.costUSD) }))],
             updatedAt: self.updatedAt,
             identity: ProviderIdentitySnapshot(
                 providerID: .xai,

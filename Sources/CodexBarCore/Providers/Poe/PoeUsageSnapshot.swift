@@ -22,12 +22,47 @@ public struct PoeUsageSnapshot: Sendable {
             accountOrganization: nil,
             loginMethod: self.balanceLabel)
 
+        var rows: [ProviderDetailSection.Row] = []
+        if let balance = self.currentPointBalance {
+            rows.append(.makeRow(label: "Current balance", value: "\(Self.compactNumber(balance)) points"))
+        }
+        if let history = self.history {
+            let seven = history.last7Days
+            let thirty = history.last30Days
+            rows.append(.makeRow(
+                label: "Last 7 days",
+                value: "\(Self.compactNumber(seven.points)) points",
+                secondaryValue: "\(seven.requests) requests"))
+            rows.append(.makeRow(
+                label: "Last 30 days",
+                value: "\(Self.compactNumber(thirty.points)) points",
+                secondaryValue: "\(thirty.requests) requests"))
+            if let top = history.topModels.first {
+                rows.append(.makeRow(
+                    label: "Top model",
+                    value: top.name,
+                    secondaryValue: "\(Self.compactNumber(top.points)) points"))
+            }
+            if let top = history.topUsageTypes.first {
+                rows.append(.makeRow(
+                    label: "Top usage type",
+                    value: top.name,
+                    secondaryValue: "\(Self.compactNumber(top.points)) points"))
+            }
+        }
+        let chart = self.history.flatMap { history in
+            history.daily.isEmpty ? nil : ProviderDetailSection.makeChart(
+                title: "Daily points",
+                unit: "points",
+                points: history.daily.map { ($0.day, $0.points) })
+        }
+
         return UsageSnapshot(
             primary: nil,
             secondary: nil,
             tertiary: nil,
             providerCost: nil,
-            poeUsage: self.history,
+            details: [.makeSection(title: "Points", rows: rows, chart: chart)],
             updatedAt: self.updatedAt,
             identity: identity)
     }

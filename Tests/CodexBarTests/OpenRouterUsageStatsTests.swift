@@ -40,7 +40,7 @@ struct OpenRouterUsageStatsTests {
         let usage = snapshot.toUsageSnapshot()
 
         #expect(usage.primary == nil)
-        #expect(usage.detailRow(label: "API key budget") == nil)
+        #expect(usage.detailRow(label: "API key budget")?.value == "Unavailable right now")
     }
 
     @Test

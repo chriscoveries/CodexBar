@@ -143,6 +143,7 @@ struct ProviderPluginDetailsParityTests {
             .fetchUsage(secrets: ["POE_API_KEY": "fixture-key"], now: now)
 
         Self.expectCoreParity(swift, script)
+        #expect(swift.details == script.details)
         #expect(try script.details == [Self.section(
             "Points",
             rows: [
@@ -183,6 +184,7 @@ struct ProviderPluginDetailsParityTests {
                 now: now)
 
         Self.expectCoreParity(swift, script)
+        #expect(swift.details == script.details)
         #expect(try script.details == [
             Self.section("Quota details", rows: [
                 Self.row("Token quota", "9% used"),

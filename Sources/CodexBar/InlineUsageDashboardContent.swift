@@ -43,24 +43,6 @@ extension UsageMenuCardView.Model {
             return self.openAIAPIUsageNotes(usage)
         }
 
-        if input.provider == .deepgram,
-           let usage = input.snapshot?.deepgramUsage
-        {
-            return usage.displayLines
-        }
-
-        if input.provider == .minimax,
-           input.showOptionalCreditsAndExtraUsage,
-           let billing = input.snapshot?.minimaxUsage?.billingSummary
-        {
-            return [
-                String(format: L("Today: %@ tokens"), UsageFormatter.tokenCountString(billing.todayTokens)),
-                String(
-                    format: L("Last 30 days: %@ tokens"),
-                    UsageFormatter.tokenCountString(billing.last30DaysTokens)),
-            ]
-        }
-
         if input.provider == .deepseek {
             if input.isRefreshing {
                 return []
@@ -94,12 +76,6 @@ extension UsageMenuCardView.Model {
                     UsageFormatter.tokenCountString(usage.todayTokens)),
                 String(format: L("This month: %@ tokens"), UsageFormatter.tokenCountString(usage.currentMonthTokens)),
             ]
-        }
-
-        if input.provider == .poe,
-           let usage = input.snapshot?.poeUsage
-        {
-            return self.poeUsageNotes(usage, now: input.now)
         }
 
         if input.provider == .ollama,
@@ -136,40 +112,6 @@ extension UsageMenuCardView.Model {
         return notes
     }
 
-    static func poeUsageNotes(
-        _ usage: PoeUsageHistorySnapshot,
-        now: Date = Date(),
-        calendar: Calendar = .current) -> [String]
-    {
-        let today = usage.currentDay(now: now, calendar: calendar)
-        let week = usage.last7Days
-        let month = usage.last30Days
-        let todayUSD = today.costUSD.map { " · \(UsageFormatter.usdString($0))" } ?? ""
-        let weekUSD = week.costUSD.map { " · \(UsageFormatter.usdString($0))" } ?? ""
-        let monthUSD = month.costUSD.map { " · \(UsageFormatter.usdString($0))" } ?? ""
-        let todayLine = "Today: \(Self.pointsSummary(today.points)) · " +
-            "\(UsageFormatter.tokenCountString(today.requests)) \(L("requests"))\(todayUSD)"
-        let weekLine = "7d: \(Self.pointsSummary(week.points)) · " +
-            "\(UsageFormatter.tokenCountString(week.requests)) \(L("requests"))\(weekUSD)"
-        let monthLine = "30d: \(Self.pointsSummary(month.points)) · " +
-            "\(UsageFormatter.tokenCountString(month.requests)) \(L("requests"))\(monthUSD)"
-        var notes = [
-            todayLine,
-            weekLine,
-            monthLine,
-        ]
-        if let topModel = usage.topModels.first {
-            notes.append("\(L("Top model")): \(topModel.name) (\(Self.pointsSummary(topModel.points)))")
-        }
-        if !usage.topUsageTypes.isEmpty {
-            let mix = usage.topUsageTypes.prefix(2)
-                .map { "\($0.name): \(Self.pointsSummary($0.points))" }
-                .joined(separator: " · ")
-            notes.append("Usage mix: \(mix)")
-        }
-        return notes
-    }
-
     static func inlineUsageDashboard(input: Input) -> InlineUsageDashboardModel? {
         guard var model = self.resolveInlineUsageDashboard(input: input) else { return nil }
         model.barColor = Self.inlineDashboardBarColor(for: input.provider)
@@ -201,18 +143,6 @@ extension UsageMenuCardView.Model {
                 usage,
                 preferredCurrencyCode: input.preferredCurrencyCode)
         }
-        if input.provider == .zai,
-           let modelUsage = input.snapshot?.zaiUsage?.modelUsage
-        {
-            return Self.zaiInlineDashboard(modelUsage: modelUsage, now: input.now)
-        }
-        if input.provider == .minimax,
-           input.showOptionalCreditsAndExtraUsage,
-           let billing = input.snapshot?.minimaxUsage?.billingSummary,
-           !billing.daily.isEmpty
-        {
-            return Self.minimaxInlineDashboard(billing)
-        }
         if input.provider == .deepseek,
            !input.isRefreshing,
            input.tokenCostInlineDashboardEnabled,
@@ -221,18 +151,6 @@ extension UsageMenuCardView.Model {
            !usage.daily.isEmpty
         {
             return Self.deepseekInlineDashboard(usage)
-        }
-        if input.provider == .poe,
-           let usage = input.snapshot?.poeUsage,
-           !usage.daily.isEmpty
-        {
-            return Self.poeInlineDashboard(usage, now: input.now)
-        }
-        if input.provider == .zoommate,
-           let history = input.snapshot?.zoommateCreditsHistory,
-           !history.dailyBreakdown().isEmpty || history.pacingVerdict() != nil
-        {
-            return Self.zoommateInlineDashboard(history)
         }
         if [.codex, .claude, .vertexai, .bedrock, .cursor, .opencodego].contains(input.provider),
            input.tokenCostInlineDashboardEnabled,
@@ -248,59 +166,8 @@ extension UsageMenuCardView.Model {
         return nil
     }
 
-    private static func zoommateInlineDashboard(
-        _ history: ZoomMateCreditsHistorySnapshot)
-        -> InlineUsageDashboardModel
-    {
-        let breakdown = history.dailyBreakdown()
-        let today = history.todayCreditsUsed()
-        let total = breakdown.reduce(0) { $0 + $1.totalCreditsUsed }
-        let points = breakdown.suffix(30).map {
-            InlineUsageDashboardModel.Point(
-                id: $0.day,
-                label: Self.shortDayLabel($0.day),
-                value: $0.totalCreditsUsed,
-                accessibilityValue: "\($0.day): \(Self.creditsSummary($0.totalCreditsUsed))")
-        }
-        var details: [String] = []
-        if let pace = history.pacingVerdict() {
-            details.append(Self.zoommatePaceLabel(for: pace))
-        }
-        var model = InlineUsageDashboardModel(
-            accessibilityLabel: L("ZoomMate 30 day credits usage trend"),
-            valueStyle: .tokens,
-            kpis: [
-                .init(title: L("Today"), value: Self.creditsSummary(today ?? 0), emphasis: true),
-                .init(title: L("30d credits"), value: Self.creditsSummary(total), emphasis: false),
-            ],
-            points: points,
-            detailLines: details)
-        model.barColor = Self.inlineDashboardBarColor(for: .zoommate)
-        return model
-    }
-
-    private static func creditsSummary(_ value: Double) -> String {
-        value.formatted(.number.precision(.fractionLength(0...2)))
-    }
-
-    private static func zoommatePaceLabel(for pace: UsagePace) -> String {
-        let deltaValue = Int(abs(pace.deltaPercent).rounded())
-        switch pace.stage {
-        case .onTrack:
-            return L("Pace: on track")
-        case .slightlyAhead, .ahead, .farAhead:
-            return deltaValue == 0
-                ? L("Pace: ahead of budget")
-                : L("Pace: %d%% ahead of budget", deltaValue)
-        case .slightlyBehind, .behind, .farBehind:
-            return deltaValue == 0
-                ? L("Pace: behind budget")
-                : L("Pace: %d%% behind budget", deltaValue)
-        }
-    }
-
     static func usesProviderCostHistoryAsPrimaryDashboard(_ provider: UsageProvider) -> Bool {
-        provider == .openai || provider == .mistral || provider == .groq || provider == .xai
+        provider == .openai || provider == .mistral
     }
 
     static func primaryCostHistorySnapshot(input: Input) -> CostUsageTokenSnapshot? {
@@ -315,79 +182,9 @@ extension UsageMenuCardView.Model {
                 return projected
             }
             return input.snapshot == nil ? input.tokenSnapshot : nil
-        case .groq:
-            if let projected = input.snapshot?.groqConsoleUsage?.toCostUsageTokenSnapshot() {
-                return projected
-            }
-            return input.snapshot == nil ? input.tokenSnapshot : nil
-        case .xai:
-            if let projected = input.snapshot?.xaiUsage?.costHistorySnapshot() {
-                return projected
-            }
-            return input.snapshot == nil ? input.tokenSnapshot : nil
         default:
             return input.tokenSnapshot
         }
-    }
-
-    static func poeInlineDashboard(
-        _ usage: PoeUsageHistorySnapshot,
-        now: Date = Date(),
-        calendar: Calendar = .current) -> InlineUsageDashboardModel
-    {
-        let today = usage.currentDay(now: now, calendar: calendar)
-        let week = usage.last7Days
-        let month = usage.last30Days
-        let points = usage.daily.suffix(30).map {
-            InlineUsageDashboardModel.Point(
-                id: $0.day,
-                label: Self.shortDayLabel($0.day),
-                value: $0.points,
-                accessibilityValue: "\($0.day): \(Self.pointsSummary($0.points))")
-        }
-        var details = ["30d requests: \(UsageFormatter.tokenCountString(month.requests))"]
-        if let topModel = usage.topModel {
-            details.append("\(L("Top model")): \(topModel)")
-        }
-        if !usage.topUsageTypes.isEmpty {
-            let mix = usage.topUsageTypes.prefix(3)
-                .map { "\($0.name): \(Self.pointsSummary($0.points))" }
-                .joined(separator: " · ")
-            details.append("Usage mix: \(mix)")
-        }
-        if let usd = today.costUSD, usd > 0 {
-            details.append("Today USD: \(UsageFormatter.usdString(usd))")
-        }
-        if let usd = week.costUSD, usd > 0 {
-            details.append("7d USD: \(UsageFormatter.usdString(usd))")
-        }
-        if let usd = month.costUSD, usd > 0 {
-            details.append("30d USD: \(UsageFormatter.usdString(usd))")
-        }
-        let recent = usage.recentEntries(limit: 2)
-        if !recent.isEmpty {
-            let text = recent.map { "\($0.model) \(Self.pointsSummary($0.points))" }.joined(separator: " · ")
-            details.append("Recent: \(text)")
-        }
-        return InlineUsageDashboardModel(
-            accessibilityLabel: "Poe points usage trend",
-            valueStyle: .points,
-            kpis: [
-                .init(title: L("Today"), value: Self.pointsSummary(today.points), emphasis: true),
-                .init(title: "7d", value: Self.pointsSummary(week.points), emphasis: false),
-                .init(title: "30d", value: Self.pointsSummary(month.points), emphasis: false),
-                .init(title: L("Requests"), value: UsageFormatter.tokenCountString(month.requests), emphasis: false),
-            ],
-            points: points,
-            detailLines: details)
-    }
-
-    static func pointsSummary(_ value: Double) -> String {
-        let clamped = max(0, value)
-        if clamped.rounded() == clamped {
-            return "\(UsageFormatter.tokenCountString(Int(clamped))) points"
-        }
-        return "\(String(format: "%.1f", clamped)) points"
     }
 
     private static func costHistoryInlineDashboard(
@@ -616,82 +413,6 @@ extension UsageMenuCardView.Model {
         return model
     }
 
-    private static func zaiInlineDashboard(modelUsage: ZaiModelUsageData, now: Date) -> InlineUsageDashboardModel? {
-        let bars = ZaiHourlyBars.from(modelData: modelUsage, range: .last24h, now: now)
-        guard !bars.isEmpty else { return nil }
-        let total = bars.reduce(0) { $0 + $1.totalTokens }
-        let latest = bars.last
-        let peak = bars.max { $0.totalTokens < $1.totalTokens }
-        let points = bars.enumerated().map { index, bar in
-            InlineUsageDashboardModel.Point(
-                id: "\(index)-\(bar.label)",
-                label: bar.label,
-                value: Double(bar.totalTokens),
-                accessibilityValue: "\(bar.label): \(UsageFormatter.tokenCountString(bar.totalTokens)) \(L("tokens"))")
-        }
-        let topModel = Self.topZaiModel(from: bars)
-        return InlineUsageDashboardModel(
-            accessibilityLabel: L("z.ai hourly token trend"),
-            valueStyle: .tokens,
-            kpis: [
-                .init(title: L("24h tokens"), value: UsageFormatter.tokenCountString(total), emphasis: true),
-                .init(
-                    title: L("Latest hour"),
-                    value: latest.map { UsageFormatter.tokenCountString($0.totalTokens) } ?? "—",
-                    emphasis: false),
-                .init(
-                    title: L("Peak hour"),
-                    value: peak.map { UsageFormatter.tokenCountString($0.totalTokens) } ?? "—",
-                    emphasis: false),
-                .init(title: L("Models"), value: "\(modelUsage.modelNames.count)", emphasis: false),
-            ],
-            points: points,
-            detailLines: topModel.map { ["\(L("Top model")): \(Self.shortModelName($0))"] } ?? [])
-    }
-
-    private static func minimaxInlineDashboard(_ billing: MiniMaxBillingSummary) -> InlineUsageDashboardModel {
-        let points = billing.daily.suffix(30).map {
-            InlineUsageDashboardModel.Point(
-                id: $0.day,
-                label: Self.shortDayLabel($0.day),
-                value: Double($0.tokens),
-                accessibilityValue: "\($0.day): \(UsageFormatter.tokenCountString($0.tokens)) \(L("tokens"))")
-        }
-        var details = [L("30d billing history from MiniMax web session")]
-        if let topModel = billing.topModels.first {
-            details.append("\(L("Top model")): \(Self.shortModelName(topModel.name))")
-        }
-        if let topMethod = billing.topMethods.first {
-            details.append("\(L("Top method")): \(Self.shortModelName(topMethod.name))")
-        }
-        if let cash = billing.last30DaysCash {
-            details.append("\(L("30d cash")): \(Self.minimaxCashString(cash))")
-        }
-        return InlineUsageDashboardModel(
-            accessibilityLabel: L("MiniMax 30 day token usage trend"),
-            valueStyle: .tokens,
-            kpis: [
-                .init(
-                    title: L("Today"),
-                    value: UsageFormatter.tokenCountString(billing.todayTokens),
-                    emphasis: true),
-                .init(
-                    title: L("30d tokens"),
-                    value: UsageFormatter.tokenCountString(billing.last30DaysTokens),
-                    emphasis: false),
-                .init(
-                    title: L("Today cash"),
-                    value: billing.todayCash.map(Self.minimaxCashString) ?? "—",
-                    emphasis: false),
-                .init(
-                    title: L("Models"),
-                    value: "\(billing.topModels.count)",
-                    emphasis: false),
-            ],
-            points: points,
-            detailLines: details)
-    }
-
     private static func deepseekInlineDashboard(_ usage: DeepSeekUsageSummary) -> InlineUsageDashboardModel {
         let symbol = usage.currency == "CNY" ? "¥" : "$"
         let points = usage.daily.suffix(30).map {
@@ -758,25 +479,6 @@ extension UsageMenuCardView.Model {
             }
             return $0.value < $1.value
         }?.key
-    }
-
-    private static func topZaiModel(from bars: [ZaiHourlyBar]) -> String? {
-        var tokens: [String: Int] = [:]
-        for bar in bars {
-            for segment in bar.segments {
-                tokens[segment.model, default: 0] += segment.tokens
-            }
-        }
-        return tokens.max {
-            if $0.value == $1.value {
-                return $0.key > $1.key
-            }
-            return $0.value < $1.value
-        }?.key
-    }
-
-    private static func minimaxCashString(_ value: Double) -> String {
-        String(format: "%.2f", max(0, value))
     }
 
     private static func costString(_ value: Double, currencyCode: String) -> String {

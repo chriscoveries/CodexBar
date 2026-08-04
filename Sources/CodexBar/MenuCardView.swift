@@ -976,9 +976,7 @@ extension UsageMenuCardView.Model {
             metrics: metrics,
             usageNotes: usageNotes,
             subscriptionNotes: Self.subscriptionMetadataNotes(snapshot: input.snapshot, provider: input.provider),
-            providerDetails: input.provider == .sakana && !input.showOptionalCreditsAndExtraUsage
-                ? []
-                : input.snapshot?.details ?? [],
+            providerDetails: Self.visibleProviderDetails(input: input),
             openAIAPIUsage: openAIAPIUsage,
             inlineUsageDashboard: inlineUsageDashboard,
             creditsText: creditsText,
@@ -992,6 +990,18 @@ extension UsageMenuCardView.Model {
             tokenUsage: tokenUsage,
             placeholder: placeholder,
             progressColor: Self.progressColor(for: input.provider))
+    }
+
+    private static func visibleProviderDetails(input: Input) -> [ProviderDetailSection] {
+        let details = input.snapshot?.details ?? []
+        guard !input.showOptionalCreditsAndExtraUsage else { return details }
+        if input.provider == .sakana {
+            return []
+        }
+        if input.provider == .minimax {
+            return details.filter { $0.title != "Billing history" }
+        }
+        return details
     }
 
     private static func email(
@@ -1173,21 +1183,8 @@ extension UsageMenuCardView.Model {
         if input.provider == .antigravity {
             return Self.antigravityMetrics(input: input, snapshot: snapshot)
         }
-        if input.provider == .minimax {
-            if let minimaxUsage = snapshot.minimaxUsage {
-                let services = minimaxUsage.orderedQuotaServices
-                if !services.isEmpty {
-                    return Self.minimaxMetrics(services: services, input: input)
-                }
-            }
-        }
         var metrics: [Metric] = []
         let percentStyle: PercentStyle = input.usageBarsShowUsed ? .used : .left
-        let zaiUsage = input.provider == .zai ? snapshot.zaiUsage : nil
-        let zaiPrimaryDetail = Self.zaiLimitDetailText(limit: zaiUsage?.sessionTokenLimit ?? zaiUsage?.tokenLimit)
-        let zaiSecondaryDetail = zaiUsage?.sessionTokenLimit == nil
-            ? nil
-            : Self.zaiLimitDetailText(limit: zaiUsage?.tokenLimit)
         let labels = Self.rateWindowLabels(input: input, snapshot: snapshot)
         if input.provider == .mistral, let credits = snapshot.mistralUsage?.credits {
             metrics.append(Metric(
@@ -1213,16 +1210,14 @@ extension UsageMenuCardView.Model {
                 input: input,
                 primary: primary,
                 percentStyle: percentStyle,
-                title: labels.primary,
-                zaiTokenDetail: zaiPrimaryDetail))
+                title: labels.primary))
         }
         if input.provider != .codex, let weekly = snapshot.secondary {
             metrics.append(Self.secondaryMetric(
                 input: input,
                 weekly: weekly,
                 percentStyle: percentStyle,
-                title: labels.secondary,
-                zaiTimeDetail: zaiSecondaryDetail))
+                title: labels.secondary))
         }
         if labels.showsTertiary, let opus = snapshot.tertiary {
             var tertiaryDetailText: String?
@@ -1296,12 +1291,11 @@ extension UsageMenuCardView.Model {
         input: Input,
         primary: RateWindow,
         percentStyle: PercentStyle,
-        title: String? = nil,
-        zaiTokenDetail: String?) -> Metric
+        title: String? = nil) -> Metric
     {
         var presentation = PrimaryMetricPresentation(
             resetText: Self.resetText(for: primary, style: input.resetTimeDisplayStyle, now: input.now),
-            detailText: input.provider == .zai ? zaiTokenDetail : nil)
+            detailText: nil)
         Self.applyPrimaryQuotaPresentation(
             &presentation,
             input: input,
@@ -1336,8 +1330,7 @@ extension UsageMenuCardView.Model {
         input: Input,
         weekly: RateWindow,
         percentStyle: PercentStyle,
-        title: String? = nil,
-        zaiTimeDetail: String?) -> Metric
+        title: String? = nil) -> Metric
     {
         // Kimi's secondary slot is its 5-hour rate limit rather than a weekly window.
         var paceDetail = if input.provider == .kimi {
@@ -1355,7 +1348,7 @@ extension UsageMenuCardView.Model {
                 showUsed: input.usageBarsShowUsed)
         }
         var weeklyResetText = Self.resetText(for: weekly, style: input.resetTimeDisplayStyle, now: input.now)
-        var weeklyDetailText: String? = input.provider == .zai ? zaiTimeDetail : nil
+        var weeklyDetailText: String?
         if input.provider == .warp,
            let detail = weekly.resetDescription,
            !detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty

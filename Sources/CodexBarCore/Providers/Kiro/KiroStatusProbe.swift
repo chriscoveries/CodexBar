@@ -116,7 +116,6 @@ public struct KiroUsageSnapshot: Sendable {
             tertiary: nil,
             kiroUsage: kiroUsage,
             providerCost: nil,
-            zaiUsage: nil,
             updatedAt: self.updatedAt,
             identity: identity)
     }

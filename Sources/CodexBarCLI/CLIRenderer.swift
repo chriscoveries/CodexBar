@@ -48,9 +48,7 @@ enum CLIRenderer {
             now: now,
             lines: &lines)
         self.appendProviderDetails(snapshot.details, useColor: context.useColor, lines: &lines)
-        self.appendDeepgramLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendAmpBalanceLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
-        self.appendXAIUsageLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendDevinOverageBalanceLine(
             provider: provider,
             snapshot: snapshot,
@@ -126,9 +124,7 @@ enum CLIRenderer {
             now: now,
             lines: &lines)
         self.appendProviderDetails(snapshot.details, useColor: context.useColor, lines: &lines)
-        self.appendDeepgramLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendAmpBalanceLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
-        self.appendXAIUsageLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendDevinOverageBalanceLine(
             provider: provider,
             snapshot: snapshot,
@@ -519,9 +515,7 @@ enum CLIRenderer {
                 lines: &lines)
         }
         self.appendProviderDetails(snapshot.details, useColor: context.useColor, lines: &lines)
-        self.appendDeepgramLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendAmpBalanceLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
-        self.appendXAIUsageLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendDevinOverageBalanceLine(
             provider: provider,
             snapshot: snapshot,
@@ -731,19 +725,6 @@ enum CLIRenderer {
         lines.append(self.labelValueLine("Extra usage balance", value: value, useColor: useColor))
     }
 
-    private static func appendXAIUsageLines(
-        snapshot: UsageSnapshot,
-        useColor: Bool,
-        lines: inout [String])
-    {
-        guard let usage = snapshot.xaiUsage else { return }
-        let balance = UsageFormatter.currencyString(usage.balanceUSD, currencyCode: "USD")
-        lines.append(self.labelValueLine("Balance", value: balance, useColor: useColor))
-        guard !usage.daily.isEmpty else { return }
-        let spend = UsageFormatter.currencyString(usage.windowCostUSD, currencyCode: "USD")
-        lines.append(self.labelValueLine(usage.historyWindowPeriodLabel, value: spend, useColor: useColor))
-    }
-
     // swiftlint:disable:next function_parameter_count
     private static func appendTertiaryLines(
         provider: UsageProvider,
@@ -782,25 +763,6 @@ enum CLIRenderer {
             lines.append(self.rateLine(title: extra.title, window: extra.window, useColor: context.useColor))
             if let reset = self.resetLine(for: extra.window, style: context.resetStyle, now: now) {
                 lines.append(self.subtleLine(reset, useColor: context.useColor))
-            }
-        }
-    }
-
-    private static func appendDeepgramLines(
-        snapshot: UsageSnapshot,
-        useColor: Bool,
-        lines: inout [String])
-    {
-        guard let usage = snapshot.deepgramUsage else { return }
-        for line in usage.displayLines {
-            let parts = line.split(separator: ":", maxSplits: 1).map(String.init)
-            if parts.count == 2 {
-                lines.append(self.labelValueLine(
-                    parts[0].trimmingCharacters(in: .whitespacesAndNewlines),
-                    value: parts[1].trimmingCharacters(in: .whitespacesAndNewlines),
-                    useColor: useColor))
-            } else {
-                lines.append(self.labelValueLine("Usage", value: line, useColor: useColor))
             }
         }
     }

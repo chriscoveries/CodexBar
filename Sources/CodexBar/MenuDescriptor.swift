@@ -394,28 +394,17 @@ struct MenuDescriptor {
                 usage: claudeAdminAPIUsage,
                 preferredCurrencyCode: preferredCurrencyCode)
         }
-        if let poeUsage = snapshot.poeUsage, !poeUsage.daily.isEmpty {
-            Self.appendPoeUsageSummary(
-                entries: &entries,
-                usage: poeUsage,
-                preferredCurrencyCode: preferredCurrencyCode)
-        }
         if let mistralUsage = snapshot.mistralUsage, !mistralUsage.daily.isEmpty {
             Self.appendMistralUsageSummary(
                 entries: &entries,
                 usage: mistralUsage,
                 preferredCurrencyCode: preferredCurrencyCode)
         }
-        if let xaiUsage = snapshot.xaiUsage {
-            entries.append(.text("\(L("Balance")): \(UsageFormatter.usdString(xaiUsage.balanceUSD))", .primary))
-            if !xaiUsage.daily.isEmpty {
-                entries.append(.text(
-                    "\(xaiUsage.historyWindowPeriodLabel): \(UsageFormatter.usdString(xaiUsage.windowCostUSD))",
-                    .secondary))
-            }
-        }
         if provider != .sakana || showOptionalUsage {
-            for section in snapshot.details {
+            let details = provider == .minimax && !showOptionalUsage
+                ? snapshot.details.filter { $0.title != "Billing history" }
+                : snapshot.details
+            for section in details {
                 for row in section.rows {
                     let value = [row.value, row.secondaryValue].compactMap(\.self).joined(separator: " · ")
                     entries.append(.text("\(row.label): \(value)", .secondary))

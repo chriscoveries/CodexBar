@@ -281,6 +281,10 @@ extension OpenRouterUsageSnapshot {
                 title: "API key",
                 rows: rows,
                 chart: points.isEmpty ? nil : .makeChart(title: "Key spend", unit: "USD", points: points)))
+        } else {
+            details.append(.makeSection(title: "API key", rows: [
+                .makeRow(label: "API key budget", value: "Unavailable right now"),
+            ]))
         }
 
         return UsageSnapshot(

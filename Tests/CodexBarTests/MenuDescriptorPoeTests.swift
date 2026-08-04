@@ -100,18 +100,10 @@ struct MenuDescriptorPoeTests {
             ],
             updatedAt: now)
 
-        let snapshot = UsageSnapshot(
-            primary: nil,
-            secondary: nil,
-            tertiary: nil,
-            providerCost: nil,
-            poeUsage: history,
-            updatedAt: now,
-            identity: ProviderIdentitySnapshot(
-                providerID: .poe,
-                accountEmail: nil,
-                accountOrganization: nil,
-                loginMethod: "Balance: 300 points"))
+        let snapshot = PoeUsageSnapshot(
+            currentPointBalance: 300,
+            history: history,
+            updatedAt: now).toUsageSnapshot()
         store._setSnapshotForTesting(snapshot, provider: .poe)
 
         let descriptor = MenuDescriptor.build(
