@@ -156,12 +156,6 @@ public struct UsageSnapshot: Codable, Sendable {
     public let deepseekDetailedUsageState: DeepSeekDetailedUsageState
     public let deepseekPlatformProfiles: [DeepSeekPlatformProfile]
     public let opencodegoUsage: OpenCodeGoUsageSnapshot?
-    public let mimoUsage: MiMoUsageSnapshot?
-    public let openRouterUsage: OpenRouterUsageSnapshot?
-    public let sakanaPayAsYouGo: SakanaPayAsYouGoSnapshot?
-    public let clawRouterUsage: ClawRouterUsageSnapshot?
-    public let sub2APIUsage: Sub2APIUsageDetails?
-    public let wayfinderUsage: WayfinderUsageSnapshot?
     public let openAIAPIUsage: OpenAIAPIUsageSnapshot?
     public let groqConsoleUsage: GroqConsoleUsageSnapshot?
     public let codexResetCredits: CodexRateLimitResetCreditsSnapshot?
@@ -170,8 +164,6 @@ public struct UsageSnapshot: Codable, Sendable {
     public let deepgramUsage: DeepgramUsageSnapshot?
     public let poeUsage: PoeUsageHistorySnapshot?
     public let xaiUsage: XAIUsageSnapshot?
-    public let cursorRequests: CursorRequestUsage?
-    public let copilotCredits: CopilotCreditsSnapshot?
     /// Live-only marker for optional Command Code subscription lookup failure.
     public let commandCodeSubscriptionEnrichmentUnavailable: Bool
     /// Live-only marker that Command Code returned a recognized subscription plan.
@@ -193,12 +185,6 @@ public struct UsageSnapshot: Codable, Sendable {
         case details
         case kiroUsage
         case ampUsage
-        case mimoUsage
-        case openRouterUsage
-        case sakanaPayAsYouGo
-        case clawRouterUsage
-        case sub2APIUsage
-        case wayfinderUsage
         case openAIAPIUsage
         case groqConsoleUsage
         case codexResetCredits
@@ -233,12 +219,6 @@ public struct UsageSnapshot: Codable, Sendable {
         deepseekDetailedUsageState: DeepSeekDetailedUsageState = .notRequested,
         deepseekPlatformProfiles: [DeepSeekPlatformProfile] = [],
         opencodegoUsage: OpenCodeGoUsageSnapshot? = nil,
-        mimoUsage: MiMoUsageSnapshot? = nil,
-        openRouterUsage: OpenRouterUsageSnapshot? = nil,
-        sakanaPayAsYouGo: SakanaPayAsYouGoSnapshot? = nil,
-        clawRouterUsage: ClawRouterUsageSnapshot? = nil,
-        sub2APIUsage: Sub2APIUsageDetails? = nil,
-        wayfinderUsage: WayfinderUsageSnapshot? = nil,
         openAIAPIUsage: OpenAIAPIUsageSnapshot? = nil,
         groqConsoleUsage: GroqConsoleUsageSnapshot? = nil,
         codexResetCredits: CodexRateLimitResetCreditsSnapshot? = nil,
@@ -247,8 +227,6 @@ public struct UsageSnapshot: Codable, Sendable {
         deepgramUsage: DeepgramUsageSnapshot? = nil,
         poeUsage: PoeUsageHistorySnapshot? = nil,
         xaiUsage: XAIUsageSnapshot? = nil,
-        cursorRequests: CursorRequestUsage? = nil,
-        copilotCredits: CopilotCreditsSnapshot? = nil,
         commandCodeSubscriptionEnrichmentUnavailable: Bool = false,
         commandCodeHasSubscriptionPlan: Bool = false,
         commandCodeMonthlyGrantDepleted: Bool = false,
@@ -276,12 +254,6 @@ public struct UsageSnapshot: Codable, Sendable {
         self.deepseekDetailedUsageState = deepseekDetailedUsageState
         self.deepseekPlatformProfiles = deepseekPlatformProfiles
         self.opencodegoUsage = opencodegoUsage
-        self.mimoUsage = mimoUsage
-        self.openRouterUsage = openRouterUsage
-        self.sakanaPayAsYouGo = sakanaPayAsYouGo
-        self.clawRouterUsage = clawRouterUsage
-        self.sub2APIUsage = sub2APIUsage
-        self.wayfinderUsage = wayfinderUsage
         self.openAIAPIUsage = openAIAPIUsage
         self.groqConsoleUsage = groqConsoleUsage
         self.codexResetCredits = codexResetCredits
@@ -290,8 +262,6 @@ public struct UsageSnapshot: Codable, Sendable {
         self.deepgramUsage = deepgramUsage
         self.poeUsage = poeUsage
         self.xaiUsage = xaiUsage
-        self.cursorRequests = cursorRequests
-        self.copilotCredits = copilotCredits
         self.commandCodeSubscriptionEnrichmentUnavailable = commandCodeSubscriptionEnrichmentUnavailable
         self.commandCodeHasSubscriptionPlan = commandCodeHasSubscriptionPlan
         self.commandCodeMonthlyGrantDepleted = commandCodeMonthlyGrantDepleted
@@ -344,14 +314,6 @@ public struct UsageSnapshot: Codable, Sendable {
         self.deepseekDetailedUsageState = .notRequested // Live-only fetch state
         self.deepseekPlatformProfiles = [] // Live-only browser profile catalog
         self.opencodegoUsage = nil // Not persisted, fetched fresh each time
-        self.mimoUsage = try container.decodeIfPresent(MiMoUsageSnapshot.self, forKey: .mimoUsage)
-        self.openRouterUsage = try container.decodeIfPresent(OpenRouterUsageSnapshot.self, forKey: .openRouterUsage)
-        self.sakanaPayAsYouGo = try container.decodeIfPresent(
-            SakanaPayAsYouGoSnapshot.self,
-            forKey: .sakanaPayAsYouGo)
-        self.clawRouterUsage = try container.decodeIfPresent(ClawRouterUsageSnapshot.self, forKey: .clawRouterUsage)
-        self.sub2APIUsage = try container.decodeIfPresent(Sub2APIUsageDetails.self, forKey: .sub2APIUsage)
-        self.wayfinderUsage = try container.decodeIfPresent(WayfinderUsageSnapshot.self, forKey: .wayfinderUsage)
         self.openAIAPIUsage = try container.decodeIfPresent(OpenAIAPIUsageSnapshot.self, forKey: .openAIAPIUsage)
         self.groqConsoleUsage = try container.decodeIfPresent(
             GroqConsoleUsageSnapshot.self,
@@ -366,8 +328,6 @@ public struct UsageSnapshot: Codable, Sendable {
         self.deepgramUsage = try container.decodeIfPresent(DeepgramUsageSnapshot.self, forKey: .deepgramUsage)
         self.poeUsage = try container.decodeIfPresent(PoeUsageHistorySnapshot.self, forKey: .poeUsage)
         self.xaiUsage = try container.decodeIfPresent(XAIUsageSnapshot.self, forKey: .xaiUsage)
-        self.cursorRequests = nil // Not persisted, fetched fresh each time
-        self.copilotCredits = nil // Not persisted, fetched fresh each time
         self.commandCodeSubscriptionEnrichmentUnavailable = false // Live-only fetch state
         self.commandCodeHasSubscriptionPlan = false // Live-only fetch state
         self.commandCodeMonthlyGrantDepleted = false // Live-only fetch state
@@ -410,12 +370,6 @@ public struct UsageSnapshot: Codable, Sendable {
         }
         try container.encodeIfPresent(self.kiroUsage, forKey: .kiroUsage)
         try container.encodeIfPresent(self.ampUsage, forKey: .ampUsage)
-        try container.encodeIfPresent(self.mimoUsage, forKey: .mimoUsage)
-        try container.encodeIfPresent(self.openRouterUsage, forKey: .openRouterUsage)
-        try container.encodeIfPresent(self.sakanaPayAsYouGo, forKey: .sakanaPayAsYouGo)
-        try container.encodeIfPresent(self.clawRouterUsage, forKey: .clawRouterUsage)
-        try container.encodeIfPresent(self.sub2APIUsage, forKey: .sub2APIUsage)
-        try container.encodeIfPresent(self.wayfinderUsage, forKey: .wayfinderUsage)
         try container.encodeIfPresent(self.openAIAPIUsage, forKey: .openAIAPIUsage)
         try container.encodeIfPresent(self.groqConsoleUsage, forKey: .groqConsoleUsage)
         try container.encodeIfPresent(self.codexResetCredits, forKey: .codexResetCredits)
@@ -478,6 +432,10 @@ public struct UsageSnapshot: Codable, Sendable {
     public var hasRateLimitWindows: Bool {
         self.primary != nil || self.secondary != nil || self.tertiary != nil ||
             !(self.extraRateWindows?.isEmpty ?? true)
+    }
+
+    public func detailRow(label: String) -> ProviderDetailSection.Row? {
+        self.details.lazy.flatMap(\.rows).first { $0.label == label }
     }
 
     public func rateLimitsUnavailable(for provider: UsageProvider) -> Bool {
@@ -592,12 +550,6 @@ public struct UsageSnapshot: Codable, Sendable {
             deepseekDetailedUsageState: deepseekDetailedUsageState.resolving(self.deepseekDetailedUsageState),
             deepseekPlatformProfiles: deepseekPlatformProfiles.resolving(self.deepseekPlatformProfiles),
             opencodegoUsage: self.opencodegoUsage,
-            mimoUsage: self.mimoUsage,
-            openRouterUsage: self.openRouterUsage,
-            sakanaPayAsYouGo: self.sakanaPayAsYouGo,
-            clawRouterUsage: self.clawRouterUsage,
-            sub2APIUsage: self.sub2APIUsage,
-            wayfinderUsage: self.wayfinderUsage,
             openAIAPIUsage: self.openAIAPIUsage,
             groqConsoleUsage: self.groqConsoleUsage,
             codexResetCredits: codexResetCredits.resolving(self.codexResetCredits),
@@ -606,8 +558,6 @@ public struct UsageSnapshot: Codable, Sendable {
             deepgramUsage: self.deepgramUsage,
             poeUsage: self.poeUsage,
             xaiUsage: self.xaiUsage,
-            cursorRequests: self.cursorRequests,
-            copilotCredits: self.copilotCredits,
             commandCodeSubscriptionEnrichmentUnavailable: self.commandCodeSubscriptionEnrichmentUnavailable,
             commandCodeHasSubscriptionPlan: self.commandCodeHasSubscriptionPlan,
             commandCodeMonthlyGrantDepleted: self.commandCodeMonthlyGrantDepleted,

@@ -466,26 +466,21 @@ struct CodexBarTests {
     }
 
     @Test
-    func `copying rate windows preserves provider payloads`() {
+    func `copying rate windows preserves provider details`() throws {
         let updatedAt = Date(timeIntervalSince1970: 1_800_000_000)
-        let mimoUsage = MiMoUsageSnapshot(
-            balance: 12.5,
-            currency: "USD",
-            tokenUsed: 25,
-            tokenLimit: 100,
-            tokenPercent: 0.25,
-            updatedAt: updatedAt)
         let identity = ProviderIdentitySnapshot(
             providerID: .codex,
             accountEmail: "test@example.com",
             accountOrganization: "Example",
             loginMethod: "OAuth")
-        let snapshot = UsageSnapshot(
+        let snapshot = try UsageSnapshot(
             primary: nil,
             secondary: nil,
             tertiary: RateWindow(usedPercent: 30, windowMinutes: 60, resetsAt: nil, resetDescription: nil),
-            mimoUsage: mimoUsage,
-            cursorRequests: CursorRequestUsage(used: 10, limit: 50),
+            details: [ProviderDetailSection(rows: [
+                ProviderDetailSection.Row(label: "Balance", value: "$12.50"),
+                ProviderDetailSection.Row(label: "Request quota", value: "10 / 50"),
+            ])],
             subscriptionExpiresAt: updatedAt.addingTimeInterval(100),
             subscriptionRenewsAt: updatedAt.addingTimeInterval(200),
             updatedAt: updatedAt,
@@ -498,24 +493,26 @@ struct CodexBarTests {
         #expect(copied.primary?.usedPercent == 40)
         #expect(copied.secondary?.usedPercent == 50)
         #expect(copied.tertiary?.usedPercent == 30)
-        #expect(copied.mimoUsage?.balance == 12.5)
-        #expect(copied.cursorRequests?.used == 10)
+        #expect(copied.detailRow(label: "Balance")?.value == "$12.50")
+        #expect(copied.detailRow(label: "Request quota")?.value == "10 / 50")
         #expect(copied.subscriptionExpiresAt == updatedAt.addingTimeInterval(100))
         #expect(copied.subscriptionRenewsAt == updatedAt.addingTimeInterval(200))
         #expect(copied.identity?.accountOrganization == "Example")
     }
 
     @Test
-    func `copying identity preserves provider payloads`() {
+    func `copying identity preserves provider details`() throws {
         let updatedAt = Date(timeIntervalSince1970: 1_800_000_000)
         let ampUsage = AmpUsageDetails(
             individualCredits: 12.5,
             workspaceBalances: [AmpWorkspaceBalance(name: "Team", remaining: 7.25)])
-        let snapshot = UsageSnapshot(
+        let snapshot = try UsageSnapshot(
             primary: nil,
             secondary: nil,
             ampUsage: ampUsage,
-            cursorRequests: CursorRequestUsage(used: 10, limit: 50),
+            details: [ProviderDetailSection(rows: [
+                ProviderDetailSection.Row(label: "Request quota", value: "10 / 50"),
+            ])],
             subscriptionExpiresAt: updatedAt.addingTimeInterval(100),
             subscriptionRenewsAt: updatedAt.addingTimeInterval(200),
             updatedAt: updatedAt)
@@ -528,7 +525,7 @@ struct CodexBarTests {
         let copied = snapshot.withIdentity(identity)
 
         #expect(copied.ampUsage == ampUsage)
-        #expect(copied.cursorRequests?.used == 10)
+        #expect(copied.detailRow(label: "Request quota")?.value == "10 / 50")
         #expect(copied.subscriptionExpiresAt == updatedAt.addingTimeInterval(100))
         #expect(copied.subscriptionRenewsAt == updatedAt.addingTimeInterval(200))
         #expect(copied.identity?.accountOrganization == "Example")

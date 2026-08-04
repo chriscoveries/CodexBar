@@ -409,7 +409,7 @@ extension UsageStore {
 
         let primaryTitle: String = {
             // Legacy request-based Cursor plans track a request quota, not the token-based "Total" pool.
-            if provider == .cursor, snapshot.cursorRequests != nil {
+            if provider == .cursor, snapshot.detailRow(label: "Request quota") != nil {
                 return "Requests"
             }
             if provider == .grok,

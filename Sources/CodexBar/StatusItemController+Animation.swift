@@ -850,12 +850,9 @@ extension StatusItemController {
         let mode = self.settings.menuBarDisplayMode
         if provider == .openrouter,
            self.settings.menuBarMetricPreference(for: provider, snapshot: snapshot) == .automatic,
-           let balance = snapshot?.openRouterUsage?.balance
+           let balance = snapshot?.detailRow(label: "Remaining")?.value
         {
-            return UsageFormatter.convertedCostString(
-                balance,
-                preferredCurrency: self.settings.preferredCurrencyCode,
-                providerCurrency: "USD")
+            return balance
         }
         if provider == .opencodego,
            let balance = Self.openCodeGoZenBalanceDisplayText(snapshot: snapshot)
@@ -1019,9 +1016,8 @@ extension StatusItemController {
         snapshot: UsageSnapshot?,
         preference: MenuBarMetricPreference) -> String?
     {
-        guard let snapshot, let mimoUsage = snapshot.mimoUsage else { return nil }
+        guard let snapshot, let detail = snapshot.detailRow(label: "Balance")?.value else { return nil }
         if snapshot.primary != nil, preference != .secondary { return nil }
-        let detail = mimoUsage.balanceDetail
         return detail.components(separatedBy: " (Paid:").first
     }
 

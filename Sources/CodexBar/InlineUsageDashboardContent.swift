@@ -49,31 +49,6 @@ extension UsageMenuCardView.Model {
             return usage.displayLines
         }
 
-        if input.provider == .clawrouter,
-           let usage = input.snapshot?.clawRouterUsage
-        {
-            var notes = [
-                "\(UsageFormatter.tokenCountString(usage.requestCount)) \(L("requests")) · " +
-                    "\(UsageFormatter.tokenCountString(usage.totalTokens)) \(L("tokens"))",
-            ]
-            if usage.errorCount > 0 {
-                notes.append("\(usage.successCount) succeeded · \(usage.errorCount) failed")
-            }
-            if !usage.providers.isEmpty {
-                let mix = usage.providers.prefix(5)
-                    .map { "\($0.provider): \(UsageFormatter.tokenCountString($0.requestCount))" }
-                    .joined(separator: " · ")
-                notes.append("Routed providers: \(mix)")
-            }
-            return notes
-        }
-
-        if input.provider == .wayfinder,
-           let usage = input.snapshot?.wayfinderUsage
-        {
-            return usage.displayLines
-        }
-
         if input.provider == .minimax,
            input.showOptionalCreditsAndExtraUsage,
            let billing = input.snapshot?.minimaxUsage?.billingSummary
@@ -223,13 +198,6 @@ extension UsageMenuCardView.Model {
            let usage = input.snapshot?.claudeAdminAPIUsage
         {
             return Self.claudeAdminAPIInlineDashboard(
-                usage,
-                preferredCurrencyCode: input.preferredCurrencyCode)
-        }
-        if input.provider == .openrouter,
-           let usage = input.snapshot?.openRouterUsage
-        {
-            return Self.openRouterInlineDashboard(
                 usage,
                 preferredCurrencyCode: input.preferredCurrencyCode)
         }
@@ -640,82 +608,6 @@ extension UsageMenuCardView.Model {
                 .init(
                     title: L("Today tokens"),
                     value: UsageFormatter.tokenCountString(today.totalTokens),
-                    emphasis: false),
-            ],
-            points: points,
-            detailLines: details)
-        model.currencyCode = displayCurrencyCode
-        return model
-    }
-
-    private static func openRouterInlineDashboard(
-        _ usage: OpenRouterUsageSnapshot,
-        preferredCurrencyCode: String) -> InlineUsageDashboardModel?
-    {
-        let displayCurrencyCode = UsageFormatter.convertedCost(
-            0,
-            preferredCurrency: preferredCurrencyCode,
-            providerCurrency: "USD").currencyCode
-        func convertedValue(_ value: Double) -> Double {
-            UsageFormatter.convertedCost(
-                value,
-                preferredCurrency: preferredCurrencyCode,
-                providerCurrency: "USD").value
-        }
-        func convertedString(_ value: Double) -> String {
-            UsageFormatter.convertedCostString(
-                value,
-                preferredCurrency: preferredCurrencyCode,
-                providerCurrency: "USD")
-        }
-        let periodValues: [(String, String, Double?)] = [
-            ("day", L("Today"), usage.keyUsageDaily),
-            ("week", L("Week"), usage.keyUsageWeekly),
-            ("month", L("Month"), usage.keyUsageMonthly),
-        ]
-        let points = periodValues.compactMap { id, label, value -> InlineUsageDashboardModel.Point? in
-            guard let value else { return nil }
-            let formattedValue = convertedString(value)
-            return InlineUsageDashboardModel.Point(
-                id: id,
-                label: label,
-                value: convertedValue(value),
-                accessibilityValue: String(format: L("%@: %@"), label, formattedValue))
-        }
-        guard !points.isEmpty else { return nil }
-        var details: [String] = []
-        if let rate = usage.rateLimit {
-            details.append(String(format: L("Rate limit: %d / %@"), rate.requests, rate.interval))
-        }
-        switch usage.keyQuotaStatus {
-        case .available:
-            if let remaining = usage.keyRemaining {
-                details.append(String(
-                    format: L("%@: %@"),
-                    L("Key remaining"),
-                    convertedString(remaining)))
-            }
-        case .noLimitConfigured:
-            details.append(L("No limit set for the API key"))
-        case .unavailable:
-            details.append(L("API key limit unavailable right now"))
-        }
-        var model = InlineUsageDashboardModel(
-            accessibilityLabel: L("OpenRouter API key spend trend"),
-            valueStyle: Self.costValueStyle(currencyCode: displayCurrencyCode),
-            kpis: [
-                .init(title: L("Balance"), value: convertedString(usage.balance), emphasis: true),
-                .init(
-                    title: L("Today"),
-                    value: usage.keyUsageDaily.map(convertedString) ?? "—",
-                    emphasis: false),
-                .init(
-                    title: L("Week"),
-                    value: usage.keyUsageWeekly.map(convertedString) ?? "—",
-                    emphasis: false),
-                .init(
-                    title: L("Month"),
-                    value: usage.keyUsageMonthly.map(convertedString) ?? "—",
                     emphasis: false),
             ],
             points: points,

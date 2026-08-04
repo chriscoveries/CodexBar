@@ -68,6 +68,7 @@ struct ProviderPluginDetailsParityTests {
             .fetchUsage(secrets: ["OPENROUTER_API_KEY": "fixture-key"], now: now)
 
         Self.expectCoreParity(swift, script)
+        #expect(swift.details == script.details)
         #expect(try script.details == [
             Self.section("Credits", rows: [
                 Self.row("Remaining", "$60.00"),
@@ -106,6 +107,7 @@ struct ProviderPluginDetailsParityTests {
             .fetchUsage(secrets: ["CLAWROUTER_API_KEY": "fixture-key"], now: now)
 
         Self.expectCoreParity(swift, script)
+        #expect(swift.details == script.details)
         #expect(try script.details == [
             Self.section("Usage", rows: [
                 Self.row("Requests", "6", "5 succeeded · 1 failed"),

@@ -26,41 +26,6 @@ public enum Sub2APIUsageError: LocalizedError, Equatable, Sendable {
     }
 }
 
-public struct Sub2APIUsageDetails: Codable, Sendable, Equatable {
-    public enum Kind: String, Codable, Sendable {
-        case keyQuota
-        case subscription
-        case wallet
-        case unknown
-    }
-
-    public struct Totals: Codable, Sendable, Equatable {
-        public let requests: Int
-        public let totalTokens: Int
-        public let actualCostUSD: Double
-
-        public init(requests: Int, totalTokens: Int, actualCostUSD: Double) {
-            self.requests = requests
-            self.totalTokens = totalTokens
-            self.actualCostUSD = actualCostUSD
-        }
-    }
-
-    public let kind: Kind
-    public let balance: Double?
-    public let unit: String
-    public let today: Totals?
-    public let total: Totals?
-
-    public init(kind: Kind, balance: Double?, unit: String, today: Totals?, total: Totals?) {
-        self.kind = kind
-        self.balance = balance
-        self.unit = unit
-        self.today = today
-        self.total = total
-    }
-}
-
 public struct Sub2APIUsageSnapshot: Sendable, Equatable {
     public struct Quota: Sendable, Equatable {
         public let limit: Double
@@ -110,15 +75,6 @@ public struct Sub2APIUsageSnapshot: Sendable, Equatable {
 
     public func toUsageSnapshot() -> UsageSnapshot {
         let subscription = self.subscription
-        let kind: Sub2APIUsageDetails.Kind = if subscription != nil {
-            .subscription
-        } else if self.quota != nil || !self.rateLimits.isEmpty {
-            .keyQuota
-        } else if self.balance != nil {
-            .wallet
-        } else {
-            .unknown
-        }
         let subscriptionWindows = subscription.map { subscription in
             [
                 Self.rateWindow(
@@ -148,29 +104,29 @@ public struct Sub2APIUsageSnapshot: Sendable, Equatable {
                     resetsAt: rateLimit.resetAt,
                     resetDescription: Self.amountDescription(used: rateLimit.used, limit: rateLimit.limit)))
         }
-        let usageDetails = Sub2APIUsageDetails(
-            kind: kind,
-            balance: self.balance,
-            unit: self.unit,
-            today: self.todayUsage.map {
-                Sub2APIUsageDetails.Totals(
-                    requests: $0.requests,
-                    totalTokens: $0.totalTokens,
-                    actualCostUSD: $0.actualCostUSD)
-            },
-            total: self.totalUsage.map {
-                Sub2APIUsageDetails.Totals(
-                    requests: $0.requests,
-                    totalTokens: $0.totalTokens,
-                    actualCostUSD: $0.actualCostUSD)
-            })
+        var detailRows: [ProviderDetailSection.Row] = []
+        if let balance = self.balance {
+            detailRows.append(.makeRow(
+                label: "Balance",
+                value: Self.currencyString(balance, unit: self.unit)))
+        }
+        for (title, totals) in [("Today", self.todayUsage), ("All time", self.totalUsage)] {
+            guard let totals else { continue }
+            detailRows.append(.makeRow(
+                label: "\(title) requests",
+                value: Self.countString(totals.requests)))
+            detailRows.append(.makeRow(
+                label: "\(title) tokens",
+                value: Self.countString(totals.totalTokens),
+                secondaryValue: Self.currencyString(totals.actualCostUSD, unit: self.unit)))
+        }
 
         return UsageSnapshot(
             primary: primary,
             secondary: secondary,
             tertiary: tertiary,
             extraRateWindows: namedWindows.isEmpty ? nil : namedWindows,
-            sub2APIUsage: usageDetails,
+            details: detailRows.isEmpty ? [] : [.makeSection(title: "Usage summary", rows: detailRows)],
             subscriptionExpiresAt: subscription?.expiresAt ?? self.expiresAt,
             updatedAt: self.updatedAt,
             identity: ProviderIdentitySnapshot(
@@ -209,6 +165,10 @@ public struct Sub2APIUsageSnapshot: Sendable, Equatable {
 
     private static func currencyString(_ value: Double, unit: String) -> String {
         unit.uppercased() == "USD" ? UsageFormatter.usdString(value) : String(format: "%.2f %@", value, unit)
+    }
+
+    private static func countString(_ value: Int) -> String {
+        value.formatted(.number.grouping(.automatic).locale(Locale(identifier: "en_US")))
     }
 
     private static func windowMinutes(_ window: String) -> Int? {

@@ -341,6 +341,7 @@ struct MenuDescriptor {
 
             Self.appendProviderUsageSummaries(
                 entries: &entries,
+                provider: provider,
                 snapshot: snap,
                 showOptionalUsage: settings.showOptionalCreditsAndExtraUsage,
                 preferredCurrencyCode: settings.preferredCurrencyCode)
@@ -369,6 +370,7 @@ struct MenuDescriptor {
 
     private static func appendProviderUsageSummaries(
         entries: inout [Entry],
+        provider: UsageProvider,
         snapshot: UsageSnapshot,
         showOptionalUsage: Bool,
         preferredCurrencyCode: String = "auto")
@@ -392,27 +394,6 @@ struct MenuDescriptor {
                 usage: claudeAdminAPIUsage,
                 preferredCurrencyCode: preferredCurrencyCode)
         }
-        if let openRouterUsage = snapshot.openRouterUsage {
-            Self.appendOpenRouterUsageSummary(
-                entries: &entries,
-                usage: openRouterUsage,
-                preferredCurrencyCode: preferredCurrencyCode)
-        }
-        if let clawRouterUsage = snapshot.clawRouterUsage {
-            entries.append(.text(
-                "\(UsageFormatter.tokenCountString(clawRouterUsage.requestCount)) \(L("requests")) · " +
-                    "\(UsageFormatter.tokenCountString(clawRouterUsage.totalTokens)) \(L("tokens"))",
-                .secondary))
-            if !clawRouterUsage.providers.isEmpty {
-                let mix = clawRouterUsage.providers.prefix(5)
-                    .map { "\($0.provider): \(UsageFormatter.tokenCountString($0.requestCount))" }
-                    .joined(separator: " · ")
-                entries.append(.text("Routed providers: \(mix)", .secondary))
-            }
-        }
-        if let wayfinderUsage = snapshot.wayfinderUsage {
-            Self.appendWayfinderUsageSummary(entries: &entries, usage: wayfinderUsage)
-        }
         if let poeUsage = snapshot.poeUsage, !poeUsage.daily.isEmpty {
             Self.appendPoeUsageSummary(
                 entries: &entries,
@@ -425,9 +406,6 @@ struct MenuDescriptor {
                 usage: mistralUsage,
                 preferredCurrencyCode: preferredCurrencyCode)
         }
-        if let mimoUsage = snapshot.mimoUsage {
-            entries.append(.text("\(L("Balance")): \(mimoUsage.balanceDetail)", .primary))
-        }
         if let xaiUsage = snapshot.xaiUsage {
             entries.append(.text("\(L("Balance")): \(UsageFormatter.usdString(xaiUsage.balanceUSD))", .primary))
             if !xaiUsage.daily.isEmpty {
@@ -436,20 +414,12 @@ struct MenuDescriptor {
                     .secondary))
             }
         }
-        // Sakana pay-as-you-go is optional data gated by "Show optional credits and extra usage".
-        // Gate the render on the setting too, not just the fetch: toggling the setting off only
-        // rebuilds the menu, it does not immediately refetch, so a previously-populated
-        // sakanaPayAsYouGo would otherwise linger in the cached snapshot until the next refresh.
-        if showOptionalUsage, let sakanaPayAsYouGo = snapshot.sakanaPayAsYouGo {
-            entries.append(.text("\(L("Balance")): \(sakanaPayAsYouGo.balanceDetail)", .primary))
-            if let periodUsageTotal = sakanaPayAsYouGo.periodUsageTotal {
-                let cost = UsageFormatter.convertedCostString(
-                    periodUsageTotal,
-                    preferredCurrency: preferredCurrencyCode,
-                    providerCurrency: "USD")
-                entries.append(.text(
-                    "\(L("Usage")): \(cost)",
-                    .secondary))
+        if provider != .sakana || showOptionalUsage {
+            for section in snapshot.details {
+                for row in section.rows {
+                    let value = [row.value, row.secondaryValue].compactMap(\.self).joined(separator: " · ")
+                    entries.append(.text("\(row.label): \(value)", .secondary))
+                }
             }
         }
     }
@@ -736,7 +706,7 @@ struct MenuDescriptor {
         } else if provider == .doubao {
             DoubaoProviderDescriptor.primaryLabel(window: snapshot.primary) ?? metadata.sessionLabel
         } else if provider == .sub2api {
-            Sub2APIProviderDescriptor.primaryLabel(details: snapshot.sub2APIUsage) ?? metadata.sessionLabel
+            Sub2APIProviderDescriptor.primaryLabel(snapshot: snapshot) ?? metadata.sessionLabel
         } else if provider == .amp {
             AmpProviderDescriptor.primaryLabel(details: snapshot.ampUsage) ?? metadata.sessionLabel
         } else if provider == .alibabatokenplan {

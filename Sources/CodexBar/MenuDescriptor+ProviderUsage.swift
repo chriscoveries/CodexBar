@@ -67,28 +67,6 @@ extension MenuDescriptor {
         }
     }
 
-    static func appendOpenRouterUsageSummary(
-        entries: inout [Entry],
-        usage: OpenRouterUsageSnapshot,
-        preferredCurrencyCode: String = "auto")
-    {
-        if let daily = usage.keyUsageDaily {
-            let cost = UsageFormatter.convertedCostString(
-                daily, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")
-            entries.append(.text("\(L("Today")): \(cost)", .secondary))
-        }
-        if let weekly = usage.keyUsageWeekly {
-            let cost = UsageFormatter.convertedCostString(
-                weekly, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")
-            entries.append(.text("\(L("Week")): \(cost)", .secondary))
-        }
-        if let monthly = usage.keyUsageMonthly {
-            let cost = UsageFormatter.convertedCostString(
-                monthly, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")
-            entries.append(.text("\(L("Month")): \(cost)", .secondary))
-        }
-    }
-
     static func appendMistralUsageSummary(
         entries: inout [Entry],
         usage: MistralUsageSnapshot,

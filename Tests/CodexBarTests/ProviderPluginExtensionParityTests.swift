@@ -105,6 +105,7 @@ struct ProviderPluginExtensionParityTests {
         #expect(script.tertiary == swift.tertiary)
         #expect(script.identity?.accountOrganization == swift.identity?.accountOrganization)
         #expect(script.identity?.loginMethod == swift.identity?.loginMethod)
+        #expect(script.details == swift.details)
         #expect(try script.details == [ProviderDetailSection(
             title: "Usage summary",
             rows: [
