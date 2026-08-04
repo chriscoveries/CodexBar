@@ -40,7 +40,7 @@ public struct CodexBarConfig: Codable, Sendable {
             let providerDecoder = try providersContainer.superDecoder()
             let providerContainer = try providerDecoder.container(keyedBy: ProviderCodingKeys.self)
             let rawID = try providerContainer.decode(String.self, forKey: .id)
-            guard UsageProvider(rawValue: rawID) != nil else {
+            guard let instanceID = ProviderInstanceID(rawValue: rawID), instanceID.firstPartyProvider != nil else {
                 Self.log.warning("Ignoring unknown provider in config", metadata: ["provider": rawID])
                 continue
             }
@@ -88,18 +88,18 @@ public struct CodexBarConfig: Codable, Sendable {
     public func normalized(
         metadata: [UsageProvider: ProviderMetadata] = ProviderDescriptorRegistry.metadata) -> CodexBarConfig
     {
-        var seen: Set<UsageProvider> = []
+        var seen: Set<ProviderInstanceID> = []
         var normalized: [ProviderConfig] = []
         normalized.reserveCapacity(max(self.providers.count, UsageProvider.allCases.count))
 
         for var provider in self.providers {
             guard !seen.contains(provider.id) else { continue }
             seen.insert(provider.id)
-            if provider.id == .deepseek {
+            if provider.id.firstPartyProvider == .deepseek {
                 provider.deepseekProfileID = provider.sanitizedDeepSeekProfileID
                 provider.deepseekProfileScope = provider.sanitizedDeepSeekProfileScope
             }
-            if provider.id == .moonshot,
+            if provider.id.firstPartyProvider == .moonshot,
                provider.sanitizedAPIKey != nil,
                provider.sanitizedAPIKeyRegion == nil
             {
@@ -108,7 +108,7 @@ public struct CodexBarConfig: Codable, Sendable {
             normalized.append(provider)
         }
 
-        for provider in UsageProvider.allCases where !seen.contains(provider) {
+        for provider in UsageProvider.allCases where !seen.contains(provider.instanceID) {
             normalized.append(Self.defaultProviderConfig(
                 provider,
                 metadata: metadata,
@@ -128,20 +128,21 @@ public struct CodexBarConfig: Codable, Sendable {
         return copy
     }
 
-    public func orderedProviders() -> [UsageProvider] {
+    public func orderedProviders() -> [ProviderInstanceID] {
         self.providers.map(\.id)
     }
 
     public func enabledProviders(
-        metadata: [UsageProvider: ProviderMetadata] = ProviderDescriptorRegistry.metadata) -> [UsageProvider]
+        metadata: [UsageProvider: ProviderMetadata] = ProviderDescriptorRegistry.metadata) -> [ProviderInstanceID]
     {
         self.providers.compactMap { config in
-            let enabled = config.enabled ?? metadata[config.id]?.defaultEnabled ?? false
+            let enabled = config.enabled ?? config.id.firstPartyProvider
+                .flatMap { metadata[$0]?.defaultEnabled } ?? false
             return enabled ? config.id : nil
         }
     }
 
-    public func providerConfig(for id: UsageProvider) -> ProviderConfig? {
+    public func providerConfig(for id: ProviderInstanceID) -> ProviderConfig? {
         self.providers.first(where: { $0.id == id })
     }
 
@@ -159,14 +160,14 @@ public struct CodexBarConfig: Codable, Sendable {
         alibabaTokenPlanRegion: AlibabaTokenPlanAPIRegion) -> ProviderConfig
     {
         ProviderConfig(
-            id: provider,
+            id: provider.instanceID,
             enabled: metadata[provider]?.defaultEnabled,
             region: provider == .alibabatokenplan ? alibabaTokenPlanRegion.rawValue : nil)
     }
 }
 
 public struct ProviderConfig: Codable, Sendable, Identifiable {
-    public let id: UsageProvider
+    public let id: ProviderInstanceID
     public var enabled: Bool?
     public var source: ProviderSourceMode?
     public var extrasEnabled: Bool?
@@ -195,7 +196,7 @@ public struct ProviderConfig: Codable, Sendable, Identifiable {
     public var apiKeyRegion: String?
 
     public init(
-        id: UsageProvider,
+        id: ProviderInstanceID,
         enabled: Bool? = nil,
         source: ProviderSourceMode? = nil,
         extrasEnabled: Bool? = nil,

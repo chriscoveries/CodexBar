@@ -11,6 +11,8 @@ read_when:
 Status: accepted design boundary. This document defines a bounded MVP; it does not authorize runtime networking or
 implement the feature.
 
+Implementation status: slice 1, the `ProviderInstanceID` runtime identity seam, has landed.
+
 Issue: [#1735](https://github.com/steipete/CodexBar/issues/1735)
 
 ## Decision summary

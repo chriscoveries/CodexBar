@@ -231,11 +231,11 @@ final class SettingsStore {
     var providerDetailSettingsRevision: Int = 0
     var backgroundWorkSettingsRevision: Int = 0
     var costUsageSettingsRevision: UInt64 = 0
-    var providerOrder: [UsageProvider] = []
-    var providerEnablement: [UsageProvider: Bool] = [:]
-    @ObservationIgnored var providerEnablementRevisions: [UsageProvider: UInt64] = [:]
-    @ObservationIgnored var providerConfigRevisions: [UsageProvider: UInt64] = [:]
-    @ObservationIgnored var providerConfigFingerprints: [UsageProvider: Data] = [:]
+    var providerOrder: [ProviderInstanceID] = []
+    var providerEnablement: [ProviderInstanceID: Bool] = [:]
+    @ObservationIgnored var providerEnablementRevisions: [ProviderInstanceID: UInt64] = [:]
+    @ObservationIgnored var providerConfigRevisions: [ProviderInstanceID: UInt64] = [:]
+    @ObservationIgnored var providerConfigFingerprints: [ProviderInstanceID: Data] = [:]
 
     static func shouldBridgeSharedDefaults(for userDefaults: UserDefaults) -> Bool {
         if !self.isRunningTests {
@@ -865,21 +865,22 @@ extension SettingsStore {
         let rawOrder = config.providers.map(\.id.rawValue)
         self.providerOrder = Self.effectiveProviderOrder(raw: rawOrder)
         let metadata = ProviderDescriptorRegistry.metadata
-        var enablement: [UsageProvider: Bool] = [:]
+        var enablement: [ProviderInstanceID: Bool] = [:]
         enablement.reserveCapacity(metadata.count)
         for provider in UsageProvider.allCases {
+            let instanceID = provider.instanceID
             let defaultEnabled = metadata[provider]?.defaultEnabled ?? false
-            let providerConfig = config.providerConfig(for: provider) ?? ProviderConfig(id: provider)
+            let providerConfig = config.providerConfig(for: instanceID) ?? ProviderConfig(id: instanceID)
             let isEnabled = providerConfig.enabled ?? defaultEnabled
-            if let previous = self.providerEnablement[provider], previous != isEnabled {
-                self.providerEnablementRevisions[provider, default: 0] &+= 1
+            if let previous = self.providerEnablement[instanceID], previous != isEnabled {
+                self.providerEnablementRevisions[instanceID, default: 0] &+= 1
             }
             let fingerprint = Self.providerConfigFingerprint(providerConfig)
-            if let previous = self.providerConfigFingerprints[provider], previous != fingerprint {
-                self.providerConfigRevisions[provider, default: 0] &+= 1
+            if let previous = self.providerConfigFingerprints[instanceID], previous != fingerprint {
+                self.providerConfigRevisions[instanceID, default: 0] &+= 1
             }
-            self.providerConfigFingerprints[provider] = fingerprint
-            enablement[provider] = isEnabled
+            self.providerConfigFingerprints[instanceID] = fingerprint
+            enablement[instanceID] = isEnabled
         }
         self.providerEnablement = enablement
     }
@@ -891,18 +892,22 @@ extension SettingsStore {
     }
 
     func providerEnablementRevision(for provider: UsageProvider) -> UInt64 {
-        self.providerEnablementRevisions[provider, default: 0]
+        self.providerEnablementRevisions[provider.instanceID, default: 0]
     }
 
     func providerConfigRevision(for provider: UsageProvider) -> UInt64 {
-        self.providerConfigRevisions[provider, default: 0]
+        self.providerConfigRevisions[provider.instanceID, default: 0]
     }
 
-    func orderedProviders() -> [UsageProvider] {
+    func orderedProviders() -> [ProviderInstanceID] {
         if self.providerOrder.isEmpty {
             self.updateProviderState(config: self.configSnapshot)
         }
         return self.providerOrder
+    }
+
+    func orderedFirstPartyProviders() -> [UsageProvider] {
+        self.orderedProviders().compactMap(\.firstPartyProvider)
     }
 
     func moveProvider(fromOffsets: IndexSet, toOffset: Int) {
@@ -912,7 +917,7 @@ extension SettingsStore {
     }
 
     func isProviderEnabled(provider: UsageProvider, metadata: ProviderMetadata) -> Bool {
-        self.providerEnablement[provider] ?? metadata.defaultEnabled
+        self.providerEnablement[provider.instanceID] ?? metadata.defaultEnabled
     }
 
     func isProviderEnabledCached(
@@ -920,10 +925,10 @@ extension SettingsStore {
         metadataByProvider: [UsageProvider: ProviderMetadata]) -> Bool
     {
         let defaultEnabled = metadataByProvider[provider]?.defaultEnabled ?? false
-        return self.providerEnablement[provider] ?? defaultEnabled
+        return self.providerEnablement[provider.instanceID] ?? defaultEnabled
     }
 
-    func enabledProvidersOrdered(metadataByProvider: [UsageProvider: ProviderMetadata]) -> [UsageProvider] {
+    func enabledProvidersOrdered(metadataByProvider: [UsageProvider: ProviderMetadata]) -> [ProviderInstanceID] {
         _ = metadataByProvider
         return self.orderedProviders().filter { self.providerEnablement[$0] ?? false }
     }
@@ -935,7 +940,7 @@ extension SettingsStore {
         self.updateProviderConfig(provider: provider) { entry in
             entry.enabled = enabled
         }
-        if !enabled, self.selectedMenuProvider == provider {
+        if !enabled, self.selectedMenuProvider == provider.instanceID {
             self.selectedMenuProvider = nil
         }
     }
@@ -946,19 +951,21 @@ extension SettingsStore {
 }
 
 extension SettingsStore {
-    private static func effectiveProviderOrder(raw: [String]) -> [UsageProvider] {
-        var seen: Set<UsageProvider> = []
-        var ordered: [UsageProvider] = []
+    private static func effectiveProviderOrder(raw: [String]) -> [ProviderInstanceID] {
+        var seen: Set<ProviderInstanceID> = []
+        var ordered: [ProviderInstanceID] = []
 
         for rawValue in raw {
-            guard let provider = UsageProvider(rawValue: rawValue) else { continue }
-            guard !seen.contains(provider) else { continue }
-            seen.insert(provider)
-            ordered.append(provider)
+            guard let instanceID = ProviderInstanceID(rawValue: rawValue), instanceID.firstPartyProvider != nil else {
+                continue
+            }
+            guard !seen.contains(instanceID) else { continue }
+            seen.insert(instanceID)
+            ordered.append(instanceID)
         }
 
         if ordered.isEmpty {
-            ordered = UsageProvider.allCases
+            ordered = UsageProvider.allCases.map(\.instanceID)
             seen = Set(ordered)
         }
 
@@ -973,8 +980,8 @@ extension SettingsStore {
             seen.insert(.minimax)
         }
 
-        for provider in UsageProvider.allCases where !seen.contains(provider) {
-            ordered.append(provider)
+        for provider in UsageProvider.allCases where !seen.contains(provider.instanceID) {
+            ordered.append(provider.instanceID)
         }
 
         return ordered

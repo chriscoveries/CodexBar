@@ -57,7 +57,7 @@ public enum ProviderPluginCapability: String, Sendable {
 }
 
 public struct ProviderPluginManifest: @unchecked Sendable {
-    public let id: UsageProvider
+    public let id: ProviderInstanceID
     public let name: String
     public let endpoints: Set<ProviderPluginEndpoint>
     public let auth: ProviderPluginAuth?
@@ -75,7 +75,7 @@ public struct ProviderPluginManifest: @unchecked Sendable {
         }
 
         let rawID = try Self.requiredString(definition, property: "id")
-        guard let id = UsageProvider(rawValue: rawID) else {
+        guard let id = ProviderInstanceID(rawValue: rawID), id.firstPartyProvider != nil else {
             throw ProviderPluginError.invalidManifest(
                 "provider id '\(rawID)' must match an existing UsageProvider raw value")
         }

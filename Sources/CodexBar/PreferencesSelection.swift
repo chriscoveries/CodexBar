@@ -37,11 +37,13 @@ extension SettingsPane {
         default:
             let providerPrefix = "provider:"
             guard persistenceToken.hasPrefix(providerPrefix),
-                  let provider = UsageProvider(rawValue: String(persistenceToken.dropFirst(providerPrefix.count)))
+                  let instanceID = ProviderInstanceID(
+                      rawValue: String(persistenceToken.dropFirst(providerPrefix.count))),
+                  instanceID.firstPartyProvider != nil
             else {
                 return nil
             }
-            self = .provider(provider)
+            self = .provider(instanceID)
         }
     }
 }

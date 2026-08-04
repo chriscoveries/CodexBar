@@ -454,7 +454,7 @@ private final class ProviderPluginWorker: @unchecked Sendable {
         host.setObject(cacheSet, forKeyedSubscript: "cacheSet" as NSString)
 
         let log: @convention(block) (String) -> Void = { [manifest] message in
-            let logger = CodexBarLog.logger(LogCategories.provider(manifest.id, scope: "plugin"))
+            let logger = CodexBarLog.logger(LogCategories.providerInstance(manifest.id, scope: "plugin"))
             logger.debug("\(redactionValues.redact(message))")
         }
         host.setObject(log, forKeyedSubscript: "log" as NSString)
@@ -554,7 +554,12 @@ private final class ProviderPluginWorker: @unchecked Sendable {
                 return
             }
 
-            let provider = self.manifest.id
+            guard let provider = self.manifest.id.firstPartyProvider else {
+                self.reject(
+                    ProviderPluginJSValueBox(reject),
+                    error: ProviderPluginError.secretAccess("browser cookies require a first-party provider"))
+                return
+            }
             let worker = self
             let resolveBox = ProviderPluginJSValueBox(resolve)
             let rejectBox = ProviderPluginJSValueBox(reject)
