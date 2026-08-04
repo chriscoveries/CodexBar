@@ -48,6 +48,43 @@ struct UserProviderPluginTests {
     }
 
     @Test
+    func `user plugin broker owns identity encoding and rejects compressed responses`() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let source = """
+        defineProvider({
+          id: "encoded-meter",
+          name: "Encoded Meter",
+          endpoints: ["https://encoded.example"],
+          settings: [],
+          async fetchUsage(ctx) {
+            const response = await ctx.http.getJSON("https://encoded.example/usage", {
+              headers: { "Accept-Encoding": "gzip" },
+            });
+            return { primary: { usedPercent: response.json.used } };
+          },
+        });
+        """
+        let transport = RecordingTransport(
+            responseJSON: #"{"used":42}"#,
+            responseHeaders: ["Content-Type": "application/json", "Content-Encoding": "gzip"])
+        let plugin = try fixture.loader(transport: transport)
+            .load(fileURL: fixture.write(name: "encoded.js", source: source))
+        try fixture.approvals.record(plugin.approvalBinding(settings: [:]))
+
+        do {
+            _ = try await plugin.fetchUsage(
+                settings: [:],
+                secrets: [:],
+                approvalStore: fixture.approvals)
+            Issue.record("Expected compressed response rejection")
+        } catch {
+            #expect(error.localizedDescription.contains("compressed responses are not allowed"))
+        }
+        #expect(transport.lastRequest?.value(forHTTPHeaderField: "Accept-Encoding") == "identity")
+    }
+
+    @Test
     func `TypeScript plugin transpiles once and reuses the SHA keyed cache`() throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
@@ -270,10 +307,12 @@ struct UserProviderPluginTests {
 private final class RecordingTransport: ProviderHTTPTransport, @unchecked Sendable {
     private let lock = NSLock()
     private let responseJSON: String
+    private let responseHeaders: [String: String]
     private var requests: [URLRequest] = []
 
-    init(responseJSON: String) {
+    init(responseJSON: String, responseHeaders: [String: String] = ["Content-Type": "application/json"]) {
         self.responseJSON = responseJSON
+        self.responseHeaders = responseHeaders
     }
 
     var requestCount: Int {
@@ -290,7 +329,7 @@ private final class RecordingTransport: ProviderHTTPTransport, @unchecked Sendab
             url: #require(request.url),
             statusCode: 200,
             httpVersion: nil,
-            headerFields: ["Content-Type": "application/json"])!
+            headerFields: self.responseHeaders)!
         return (Data(self.responseJSON.utf8), response)
     }
 }

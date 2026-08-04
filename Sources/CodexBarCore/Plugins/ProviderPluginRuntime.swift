@@ -645,16 +645,11 @@ private final class ProviderPluginWorker: @unchecked Sendable {
         }
         request.httpMethod = method
         request.timeoutInterval = 15
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if self.rejectsNonSuccessResponses {
-            request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
-        }
         if method == "POST" {
             guard let bodyJSON = options.forProperty("bodyJSON"), bodyJSON.isString else {
                 throw ProviderPluginError.http("POST JSON body is missing")
             }
             request.httpBody = Data(bodyJSON.toString().utf8)
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
         if options.isObject,
            let headers = options.forProperty("headers"),
@@ -672,6 +667,15 @@ private final class ProviderPluginWorker: @unchecked Sendable {
                 }
                 request.setValue(value, forHTTPHeaderField: name)
             }
+        }
+
+        // The broker owns representation headers so plugins cannot relax the user-plugin response boundary.
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if self.rejectsNonSuccessResponses {
+            request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
+        }
+        if method == "POST" {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
 
         if let auth = self.manifest.auth {
