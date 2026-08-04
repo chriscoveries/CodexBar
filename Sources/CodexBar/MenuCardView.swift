@@ -928,7 +928,7 @@ extension UsageMenuCardView.Model {
         let creditsScaleText = Self.creditsScaleText(credits: input.credits)
         let codexCreditLimitDetail = Self.codexCreditLimitDetail(credits: input.credits, now: input.now)
         let isClaudeAdminAPI = input.provider == .claude &&
-            input.snapshot?.claudeAdminAPIUsage != nil
+            input.snapshot?.loginMethod(for: .claude) == "Admin API"
         let isRequiredOpenCodeZenBalance = Self.isRequiredOpenCodeZenBalance(input.snapshot)
         let hidesOptionalProviderCost = ((input.provider == .claude && !isClaudeAdminAPI) ||
             input.provider == .cursor ||
@@ -993,15 +993,41 @@ extension UsageMenuCardView.Model {
     }
 
     private static func visibleProviderDetails(input: Input) -> [ProviderDetailSection] {
-        let details = input.snapshot?.details ?? []
-        guard !input.showOptionalCreditsAndExtraUsage else { return details }
-        if input.provider == .sakana {
-            return []
+        var details = input.snapshot?.details ?? []
+        if !input.showOptionalCreditsAndExtraUsage {
+            if input.provider == .sakana {
+                details = []
+            } else if input.provider == .minimax {
+                details.removeAll { $0.title == "Billing history" }
+            }
         }
-        if input.provider == .minimax {
-            return details.filter { $0.title != "Billing history" }
+        guard input.hidePersonalInfo else { return details }
+        return details.compactMap { section in
+            let rows = section.rows.compactMap { row in
+                try? ProviderDetailSection.Row(
+                    label: PersonalInfoRedactor.redactEmails(in: row.label, isEnabled: true) ?? row.label,
+                    value: PersonalInfoRedactor.redactEmails(in: row.value, isEnabled: true) ?? row.value,
+                    secondaryValue: PersonalInfoRedactor.redactEmails(
+                        in: row.secondaryValue,
+                        isEnabled: true))
+            }
+            let chart = section.chart.flatMap { chart in
+                let points = chart.points.compactMap { point in
+                    try? ProviderDetailSection.Chart.Point(
+                        label: PersonalInfoRedactor.redactEmails(in: point.label, isEnabled: true) ?? point.label,
+                        value: point.value)
+                }
+                return try? ProviderDetailSection.Chart(
+                    kind: chart.kind,
+                    title: PersonalInfoRedactor.redactEmails(in: chart.title, isEnabled: true),
+                    unit: chart.unit,
+                    points: points)
+            }
+            return try? ProviderDetailSection(
+                title: PersonalInfoRedactor.redactEmails(in: section.title, isEnabled: true),
+                rows: rows,
+                chart: chart)
         }
-        return details
     }
 
     private static func email(
@@ -1042,12 +1068,6 @@ extension UsageMenuCardView.Model {
                 return nil
             }
             return self.planDisplay(pass, for: provider)
-        }
-        if provider == .amp,
-           let plan = snapshot?.ampUsage?.subscriptionPlan,
-           !plan.isEmpty
-        {
-            return self.planDisplay(plan, for: provider)
         }
         if let plan = snapshot?.loginMethod(for: provider), !plan.isEmpty {
             return self.planDisplay(plan, for: provider)
@@ -1369,12 +1389,13 @@ extension UsageMenuCardView.Model {
             weeklyResetText = weekly.resetDescription
         }
         if input.provider == .kiro,
-           let kiroUsage = input.snapshot?.kiroUsage,
-           let remaining = kiroUsage.bonusCreditsRemaining,
-           let total = kiroUsage.bonusCreditsTotal
+           let remainingText = input.snapshot?.detailRow(label: "Bonus credits left")?.value,
+           let totalText = input.snapshot?.detailRow(label: "Bonus credits left")?.secondaryValue?
+               .split(separator: "·", maxSplits: 1)
+               .first?
+               .trimmingCharacters(in: .whitespacesAndNewlines)
+               .replacingOccurrences(of: "of ", with: "")
         {
-            let remainingText = UsageFormatter.kiroCreditNumber(remaining)
-            let totalText = UsageFormatter.kiroCreditNumber(total)
             paceDetail = PaceDetail(
                 leftLabel: String(format: L("%@ of %@ bonus credits left"), remainingText, totalText),
                 rightLabel: nil,

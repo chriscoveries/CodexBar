@@ -1076,52 +1076,51 @@ extension StatusItemController {
         -> String?
     {
         guard mode != .hidden else { return nil }
-        guard let usage = snapshot?.kiroUsage else {
+        guard let snapshot else {
             return MenuBarDisplayText.percentText(window: snapshot?.primary, showUsed: showUsed)
         }
         let percentText = MenuBarDisplayText.percentText(
-            window: snapshot?.primary,
+            window: snapshot.primary,
             showUsed: showUsed)
-        let creditsLeft = UsageFormatter.kiroCreditNumber(usage.creditsRemaining)
-        let usedTotal = [
-            UsageFormatter.kiroCreditNumber(usage.creditsUsed),
-            UsageFormatter.kiroCreditNumber(usage.creditsTotal),
-        ].joined(separator: " / ")
+        let creditsLeft = snapshot.detailRow(label: "Credits left")?.value
+        let creditsUsed = snapshot.detailRow(label: "Credits used")?.value
+        let creditsTotal = snapshot.detailRow(label: "Credits total")?.value
+        let usedTotal = [creditsUsed, creditsTotal].compactMap(\.self).joined(separator: " / ")
 
         switch mode {
         case .automatic, .creditsLeft:
-            if usage.creditsTotal > 0 {
+            if let creditsLeft, creditsTotal != "0" {
                 return creditsLeft
             }
             return percentText
         case .hidden:
             return nil
         case .percentLeft:
-            return MenuBarDisplayText.percentText(window: snapshot?.primary, showUsed: false)
+            return MenuBarDisplayText.percentText(window: snapshot.primary, showUsed: false)
         case .creditsAndPercent:
-            guard usage.creditsTotal > 0 else { return percentText }
+            guard creditsTotal != "0" else { return percentText }
             guard let percentText else { return creditsLeft }
-            return "\(creditsLeft) · \(percentText)"
+            return creditsLeft.map { "\($0) · \(percentText)" } ?? percentText
         case .usedAndTotal:
-            guard usage.creditsTotal > 0 else { return percentText }
-            return usedTotal
+            guard creditsTotal != "0" else { return percentText }
+            return usedTotal.isEmpty ? percentText : usedTotal
         case .overageCreditsWhenExhausted:
             return self.kiroOverageDisplayText(
-                usage: usage,
+                snapshot: snapshot,
                 format: .credits,
-                fallback: creditsLeft,
+                fallback: creditsLeft ?? percentText,
                 percentFallback: percentText)
         case .overageCostWhenExhausted:
             return self.kiroOverageDisplayText(
-                usage: usage,
+                snapshot: snapshot,
                 format: .cost,
-                fallback: creditsLeft,
+                fallback: creditsLeft ?? percentText,
                 percentFallback: percentText)
         case .overageCreditsAndCostWhenExhausted:
             return self.kiroOverageDisplayText(
-                usage: usage,
+                snapshot: snapshot,
                 format: .creditsAndCost,
-                fallback: creditsLeft,
+                fallback: creditsLeft ?? percentText,
                 percentFallback: percentText)
         }
     }
@@ -1133,16 +1132,16 @@ extension StatusItemController {
     }
 
     private nonisolated static func kiroOverageDisplayText(
-        usage: KiroUsageDetails,
+        snapshot: UsageSnapshot,
         format: KiroOverageDisplayFormat,
-        fallback: String,
+        fallback: String?,
         percentFallback: String?)
         -> String?
     {
-        guard usage.creditsTotal > 0 else { return percentFallback }
-        guard usage.creditsRemaining <= 0 else { return fallback }
+        guard snapshot.detailRow(label: "Credits total")?.value != "0" else { return percentFallback }
+        guard snapshot.detailRow(label: "Credits left")?.value == "0" else { return fallback }
         guard
-            usage.overagesStatus?
+            snapshot.detailRow(label: "Overages")?.value
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .lowercased()
                 .hasPrefix("enabled") == true
@@ -1150,8 +1149,9 @@ extension StatusItemController {
             return fallback
         }
 
-        let credits = usage.overageCreditsUsed.map { "\(UsageFormatter.kiroCreditNumber($0)) over" }
-        let cost = usage.estimatedOverageCostUSD.map { "\(UsageFormatter.usdString($0)) over" }
+        let credits = snapshot.detailRow(label: "Overage usage")?.value
+            .replacingOccurrences(of: " credits", with: " over")
+        let cost = snapshot.detailRow(label: "Overage cost").map { "\($0.value) over" }
 
         switch format {
         case .credits:

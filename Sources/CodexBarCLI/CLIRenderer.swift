@@ -48,7 +48,6 @@ enum CLIRenderer {
             now: now,
             lines: &lines)
         self.appendProviderDetails(snapshot.details, useColor: context.useColor, lines: &lines)
-        self.appendAmpBalanceLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendDevinOverageBalanceLine(
             provider: provider,
             snapshot: snapshot,
@@ -124,7 +123,6 @@ enum CLIRenderer {
             now: now,
             lines: &lines)
         self.appendProviderDetails(snapshot.details, useColor: context.useColor, lines: &lines)
-        self.appendAmpBalanceLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendDevinOverageBalanceLine(
             provider: provider,
             snapshot: snapshot,
@@ -515,7 +513,6 @@ enum CLIRenderer {
                 lines: &lines)
         }
         self.appendProviderDetails(snapshot.details, useColor: context.useColor, lines: &lines)
-        self.appendAmpBalanceLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
         self.appendDevinOverageBalanceLine(
             provider: provider,
             snapshot: snapshot,
@@ -767,26 +764,6 @@ enum CLIRenderer {
         }
     }
 
-    private static func appendAmpBalanceLines(
-        snapshot: UsageSnapshot,
-        useColor: Bool,
-        lines: inout [String])
-    {
-        guard let usage = snapshot.ampUsage else { return }
-        if let individualCredits = usage.individualCredits {
-            lines.append(self.labelValueLine(
-                "Individual credits",
-                value: UsageFormatter.currencyString(individualCredits, currencyCode: "USD"),
-                useColor: useColor))
-        }
-        for workspace in usage.workspaceBalances {
-            lines.append(self.labelValueLine(
-                "Workspace \(workspace.name)",
-                value: UsageFormatter.currencyString(workspace.remaining, currencyCode: "USD"),
-                useColor: useColor))
-        }
-    }
-
     private struct RateWindowLabels {
         let primary: String
         let secondary: String
@@ -813,12 +790,12 @@ enum CLIRenderer {
         } else if provider == .sub2api {
             Sub2APIProviderDescriptor.primaryLabel(snapshot: snapshot) ?? metadata.sessionLabel
         } else if provider == .amp {
-            AmpProviderDescriptor.primaryLabel(details: snapshot.ampUsage) ?? metadata.sessionLabel
+            AmpProviderDescriptor.primaryLabel(snapshot: snapshot) ?? metadata.sessionLabel
         } else {
             metadata.sessionLabel
         }
         let secondaryLabel = if provider == .amp {
-            AmpProviderDescriptor.secondaryLabel(details: snapshot.ampUsage) ?? metadata.weeklyLabel
+            AmpProviderDescriptor.secondaryLabel(snapshot: snapshot) ?? metadata.weeklyLabel
         } else {
             metadata.weeklyLabel
         }

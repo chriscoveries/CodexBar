@@ -58,7 +58,7 @@ extension UsageMenuCardView.Model {
             guard input.tokenCostInlineDashboardEnabled,
                   input.showOptionalCreditsAndExtraUsage
             else { return nil }
-            guard let usage = input.snapshot?.deepseekUsage else {
+            guard input.snapshot?.details.isEmpty == false else {
                 if input.snapshot?.deepseekDetailedUsageState == .webSessionRequired {
                     return [L("Sign in to DeepSeek Platform in Chrome for detailed usage.")]
                 }
@@ -67,15 +67,7 @@ extension UsageMenuCardView.Model {
                 }
                 return [L("Detailed usage unavailable.")]
             }
-            let symbol = usage.currency == "CNY" ? "¥" : "$"
-            let todayCostStr = usage.todayCost.map { "\(symbol)\(String(format: "%.4f", max(0, $0)))" } ?? "—"
-            return [
-                String(
-                    format: L("Today: %@ · %@ tokens"),
-                    todayCostStr,
-                    UsageFormatter.tokenCountString(usage.todayTokens)),
-                String(format: L("This month: %@ tokens"), UsageFormatter.tokenCountString(usage.currentMonthTokens)),
-            ]
+            return nil
         }
 
         if input.provider == .ollama,
@@ -135,22 +127,6 @@ extension UsageMenuCardView.Model {
                 snapshot: tokenSnapshot,
                 comparisonPeriodsEnabled: input.costComparisonPeriodsEnabled,
                 preferredCurrencyCode: input.preferredCurrencyCode)
-        }
-        if input.provider == .claude,
-           let usage = input.snapshot?.claudeAdminAPIUsage
-        {
-            return Self.claudeAdminAPIInlineDashboard(
-                usage,
-                preferredCurrencyCode: input.preferredCurrencyCode)
-        }
-        if input.provider == .deepseek,
-           !input.isRefreshing,
-           input.tokenCostInlineDashboardEnabled,
-           input.showOptionalCreditsAndExtraUsage,
-           let usage = input.snapshot?.deepseekUsage,
-           !usage.daily.isEmpty
-        {
-            return Self.deepseekInlineDashboard(usage)
         }
         if [.codex, .claude, .vertexai, .bedrock, .cursor, .opencodego].contains(input.provider),
            input.tokenCostInlineDashboardEnabled,
@@ -352,118 +328,6 @@ extension UsageMenuCardView.Model {
                 value: latest?.totalTokens.map(UsageFormatter.tokenCountString) ?? "—",
                 emphasis: false),
         ]
-    }
-
-    fileprivate static func claudeAdminAPIInlineDashboard(
-        _ usage: ClaudeAdminAPIUsageSnapshot,
-        preferredCurrencyCode: String = "auto")
-        -> InlineUsageDashboardModel
-    {
-        let displayCurrencyCode = UsageFormatter.convertedCost(
-            0,
-            preferredCurrency: preferredCurrencyCode,
-            providerCurrency: "USD").currencyCode
-        func convertedValue(_ value: Double) -> Double {
-            UsageFormatter.convertedCost(
-                value,
-                preferredCurrency: preferredCurrencyCode,
-                providerCurrency: "USD").value
-        }
-        func convertedString(_ value: Double) -> String {
-            UsageFormatter.convertedCostString(
-                value,
-                preferredCurrency: preferredCurrencyCode,
-                providerCurrency: "USD")
-        }
-        let today = usage.currentDay
-        let last7 = usage.last7Days
-        let last30 = usage.last30Days
-        let points = usage.daily.suffix(30).map {
-            InlineUsageDashboardModel.Point(
-                id: $0.day,
-                label: Self.shortDayLabel($0.day),
-                value: convertedValue($0.costUSD),
-                accessibilityValue: "\($0.day): \(convertedString($0.costUSD))")
-        }
-        var details = [
-            "30d: \(UsageFormatter.tokenCountString(last30.totalTokens)) \(L("tokens"))",
-            "\(L("Cache read")): \(UsageFormatter.tokenCountString(last30.cacheReadInputTokens)) \(L("tokens"))",
-        ]
-        if let topModel = usage.topModels.first {
-            details.append("\(L("Top model")): \(Self.shortModelName(topModel.name))")
-        }
-        var model = InlineUsageDashboardModel(
-            accessibilityLabel: L("Claude Admin API 30 day spend trend"),
-            valueStyle: Self.costValueStyle(currencyCode: displayCurrencyCode),
-            kpis: [
-                .init(title: L("Today"), value: convertedString(today.costUSD), emphasis: true),
-                .init(title: L("7d spend"), value: convertedString(last7.costUSD), emphasis: false),
-                .init(
-                    title: L("30d spend"),
-                    value: convertedString(last30.costUSD),
-                    emphasis: false),
-                .init(
-                    title: L("Today tokens"),
-                    value: UsageFormatter.tokenCountString(today.totalTokens),
-                    emphasis: false),
-            ],
-            points: points,
-            detailLines: details)
-        model.currencyCode = displayCurrencyCode
-        return model
-    }
-
-    private static func deepseekInlineDashboard(_ usage: DeepSeekUsageSummary) -> InlineUsageDashboardModel {
-        let symbol = usage.currency == "CNY" ? "¥" : "$"
-        let points = usage.daily.suffix(30).map {
-            InlineUsageDashboardModel.Point(
-                id: $0.date,
-                label: Self.shortDayLabel($0.date),
-                value: Double($0.totalTokens),
-                accessibilityValue: "\($0.date): \(UsageFormatter.tokenCountString($0.totalTokens)) \(L("tokens"))")
-        }
-        var details: [String] = []
-        if let topModel = usage.topModel {
-            details.append("\(L("Top model")): \(Self.shortModelName(topModel))")
-        }
-        if let cacheHit = usage.categoryBreakdown.first(where: { $0.category == .promptCacheHitToken }) {
-            details.append("\(L("cache-hit input")): \(UsageFormatter.tokenCountString(cacheHit.tokens))")
-        }
-        if let cacheMiss = usage.categoryBreakdown.first(where: { $0.category == .promptCacheMissToken }) {
-            details.append("\(L("cache-miss input")): \(UsageFormatter.tokenCountString(cacheMiss.tokens))")
-        }
-        if let output = usage.categoryBreakdown.first(where: { $0.category == .responseToken }) {
-            details.append("\(L("output")): \(UsageFormatter.tokenCountString(output.tokens))")
-        }
-        details.append("\(L("requests")): \(usage.currentMonthRequestCount)")
-
-        let todayCostStr = usage.todayCost.map { "\(symbol)\(String(format: "%.4f", max(0, $0)))" } ?? "—"
-        let monthCostStr = usage.currentMonthCost.map { "\(symbol)\(String(format: "%.4f", max(0, $0)))" } ?? "—"
-        let monthTokensStr = UsageFormatter.tokenCountString(usage.currentMonthTokens)
-
-        return InlineUsageDashboardModel(
-            accessibilityLabel: L("DeepSeek this month token usage trend"),
-            valueStyle: .tokens,
-            kpis: [
-                .init(
-                    title: L("Today"),
-                    value: "\(todayCostStr) · \(UsageFormatter.tokenCountString(usage.todayTokens))",
-                    emphasis: true),
-                .init(
-                    title: L("This month"),
-                    value: "\(monthCostStr) · \(monthTokensStr)",
-                    emphasis: false),
-                .init(
-                    title: L("Models"),
-                    value: usage.topModel.map { Self.shortModelName($0) } ?? "—",
-                    emphasis: false),
-                .init(
-                    title: L("Requests"),
-                    value: "\(usage.currentMonthRequestCount)",
-                    emphasis: false),
-            ],
-            points: points,
-            detailLines: details)
     }
 
     private static func topMistralModel(from entries: [MistralDailyUsageBucket]) -> String? {

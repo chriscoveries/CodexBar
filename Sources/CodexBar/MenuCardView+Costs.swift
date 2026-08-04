@@ -114,11 +114,8 @@ extension UsageMenuCardView.Model {
         if metadata.id == .codex, credits == nil, error == nil {
             return nil
         }
-        if metadata.id == .amp,
-           let ampUsage = snapshot?.ampUsage,
-           let ampCredits = self.ampCreditsLine(ampUsage, preferredCurrencyCode: preferredCurrencyCode)
-        {
-            return ampCredits
+        if metadata.id == .amp, snapshot != nil {
+            return nil
         }
         if let credits {
             if let creditLimit = credits.codexCreditLimit {
@@ -150,24 +147,6 @@ extension UsageMenuCardView.Model {
             parts.append(L("resets %@", UsageFormatter.resetDescription(from: resetsAt, now: now)))
         }
         return parts.joined(separator: " · ")
-    }
-
-    private static func ampCreditsLine(
-        _ usage: AmpUsageDetails,
-        preferredCurrencyCode: String = "auto") -> String?
-    {
-        var lines: [String] = []
-        if let individualCredits = usage.individualCredits {
-            let cost = UsageFormatter.convertedCostString(
-                individualCredits, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")
-            lines.append("\(L("Individual credits")): \(cost)")
-        }
-        lines.append(contentsOf: usage.workspaceBalances.map { workspace in
-            "\(L("Workspace")) \(workspace.name): " +
-                UsageFormatter.convertedCostString(
-                    workspace.remaining, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")
-        })
-        return lines.isEmpty ? nil : lines.joined(separator: "\n")
     }
 
     static func tokenUsageSection(

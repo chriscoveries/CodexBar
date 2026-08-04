@@ -57,11 +57,10 @@ extension UsageMenuCardView.Model {
             presentation.detailText = balance
         }
         if input.provider == .kiro,
-           let kiroUsage = input.snapshot?.kiroUsage,
-           kiroUsage.creditsTotal > 0
+           let remaining = input.snapshot?.detailRow(label: "Credits left")?.value,
+           let total = input.snapshot?.detailRow(label: "Credits total")?.value,
+           total != "0"
         {
-            let remaining = UsageFormatter.kiroCreditNumber(kiroUsage.creditsRemaining)
-            let total = UsageFormatter.kiroCreditNumber(kiroUsage.creditsTotal)
             presentation.detailLeft = String(format: L("%@ of %@ credits left"), remaining, total)
         }
         if input.provider == .alibaba || input.provider == .alibabatokenplan || input.provider == .manus,
@@ -454,14 +453,14 @@ extension UsageMenuCardView.Model {
         } else if input.provider == .sub2api {
             Sub2APIProviderDescriptor.primaryLabel(snapshot: snapshot) ?? input.metadata.sessionLabel
         } else if input.provider == .amp {
-            AmpProviderDescriptor.primaryLabel(details: snapshot.ampUsage) ?? input.metadata.sessionLabel
+            AmpProviderDescriptor.primaryLabel(snapshot: snapshot) ?? input.metadata.sessionLabel
         } else if input.provider == .alibabatokenplan {
             AlibabaTokenPlanProviderDescriptor.primaryLabel(window: snapshot.primary) ?? input.metadata.sessionLabel
         } else {
             input.metadata.sessionLabel
         }
         let secondaryLabel = if input.provider == .amp {
-            AmpProviderDescriptor.secondaryLabel(details: snapshot.ampUsage) ?? input.metadata.weeklyLabel
+            AmpProviderDescriptor.secondaryLabel(snapshot: snapshot) ?? input.metadata.weeklyLabel
         } else if input.provider == .alibabatokenplan {
             AlibabaTokenPlanProviderDescriptor.secondaryLabel(window: snapshot.secondary) ?? input.metadata.weeklyLabel
         } else {

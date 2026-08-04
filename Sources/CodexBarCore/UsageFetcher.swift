@@ -147,15 +147,11 @@ public struct UsageSnapshot: Codable, Sendable {
     public let extraRateWindows: [NamedRateWindow]?
     public let providerCost: ProviderCostSnapshot?
     public let details: [ProviderDetailSection]
-    public let kiroUsage: KiroUsageDetails?
-    public let ampUsage: AmpUsageDetails?
-    public let deepseekUsage: DeepSeekUsageSummary?
     public let deepseekDetailedUsageState: DeepSeekDetailedUsageState
     public let deepseekPlatformProfiles: [DeepSeekPlatformProfile]
     public let opencodegoUsage: OpenCodeGoUsageSnapshot?
     public let openAIAPIUsage: OpenAIAPIUsageSnapshot?
     public let codexResetCredits: CodexRateLimitResetCreditsSnapshot?
-    public let claudeAdminAPIUsage: ClaudeAdminAPIUsageSnapshot?
     public let mistralUsage: MistralUsageSnapshot?
     /// Live-only marker for optional Command Code subscription lookup failure.
     public let commandCodeSubscriptionEnrichmentUnavailable: Bool
@@ -176,11 +172,8 @@ public struct UsageSnapshot: Codable, Sendable {
         case extraRateWindows
         case providerCost
         case details
-        case kiroUsage
-        case ampUsage
         case openAIAPIUsage
         case codexResetCredits
-        case claudeAdminAPIUsage
         case mistralUsage
         case subscriptionExpiresAt
         case subscriptionRenewsAt
@@ -197,17 +190,13 @@ public struct UsageSnapshot: Codable, Sendable {
         secondary: RateWindow?,
         tertiary: RateWindow? = nil,
         extraRateWindows: [NamedRateWindow]? = nil,
-        kiroUsage: KiroUsageDetails? = nil,
-        ampUsage: AmpUsageDetails? = nil,
         providerCost: ProviderCostSnapshot? = nil,
         details: [ProviderDetailSection] = [],
-        deepseekUsage: DeepSeekUsageSummary? = nil,
         deepseekDetailedUsageState: DeepSeekDetailedUsageState = .notRequested,
         deepseekPlatformProfiles: [DeepSeekPlatformProfile] = [],
         opencodegoUsage: OpenCodeGoUsageSnapshot? = nil,
         openAIAPIUsage: OpenAIAPIUsageSnapshot? = nil,
         codexResetCredits: CodexRateLimitResetCreditsSnapshot? = nil,
-        claudeAdminAPIUsage: ClaudeAdminAPIUsageSnapshot? = nil,
         mistralUsage: MistralUsageSnapshot? = nil,
         commandCodeSubscriptionEnrichmentUnavailable: Bool = false,
         commandCodeHasSubscriptionPlan: Bool = false,
@@ -225,17 +214,13 @@ public struct UsageSnapshot: Codable, Sendable {
         self.secondary = secondary
         self.tertiary = tertiary
         self.extraRateWindows = extraRateWindows
-        self.kiroUsage = kiroUsage
-        self.ampUsage = ampUsage
         self.providerCost = providerCost
         self.details = details
-        self.deepseekUsage = deepseekUsage
         self.deepseekDetailedUsageState = deepseekDetailedUsageState
         self.deepseekPlatformProfiles = deepseekPlatformProfiles
         self.opencodegoUsage = opencodegoUsage
         self.openAIAPIUsage = openAIAPIUsage
         self.codexResetCredits = codexResetCredits
-        self.claudeAdminAPIUsage = claudeAdminAPIUsage
         self.mistralUsage = mistralUsage
         self.commandCodeSubscriptionEnrichmentUnavailable = commandCodeSubscriptionEnrichmentUnavailable
         self.commandCodeHasSubscriptionPlan = commandCodeHasSubscriptionPlan
@@ -280,9 +265,6 @@ public struct UsageSnapshot: Codable, Sendable {
         self.providerCost = try container.decodeIfPresent(ProviderCostSnapshot.self, forKey: .providerCost)
         self.details = try container.decodeIfPresent([ProviderDetailSection].self, forKey: .details) ?? []
         try ProviderDetailSection.validateSections(self.details)
-        self.kiroUsage = try container.decodeIfPresent(KiroUsageDetails.self, forKey: .kiroUsage)
-        self.ampUsage = try container.decodeIfPresent(AmpUsageDetails.self, forKey: .ampUsage)
-        self.deepseekUsage = nil // Not persisted, fetched fresh each time
         self.deepseekDetailedUsageState = .notRequested // Live-only fetch state
         self.deepseekPlatformProfiles = [] // Live-only browser profile catalog
         self.opencodegoUsage = nil // Not persisted, fetched fresh each time
@@ -290,9 +272,6 @@ public struct UsageSnapshot: Codable, Sendable {
         self.codexResetCredits = try container.decodeIfPresent(
             CodexRateLimitResetCreditsSnapshot.self,
             forKey: .codexResetCredits)
-        self.claudeAdminAPIUsage = try container.decodeIfPresent(
-            ClaudeAdminAPIUsageSnapshot.self,
-            forKey: .claudeAdminAPIUsage)
         self.mistralUsage = try container.decodeIfPresent(MistralUsageSnapshot.self, forKey: .mistralUsage)
         self.commandCodeSubscriptionEnrichmentUnavailable = false // Live-only fetch state
         self.commandCodeHasSubscriptionPlan = false // Live-only fetch state
@@ -334,11 +313,8 @@ public struct UsageSnapshot: Codable, Sendable {
         if !self.details.isEmpty {
             try container.encode(self.details, forKey: .details)
         }
-        try container.encodeIfPresent(self.kiroUsage, forKey: .kiroUsage)
-        try container.encodeIfPresent(self.ampUsage, forKey: .ampUsage)
         try container.encodeIfPresent(self.openAIAPIUsage, forKey: .openAIAPIUsage)
         try container.encodeIfPresent(self.codexResetCredits, forKey: .codexResetCredits)
-        try container.encodeIfPresent(self.claudeAdminAPIUsage, forKey: .claudeAdminAPIUsage)
         try container.encodeIfPresent(self.mistralUsage, forKey: .mistralUsage)
         try container.encodeIfPresent(self.subscriptionExpiresAt, forKey: .subscriptionExpiresAt)
         try container.encodeIfPresent(self.subscriptionRenewsAt, forKey: .subscriptionRenewsAt)
@@ -487,7 +463,7 @@ public struct UsageSnapshot: Codable, Sendable {
         secondary: Replacement<RateWindow?> = .unchanged,
         tertiary: Replacement<RateWindow?> = .unchanged,
         extraRateWindows: Replacement<[NamedRateWindow]?> = .unchanged,
-        deepseekUsage: Replacement<DeepSeekUsageSummary?> = .unchanged,
+        details: Replacement<[ProviderDetailSection]> = .unchanged,
         deepseekDetailedUsageState: Replacement<DeepSeekDetailedUsageState> = .unchanged,
         deepseekPlatformProfiles: Replacement<[DeepSeekPlatformProfile]> = .unchanged,
         codexResetCredits: Replacement<CodexRateLimitResetCreditsSnapshot?> = .unchanged,
@@ -501,17 +477,13 @@ public struct UsageSnapshot: Codable, Sendable {
             secondary: secondary.resolving(self.secondary),
             tertiary: tertiary.resolving(self.tertiary),
             extraRateWindows: extraRateWindows.resolving(self.extraRateWindows),
-            kiroUsage: self.kiroUsage,
-            ampUsage: self.ampUsage,
             providerCost: self.providerCost,
-            details: self.details,
-            deepseekUsage: deepseekUsage.resolving(self.deepseekUsage),
+            details: details.resolving(self.details),
             deepseekDetailedUsageState: deepseekDetailedUsageState.resolving(self.deepseekDetailedUsageState),
             deepseekPlatformProfiles: deepseekPlatformProfiles.resolving(self.deepseekPlatformProfiles),
             opencodegoUsage: self.opencodegoUsage,
             openAIAPIUsage: self.openAIAPIUsage,
             codexResetCredits: codexResetCredits.resolving(self.codexResetCredits),
-            claudeAdminAPIUsage: self.claudeAdminAPIUsage,
             mistralUsage: self.mistralUsage,
             commandCodeSubscriptionEnrichmentUnavailable: self.commandCodeSubscriptionEnrichmentUnavailable,
             commandCodeHasSubscriptionPlan: self.commandCodeHasSubscriptionPlan,

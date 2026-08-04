@@ -422,16 +422,15 @@ struct CodexBarTests {
     }
 
     @Test
-    func `copying extra rate windows preserves subscription dates`() {
+    func `copying extra rate windows preserves subscription dates`() throws {
         let expiresAt = Date(timeIntervalSince1970: 1_810_656_000)
         let renewsAt = Date(timeIntervalSince1970: 1_810_569_600)
-        let ampUsage = AmpUsageDetails(
-            individualCredits: 12.5,
-            workspaceBalances: [AmpWorkspaceBalance(name: "Team", remaining: 7.25)])
-        let snapshot = UsageSnapshot(
+        let snapshot = try UsageSnapshot(
             primary: nil,
             secondary: nil,
-            ampUsage: ampUsage,
+            details: [ProviderDetailSection(rows: [
+                ProviderDetailSection.Row(label: "Individual credits", value: "$12.50"),
+            ])],
             subscriptionExpiresAt: expiresAt,
             subscriptionRenewsAt: renewsAt,
             updatedAt: Date(timeIntervalSince1970: 1_800_000_000))
@@ -440,7 +439,7 @@ struct CodexBarTests {
 
         #expect(copied.subscriptionExpiresAt == expiresAt)
         #expect(copied.subscriptionRenewsAt == renewsAt)
-        #expect(copied.ampUsage == ampUsage)
+        #expect(copied.details == snapshot.details)
     }
 
     @Test
@@ -503,14 +502,11 @@ struct CodexBarTests {
     @Test
     func `copying identity preserves provider details`() throws {
         let updatedAt = Date(timeIntervalSince1970: 1_800_000_000)
-        let ampUsage = AmpUsageDetails(
-            individualCredits: 12.5,
-            workspaceBalances: [AmpWorkspaceBalance(name: "Team", remaining: 7.25)])
         let snapshot = try UsageSnapshot(
             primary: nil,
             secondary: nil,
-            ampUsage: ampUsage,
             details: [ProviderDetailSection(rows: [
+                ProviderDetailSection.Row(label: "Individual credits", value: "$12.50"),
                 ProviderDetailSection.Row(label: "Request quota", value: "10 / 50"),
             ])],
             subscriptionExpiresAt: updatedAt.addingTimeInterval(100),
@@ -524,7 +520,7 @@ struct CodexBarTests {
 
         let copied = snapshot.withIdentity(identity)
 
-        #expect(copied.ampUsage == ampUsage)
+        #expect(copied.details == snapshot.details)
         #expect(copied.detailRow(label: "Request quota")?.value == "10 / 50")
         #expect(copied.subscriptionExpiresAt == updatedAt.addingTimeInterval(100))
         #expect(copied.subscriptionRenewsAt == updatedAt.addingTimeInterval(200))

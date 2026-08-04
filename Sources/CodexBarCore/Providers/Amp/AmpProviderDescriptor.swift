@@ -45,12 +45,12 @@ public enum AmpProviderDescriptor {
                 versionDetector: nil))
     }
 
-    public static func primaryLabel(details: AmpUsageDetails?) -> String? {
-        details?.subscriptionPlan == nil ? nil : "Other usage"
+    public static func primaryLabel(snapshot: UsageSnapshot) -> String? {
+        snapshot.secondary == nil ? nil : "Other usage"
     }
 
-    public static func secondaryLabel(details: AmpUsageDetails?) -> String? {
-        details?.subscriptionPlan == nil ? nil : "Orb usage"
+    public static func secondaryLabel(snapshot: UsageSnapshot) -> String? {
+        snapshot.secondary == nil ? nil : "Orb usage"
     }
 
     private static func resolveStrategies(context: ProviderFetchContext) async -> [any ProviderFetchStrategy] {

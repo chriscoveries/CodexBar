@@ -176,11 +176,7 @@ public struct ProviderDiagnosticUsageSummary: Codable, Sendable {
         }
 
         var providerSpecificData: [String] = []
-        if snapshot.kiroUsage != nil { providerSpecificData.append("kiroUsage") }
-        if snapshot.ampUsage != nil { providerSpecificData.append("ampUsage") }
-        if snapshot.deepseekUsage != nil { providerSpecificData.append("deepseekUsage") }
         if snapshot.openAIAPIUsage != nil { providerSpecificData.append("openAIAPIUsage") }
-        if snapshot.claudeAdminAPIUsage != nil { providerSpecificData.append("claudeAdminAPIUsage") }
         if snapshot.mistralUsage != nil { providerSpecificData.append("mistralUsage") }
 
         self.updatedAt = snapshot.updatedAt

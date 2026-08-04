@@ -388,12 +388,6 @@ struct MenuDescriptor {
                 usage: openAIAPIUsage,
                 preferredCurrencyCode: preferredCurrencyCode)
         }
-        if let claudeAdminAPIUsage = snapshot.claudeAdminAPIUsage {
-            Self.appendClaudeAdminAPIUsageSummary(
-                entries: &entries,
-                usage: claudeAdminAPIUsage,
-                preferredCurrencyCode: preferredCurrencyCode)
-        }
         if let mistralUsage = snapshot.mistralUsage, !mistralUsage.daily.isEmpty {
             Self.appendMistralUsageSummary(
                 entries: &entries,
@@ -449,7 +443,7 @@ struct MenuDescriptor {
             entries.append(.text("\(L("Account")): \(redactedEmail)", .secondary))
         }
         if provider == .kiro {
-            if let plan = snapshot?.kiroUsage?.displayPlanName,
+            if let plan = snapshot?.detailRow(label: "Plan")?.value,
                !plan.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             {
                 entries.append(.text("\(L("Plan")): \(plan)", .secondary))
@@ -457,7 +451,7 @@ struct MenuDescriptor {
             if let loginMethodText, !loginMethodText.isEmpty {
                 entries.append(.text("\(L("Auth")): \(loginMethodText)", .secondary))
             }
-            if let overages = snapshot?.kiroUsage?.overagesStatus,
+            if let overages = snapshot?.detailRow(label: "Overages")?.value,
                !overages.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             {
                 entries.append(.text("\(L("Overages")): \(overages)", .secondary))
@@ -697,7 +691,7 @@ struct MenuDescriptor {
         } else if provider == .sub2api {
             Sub2APIProviderDescriptor.primaryLabel(snapshot: snapshot) ?? metadata.sessionLabel
         } else if provider == .amp {
-            AmpProviderDescriptor.primaryLabel(details: snapshot.ampUsage) ?? metadata.sessionLabel
+            AmpProviderDescriptor.primaryLabel(snapshot: snapshot) ?? metadata.sessionLabel
         } else if provider == .alibabatokenplan {
             AlibabaTokenPlanProviderDescriptor.primaryLabel(window: snapshot.primary) ?? metadata.sessionLabel
         } else {
@@ -710,7 +704,7 @@ struct MenuDescriptor {
                 sessionLabel: metadata.sessionLabel,
                 weeklyLabel: metadata.weeklyLabel)
         } else if provider == .amp {
-            AmpProviderDescriptor.secondaryLabel(details: snapshot.ampUsage) ?? metadata.weeklyLabel
+            AmpProviderDescriptor.secondaryLabel(snapshot: snapshot) ?? metadata.weeklyLabel
         } else if provider == .alibabatokenplan {
             AlibabaTokenPlanProviderDescriptor.secondaryLabel(window: snapshot.secondary) ?? metadata.weeklyLabel
         } else {

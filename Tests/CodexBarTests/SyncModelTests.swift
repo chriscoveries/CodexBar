@@ -204,6 +204,10 @@ struct SyncModelTests {
             "deepgramUsage": {"requests": 3},
             "poeUsage": {"daily": []},
             "xaiUsage": {"balanceUSD": 4},
+            "kiroUsage": {"creditsRemaining": 4},
+            "ampUsage": {"individualCredits": 4},
+            "deepseekUsage": {"todayTokens": 4},
+            "claudeAdminAPIUsage": {"daily": []},
             "updatedAt": "2026-08-04T12:00:00Z"
           }
         }
