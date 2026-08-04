@@ -68,7 +68,9 @@ public struct XAIUsageSnapshot: Codable, Equatable, Sendable {
                 title: "Billing summary",
                 rows: [
                     .makeRow(label: "Prepaid balance", value: UsageFormatter.usdString(self.balanceUSD)),
-                    .makeRow(label: "History", value: self.historyWindowPeriodLabel),
+                    .makeRow(
+                        label: self.historyWindowPeriodLabel,
+                        value: UsageFormatter.usdString(self.windowCostUSD)),
                 ],
                 chart: self.daily.isEmpty ? nil : .makeChart(
                     title: "Daily spend",

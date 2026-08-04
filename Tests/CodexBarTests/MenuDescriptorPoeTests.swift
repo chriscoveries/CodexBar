@@ -121,10 +121,10 @@ struct MenuDescriptorPoeTests {
                 return text
             }
 
-        #expect(textLines.contains(where: { $0.contains("Today: 100 points") }))
-        #expect(textLines.contains(where: { $0.contains("7d: 300 points") }))
-        #expect(textLines.contains(where: { $0.contains("30d: 300 points") }))
-        #expect(textLines.contains(where: { $0.contains("Top model: Claude-3.7-Sonnet") }))
+        #expect(textLines.contains(where: { $0.contains("Today: 100 points · 1 requests") }))
+        #expect(textLines.contains(where: { $0.contains("Last 7 days: 300 points · 2 requests") }))
+        #expect(textLines.contains(where: { $0.contains("Last 30 days: 300 points · 2 requests") }))
+        #expect(textLines.contains(where: { $0.contains("Top model: Claude-3.7-Sonnet · 200 points") }))
         #expect(textLines.contains(where: { $0.contains("Usage mix: chat: 300 points") }))
         #expect(textLines.contains(where: { $0.contains("Recent activity:") }))
     }

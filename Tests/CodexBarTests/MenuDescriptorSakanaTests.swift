@@ -10,7 +10,7 @@ struct MenuDescriptorSakanaTests {
         let lines = try Self.menuLines(showOptionalUsage: true)
 
         #expect(lines.contains("Balance: $12.34"))
-        #expect(lines.contains("Usage: $5.67"))
+        #expect(lines.contains("Usage: $5.67 · Jun 02, 2026 - Jul 01, 2026"))
     }
 
     @Test

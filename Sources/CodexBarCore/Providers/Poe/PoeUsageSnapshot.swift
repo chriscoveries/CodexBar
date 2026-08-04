@@ -27,27 +27,33 @@ public struct PoeUsageSnapshot: Sendable {
             rows.append(.makeRow(label: "Current balance", value: "\(Self.compactNumber(balance)) points"))
         }
         if let history = self.history {
+            let today = history.currentDay(now: self.updatedAt)
             let seven = history.last7Days
             let thirty = history.last30Days
-            rows.append(.makeRow(
-                label: "Last 7 days",
-                value: "\(Self.compactNumber(seven.points)) points",
-                secondaryValue: "\(seven.requests) requests"))
-            rows.append(.makeRow(
-                label: "Last 30 days",
-                value: "\(Self.compactNumber(thirty.points)) points",
-                secondaryValue: "\(thirty.requests) requests"))
+            rows.append(Self.summaryRow(label: "Today", summary: today))
+            rows.append(Self.summaryRow(label: "Last 7 days", summary: seven))
+            rows.append(Self.summaryRow(label: "Last 30 days", summary: thirty))
             if let top = history.topModels.first {
                 rows.append(.makeRow(
                     label: "Top model",
                     value: top.name,
                     secondaryValue: "\(Self.compactNumber(top.points)) points"))
             }
-            if let top = history.topUsageTypes.first {
+            let usageMix = history.topUsageTypes.prefix(2)
+                .map { "\($0.name): \(Self.compactNumber($0.points)) points" }
+                .joined(separator: " · ")
+            if !usageMix.isEmpty {
                 rows.append(.makeRow(
-                    label: "Top usage type",
-                    value: top.name,
-                    secondaryValue: "\(Self.compactNumber(top.points)) points"))
+                    label: "Usage mix",
+                    value: usageMix))
+            }
+            for (index, entry) in history.recentEntries(limit: 3).enumerated() {
+                rows.append(.makeRow(
+                    label: index == 0 ? "Recent activity" : Self.timeString(entry.createdAt),
+                    value: index == 0
+                        ? "\(Self.timeString(entry.createdAt)) · \(entry.model)"
+                        : entry.model,
+                    secondaryValue: "\(Self.compactNumber(entry.points)) points"))
             }
         }
         let chart = self.history.flatMap { history in
@@ -70,6 +76,28 @@ public struct PoeUsageSnapshot: Sendable {
     private var balanceLabel: String? {
         guard let balance = self.currentPointBalance, balance.isFinite else { return nil }
         return "Balance: \(Self.compactNumber(balance)) points"
+    }
+
+    private static func summaryRow(
+        label: String,
+        summary: PoeUsageHistorySnapshot.Summary) -> ProviderDetailSection.Row
+    {
+        let secondary = [
+            "\(summary.requests) requests",
+            summary.costUSD.map(UsageFormatter.usdString),
+        ].compactMap(\.self).joined(separator: " · ")
+        return .makeRow(
+            label: label,
+            value: "\(Self.compactNumber(summary.points)) points",
+            secondaryValue: secondary)
+    }
+
+    private static func timeString(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        formatter.dateFormat = "MM-dd HH:mm"
+        return formatter.string(from: date)
     }
 
     static func compactNumber(_ value: Double) -> String {

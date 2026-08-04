@@ -142,6 +142,7 @@ struct ProviderPluginExtensionParityTests {
         let details = try #require(script.details.first)
         #expect(details.title == "Billing summary")
         #expect(try details.rows.first == .init(label: "Prepaid balance", value: "$10.00"))
+        #expect(try details.rows.last == .init(label: "Last 30 days", value: "$1.50"))
         #expect(try details.chart?.points == [.init(label: "2027-01-15", value: 1.5)])
     }
 

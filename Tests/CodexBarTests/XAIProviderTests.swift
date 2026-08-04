@@ -466,7 +466,7 @@ struct XAIProviderTests {
                 useColor: false,
                 resetStyle: .countdown))
 
-        #expect(text.contains("Balance: $7.36"))
+        #expect(text.contains("Prepaid balance: $7.36"))
         #expect(text.contains("Last 30 days: $1.75"))
         // The generic no-window fallback would print "Cost: 7.4 / 0.0", which
         // presents the balance as a spend against a zero budget.

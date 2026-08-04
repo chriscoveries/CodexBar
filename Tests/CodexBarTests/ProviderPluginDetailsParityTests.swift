@@ -148,10 +148,13 @@ struct ProviderPluginDetailsParityTests {
             "Points",
             rows: [
                 Self.row("Current balance", "2,500 points"),
-                Self.row("Last 7 days", "20.5 points", "2 requests"),
-                Self.row("Last 30 days", "20.5 points", "2 requests"),
+                Self.row("Today", "0 points", "0 requests"),
+                Self.row("Last 7 days", "20.5 points", "2 requests · $0.05"),
+                Self.row("Last 30 days", "20.5 points", "2 requests · $0.05"),
                 Self.row("Top model", "gpt-5", "12.5 points"),
-                Self.row("Top usage type", "API", "12.5 points"),
+                Self.row("Usage mix", "API: 12.5 points · Chat: 8 points"),
+                Self.row("Recent activity", "08-03 09:00 · claude-sonnet-4", "8 points"),
+                Self.row("08-02 09:00", "gpt-5", "12.5 points"),
             ],
             chart: Self.chart("Daily points", unit: "points", points: [
                 ("2026-08-02", 12.5), ("2026-08-03", 8),
