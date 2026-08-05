@@ -192,6 +192,7 @@ public enum ClaudeProviderDescriptor {
                 versionDetector: { browserDetection in
                     ClaudeUsageFetcher(browserDetection: browserDetection).detectVersion()
                 },
+                supportsCostCommand: true,
                 browserSupportExemption: { sourceMode, _, _ in sourceMode == .auto }))
     }
 

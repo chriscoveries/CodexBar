@@ -88,6 +88,7 @@ public enum CursorProviderDescriptor {
             cli: ProviderCLIConfig(
                 name: "cursor",
                 versionDetector: nil,
+                supportsCostCommand: self.supportsCostCommand,
                 browserSupportExemption: { _, _, settings in
                     #if os(Linux)
                     // Linux uses Cursor app auth and manual cookies; browser import remains macOS-only.
@@ -96,6 +97,14 @@ public enum CursorProviderDescriptor {
                     false
                     #endif
                 }))
+    }
+
+    private static var supportsCostCommand: Bool {
+        #if os(macOS)
+        true
+        #else
+        false
+        #endif
     }
 
     private static func menuBarWindow(

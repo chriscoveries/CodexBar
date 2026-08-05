@@ -108,6 +108,7 @@ public enum CodexProviderDescriptor {
                 name: "codex",
                 binaryLocator: { BinaryLocator.resolveCodexBinary() },
                 versionDetector: { _ in ProviderVersionDetector.codexVersion() },
+                supportsCostCommand: true,
                 browserSupportExemption: { sourceMode, _, _ in sourceMode == .auto }))
     }
 

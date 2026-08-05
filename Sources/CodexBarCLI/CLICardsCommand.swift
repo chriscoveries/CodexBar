@@ -97,6 +97,7 @@ extension CodexBarCLI {
         let resetStyle = Self.resetTimeDisplayStyleFromDefaults()
         let weeklyWorkDays = Self.weeklyProgressWorkDaysFromDefaults()
         let providerList = provider.asList
+        // Provider-specific by design: claude-swap cards need Claude's integration configuration and subprocess.
         let claudeConfig = config.providerConfig(for: .claude)
 
         let tokenSelection: TokenAccountCLISelection
@@ -122,6 +123,7 @@ extension CodexBarCLI {
                     output: output,
                     kind: .args)
             }
+            // Provider-specific by design: --all-accounts includes reconciled Codex live and managed profiles.
             let supportsAllCodexAccounts = providerList[0] == .codex
                 && tokenSelection.allAccounts
                 && tokenSelection.label == nil
@@ -196,7 +198,9 @@ extension CodexBarCLI {
                             command: command)
                     }
                 })
-            if result.exitCode != .success { exitCode = result.exitCode }
+            if result.exitCode != .success {
+                exitCode = result.exitCode
+            }
             cards.append(contentsOf: result.cards)
             failures.append(contentsOf: result.cardFailures)
         }
