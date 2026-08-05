@@ -30,6 +30,7 @@ struct ProvidersPane: View {
     @State private var isAuthenticatingLiveCodexAccount = false
 
     init(
+        // Provider-specific by design: Codex is the historical settings selection when no provider is supplied.
         provider: UsageProvider = .codex,
         settings: SettingsStore,
         store: UsageStore,

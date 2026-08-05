@@ -200,6 +200,7 @@ extension UsageStore {
 
     @discardableResult
     func hydrateCachedTokenSnapshots(now: Date = Date()) -> Task<Void, Never>? {
+        // Provider-specific by design: only the Codex local ledger hydrates a cached snapshot before the first scan.
         guard self.settings.isCostUsageEffectivelyEnabled(for: .codex) else { return nil }
         guard self.settings.enabledProvidersOrdered(metadataByProvider: self.providerMetadata).contains(.codex) else {
             return nil

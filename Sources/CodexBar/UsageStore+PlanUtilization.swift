@@ -470,6 +470,7 @@ extension UsageStore {
         context: LimitResetDetectionContext,
         samples: [PlanUtilizationSeriesSample])
     {
+        // Provider-specific by design: Codex reset celebration confirmation uses owner-scoped session observations.
         let sessionObservation: LimitResetObservation? = if context.provider == .codex {
             samples.last(where: { $0.name == .session }).map {
                 LimitResetObservation(
@@ -808,6 +809,7 @@ extension UsageStore {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
         if let normalizedEmail, !normalizedEmail.isEmpty {
+            // Provider-specific by design: Codex hashes email ownership; Claude also binds organization and plan.
             if provider == .codex {
                 return CodexHistoryOwnership.canonicalEmailHashKey(for: normalizedEmail)
             }
@@ -1091,6 +1093,7 @@ extension UsageStore {
         shouldAdoptUnscopedHistory: Bool = true,
         providerBuckets: inout PlanUtilizationHistoryBuckets) -> String?
     {
+        // Provider-specific by design: Codex reconciliation and Claude OAuth use distinct persisted owner migrations.
         if provider == .codex {
             return self.resolveCodexPlanUtilizationAccountKey(
                 snapshot: snapshot,
@@ -1248,6 +1251,7 @@ extension UsageStore {
         for rawKey in legacyRawKeysToRemove {
             providerBuckets.accounts.removeValue(forKey: rawKey)
         }
+        // Provider-specific by design: legacy Codex email/workspace buckets merge only after ambiguity checks.
         let mergedHistory = Self.mergedPlanUtilizationHistories(provider: .codex, histories: historiesToMerge)
         providerBuckets.setHistories(mergedHistory, for: canonicalKey)
         return canonicalKey

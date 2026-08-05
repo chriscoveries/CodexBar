@@ -534,6 +534,7 @@ extension StatusItemController {
 
         if let phase, self.shouldAnimate(provider: provider) {
             var pattern = self.animationPattern
+            // Provider-specific by design: Claude's star glyph cannot render the icon-only unbraid transition.
             if provider == .claude, pattern == .unbraid {
                 pattern = .cylon
             }
@@ -660,6 +661,7 @@ extension StatusItemController {
                 primary: showUsed ? metricWindow.usedPercent : metricWindow.remainingPercent,
                 secondary: nil)
         }
+        // Provider-specific by design: Mistral's balance/spend text replaces percentage lanes in its icon.
         if provider == .mistral {
             return (primary: nil, secondary: nil)
         }
@@ -1037,6 +1039,7 @@ extension StatusItemController {
     }
 
     nonisolated static func poeBalanceDisplayText(snapshot: UsageSnapshot?) -> String? {
+        // Provider-specific by design: Poe stores its point balance in the login-method payload field.
         self.displayValue(
             from: snapshot?.loginMethod(for: .poe),
             prefix: "Balance:",
@@ -1044,6 +1047,7 @@ extension StatusItemController {
     }
 
     nonisolated static func moonshotBalanceDisplayText(snapshot: UsageSnapshot?) -> String? {
+        // Provider-specific by design: Moonshot stores cash/voucher balance text in its login-method payload.
         self.displayValue(
             from: snapshot?.loginMethod(for: .moonshot),
             prefix: "Balance:",
@@ -1332,6 +1336,7 @@ extension StatusItemController {
         if let projection {
             return projection.menuBarSelectableRateWindow(for: .weekly)
         }
+        // Provider-specific by design: Abacus publishes its weekly semantic window in the primary lane.
         if provider == .abacus {
             return snapshot?.primary
         }

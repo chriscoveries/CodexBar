@@ -727,6 +727,7 @@ struct WidgetUsageRow: Identifiable, Equatable {
     }
 
     private static func antigravityQuotaFamily(for row: WidgetUsageRow) -> AntigravityQuotaFamily? {
+        // Provider-specific by design: Antigravity IDs/titles classify Gemini versus third-party quota families.
         guard row.id.hasPrefix("antigravity-quota-summary-") else { return nil }
         let id = row.id.lowercased()
         if id.contains("gemini") {
@@ -939,6 +940,7 @@ struct WidgetBalanceLine: Equatable {
 
 enum WidgetBalanceFormatter {
     static func extraUsageCost(for entry: WidgetSnapshot.ProviderEntry) -> ProviderCostSnapshot? {
+        // Provider-specific by design: Devin encodes its extra-usage balance as a named provider-cost period.
         guard entry.provider == .devin,
               let cost = entry.providerCost,
               cost.period == "Extra usage balance"

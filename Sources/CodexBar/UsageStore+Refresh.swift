@@ -297,6 +297,7 @@ extension UsageStore {
             guard matches.count == 1 else { return nil }
             return matches[0]
         }()
+        // Provider-specific by design: Codex account refresh hydrates only a uniquely matching reconciled owner.
         if self.snapshots[.codex] == nil,
            let hydratedPrior,
            let hydratedSnapshot = hydratedPrior.snapshot
@@ -654,6 +655,7 @@ extension UsageStore {
         context: ProviderRefreshOutcomeContext) async
     {
         let rawScoped = result.usage.scoped(to: provider)
+        // Provider-specific by design: Codex results are discarded when managed-account ownership changes mid-fetch.
         if provider == .codex,
            let codexExpectedGuard = context.codexExpectedGuard,
            !self.shouldApplyCodexUsageResult(expectedGuard: codexExpectedGuard, usage: rawScoped)
@@ -1121,6 +1123,7 @@ extension UsageStore {
         beforeFetch: ClaudeRefreshAuthState?,
         afterFetchFingerprintToken: String?) -> Bool
     {
+        // Provider-specific by design: Claude credential fingerprints invalidate results produced by an old OAuth key.
         provider == .claude && afterFetchFingerprintToken != beforeFetch?.fingerprintToken
     }
 
@@ -1287,6 +1290,7 @@ extension UsageStore {
     }
 
     private func clearClaudeCredentialDerivedStateForCredentialSwap() {
+        // Provider-specific by design: Claude credential swaps invalidate OAuth, swap, widget, quota, and token state.
         self.widgetUsagePreservationBlockedProviders.insert(.claude)
         self.snapshots.removeValue(forKey: .claude)
         self.lastKnownResetSnapshots.removeValue(forKey: .claude)

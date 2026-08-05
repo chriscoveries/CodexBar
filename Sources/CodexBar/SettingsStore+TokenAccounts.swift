@@ -271,6 +271,7 @@ extension SettingsStore {
         removedAccount: ProviderTokenAccount,
         remainingAccounts: [ProviderTokenAccount])
     {
+        // Provider-specific by design: removing the final Antigravity account must delete its shared OAuth cache.
         guard provider == .antigravity else { return }
         guard let removedCredentials = AntigravityOAuthCredentialsStore.credentials(
             fromTokenAccountValue: removedAccount.token)

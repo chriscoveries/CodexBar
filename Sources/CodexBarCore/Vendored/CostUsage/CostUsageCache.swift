@@ -765,6 +765,7 @@ enum CostUsageCacheIO {
         provider: UsageProvider,
         parserHash: String = CodexParserHash.value) -> String?
     {
+        // Provider-specific by design: only the Codex incremental parser persists a producer hash.
         guard provider == .codex else { return nil }
         return "\(provider.rawValue):cu:p\(parserHash)"
     }

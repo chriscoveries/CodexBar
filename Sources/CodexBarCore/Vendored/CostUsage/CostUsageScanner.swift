@@ -728,6 +728,7 @@ enum CostUsageScanner {
         private let homeCodexWorktreesPrefix: String
 
         init(homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser) {
+            // Provider-specific by design: Codex worktree sessions canonicalize to their source project path.
             self.homeCodexWorktreesPrefix = homeDirectory
                 .appendingPathComponent(".codex/worktrees", isDirectory: true)
                 .standardizedFileURL
@@ -1776,6 +1777,7 @@ enum CostUsageScanner {
     // MARK: - Codex
 
     private static func defaultCodexSessionsRoot(options: Options) -> URL {
+        // Provider-specific by design: Codex session discovery honors CODEX_HOME before ~/.codex.
         if let override = options.codexSessionsRoot {
             return override
         }
@@ -4458,6 +4460,7 @@ enum CostUsageScanner {
     }
 
     private static func saveCodexCache(_ cache: CostUsageCache, options: Options, range: CostUsageDayRange) {
+        // Provider-specific by design: Codex scans persist resume and report-window metadata.
         CostUsageCacheIO.save(
             provider: .codex,
             cache: cache,
