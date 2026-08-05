@@ -45,7 +45,8 @@ public enum ManusProviderDescriptor {
                     ProviderColor(hex: 0x34322D),
                     ProviderColor(hex: 0xF2F0E9),
                     ProviderColor(hex: 0x0099FF),
-                ]),
+                ],
+                widgetColor: ProviderColor(red: 24 / 255, green: 24 / 255, blue: 24 / 255)),
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "Manus cost summary is not supported." }),

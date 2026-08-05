@@ -37,7 +37,8 @@ public enum CommandCodeProviderDescriptor {
                     ProviderColor(hex: 0x000000),
                     ProviderColor(hex: 0xFFFFFF),
                     ProviderColor(hex: 0x7B5BFF),
-                ]),
+                ],
+                widgetColor: ProviderColor(hex: 0x000000)),
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "Command Code cost summary is not yet supported." }),

@@ -44,7 +44,8 @@ public enum OpenAIAPIProviderDescriptor {
                     ProviderColor(hex: 0x000000),
                     ProviderColor(hex: 0x808080),
                     ProviderColor(hex: 0xFFFFFF),
-                ]),
+                ],
+                widgetColor: ProviderColor(red: 15 / 255, green: 130 / 255, blue: 110 / 255)),
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: true,
                 noDataMessage: { "OpenAI usage needs an Admin API key for organization usage." }),

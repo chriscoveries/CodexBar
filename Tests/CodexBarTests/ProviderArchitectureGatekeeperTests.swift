@@ -129,6 +129,21 @@ struct ProviderArchitectureGatekeeperTests {
         }
     }
 
+    @Test
+    func `descriptor widget colors preserve the pre-derivation literals`() {
+        var widgetFingerprint: UInt64 = 1_469_598_103_934_665_603
+        var burnDownFingerprint = widgetFingerprint
+        for descriptor in ProviderDescriptorRegistry.all {
+            Self.hash(descriptor.id.rawValue.utf8, into: &widgetFingerprint)
+            Self.hash(descriptor.branding.widgetColor, into: &widgetFingerprint)
+            Self.hash(descriptor.id.rawValue.utf8, into: &burnDownFingerprint)
+            Self.hash(descriptor.branding.burnDownWidgetColor, into: &burnDownFingerprint)
+        }
+
+        #expect(widgetFingerprint == 8_322_639_844_029_602_741)
+        #expect(burnDownFingerprint == 3_478_078_203_311_670_951)
+    }
+
     private static func repoRoot() throws -> URL {
         var directory = URL(filePath: #filePath).deletingLastPathComponent()
         for _ in 0..<12 {
@@ -140,5 +155,21 @@ struct ProviderArchitectureGatekeeperTests {
             directory.deleteLastPathComponent()
         }
         throw CocoaError(.fileNoSuchFile)
+    }
+
+    private static func hash(_ color: ProviderColor, into fingerprint: inout UInt64) {
+        for component in [color.red, color.green, color.blue] {
+            var bits = component.bitPattern
+            for _ in 0..<MemoryLayout<UInt64>.size {
+                fingerprint = (fingerprint ^ UInt64(UInt8(truncatingIfNeeded: bits))) &* 1_099_511_628_211
+                bits >>= 8
+            }
+        }
+    }
+
+    private static func hash(_ bytes: String.UTF8View, into fingerprint: inout UInt64) {
+        for byte in bytes {
+            fingerprint = (fingerprint ^ UInt64(byte)) &* 1_099_511_628_211
+        }
     }
 }

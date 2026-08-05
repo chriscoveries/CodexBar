@@ -23,6 +23,8 @@ public struct ProviderBranding: Sendable {
     public let iconStyle: IconStyle
     public let iconResourceName: String
     public let color: ProviderColor
+    public let widgetColor: ProviderColor
+    public let burnDownWidgetColor: ProviderColor
     public let confettiPalette: [ProviderColor]
 
     /// Source-compatible fallback for external CodexBarCore clients. Registered descriptors must provide
@@ -40,12 +42,16 @@ public struct ProviderBranding: Sendable {
         iconStyle: IconStyle,
         iconResourceName: String,
         color: ProviderColor,
-        confettiPalette: [ProviderColor])
+        confettiPalette: [ProviderColor],
+        widgetColor: ProviderColor? = nil,
+        burnDownWidgetColor: ProviderColor = ProviderColor(red: 0.60, green: 0.60, blue: 0.60))
     {
         precondition((2...3).contains(confettiPalette.count), "Provider confetti palettes require 2–3 colors.")
         self.iconStyle = iconStyle
         self.iconResourceName = iconResourceName
         self.color = color
+        self.widgetColor = widgetColor ?? color
+        self.burnDownWidgetColor = burnDownWidgetColor
         self.confettiPalette = confettiPalette
     }
 }

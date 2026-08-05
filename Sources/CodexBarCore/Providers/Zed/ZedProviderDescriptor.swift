@@ -31,7 +31,8 @@ public enum ZedProviderDescriptor {
                     ProviderColor(hex: 0x084CCF),
                     ProviderColor(hex: 0x000000),
                     ProviderColor(hex: 0xFFFFFF),
-                ]),
+                ],
+                widgetColor: ProviderColor(red: 64 / 255, green: 156 / 255, blue: 255 / 255)),
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "Zed cost summary is not supported." }),

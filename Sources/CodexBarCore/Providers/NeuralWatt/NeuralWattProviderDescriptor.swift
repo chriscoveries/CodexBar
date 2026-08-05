@@ -47,7 +47,8 @@ public enum NeuralWattProviderDescriptor {
                     ProviderColor(hex: 0x38D98C),
                     ProviderColor(hex: 0x17243A),
                     ProviderColor(hex: 0xFFFFFF),
-                ]),
+                ],
+                widgetColor: ProviderColor(red: 56 / 255, green: 217 / 255, blue: 140 / 255)),
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "Neuralwatt token cost history is not available via the quota API." }),

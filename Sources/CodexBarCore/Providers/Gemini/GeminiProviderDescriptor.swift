@@ -33,7 +33,8 @@ public enum GeminiProviderDescriptor {
                     ProviderColor(hex: 0x4285F4),
                     ProviderColor(hex: 0xA142F4),
                     ProviderColor(hex: 0xD96570),
-                ]),
+                ],
+                burnDownWidgetColor: ProviderColor(red: 0.420, green: 0.440, blue: 0.900)),
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "Gemini cost summary is not supported." }),

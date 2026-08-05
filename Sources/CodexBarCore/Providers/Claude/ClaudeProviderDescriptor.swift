@@ -98,7 +98,8 @@ public enum ClaudeProviderDescriptor {
                     ProviderColor(hex: 0xD97757),
                     ProviderColor(hex: 0xF0EEE6),
                     ProviderColor(hex: 0x141413),
-                ]),
+                ],
+                burnDownWidgetColor: ProviderColor(red: 0.880, green: 0.580, blue: 0.180)),
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: true,
                 noDataMessage: self.noDataMessage),

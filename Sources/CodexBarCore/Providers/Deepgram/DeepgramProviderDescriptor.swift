@@ -55,7 +55,8 @@ public enum DeepgramProviderDescriptor {
                     ProviderColor(hex: 0x13EF95),
                     ProviderColor(hex: 0x149AFB),
                     ProviderColor(hex: 0x1A1A1F),
-                ]),
+                ],
+                widgetColor: ProviderColor(red: 10 / 255, green: 18 / 255, blue: 27 / 255)),
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: {

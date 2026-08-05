@@ -56,7 +56,8 @@ public enum DoubaoProviderDescriptor {
                     ProviderColor(hex: 0x0057FF),
                     ProviderColor(hex: 0xEFC5BA),
                     ProviderColor(hex: 0x493530),
-                ]),
+                ],
+                widgetColor: ProviderColor(red: 45 / 255, green: 136 / 255, blue: 255 / 255)),
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "Doubao cost summary is not available." }),

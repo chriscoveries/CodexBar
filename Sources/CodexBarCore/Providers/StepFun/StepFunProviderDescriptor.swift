@@ -67,7 +67,8 @@ public enum StepFunProviderDescriptor {
                     ProviderColor(hex: 0x000000),
                     ProviderColor(hex: 0xFFFFFF),
                     ProviderColor(hex: 0x858585),
-                ]),
+                ],
+                widgetColor: ProviderColor(red: 255 / 255, green: 140 / 255, blue: 0 / 255)),
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "StepFun per-day cost history is not available via API." }),

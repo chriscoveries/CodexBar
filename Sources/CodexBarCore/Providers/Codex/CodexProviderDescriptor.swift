@@ -34,7 +34,8 @@ public enum CodexProviderDescriptor {
                     ProviderColor(hex: 0x736BD4),
                     ProviderColor(hex: 0x97A9F7),
                     ProviderColor(hex: 0xCFD4F7),
-                ]),
+                ],
+                burnDownWidgetColor: ProviderColor(red: 0.120, green: 0.780, blue: 0.598)),
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: true,
                 noDataMessage: self.noDataMessage),
@@ -310,7 +311,9 @@ struct CodexOAuthFetchStrategy: ProviderFetchStrategy {
         do {
             cliResult = try await cliStrategy.fetch(context)
         } catch {
-            if error is CancellationError { throw error }
+            if error is CancellationError {
+                throw error
+            }
             return oauthResult
         }
         guard let cliLimit = cliResult.credits?.codexCreditLimit,
@@ -347,7 +350,9 @@ struct CodexOAuthFetchStrategy: ProviderFetchStrategy {
     }
 
     private static func defersResetCreditFetchToApp(_ context: ProviderFetchContext) -> Bool {
-        if case .app = context.runtime { return true }
+        if case .app = context.runtime {
+            return true
+        }
         return false
     }
 
@@ -363,7 +368,9 @@ struct CodexOAuthFetchStrategy: ProviderFetchStrategy {
         do {
             return try await fetcher(credentials)
         } catch {
-            if error is CancellationError || Task.isCancelled { throw CancellationError() }
+            if error is CancellationError || Task.isCancelled {
+                throw CancellationError()
+            }
             return nil
         }
     }
