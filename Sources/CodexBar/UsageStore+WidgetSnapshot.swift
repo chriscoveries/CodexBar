@@ -409,7 +409,7 @@ extension UsageStore {
 
         let primaryTitle: String = {
             // Legacy request-based Cursor plans track a request quota, not the token-based "Total" pool.
-            if provider == .cursor, snapshot.cursorRequests != nil {
+            if provider == .cursor, snapshot.detailRow(label: "Request quota") != nil {
                 return "Requests"
             }
             if provider == .grok,
@@ -423,7 +423,7 @@ extension UsageStore {
                 return dyn
             }
             if provider == .amp,
-               let dyn = AmpProviderDescriptor.primaryLabel(details: snapshot.ampUsage)
+               let dyn = AmpProviderDescriptor.primaryLabel(snapshot: snapshot)
             {
                 return dyn
             }
@@ -438,7 +438,7 @@ extension UsageStore {
             return metadata?.sessionLabel ?? "Session"
         }()
         let secondaryTitle = if provider == .amp {
-            AmpProviderDescriptor.secondaryLabel(details: snapshot.ampUsage) ?? metadata?.weeklyLabel ?? "Weekly"
+            AmpProviderDescriptor.secondaryLabel(snapshot: snapshot) ?? metadata?.weeklyLabel ?? "Weekly"
         } else if provider == .alibabatokenplan {
             AlibabaTokenPlanProviderDescriptor.secondaryLabel(window: snapshot.secondary) ??
                 metadata?.weeklyLabel ?? "Weekly"

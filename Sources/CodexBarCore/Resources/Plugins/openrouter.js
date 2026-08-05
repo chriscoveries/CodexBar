@@ -68,12 +68,14 @@ defineProvider({
     let primary;
     let keyLimit = null;
     let keyUsage = null;
+    let keyRemaining = null;
     if (keyData) {
       keyLimit = finite(keyData.limit, "key.limit", true);
       keyUsage = finite(keyData.usage, "key.usage", true);
       const used = keyUsedForQuota();
       if (keyLimit !== null && keyLimit > 0 && used !== null && Number.isFinite(used) && used >= 0) {
         primary = { usedPercent: ctx.pct(used, keyLimit) };
+        keyRemaining = Math.max(0, keyLimit - used);
       }
     }
 
@@ -91,10 +93,13 @@ defineProvider({
       const rows = [];
       if (keyLimit !== null && keyLimit > 0) {
         rows.push({ label: "API key budget", value: currency(keyLimit) });
+        if (keyRemaining !== null) rows.push({ label: "API key remaining", value: currency(keyRemaining) });
         if (keyUsage !== null) rows.push({ label: "API key used", value: currency(keyUsage) });
       } else {
         rows.push({ label: "API key budget", value: "No limit configured" });
       }
+      const resetWindow = typeof keyData.limit_reset === "string" ? keyData.limit_reset.trim() : "";
+      if (resetWindow) rows.push({ label: "Reset window", value: resetWindow });
       const periods = [
         ["Today", "usage_daily"],
         ["This week", "usage_weekly"],
@@ -120,6 +125,11 @@ defineProvider({
         section.chart = { kind: "bars", title: "Key spend", unit: "USD", points };
       }
       details.push(section);
+    } else {
+      details.push({
+        title: "API key",
+        rows: [{ label: "API key budget", value: "Unavailable right now" }],
+      });
     }
 
     const result = {

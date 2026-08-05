@@ -44,6 +44,12 @@ See `docs/configuration.md` for the schema.
 ## Command
 - `codexbar` defaults to the `usage` command.
   - `--format text|json` (default: text).
+  - JSON uses the generic `usage.details` array for provider-specific information. Each section contains an optional
+    `title`, `rows` (`label`, `value`, and optional `secondaryValue`), and an optional `bars` or `line` chart. The same
+    shape is returned by `GET /usage` from `codexbar serve`.
+  - Legacy provider-specific keys such as `openRouterUsage`, `clawRouterUsage`, and `sub2APIUsage` are not compatibility
+    aliases; clients must read `usage.details`. Unknown legacy keys in cached or iCloud-synced snapshots are ignored
+    when decoding.
 - `codexbar cost` prints token cost usage for Claude, Codex, and Cursor.
   - Claude and Codex are scanned from local session logs without web/CLI access.
   - Cursor is fetched from the cookie-authenticated cursor.com dashboard API (macOS only; see `docs/cursor.md`) and honors the configured cookie source: a non-empty Manual header is required and forwarded, while Off fails explicitly instead of silently omitting Cursor.

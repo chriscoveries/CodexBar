@@ -175,6 +175,50 @@ struct SyncModelTests {
         #expect(decoded.usage.primary?.usedPercent == 42)
         #expect(decoded.fetchedAt == usage.updatedAt)
     }
+
+    @Test
+    func `account snapshot ignores retired provider payload keys`() throws {
+        let legacy = #"""
+        {
+          "schemaVersion": 1,
+          "provider": "openrouter",
+          "deviceID": "device-id",
+          "accountKey": "default",
+          "fetchedAt": "2026-08-04T12:00:00Z",
+          "displayLabel": "OpenRouter",
+          "usage": {
+            "primary": null,
+            "secondary": null,
+            "tertiary": null,
+            "mimoUsage": {"legacy": true},
+            "openRouterUsage": {"balance": 42},
+            "sakanaPayAsYouGo": {"creditBalance": 12},
+            "clawRouterUsage": {"requestCount": 3},
+            "sub2APIUsage": {"kind": "wallet"},
+            "wayfinderUsage": {"gatewayStatus": "ok"},
+            "cursorRequests": {"used": 3, "limit": 10},
+            "zaiUsage": {"legacy": true},
+            "zoommateCreditsHistory": {"records": []},
+            "minimaxUsage": {"planName": "legacy"},
+            "groqConsoleUsage": {"daily": []},
+            "deepgramUsage": {"requests": 3},
+            "poeUsage": {"daily": []},
+            "xaiUsage": {"balanceUSD": 4},
+            "kiroUsage": {"creditsRemaining": 4},
+            "ampUsage": {"individualCredits": 4},
+            "deepseekUsage": {"todayTokens": 4},
+            "claudeAdminAPIUsage": {"daily": []},
+            "updatedAt": "2026-08-04T12:00:00Z"
+          }
+        }
+        """#
+
+        let decoded = try CanonicalSyncJSON.decode(AccountSnapshotSyncPayload.self, from: legacy)
+
+        #expect(decoded.provider == .openrouter)
+        #expect(decoded.usage.details.isEmpty)
+        #expect(decoded.usage.updatedAt == decoded.fetchedAt)
+    }
 }
 
 import CloudKit

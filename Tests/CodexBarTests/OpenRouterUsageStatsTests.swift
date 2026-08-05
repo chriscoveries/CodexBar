@@ -21,8 +21,8 @@ struct OpenRouterUsageStatsTests {
         #expect(usage.primary?.usedPercent == 25)
         #expect(usage.primary?.resetsAt == nil)
         #expect(usage.primary?.resetDescription == nil)
-        #expect(usage.openRouterUsage?.keyRemaining == 15)
-        #expect(usage.openRouterUsage?.keyQuotaStatus == .available)
+        #expect(usage.detailRow(label: "API key budget")?.value == "$20.00")
+        #expect(usage.detailRow(label: "API key remaining")?.value == "$15.00")
     }
 
     @Test
@@ -40,7 +40,7 @@ struct OpenRouterUsageStatsTests {
         let usage = snapshot.toUsageSnapshot()
 
         #expect(usage.primary == nil)
-        #expect(usage.openRouterUsage?.keyQuotaStatus == .unavailable)
+        #expect(usage.detailRow(label: "API key budget")?.value == "Unavailable right now")
     }
 
     @Test
@@ -59,7 +59,7 @@ struct OpenRouterUsageStatsTests {
         let usage = snapshot.toUsageSnapshot()
 
         #expect(usage.primary == nil)
-        #expect(usage.openRouterUsage?.keyQuotaStatus == .noLimitConfigured)
+        #expect(usage.detailRow(label: "API key budget")?.value == "No limit configured")
     }
 
     @Test
@@ -416,13 +416,11 @@ struct OpenRouterUsageStatsTests {
         let data = try encoder.encode(snapshot)
         let decoded = try JSONDecoder().decode(UsageSnapshot.self, from: data)
 
-        #expect(decoded.openRouterUsage?.keyDataFetched == true)
-        #expect(decoded.openRouterUsage?.keyQuotaStatus == .noLimitConfigured)
-        #expect(decoded.openRouterUsage?.keyLimitRemaining == 454.542594979)
-        #expect(decoded.openRouterUsage?.keyLimitReset == "monthly")
-        #expect(decoded.openRouterUsage?.keyUsageDaily == 0.12)
-        #expect(decoded.openRouterUsage?.keyUsageWeekly == 0.74)
-        #expect(decoded.openRouterUsage?.keyUsageMonthly == 4.56)
+        #expect(decoded.detailRow(label: "API key budget")?.value == "No limit configured")
+        #expect(decoded.detailRow(label: "Reset window")?.value == "monthly")
+        #expect(decoded.detailRow(label: "Today")?.value == "$0.12")
+        #expect(decoded.detailRow(label: "This week")?.value == "$0.74")
+        #expect(decoded.detailRow(label: "This month")?.value == "$4.56")
     }
 
     private static func makeResponse(

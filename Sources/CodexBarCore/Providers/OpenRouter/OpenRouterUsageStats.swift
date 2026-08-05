@@ -238,12 +238,63 @@ extension OpenRouterUsageSnapshot {
             accountOrganization: nil,
             loginMethod: "Balance: \(balanceStr)")
 
+        var details: [ProviderDetailSection] = [.makeSection(title: "Credits", rows: [
+            .makeRow(label: "Remaining", value: UsageFormatter.usdString(self.balance)),
+            .makeRow(label: "Used", value: UsageFormatter.usdString(self.totalUsage)),
+            .makeRow(label: "Total added", value: UsageFormatter.usdString(self.totalCredits)),
+        ])]
+        if self.keyDataFetched {
+            var rows: [ProviderDetailSection.Row] = []
+            if let keyLimit = self.keyLimit, keyLimit > 0 {
+                rows.append(.makeRow(label: "API key budget", value: UsageFormatter.usdString(keyLimit)))
+                if let keyRemaining = self.keyRemaining {
+                    rows.append(.makeRow(
+                        label: "API key remaining",
+                        value: UsageFormatter.usdString(keyRemaining)))
+                }
+                if let keyUsage = self.keyUsage {
+                    rows.append(.makeRow(label: "API key used", value: UsageFormatter.usdString(keyUsage)))
+                }
+            } else {
+                rows.append(.makeRow(label: "API key budget", value: "No limit configured"))
+            }
+            if let keyLimitReset = self.keyLimitReset?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !keyLimitReset.isEmpty
+            {
+                rows.append(.makeRow(label: "Reset window", value: keyLimitReset))
+            }
+            let periods = [
+                ("Today", self.keyUsageDaily),
+                ("This week", self.keyUsageWeekly),
+                ("This month", self.keyUsageMonthly),
+            ]
+            for (label, value) in periods {
+                if let value {
+                    rows.append(.makeRow(label: label, value: UsageFormatter.usdString(value)))
+                }
+            }
+            if let rateLimit = self.rateLimit {
+                rows.append(.makeRow(
+                    label: "Rate limit",
+                    value: "\(rateLimit.requests) requests / \(rateLimit.interval)"))
+            }
+            let points = periods.compactMap { label, value in value.map { (label, $0) } }
+            details.append(.makeSection(
+                title: "API key",
+                rows: rows,
+                chart: points.isEmpty ? nil : .makeChart(title: "Key spend", unit: "USD", points: points)))
+        } else {
+            details.append(.makeSection(title: "API key", rows: [
+                .makeRow(label: "API key budget", value: "Unavailable right now"),
+            ]))
+        }
+
         return UsageSnapshot(
             primary: primary,
             secondary: nil,
             tertiary: nil,
             providerCost: nil,
-            openRouterUsage: self,
+            details: details,
             updatedAt: self.updatedAt,
             identity: identity)
     }

@@ -1,8 +1,8 @@
 import Foundation
 
 public enum Sub2APIProviderDescriptor {
-    public static func primaryLabel(details: Sub2APIUsageDetails?) -> String? {
-        details?.kind == .subscription ? "Daily quota" : nil
+    public static func primaryLabel(snapshot: UsageSnapshot) -> String? {
+        snapshot.secondary != nil ? "Daily quota" : nil
     }
 
     public static let descriptor = ProviderDescriptor(

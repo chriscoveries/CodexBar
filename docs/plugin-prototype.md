@@ -18,8 +18,8 @@ the default.
 
 Plugin manifests and their projected snapshots now carry a validated `ProviderInstanceID`. The prototype still maps
 that instance ID to an existing first-party `UsageProvider` before using browser-cookie brokerage or other bespoke
-provider paths; provider-specific snapshot payloads remain enum-typed, and the widget's `AppEnum` still lists only
-first-party cases. User-installed plugins without an enum case therefore remain out of scope for this prototype.
+provider paths, and the widget's `AppEnum` still lists only first-party cases. User-installed plugins without an enum
+case therefore remain out of scope for this prototype.
 
 ## Enable and test
 
@@ -179,8 +179,9 @@ origins. The separate user-plugin path adds local `.js`/`.ts` discovery, approva
 first-party flag semantics. Browser cookies remain restricted to declared domains. See
 [`plugin-conversion-matrix.md`](plugin-conversion-matrix.md) for the provider-by-provider impact.
 
-## Future work
+## Remaining native-only payloads
 
-Migrating existing Swift providers' roughly 25 bespoke `UsageSnapshot` payload fields onto the details model is
-intentionally not part of this prototype slice. Those fields and their current views remain intact for the flag-off
-path and for providers not yet converted.
+Display-only provider payloads now use `details` on both the Swift and JavaScript paths. The remaining bespoke
+`UsageSnapshot` fields drive behavior rather than presentation: Codex reset-credit actions, Command Code refresh
+stabilization, DeepSeek profile selection/transition state, and provider-derived token-cost pipelines for OpenAI API,
+Mistral, and OpenCode Go. They are not plugin compatibility shims.

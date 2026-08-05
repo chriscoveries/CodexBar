@@ -685,10 +685,6 @@ struct UsageStoreSessionQuotaTransitionTests {
             UsageSnapshot(
                 primary: RateWindow(usedPercent: used, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
                 secondary: RateWindow(usedPercent: used, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
-                ampUsage: AmpUsageDetails(
-                    individualCredits: nil,
-                    workspaceBalances: [],
-                    subscriptionPlan: "Megawatt"),
                 updatedAt: Date())
         }
         store.handleQuotaWarningTransitions(provider: .amp, snapshot: snapshot(used: 40))
