@@ -23,6 +23,7 @@
 - Codex: define Fast cost as estimated API Fast USD, resolve it models.dev-first with model-specific API ratios, and refresh GPT-5.6 Terra/Luna fallback rates (refs #2175). Thanks @iam-brain!
 
 ### Fixed
+- Overview: stop the infinite menu flicker when hovering between provider chart submenus with Agent Sessions enabled — no-op session rescans no longer invalidate menus, submenu hovers no longer trigger rescans, and session updates defer tracked-parent rebuilds like other data refreshes (#2652). Thanks @qazi0!
 - Widgets: bound widget-snapshot file I/O with a defensive timeout and skip further container access once it wedges, so a blocked macOS 26 app-group open() can no longer beachball the app or hang the widget (#2267 follow-up).
 - Command Code: parse and display 5-hour and weekly rolling limits alongside monthly credits and reset times (#2466). Thanks @derekszen!
 - OpenCode Go: include Zen balance in CLI usage reads without waiting beyond five seconds (#2583). Thanks @Yuxin-Qiao!
