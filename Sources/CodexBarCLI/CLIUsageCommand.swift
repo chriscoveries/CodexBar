@@ -135,6 +135,7 @@ extension CodexBarCLI {
                     output: output,
                     kind: .args)
             }
+            // Provider-specific by design: Codex exposes reconciled accounts beyond config token accounts.
             let supportsAllCodexAccounts = providerList[0] == .codex
                 && tokenSelection.allAccounts
                 && tokenSelection.label == nil
@@ -240,6 +241,7 @@ extension CodexBarCLI {
         tokenSelection: TokenAccountCLISelection) -> String?
     {
         guard enabled else { return nil }
+        // Provider-specific by design: this hidden verifier recreates Claude's owner-CLI lifecycle only.
         guard providers == [.claude], sourceMode == .auto else {
             return "--app-auto-verifier requires --provider claude --source auto."
         }
@@ -255,6 +257,7 @@ extension CodexBarCLI {
         tokenContext: TokenAccountCLIContext,
         command: UsageCommandContext) async -> UsageCommandOutput
     {
+        // Provider-specific by design: Codex can enumerate reconciled live, managed, and profile-home accounts.
         if provider == .codex, command.includeAllCodexAccounts {
             var output = UsageCommandOutput()
             let accounts = tokenContext.visibleCodexAccounts().visibleAccounts
@@ -404,6 +407,7 @@ extension CodexBarCLI {
                         resetStyle: input.command.resetStyle,
                         weeklyWorkDays: input.command.weeklyWorkDays,
                         notes: input.notes))
+                // Provider-specific by design: OpenAI dashboard payloads are behavioral Codex fetch results.
                 if let dashboard = input.dashboard, input.provider == .codex, input.effectiveSourceMode.usesWeb {
                     text += "\n" + Self.renderOpenAIWebDashboardText(dashboard)
                 }
@@ -511,6 +515,7 @@ extension CodexBarCLI {
             }
 
             var dashboard = result.dashboard
+            // Provider-specific by design: JSON preserves Codex's optional behavioral dashboard payload.
             if dashboard == nil, command.format == .json, provider == .codex {
                 dashboard = Self.loadOpenAIDashboardIfAvailable(
                     usage: usage,
@@ -586,6 +591,7 @@ extension CodexBarCLI {
         let descriptor = ProviderDescriptorRegistry.descriptor(for: provider)
         guard descriptor.cli.versionDetector != nil else { return false }
         guard result.strategyKind != .webDashboard else { return false }
+        // Provider-specific by design: Claude OAuth is in-process and has no CLI version to report.
         return !(provider == .claude && result.strategyKind == .oauth)
     }
 
@@ -613,6 +619,7 @@ extension CodexBarCLI {
         jsonOnly: Bool,
         persistsCLISessions: Bool) -> Bool
     {
+        // Provider-specific by design: --antigravity-plan-debug interrogates its persistent helper session.
         provider == .antigravity
             && planDebugEnabled
             && !jsonOnly
@@ -634,6 +641,7 @@ extension CodexBarCLI {
         provider: UsageProvider,
         command: UsageCommandContext) async -> AntigravityPlanInfoSummary?
     {
+        // Provider-specific by design: --antigravity-plan-debug requests its plan-only diagnostic.
         guard command.antigravityPlanDebug,
               provider == .antigravity,
               !command.jsonOnly
@@ -651,6 +659,7 @@ extension CodexBarCLI {
         provider: UsageProvider,
         command: UsageCommandContext) async
     {
+        // Provider-specific by design: --augment-debug emits Augment's explicit diagnostic dump.
         guard command.augmentDebug, provider == .augment else { return }
         #if os(macOS)
         let dump = await AugmentStatusProbe.latestDumps()

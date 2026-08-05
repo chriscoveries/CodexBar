@@ -122,6 +122,7 @@ struct TokenAccountCLIContext {
         codexActiveSourceOverride: CodexActiveSource? = nil) ->
         ProviderSettingsSnapshot.CodexProviderSettings
     {
+        // Provider-specific by design: Codex settings include reconciliation state and profile-home selection.
         let config = self.providerConfig(for: .codex)
         let reconciliationSnapshot = self.codexAccountReconciler(
             activeSource: codexActiveSourceOverride).loadSnapshot()
