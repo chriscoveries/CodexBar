@@ -27,6 +27,7 @@ public enum CrofProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                usesDetailBackedWindow: true,
                 browserCookieOrder: nil,
                 dashboardURL: "https://crof.ai/dashboard",
                 statusPageURL: nil,

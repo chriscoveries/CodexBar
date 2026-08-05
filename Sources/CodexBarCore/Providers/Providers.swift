@@ -146,6 +146,8 @@ public struct ProviderMetadata: Sendable {
     public let sharePlanLabels: [String: String]
     public let debugLogUnavailableMessage: String?
     public let debugPane: ProviderDebugPaneCapabilities
+    public let balanceOnly: Bool
+    public let usesDetailBackedWindow: Bool
     public let browserCookieOrder: BrowserCookieImportOrder?
     public let dashboardURL: String?
     public let subscriptionDashboardURL: String?
@@ -179,6 +181,8 @@ public struct ProviderMetadata: Sendable {
         sharePlanLabels: [String: String] = [:],
         debugLogUnavailableMessage: String? = nil,
         debugPane: ProviderDebugPaneCapabilities = .init(),
+        balanceOnly: Bool = false,
+        usesDetailBackedWindow: Bool = false,
         browserCookieOrder: BrowserCookieImportOrder? = nil,
         dashboardURL: String?,
         subscriptionDashboardURL: String? = nil,
@@ -206,6 +210,8 @@ public struct ProviderMetadata: Sendable {
         self.sharePlanLabels = sharePlanLabels
         self.debugLogUnavailableMessage = debugLogUnavailableMessage
         self.debugPane = debugPane
+        self.balanceOnly = balanceOnly
+        self.usesDetailBackedWindow = usesDetailBackedWindow
         self.browserCookieOrder = browserCookieOrder
         self.dashboardURL = dashboardURL
         self.subscriptionDashboardURL = subscriptionDashboardURL

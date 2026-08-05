@@ -64,7 +64,9 @@ public enum CursorProviderDescriptor {
                 ]),
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: true,
-                noDataMessage: { "No Cursor cost usage found. Sign in to Cursor in your browser or the Cursor app." }),
+                noDataMessage: { "No Cursor cost usage found. Sign in to Cursor in your browser or the Cursor app." },
+                menuHintLines: [.estimate],
+                supportsTokenSnapshot: self.supportsTokenSnapshot),
             pace: ProviderPaceCapability(resetWindowPace: .windowDurationPresent),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .cli, .web],
@@ -72,6 +74,14 @@ public enum CursorProviderDescriptor {
             cli: ProviderCLIConfig(
                 name: "cursor",
                 versionDetector: nil))
+    }
+
+    private static var supportsTokenSnapshot: Bool {
+        #if os(macOS)
+        true
+        #else
+        false
+        #endif
     }
 }
 

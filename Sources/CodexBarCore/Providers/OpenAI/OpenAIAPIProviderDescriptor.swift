@@ -48,7 +48,8 @@ public enum OpenAIAPIProviderDescriptor {
                 widgetColor: ProviderColor(red: 15 / 255, green: 130 / 255, blue: 110 / 255)),
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: true,
-                noDataMessage: { "OpenAI usage needs an Admin API key for organization usage." }),
+                noDataMessage: { "OpenAI usage needs an Admin API key for organization usage." },
+                menuHintLines: [.literal("Reported by OpenAI Admin API organization usage.")]),
             fetchPlan: self.fetchPlan(),
             cli: ProviderCLIConfig(
                 name: "openai",

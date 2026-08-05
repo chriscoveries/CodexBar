@@ -39,6 +39,8 @@ public enum MistralProviderDescriptor {
                 defaultEnabled: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                balanceOnly: true,
+                usesDetailBackedWindow: true,
                 browserCookieOrder: self.browserCookieOrder,
                 dashboardURL: "https://admin.mistral.ai/organization/usage",
                 statusPageURL: nil,
@@ -54,7 +56,8 @@ public enum MistralProviderDescriptor {
                 ]),
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: true,
-                noDataMessage: { "Mistral cost history needs a billing web session." }),
+                noDataMessage: { "Mistral cost history needs a billing web session." },
+                menuHintLines: [.literal("Reported by Mistral billing usage.")]),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .web],
                 pipeline: ProviderFetchPipeline(resolveStrategies: { _ in [MistralWebFetchStrategy()] })),

@@ -176,6 +176,43 @@ struct ProviderArchitectureGatekeeperTests {
         ])
     }
 
+    @Test
+    func `small provider capabilities preserve legacy registries`() {
+        let descriptors = ProviderDescriptorRegistry.all
+        #expect(Set(descriptors.filter(\.metadata.balanceOnly).map(\.id)) == [
+            .deepseek, .deepinfra, .mistral, .moonshot, .poe,
+        ])
+        #expect(Set(descriptors.filter(\.metadata.usesDetailBackedWindow).map(\.id)) == [
+            .warp, .kilo, .mistral, .deepseek, .deepinfra, .qoder, .crof, .chutes,
+        ])
+        #if os(macOS)
+        #expect(Set(descriptors.filter(\.tokenCost.supportsTokenSnapshot).map(\.id)) == [
+            .codex, .claude, .cursor, .vertexai, .bedrock,
+        ])
+        #else
+        #expect(Set(descriptors.filter(\.tokenCost.supportsTokenSnapshot).map(\.id)) == [
+            .codex, .claude, .vertexai, .bedrock,
+        ])
+        #endif
+        #expect(Set(descriptors.filter { $0.cli.binaryLocator != nil }.map(\.id)) == [
+            .codex, .claude, .gemini,
+        ])
+
+        #expect(CodexProviderDescriptor.descriptor.tokenCost.menuHintLines == [.localized("codex_api_estimate_hint")])
+        #expect(ClaudeProviderDescriptor.descriptor.tokenCost.menuHintLines == [.estimate])
+        #expect(CursorProviderDescriptor.descriptor.tokenCost.menuHintLines == [.estimate])
+        #expect(VertexAIProviderDescriptor.descriptor.tokenCost.menuHintLines == [.localized("cost_estimate_hint")])
+        #expect(BedrockProviderDescriptor.descriptor.tokenCost.menuHintLines == [
+            .literal("AWS Cost Explorer billing can lag."),
+        ])
+        #expect(OpenAIAPIProviderDescriptor.descriptor.tokenCost.menuHintLines == [
+            .literal("Reported by OpenAI Admin API organization usage."),
+        ])
+        #expect(MistralProviderDescriptor.descriptor.tokenCost.menuHintLines == [
+            .literal("Reported by Mistral billing usage."),
+        ])
+    }
+
     private static func repoRoot() throws -> URL {
         var directory = URL(filePath: #filePath).deletingLastPathComponent()
         for _ in 0..<12 {

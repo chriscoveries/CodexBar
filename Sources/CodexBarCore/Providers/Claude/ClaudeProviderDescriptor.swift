@@ -114,12 +114,15 @@ public enum ClaudeProviderDescriptor {
                 burnDownWidgetColor: ProviderColor(red: 0.880, green: 0.580, blue: 0.180)),
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: true,
-                noDataMessage: self.noDataMessage),
+                noDataMessage: self.noDataMessage,
+                menuHintLines: [.estimate],
+                supportsTokenSnapshot: true),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .api, .web, .cli, .oauth],
                 pipeline: ProviderFetchPipeline(resolveStrategies: self.resolveStrategies)),
             cli: ProviderCLIConfig(
                 name: "claude",
+                binaryLocator: { BinaryLocator.resolveClaudeBinary() },
                 versionDetector: { browserDetection in
                     ClaudeUsageFetcher(browserDetection: browserDetection).detectVersion()
                 }))

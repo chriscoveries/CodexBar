@@ -58,7 +58,9 @@ public enum BedrockProviderDescriptor {
                 supportsTokenCost: true,
                 noDataMessage: { "No AWS Bedrock cost data available. Check your AWS access keys "
                     + "or profile, and that the AWS CLI is installed for profile auth."
-                }),
+                },
+                menuHintLines: [.literal("AWS Cost Explorer billing can lag.")],
+                supportsTokenSnapshot: true),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .api],
                 pipeline: ProviderFetchPipeline(resolveStrategies: { _ in [BedrockAPIFetchStrategy()] })),

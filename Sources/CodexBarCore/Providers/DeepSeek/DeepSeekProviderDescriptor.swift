@@ -86,6 +86,8 @@ public enum DeepSeekProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                balanceOnly: true,
+                usesDetailBackedWindow: true,
                 browserCookieOrder: nil,
                 dashboardURL: "https://platform.deepseek.com/usage",
                 statusPageURL: nil,

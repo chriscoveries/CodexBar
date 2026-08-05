@@ -1,12 +1,27 @@
 import Foundation
 
+public enum ProviderTokenCostHint: Sendable, Equatable {
+    case localized(String)
+    case estimate
+    case literal(String)
+}
+
 public struct ProviderTokenCostConfig: Sendable {
     public let supportsTokenCost: Bool
     public let noDataMessage: @Sendable () -> String
+    public let menuHintLines: [ProviderTokenCostHint]
+    public let supportsTokenSnapshot: Bool
 
-    public init(supportsTokenCost: Bool, noDataMessage: @escaping @Sendable () -> String) {
+    public init(
+        supportsTokenCost: Bool,
+        noDataMessage: @escaping @Sendable () -> String,
+        menuHintLines: [ProviderTokenCostHint] = [],
+        supportsTokenSnapshot: Bool = false)
+    {
         self.supportsTokenCost = supportsTokenCost
         self.noDataMessage = noDataMessage
+        self.menuHintLines = menuHintLines
+        self.supportsTokenSnapshot = supportsTokenSnapshot
     }
 }
 

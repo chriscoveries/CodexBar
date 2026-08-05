@@ -25,6 +25,7 @@ public enum WarpProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                usesDetailBackedWindow: true,
                 browserCookieOrder: nil,
                 dashboardURL: "https://docs.warp.dev/reference/cli/api-keys",
                 statusPageURL: nil),

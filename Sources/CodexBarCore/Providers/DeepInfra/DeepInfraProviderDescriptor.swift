@@ -34,6 +34,8 @@ public enum DeepInfraProviderDescriptor {
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 debugLogUnavailableMessage: "DeepInfra debug log not yet implemented",
+                balanceOnly: true,
+                usesDetailBackedWindow: true,
                 browserCookieOrder: nil,
                 dashboardURL: "https://deepinfra.com/dash",
                 statusPageURL: nil,

@@ -932,18 +932,7 @@ public struct CostUsageFetcher: Sendable {
     /// Providers whose token-cost snapshot `loadTokenSnapshot` can produce. Cursor is
     /// macOS-only because it reuses the macOS Cursor session resolution.
     static func supportsTokenSnapshot(_ provider: UsageProvider) -> Bool {
-        switch provider {
-        case .codex, .claude, .vertexai, .bedrock:
-            return true
-        case .cursor:
-            #if os(macOS)
-            return true
-            #else
-            return false
-            #endif
-        default:
-            return false
-        }
+        ProviderDescriptorRegistry.descriptor(for: provider).tokenCost.supportsTokenSnapshot
     }
 
     static func loadCachedCodexLocalProjectUsageSnapshot(

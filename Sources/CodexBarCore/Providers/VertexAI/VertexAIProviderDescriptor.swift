@@ -38,7 +38,9 @@ public enum VertexAIProviderDescriptor {
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: true,
                 noDataMessage: { "No Vertex AI cost data found in Claude logs. Ensure entries include Vertex metadata."
-                }),
+                },
+                menuHintLines: [.localized("cost_estimate_hint")],
+                supportsTokenSnapshot: true),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .oauth],
                 pipeline: ProviderFetchPipeline(resolveStrategies: { _ in [VertexAIOAuthFetchStrategy()] })),

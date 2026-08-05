@@ -63,12 +63,15 @@ public enum CodexProviderDescriptor {
                 burnDownWidgetColor: ProviderColor(red: 0.120, green: 0.780, blue: 0.598)),
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: true,
-                noDataMessage: self.noDataMessage),
+                noDataMessage: self.noDataMessage,
+                menuHintLines: [.localized("codex_api_estimate_hint")],
+                supportsTokenSnapshot: true),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .web, .cli, .oauth],
                 pipeline: ProviderFetchPipeline(resolveStrategies: self.resolveStrategies)),
             cli: ProviderCLIConfig(
                 name: "codex",
+                binaryLocator: { BinaryLocator.resolveCodexBinary() },
                 versionDetector: { _ in ProviderVersionDetector.codexVersion() }))
     }
 
