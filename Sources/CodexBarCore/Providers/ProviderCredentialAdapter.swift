@@ -89,6 +89,11 @@ public struct ProviderCredentialAdapter: Sendable {
     public typealias AccountEnvironmentOverride = @Sendable (
         _ environment: inout [String: String],
         _ account: ProviderTokenAccount) -> Void
+    public typealias SelectedAccountSourceModeResolver = @Sendable (
+        _ base: ProviderSourceMode,
+        _ account: ProviderTokenAccount?,
+        _ config: ProviderConfig?) -> ProviderSourceMode
+    public typealias ManualTokenPersister = @Sendable (_ token: String) throws -> Void
 
     public let supportsAPIKeyOverride: Bool
     public let usesRegion: Bool
@@ -102,6 +107,8 @@ public struct ProviderCredentialAdapter: Sendable {
     private let configValidator: ConfigValidator
     private let missingCredentialMessage: MissingCredentialMessage?
     private let accountEnvironmentOverride: AccountEnvironmentOverride
+    private let selectedAccountSourceModeResolver: SelectedAccountSourceModeResolver
+    private let manualTokenPersister: ManualTokenPersister?
 
     public init(
         supportsAPIKeyOverride: Bool = false,
@@ -115,7 +122,9 @@ public struct ProviderCredentialAdapter: Sendable {
         diagnosticSummary: DiagnosticSummary? = nil,
         configValidator: @escaping ConfigValidator = { _ in [] },
         missingCredentialMessage: MissingCredentialMessage? = nil,
-        accountEnvironmentOverride: @escaping AccountEnvironmentOverride = { _, _ in })
+        accountEnvironmentOverride: @escaping AccountEnvironmentOverride = { _, _ in },
+        selectedAccountSourceModeResolver: @escaping SelectedAccountSourceModeResolver = { base, _, _ in base },
+        manualTokenPersister: ManualTokenPersister? = nil)
     {
         self.supportsAPIKeyOverride = supportsAPIKeyOverride
         self.usesRegion = usesRegion
@@ -129,6 +138,8 @@ public struct ProviderCredentialAdapter: Sendable {
         self.configValidator = configValidator
         self.missingCredentialMessage = missingCredentialMessage
         self.accountEnvironmentOverride = accountEnvironmentOverride
+        self.selectedAccountSourceModeResolver = selectedAccountSourceModeResolver
+        self.manualTokenPersister = manualTokenPersister
     }
 
     public func applyConfig(base: [String: String], config: ProviderConfig?) -> [String: String] {
@@ -186,6 +197,18 @@ public struct ProviderCredentialAdapter: Sendable {
         account: ProviderTokenAccount)
     {
         self.accountEnvironmentOverride(&environment, account)
+    }
+
+    public func selectedAccountSourceMode(
+        base: ProviderSourceMode,
+        account: ProviderTokenAccount?,
+        config: ProviderConfig?) -> ProviderSourceMode
+    {
+        self.selectedAccountSourceModeResolver(base, account, config)
+    }
+
+    public func persistManualToken(_ token: String) throws {
+        try self.manualTokenPersister?(token)
     }
 }
 

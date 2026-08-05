@@ -36,6 +36,15 @@ public enum ClaudeProviderDescriptor {
             }),
         authDetector: { environment, _ in
             ClaudeAdminAPISettingsReader.apiKey(environment: environment) == nil ? [] : ["api"]
+        },
+        selectedAccountSourceModeResolver: { base, account, _ in
+            guard let account else { return base }
+            return switch ClaudeCredentialRouting.resolve(tokenAccountToken: account.token, manualCookieHeader: nil) {
+            case .adminAPIKey: .api
+            case .oauth: .oauth
+            case .webCookie: .web
+            case .none: base
+            }
         })
 
     static func makeDescriptor() -> ProviderDescriptor {
