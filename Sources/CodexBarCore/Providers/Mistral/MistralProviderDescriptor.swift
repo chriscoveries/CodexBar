@@ -59,6 +59,12 @@ public enum MistralProviderDescriptor {
                 supportsTokenCost: true,
                 noDataMessage: { "Mistral cost history needs a billing web session." },
                 menuHintLines: [.literal("Reported by Mistral billing usage.")]),
+            presentation: ProviderUsagePresentation(menuBarWindowResolver: { context in
+                guard context.metric == .monthlyPlan else { return .unhandled }
+                return .resolved(context.snapshot.extraRateWindows?.first {
+                    $0.id == "mistral-monthly-plan"
+                }?.window)
+            }),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .web],
                 pipeline: ProviderFetchPipeline(resolveStrategies: { _ in [MistralWebFetchStrategy()] })),

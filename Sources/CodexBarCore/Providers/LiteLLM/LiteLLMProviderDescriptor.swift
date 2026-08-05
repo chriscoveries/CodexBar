@@ -49,6 +49,13 @@ public enum LiteLLMProviderDescriptor {
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "LiteLLM spend is reported by the provider API." }),
+            presentation: ProviderUsagePresentation(menuBarWindowResolver: { context in
+                guard context.metric == .automatic else { return .unhandled }
+                return .resolved(
+                    ProviderUsagePresentation.exhausted(context.snapshot.primary, context.snapshot.secondary)
+                        ?? context.snapshot.secondary
+                        ?? context.snapshot.primary)
+            }),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .api],
                 pipeline: ProviderFetchPipeline(resolveStrategies: { _ in [LiteLLMAPIFetchStrategy()] })),

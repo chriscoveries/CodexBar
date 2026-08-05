@@ -180,6 +180,7 @@ public struct ProviderPaceCapability: Sendable {
     public let secondary: ProviderStandardPaceLane?
     public let tertiary: ProviderStandardPaceLane?
     public let showsHeadroomHint: Bool
+    public let sessionPaceWindowRule: ProviderPaceWindowRule
 
     public init(
         resetWindowPace: ProviderPaceWindowRule = .unsupported,
@@ -187,7 +188,8 @@ public struct ProviderPaceCapability: Sendable {
         primary: ProviderStandardPaceLane? = nil,
         secondary: ProviderStandardPaceLane? = nil,
         tertiary: ProviderStandardPaceLane? = nil,
-        showsHeadroomHint: Bool = false)
+        showsHeadroomHint: Bool = false,
+        sessionPaceWindowRule: ProviderPaceWindowRule = .unsupported)
     {
         self.resetWindowPace = resetWindowPace
         self.inferredMonthlyDuration = inferredMonthlyDuration
@@ -195,6 +197,7 @@ public struct ProviderPaceCapability: Sendable {
         self.secondary = secondary
         self.tertiary = tertiary
         self.showsHeadroomHint = showsHeadroomHint
+        self.sessionPaceWindowRule = sessionPaceWindowRule
     }
 
     public func supportsResetWindowPace(window: RateWindow, now: Date) -> Bool {
@@ -230,6 +233,10 @@ public struct ProviderPaceCapability: Sendable {
         }
         guard let lane, lane.windowRule.matches(window: window, now: now) else { return nil }
         return lane.kind
+    }
+
+    public func supportsSessionPace(window: RateWindow, now: Date) -> Bool {
+        self.sessionPaceWindowRule.matches(window: window, now: now)
     }
 
     private static func inferredMonthlyWindowMinutes(endingAt resetsAt: Date) -> Int? {

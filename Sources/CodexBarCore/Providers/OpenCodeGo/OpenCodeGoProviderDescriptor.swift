@@ -62,6 +62,19 @@ public enum OpenCodeGoProviderDescriptor {
                 }),
             pace: .calendarMonthResetWindow,
             history: .alwaysTracked,
+            presentation: ProviderUsagePresentation(planUtilizationSeriesResolver: { snapshot in
+                var series: Set<ProviderPlanUtilizationSeries> = []
+                if snapshot.primary != nil {
+                    series.insert(.session)
+                }
+                if snapshot.secondary != nil {
+                    series.insert(.weekly)
+                }
+                if snapshot.tertiary != nil {
+                    series.insert(.monthly)
+                }
+                return series
+            }),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .web],
                 pipeline: ProviderFetchPipeline(resolveStrategies: self.resolveStrategies)),
