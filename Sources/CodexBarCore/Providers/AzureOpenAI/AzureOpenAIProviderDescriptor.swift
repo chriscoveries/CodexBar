@@ -2,10 +2,19 @@ import Foundation
 
 public enum AzureOpenAIProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+    private static let credentials = ProviderCredentialAdapter.apiKey(
+        environmentKey: AzureOpenAISettingsReader.apiKeyEnvironmentKey,
+        additionalProjections: [
+            .enterpriseHost(AzureOpenAISettingsReader.endpointEnvironmentKey),
+            .workspaceID(AzureOpenAISettingsReader.deploymentNameEnvironmentKey),
+        ],
+        resolve: AzureOpenAISettingsReader.apiKey,
+        missingCredentialMessage: { _ in AzureOpenAISettingsError.missingAPIKey.errorDescription })
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .azureopenai,
+            credentials: self.credentials,
             metadata: ProviderMetadata(
                 id: .azureopenai,
                 displayName: "Azure OpenAI",
@@ -18,6 +27,7 @@ public enum AzureOpenAIProviderDescriptor {
                 toggleTitle: "Show Azure OpenAI status",
                 cliName: "azure-openai",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: nil,
@@ -25,7 +35,7 @@ public enum AzureOpenAIProviderDescriptor {
                 statusPageURL: nil,
                 statusLinkURL: "https://azure.status.microsoft/en-us/status"),
             branding: ProviderBranding(
-                iconStyle: .openai,
+                iconStyle: .init(provider: .openai),
                 iconResourceName: "ProviderIcon-codex",
                 color: ProviderColor(red: 0, green: 120 / 255, blue: 212 / 255),
                 confettiPalette: [

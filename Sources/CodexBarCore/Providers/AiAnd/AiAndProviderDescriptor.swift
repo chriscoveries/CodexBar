@@ -2,10 +2,14 @@ import Foundation
 
 public enum AiAndProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+    private static let credentials = ProviderCredentialAdapter.apiKey(
+        environmentKey: AiAndSettingsReader.apiKeyEnvironmentKey,
+        resolve: AiAndSettingsReader.apiKey)
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .aiand,
+            credentials: self.credentials,
             metadata: ProviderMetadata(
                 id: .aiand,
                 displayName: "ai&",
@@ -18,10 +22,11 @@ public enum AiAndProviderDescriptor {
                 toggleTitle: "Show ai& usage",
                 cliName: "aiand",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 dashboardURL: "https://console.aiand.com",
                 statusPageURL: nil),
             branding: ProviderBranding(
-                iconStyle: .aiand,
+                iconStyle: .init(provider: .aiand),
                 iconResourceName: "ProviderIcon-aiand",
                 color: ProviderColor(red: 226 / 255, green: 92 / 255, blue: 43 / 255),
                 confettiPalette: [

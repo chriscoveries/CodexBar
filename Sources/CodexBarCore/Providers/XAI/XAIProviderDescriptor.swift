@@ -2,10 +2,15 @@ import Foundation
 
 public enum XAIProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+    private static let credentials = ProviderCredentialAdapter.apiKey(
+        environmentKey: XAISettingsReader.apiKeyEnvironmentKey,
+        additionalProjections: [.workspaceID(XAISettingsReader.teamIDEnvironmentKey)],
+        resolve: XAISettingsReader.apiKey)
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .xai,
+            credentials: self.credentials,
             metadata: ProviderMetadata(
                 id: .xai,
                 displayName: "xAI",
@@ -18,11 +23,12 @@ public enum XAIProviderDescriptor {
                 toggleTitle: "Show xAI usage",
                 cliName: "xai",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 dashboardURL: "https://console.x.ai",
                 statusPageURL: nil,
                 statusLinkURL: "https://status.x.ai"),
             branding: ProviderBranding(
-                iconStyle: .xai,
+                iconStyle: .init(provider: .xai),
                 iconResourceName: "ProviderIcon-xai",
                 color: ProviderColor(red: 142 / 255, green: 142 / 255, blue: 147 / 255),
                 confettiPalette: [
@@ -33,12 +39,39 @@ public enum XAIProviderDescriptor {
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "xAI spend history comes from the Management API billing endpoints." }),
-            fetchPlan: ProviderFetchPlan(
-                sourceModes: [.auto, .api],
-                pipeline: ProviderFetchPipeline(resolveStrategies: { _ in [XAIAPIFetchStrategy()] })),
+            fetchPlan: self.fetchPlan(),
             cli: ProviderCLIConfig(
                 name: "xai",
                 versionDetector: nil))
+    }
+
+    private static func fetchPlan() -> ProviderFetchPlan {
+        ProviderFetchPlan(
+            sourceModes: [.auto, .api],
+            pipeline: ProviderFetchPipeline(resolveStrategies: { context in
+                let swift = XAIAPIFetchStrategy()
+                #if canImport(JavaScriptCore)
+                guard ProviderPluginPrototype.isEnabled(environment: context.env) else { return [swift] }
+                return [
+                    ScriptFetchStrategy(
+                        id: "xai.js",
+                        provider: .xai,
+                        bundledPlugin: "xai",
+                        secretKey: XAISettingsReader.apiKeyEnvironmentKey,
+                        resolveValues: { context in
+                            guard let key = XAISettingsReader.apiKey(environment: context.env),
+                                  let teamID = XAISettingsReader.teamID(environment: context.env)
+                            else { return nil }
+                            return ScriptFetchStrategy.Values(
+                                settings: [XAISettingsReader.teamIDEnvironmentKey: teamID],
+                                secrets: [XAISettingsReader.apiKeyEnvironmentKey: key])
+                        }),
+                    swift,
+                ]
+                #else
+                return [swift]
+                #endif
+            }))
     }
 }
 

@@ -12,7 +12,7 @@ struct SyncModelTests {
             token: "account-secret",
             addedAt: 1,
             lastUsed: nil)
-        let local = ProviderConfig(
+        var local = ProviderConfig(
             id: .codex,
             enabled: true,
             source: .cli,
@@ -23,12 +23,12 @@ struct SyncModelTests {
             cookieSource: .manual,
             region: "us",
             workspaceID: "workspace",
-            tokenAccounts: .init(version: 1, accounts: [account], activeIndex: 0),
-            claudeSwapExecutablePath: "/machine/bin/cswap",
-            codexActiveSource: .managedAccount(id: UUID()),
-            codexProfileHomePaths: ["/machine/codex"],
-            awsProfile: "machine-profile",
-            awsAuthMode: "machine-auth")
+            tokenAccounts: .init(version: 1, accounts: [account], activeIndex: 0))
+        local.claudeSwapExecutablePath = "/machine/bin/cswap"
+        local.codexActiveSource = .managedAccount(id: UUID())
+        local.codexProfileHomePaths = ["/machine/codex"]
+        local.awsProfile = "machine-profile"
+        local.awsAuthMode = "machine-auth"
 
         let payload = ProviderIntentPayload(config: local)
         let encoded = try CanonicalSyncJSON.string(payload)
@@ -43,17 +43,17 @@ struct SyncModelTests {
         #expect(secrets["cookieHeader"] == "session=secret")
         #expect(secrets["tokenAccounts"]?.contains("account-secret") == true)
 
-        let baseline = ProviderConfig(
+        var baseline = ProviderConfig(
             id: .codex,
             enabled: false,
             source: .web,
             apiKey: "local-api",
-            cookieSource: .off,
-            claudeSwapExecutablePath: "/local/cswap",
-            codexActiveSource: .liveSystem,
-            codexProfileHomePaths: ["/local/home"],
-            awsProfile: "local-profile",
-            awsAuthMode: "local-auth")
+            cookieSource: .off)
+        baseline.claudeSwapExecutablePath = "/local/cswap"
+        baseline.codexActiveSource = .liveSystem
+        baseline.codexProfileHomePaths = ["/local/home"]
+        baseline.awsProfile = "local-profile"
+        baseline.awsAuthMode = "local-auth"
         let applied = try decoded.applying(to: baseline, secretFields: secrets) { _, _ in true }
 
         #expect(applied.enabled == true)
@@ -174,5 +174,78 @@ struct SyncModelTests {
         #expect(decoded.recordName.hasSuffix("-device-id"))
         #expect(decoded.usage.primary?.usedPercent == 42)
         #expect(decoded.fetchedAt == usage.updatedAt)
+    }
+
+    @Test
+    func `account snapshot ignores retired provider payload keys`() throws {
+        let legacy = #"""
+        {
+          "schemaVersion": 1,
+          "provider": "openrouter",
+          "deviceID": "device-id",
+          "accountKey": "default",
+          "fetchedAt": "2026-08-04T12:00:00Z",
+          "displayLabel": "OpenRouter",
+          "usage": {
+            "primary": null,
+            "secondary": null,
+            "tertiary": null,
+            "mimoUsage": {"legacy": true},
+            "openRouterUsage": {"balance": 42},
+            "sakanaPayAsYouGo": {"creditBalance": 12},
+            "clawRouterUsage": {"requestCount": 3},
+            "sub2APIUsage": {"kind": "wallet"},
+            "wayfinderUsage": {"gatewayStatus": "ok"},
+            "cursorRequests": {"used": 3, "limit": 10},
+            "zaiUsage": {"legacy": true},
+            "zoommateCreditsHistory": {"records": []},
+            "minimaxUsage": {"planName": "legacy"},
+            "groqConsoleUsage": {"daily": []},
+            "deepgramUsage": {"requests": 3},
+            "poeUsage": {"daily": []},
+            "xaiUsage": {"balanceUSD": 4},
+            "kiroUsage": {"creditsRemaining": 4},
+            "ampUsage": {"individualCredits": 4},
+            "deepseekUsage": {"todayTokens": 4},
+            "claudeAdminAPIUsage": {"daily": []},
+            "updatedAt": "2026-08-04T12:00:00Z"
+          }
+        }
+        """#
+
+        let decoded = try CanonicalSyncJSON.decode(AccountSnapshotSyncPayload.self, from: legacy)
+
+        #expect(decoded.provider == .openrouter)
+        #expect(decoded.usage.details.isEmpty)
+        #expect(decoded.usage.updatedAt == decoded.fetchedAt)
+    }
+}
+
+import CloudKit
+
+struct CloudSyncRecordRebaseTests {
+    @Test
+    func `copying user fields keeps encrypted fields on the encrypted API surface`() {
+        // Regression: allKeys() includes encrypted field names; assigning them through the
+        // plain subscript makes CloudKit throw NSInvalidArgumentException and crashed the
+        // app while applying fetched records (receiver crash-loop, 2026-08-03).
+        let source = CKRecord(recordType: "ProviderIntent", recordID: .init(recordName: "intent-test"))
+        source["payload"] = "{}" as CKRecordValue
+        source["editCount"] = 3 as CKRecordValue
+        source.encryptedValues["apiKey"] = "sk-secret" as CKRecordValue
+        source.encryptedValues["cookieHeader"] = "cookie=1" as CKRecordValue
+
+        let server = CKRecord(recordType: "ProviderIntent", recordID: .init(recordName: "intent-test"))
+        server["payload"] = "{\"old\":true}" as CKRecordValue
+        server["schemaVersion"] = 1 as CKRecordValue
+        server.encryptedValues["apiKey"] = "sk-older" as CKRecordValue
+
+        let rebased = CloudSyncEngine.copyUserFields(from: source, onto: server)
+
+        #expect(rebased["payload"] as? String == "{}")
+        #expect((rebased["editCount"] as? NSNumber)?.intValue == 3)
+        #expect(rebased["schemaVersion"] == nil)
+        #expect(rebased.encryptedValues["apiKey"] as? String == "sk-secret")
+        #expect(rebased.encryptedValues["cookieHeader"] as? String == "cookie=1")
     }
 }

@@ -6,6 +6,9 @@ import SweetCookieKit
 
 public enum QwenCloudProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+    private static let credentials = ProviderCredentialAdapter(authDetector: { environment, _ in
+        QwenCloudSettingsReader.cookieHeader(environment: environment) == nil ? [] : ["web"]
+    })
 
     static func makeDescriptor() -> ProviderDescriptor {
         #if os(macOS)
@@ -16,6 +19,8 @@ public enum QwenCloudProviderDescriptor {
 
         return ProviderDescriptor(
             id: .qwencloud,
+            settingsSection: .init(QwenCloudProviderSettingsKey.self, cookieSettings: QwenCloudProviderSettings.self),
+            credentials: self.credentials,
             metadata: ProviderMetadata(
                 id: .qwencloud,
                 displayName: "Qwen Cloud",
@@ -35,7 +40,7 @@ public enum QwenCloudProviderDescriptor {
                 statusPageURL: nil,
                 statusLinkURL: "https://status.alibabacloud.com"),
             branding: ProviderBranding(
-                iconStyle: .qwencloud,
+                iconStyle: .init(provider: .qwencloud),
                 iconResourceName: "ProviderIcon-qwencloud",
                 color: ProviderColor(hex: 0x615CED),
                 confettiPalette: [

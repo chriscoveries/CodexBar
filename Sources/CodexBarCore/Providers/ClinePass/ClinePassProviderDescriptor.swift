@@ -2,10 +2,14 @@ import Foundation
 
 public enum ClinePassProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+    private static let credentials = ProviderCredentialAdapter.apiKey(
+        environmentKey: ClinePassSettingsReader.apiKeyEnvironmentKey,
+        resolve: ClinePassSettingsReader.apiKey)
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .clinepass,
+            credentials: self.credentials,
             metadata: ProviderMetadata(
                 id: .clinepass,
                 displayName: "ClinePass",
@@ -18,6 +22,7 @@ public enum ClinePassProviderDescriptor {
                 toggleTitle: "Show ClinePass usage",
                 cliName: "clinepass",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: nil,
@@ -25,7 +30,7 @@ public enum ClinePassProviderDescriptor {
                 statusPageURL: nil,
                 statusLinkURL: nil),
             branding: ProviderBranding(
-                iconStyle: .clinepass,
+                iconStyle: .init(provider: .clinepass),
                 iconResourceName: "ProviderIcon-clinepass",
                 color: ProviderColor(red: 0.38, green: 0.64, blue: 0.98),
                 confettiPalette: [

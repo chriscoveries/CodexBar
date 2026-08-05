@@ -1,12 +1,43 @@
 import Foundation
 
 public enum Sub2APIProviderDescriptor {
-    public static func primaryLabel(details: Sub2APIUsageDetails?) -> String? {
-        details?.kind == .subscription ? "Daily quota" : nil
+    private static let credentials = ProviderCredentialAdapter.apiKey(
+        environmentKey: Sub2APISettingsReader.apiKeyEnvironmentKey,
+        additionalProjections: [.enterpriseHost(Sub2APISettingsReader.baseURLEnvironmentKey)],
+        resolve: Sub2APISettingsReader.apiKey,
+        tokenAccountSupport: TokenAccountSupport(
+            title: "Group API keys",
+            subtitle: "Store one labeled sub2api API key for each group you want to monitor.",
+            placeholder: "Paste sub2api API key…",
+            injection: .environment(key: Sub2APISettingsReader.apiKeyEnvironmentKey),
+            requiresManualCookieSource: false,
+            cookieName: nil),
+        configValidator: { config in
+            guard let raw = config.sanitizedEnterpriseHost,
+                  Sub2APISettingsReader.baseURL(environment: [
+                      Sub2APISettingsReader.baseURLEnvironmentKey: raw,
+                  ]) == nil
+            else { return [] }
+            return [CodexBarConfigIssue(
+                severity: .error,
+                provider: .sub2api,
+                field: "enterpriseHost",
+                code: "invalid_enterprise_host",
+                message: Sub2APISettingsError.invalidBaseURL.errorDescription ?? "Invalid sub2api base URL.")]
+        },
+        missingCredentialMessage: { environment in
+            Sub2APISettingsReader.apiKey(environment: environment) == nil
+                ? Sub2APIUsageError.missingCredentials.errorDescription
+                : Sub2APIUsageError.missingBaseURL.errorDescription
+        })
+
+    public static func primaryLabel(snapshot: UsageSnapshot) -> String? {
+        snapshot.secondary != nil ? "Daily quota" : nil
     }
 
     public static let descriptor = ProviderDescriptor(
         id: .sub2api,
+        credentials: Self.credentials,
         metadata: ProviderMetadata(
             id: .sub2api,
             displayName: "sub2api",
@@ -19,10 +50,11 @@ public enum Sub2APIProviderDescriptor {
             toggleTitle: "Show sub2api usage",
             cliName: "sub2api",
             defaultEnabled: false,
+            widgetSelectable: false,
             dashboardURL: nil,
             statusPageURL: nil),
         branding: ProviderBranding(
-            iconStyle: .sub2api,
+            iconStyle: .init(provider: .sub2api),
             iconResourceName: "ProviderIcon-sub2api",
             color: ProviderColor(red: 45 / 255, green: 198 / 255, blue: 216 / 255),
             confettiPalette: [
@@ -33,13 +65,40 @@ public enum Sub2APIProviderDescriptor {
         tokenCost: ProviderTokenCostConfig(
             supportsTokenCost: false,
             noDataMessage: { "sub2api spend is reported by its usage API." }),
-        fetchPlan: ProviderFetchPlan(
-            sourceModes: [.auto, .api],
-            pipeline: ProviderFetchPipeline(resolveStrategies: { _ in [Sub2APIAPIFetchStrategy()] })),
+        fetchPlan: Self.fetchPlan(),
         cli: ProviderCLIConfig(
             name: "sub2api",
             aliases: ["sub-2-api"],
             versionDetector: nil))
+
+    private static func fetchPlan() -> ProviderFetchPlan {
+        ProviderFetchPlan(
+            sourceModes: [.auto, .api],
+            pipeline: ProviderFetchPipeline(resolveStrategies: { context in
+                let swift = Sub2APIAPIFetchStrategy()
+                #if canImport(JavaScriptCore)
+                guard ProviderPluginPrototype.isEnabled(environment: context.env) else { return [swift] }
+                return [
+                    ScriptFetchStrategy(
+                        id: "sub2api.js",
+                        provider: .sub2api,
+                        bundledPlugin: "sub2api",
+                        secretKey: Sub2APISettingsReader.apiKeyEnvironmentKey,
+                        resolveValues: { context in
+                            guard let key = Sub2APISettingsReader.apiKey(environment: context.env),
+                                  let baseURL = Sub2APISettingsReader.baseURL(environment: context.env)
+                            else { return nil }
+                            return ScriptFetchStrategy.Values(
+                                settings: [Sub2APISettingsReader.baseURLEnvironmentKey: baseURL.absoluteString],
+                                secrets: [Sub2APISettingsReader.apiKeyEnvironmentKey: key])
+                        }),
+                    swift,
+                ]
+                #else
+                return [swift]
+                #endif
+            }))
+    }
 }
 
 struct Sub2APIAPIFetchStrategy: ProviderFetchStrategy {

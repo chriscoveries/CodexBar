@@ -2,10 +2,22 @@ import Foundation
 
 public enum FactoryProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+    private static let credentials = ProviderCredentialAdapter.apiKey(
+        environmentKey: FactorySettingsReader.apiTokenKey,
+        resolve: { FactorySettingsReader.apiKey(environment: $0) },
+        tokenAccountSupport: TokenAccountSupport(
+            title: "Session tokens",
+            subtitle: "Store multiple Factory Cookie or Authorization headers.",
+            placeholder: "Cookie: … or Authorization: Bearer …",
+            injection: .cookieHeader,
+            requiresManualCookieSource: true,
+            cookieName: nil))
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .factory,
+            settingsSection: .init(FactoryProviderSettingsKey.self, cookieSettings: FactoryProviderSettings.self),
+            credentials: self.credentials,
             metadata: ProviderMetadata(
                 id: .factory,
                 displayName: "Droid",
@@ -18,6 +30,7 @@ public enum FactoryProviderDescriptor {
                 toggleTitle: "Show Droid usage",
                 cliName: "factory",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: ProviderBrowserCookieDefaults.defaultImportOrder,
@@ -25,7 +38,7 @@ public enum FactoryProviderDescriptor {
                 statusPageURL: "https://status.factory.ai",
                 statusLinkURL: nil),
             branding: ProviderBranding(
-                iconStyle: .factory,
+                iconStyle: .init(provider: .factory),
                 iconResourceName: "ProviderIcon-factory",
                 color: ProviderColor(red: 255 / 255, green: 107 / 255, blue: 53 / 255),
                 confettiPalette: [

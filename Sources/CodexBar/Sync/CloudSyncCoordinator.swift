@@ -10,16 +10,27 @@ final class CloudSyncCoordinator {
     private let settings: SettingsStore
     private let engine: CloudSyncEngine
     private var configObserver: NSObjectProtocol?
+    private var localFileConfigObserver: NSObjectProtocol?
     private var snapshotObserver: NSObjectProtocol?
     private var accountObserver: NSObjectProtocol?
     private var resumeTask: Task<Void, Never>?
     private var observedEnabled: Bool
 
-    init(settings: SettingsStore, state: CloudSyncState = CloudSyncState()) {
+    init(
+        settings: SettingsStore,
+        state: CloudSyncState = CloudSyncState(),
+        persistence: CloudSyncPersistence = CloudSyncPersistence())
+    {
         self.settings = settings
         self.state = state
         self.observedEnabled = settings.iCloudSyncEnabled
-        self.engine = CloudSyncEngine(settings: settings, state: self.state)
+        self.engine = CloudSyncEngine(
+            settings: settings,
+            state: self.state,
+            persistence: persistence,
+            initialConfiguration: settings.configSnapshot,
+            initialPreferences: settings.syncedPreferences,
+            initialIncludeSecrets: settings.iCloudSyncIncludeSecrets)
     }
 
     func start() {
@@ -30,12 +41,16 @@ final class CloudSyncCoordinator {
             queue: .main)
         { [weak self] _ in
             MainActor.assumeIsolated {
-                guard let self else { return }
-                let config = self.settings.configSnapshot
-                Task {
-                    await self.engine.localUserConfigurationDidChange(config)
-                    await self.engine.scheduleConfigurationPush()
-                }
+                self?.configurationDidChangeLocally()
+            }
+        }
+        self.localFileConfigObserver = NotificationCenter.default.addObserver(
+            forName: .codexbarLocalConfigFileDidChange,
+            object: self.settings,
+            queue: .main)
+        { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.configurationDidChangeLocally()
             }
         }
         self.snapshotObserver = NotificationCenter.default.addObserver(
@@ -65,9 +80,20 @@ final class CloudSyncCoordinator {
         self.scheduleResume(debounce: false)
     }
 
+    private func configurationDidChangeLocally() {
+        let config = self.settings.configSnapshot
+        Task {
+            await self.engine.localUserConfigurationDidChange(config)
+            await self.engine.scheduleConfigurationPush()
+        }
+    }
+
     func stop() {
         if let configObserver {
             NotificationCenter.default.removeObserver(configObserver)
+        }
+        if let localFileConfigObserver {
+            NotificationCenter.default.removeObserver(localFileConfigObserver)
         }
         if let snapshotObserver {
             NotificationCenter.default.removeObserver(snapshotObserver)
@@ -77,6 +103,7 @@ final class CloudSyncCoordinator {
         }
         self.resumeTask?.cancel()
         self.configObserver = nil
+        self.localFileConfigObserver = nil
         self.snapshotObserver = nil
         self.accountObserver = nil
         self.resumeTask = nil
@@ -114,6 +141,10 @@ final class CloudSyncCoordinator {
                     self.observedEnabled = enabled
                     await self.engine.setEnabled(enabled)
                 } else {
+                    await self.engine.localUserPreferencesDidChange(self.settings.syncedPreferences)
+                    await self.engine.localIncludeSecretsDidChange(
+                        self.settings.iCloudSyncIncludeSecrets,
+                        config: self.settings.configSnapshot)
                     await self.engine.scheduleConfigurationPush()
                 }
             }

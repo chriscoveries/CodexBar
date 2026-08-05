@@ -2,10 +2,22 @@ import Foundation
 
 public enum DeepInfraProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+    private static let credentials = ProviderCredentialAdapter.apiKey(
+        environmentKey: DeepInfraSettingsReader.apiKeyEnvironmentKey,
+        resolve: DeepInfraSettingsReader.apiKey,
+        tokenAccountSupport: TokenAccountSupport(
+            title: "API tokens",
+            subtitle: "Store multiple DeepInfra API keys.",
+            placeholder: "Paste API key…",
+            injection: .environment(key: DeepInfraSettingsReader.apiKeyEnvironmentKey),
+            requiresManualCookieSource: false,
+            cookieName: nil),
+        missingCredentialMessage: { _ in DeepInfraUsageError.missingCredentials.errorDescription })
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .deepinfra,
+            credentials: self.credentials,
             metadata: ProviderMetadata(
                 id: .deepinfra,
                 displayName: "DeepInfra",
@@ -18,6 +30,7 @@ public enum DeepInfraProviderDescriptor {
                 toggleTitle: "Show DeepInfra usage",
                 cliName: "deepinfra",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: nil,
@@ -25,7 +38,7 @@ public enum DeepInfraProviderDescriptor {
                 statusPageURL: nil,
                 statusLinkURL: "https://status.deepinfra.com"),
             branding: ProviderBranding(
-                iconStyle: .deepinfra,
+                iconStyle: .init(provider: .deepinfra),
                 iconResourceName: "ProviderIcon-deepinfra",
                 color: ProviderColor(red: 42 / 255, green: 50 / 255, blue: 117 / 255),
                 confettiPalette: [

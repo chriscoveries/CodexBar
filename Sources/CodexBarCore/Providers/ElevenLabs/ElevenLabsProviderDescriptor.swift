@@ -2,10 +2,22 @@ import Foundation
 
 public enum ElevenLabsProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+    private static let credentials = ProviderCredentialAdapter.apiKey(
+        environmentKey: ElevenLabsSettingsReader.apiKeyEnvironmentKey,
+        resolve: ElevenLabsSettingsReader.apiKey,
+        tokenAccountSupport: TokenAccountSupport(
+            title: "API keys",
+            subtitle: "Store multiple ElevenLabs API keys.",
+            placeholder: "Paste API key…",
+            injection: .environment(key: ElevenLabsSettingsReader.apiKeyEnvironmentKey),
+            requiresManualCookieSource: false,
+            cookieName: nil),
+        missingCredentialMessage: { _ in ElevenLabsUsageError.missingCredentials.errorDescription })
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .elevenlabs,
+            credentials: self.credentials,
             metadata: ProviderMetadata(
                 id: .elevenlabs,
                 displayName: "ElevenLabs",
@@ -18,6 +30,7 @@ public enum ElevenLabsProviderDescriptor {
                 toggleTitle: "Show ElevenLabs usage",
                 cliName: "elevenlabs",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: nil,
@@ -26,7 +39,7 @@ public enum ElevenLabsProviderDescriptor {
                 statusPageURL: nil,
                 statusLinkURL: "https://status.elevenlabs.io"),
             branding: ProviderBranding(
-                iconStyle: .elevenlabs,
+                iconStyle: .init(provider: .elevenlabs),
                 iconResourceName: "ProviderIcon-elevenlabs",
                 color: ProviderColor(red: 0.92, green: 0.92, blue: 0.90),
                 confettiPalette: [

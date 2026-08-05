@@ -41,13 +41,13 @@ enum CLIRenderer {
             context: context,
             now: now,
             lines: &lines)
-        self.appendMiMoBalanceLine(snapshot: snapshot, useColor: context.useColor, lines: &lines)
-        self.appendClawRouterUsageLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
-        self.appendSub2APIUsageLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
-        self.appendWayfinderUsageLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
-        self.appendDeepgramLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
-        self.appendAmpBalanceLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
-        self.appendXAIUsageLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
+        self.appendZaiExtraRateWindows(
+            provider: provider,
+            snapshot: snapshot,
+            context: context,
+            now: now,
+            lines: &lines)
+        self.appendProviderDetails(snapshot.details, useColor: context.useColor, lines: &lines)
         self.appendDevinOverageBalanceLine(
             provider: provider,
             snapshot: snapshot,
@@ -116,13 +116,13 @@ enum CLIRenderer {
             context: context,
             now: now,
             lines: &lines)
-        self.appendMiMoBalanceLine(snapshot: snapshot, useColor: context.useColor, lines: &lines)
-        self.appendClawRouterUsageLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
-        self.appendSub2APIUsageLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
-        self.appendWayfinderUsageLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
-        self.appendDeepgramLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
-        self.appendAmpBalanceLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
-        self.appendXAIUsageLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
+        self.appendZaiExtraRateWindows(
+            provider: provider,
+            snapshot: snapshot,
+            context: context,
+            now: now,
+            lines: &lines)
+        self.appendProviderDetails(snapshot.details, useColor: context.useColor, lines: &lines)
         self.appendDevinOverageBalanceLine(
             provider: provider,
             snapshot: snapshot,
@@ -162,8 +162,8 @@ enum CLIRenderer {
     }
 
     static func planBadgeText(provider: UsageProvider, snapshot: UsageSnapshot) -> String? {
-        if let usage = snapshot.mimoUsage {
-            return usage.balanceDetail
+        if provider == .mimo, let balance = snapshot.detailRow(label: "Balance")?.value {
+            return balance
         }
         if provider == .kilo {
             let kiloLogin = self.kiloLoginParts(snapshot: snapshot)
@@ -450,6 +450,16 @@ enum CLIRenderer {
                 resetStyle: resetStyle,
                 now: now))
         }
+        if provider == .zai {
+            for extra in snapshot.extraRateWindows ?? [] where extra.id == "zai-mcp" {
+                metrics.append(self.makeCardMetric(
+                    provider: provider,
+                    label: extra.title,
+                    window: extra.window,
+                    resetStyle: resetStyle,
+                    now: now))
+            }
+        }
         return metrics
     }
 
@@ -502,15 +512,7 @@ enum CLIRenderer {
                 now: now,
                 lines: &lines)
         }
-        if snapshot.mimoUsage != nil {
-            self.appendMiMoBalanceLine(snapshot: snapshot, useColor: context.useColor, lines: &lines)
-        }
-        self.appendClawRouterUsageLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
-        self.appendSub2APIUsageLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
-        self.appendWayfinderUsageLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
-        self.appendDeepgramLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
-        self.appendAmpBalanceLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
-        self.appendXAIUsageLines(snapshot: snapshot, useColor: context.useColor, lines: &lines)
+        self.appendProviderDetails(snapshot.details, useColor: context.useColor, lines: &lines)
         self.appendDevinOverageBalanceLine(
             provider: provider,
             snapshot: snapshot,
@@ -667,13 +669,29 @@ enum CLIRenderer {
             lines: &lines)
     }
 
-    private static func appendMiMoBalanceLine(
-        snapshot: UsageSnapshot,
+    private static func appendProviderDetails(
+        _ sections: [ProviderDetailSection],
         useColor: Bool,
         lines: inout [String])
     {
-        guard let usage = snapshot.mimoUsage else { return }
-        lines.append(self.labelValueLine("Balance", value: usage.balanceDetail, useColor: useColor))
+        for section in sections {
+            for row in section.rows {
+                let value = [row.value, row.secondaryValue]
+                    .compactMap(\.self)
+                    .joined(separator: " · ")
+                lines.append(self.labelValueLine(row.label, value: value, useColor: useColor))
+            }
+            if let chart = section.chart {
+                let unit = chart.unit.map { " \($0)" } ?? ""
+                for point in chart.points {
+                    let label = chart.title.map { "\($0) · \(point.label)" } ?? point.label
+                    lines.append(self.labelValueLine(
+                        label,
+                        value: "\(point.value.formatted())\(unit)",
+                        useColor: useColor))
+                }
+            }
+        }
     }
 
     private static func appendDevinOverageBalanceLine(
@@ -704,106 +722,6 @@ enum CLIRenderer {
         lines.append(self.labelValueLine("Extra usage balance", value: value, useColor: useColor))
     }
 
-    private static func appendXAIUsageLines(
-        snapshot: UsageSnapshot,
-        useColor: Bool,
-        lines: inout [String])
-    {
-        guard let usage = snapshot.xaiUsage else { return }
-        let balance = UsageFormatter.currencyString(usage.balanceUSD, currencyCode: "USD")
-        lines.append(self.labelValueLine("Balance", value: balance, useColor: useColor))
-        guard !usage.daily.isEmpty else { return }
-        let spend = UsageFormatter.currencyString(usage.windowCostUSD, currencyCode: "USD")
-        lines.append(self.labelValueLine(usage.historyWindowPeriodLabel, value: spend, useColor: useColor))
-    }
-
-    private static func appendClawRouterUsageLines(
-        snapshot: UsageSnapshot,
-        useColor: Bool,
-        lines: inout [String])
-    {
-        guard let usage = snapshot.clawRouterUsage else { return }
-
-        let spend = usage.budgetSpentUSD ?? usage.actualCostUSD
-        let spendValue = UsageFormatter.currencyString(spend, currencyCode: "USD")
-        if let limit = usage.budgetLimitUSD, limit > 0 {
-            let limitValue = UsageFormatter.currencyString(limit, currencyCode: "USD")
-            lines.append(self.labelValueLine("Spend", value: "\(spendValue) / \(limitValue)", useColor: useColor))
-        } else {
-            lines.append(self.labelValueLine("Spend", value: spendValue, useColor: useColor))
-        }
-
-        let requests = UsageFormatter.tokenCountString(usage.requestCount)
-        let tokens = UsageFormatter.tokenCountString(usage.totalTokens)
-        lines.append(self.labelValueLine("Usage", value: "\(requests) requests · \(tokens) tokens", useColor: useColor))
-
-        if usage.errorCount > 0 {
-            lines.append(self.labelValueLine(
-                "Results",
-                value: "\(usage.successCount) succeeded · \(usage.errorCount) failed",
-                useColor: useColor))
-        }
-
-        if !usage.providers.isEmpty {
-            let providerMix = usage.providers.prefix(5)
-                .map { "\($0.provider): \(UsageFormatter.tokenCountString($0.requestCount))" }
-                .joined(separator: " · ")
-            lines.append(self.labelValueLine("Routed providers", value: providerMix, useColor: useColor))
-        }
-    }
-
-    private static func appendSub2APIUsageLines(
-        snapshot: UsageSnapshot,
-        useColor: Bool,
-        lines: inout [String])
-    {
-        guard let usage = snapshot.sub2APIUsage else { return }
-        if let balance = usage.balance {
-            lines.append(self.labelValueLine(
-                "Balance",
-                value: UsageFormatter.currencyString(balance, currencyCode: usage.unit),
-                useColor: useColor))
-        }
-        if let today = usage.today {
-            lines.append(self.labelValueLine(
-                "Today",
-                value: self.sub2APITotalsText(today, unit: usage.unit),
-                useColor: useColor))
-        }
-        if let total = usage.total {
-            lines.append(self.labelValueLine(
-                "Total",
-                value: self.sub2APITotalsText(total, unit: usage.unit),
-                useColor: useColor))
-        }
-    }
-
-    private static func sub2APITotalsText(_ totals: Sub2APIUsageDetails.Totals, unit: String) -> String {
-        "\(UsageFormatter.tokenCountString(totals.requests)) requests · " +
-            "\(UsageFormatter.tokenCountString(totals.totalTokens)) tokens · " +
-            UsageFormatter.currencyString(totals.actualCostUSD, currencyCode: unit)
-    }
-
-    private static func appendWayfinderUsageLines(
-        snapshot: UsageSnapshot,
-        useColor: Bool,
-        lines: inout [String])
-    {
-        guard let usage = snapshot.wayfinderUsage else { return }
-
-        lines.append(self.labelValueLine("Gateway", value: usage.gatewaySummary, useColor: useColor))
-
-        if let routed = usage.routedSummary {
-            lines.append(self.labelValueLine("Routed", value: routed, useColor: useColor))
-        }
-        if let saved = usage.savedSummary {
-            lines.append(self.labelValueLine("Saved", value: saved, useColor: useColor))
-        }
-        if let avgDecision = usage.avgDecisionSummary {
-            lines.append(self.labelValueLine("Avg decision", value: avgDecision, useColor: useColor))
-        }
-    }
-
     // swiftlint:disable:next function_parameter_count
     private static func appendTertiaryLines(
         provider: UsageProvider,
@@ -830,42 +748,19 @@ enum CLIRenderer {
         }
     }
 
-    private static func appendDeepgramLines(
+    private static func appendZaiExtraRateWindows(
+        provider: UsageProvider,
         snapshot: UsageSnapshot,
-        useColor: Bool,
+        context: RenderContext,
+        now: Date,
         lines: inout [String])
     {
-        guard let usage = snapshot.deepgramUsage else { return }
-        for line in usage.displayLines {
-            let parts = line.split(separator: ":", maxSplits: 1).map(String.init)
-            if parts.count == 2 {
-                lines.append(self.labelValueLine(
-                    parts[0].trimmingCharacters(in: .whitespacesAndNewlines),
-                    value: parts[1].trimmingCharacters(in: .whitespacesAndNewlines),
-                    useColor: useColor))
-            } else {
-                lines.append(self.labelValueLine("Usage", value: line, useColor: useColor))
+        guard provider == .zai else { return }
+        for extra in snapshot.extraRateWindows ?? [] where extra.id == "zai-mcp" {
+            lines.append(self.rateLine(title: extra.title, window: extra.window, useColor: context.useColor))
+            if let reset = self.resetLine(for: extra.window, style: context.resetStyle, now: now) {
+                lines.append(self.subtleLine(reset, useColor: context.useColor))
             }
-        }
-    }
-
-    private static func appendAmpBalanceLines(
-        snapshot: UsageSnapshot,
-        useColor: Bool,
-        lines: inout [String])
-    {
-        guard let usage = snapshot.ampUsage else { return }
-        if let individualCredits = usage.individualCredits {
-            lines.append(self.labelValueLine(
-                "Individual credits",
-                value: UsageFormatter.currencyString(individualCredits, currencyCode: "USD"),
-                useColor: useColor))
-        }
-        for workspace in usage.workspaceBalances {
-            lines.append(self.labelValueLine(
-                "Workspace \(workspace.name)",
-                value: UsageFormatter.currencyString(workspace.remaining, currencyCode: "USD"),
-                useColor: useColor))
         }
     }
 
@@ -893,14 +788,14 @@ enum CLIRenderer {
         } else if provider == .crof {
             CrofProviderDescriptor.primaryLabel(snapshot: snapshot)
         } else if provider == .sub2api {
-            Sub2APIProviderDescriptor.primaryLabel(details: snapshot.sub2APIUsage) ?? metadata.sessionLabel
+            Sub2APIProviderDescriptor.primaryLabel(snapshot: snapshot) ?? metadata.sessionLabel
         } else if provider == .amp {
-            AmpProviderDescriptor.primaryLabel(details: snapshot.ampUsage) ?? metadata.sessionLabel
+            AmpProviderDescriptor.primaryLabel(snapshot: snapshot) ?? metadata.sessionLabel
         } else {
             metadata.sessionLabel
         }
         let secondaryLabel = if provider == .amp {
-            AmpProviderDescriptor.secondaryLabel(details: snapshot.ampUsage) ?? metadata.weeklyLabel
+            AmpProviderDescriptor.secondaryLabel(snapshot: snapshot) ?? metadata.weeklyLabel
         } else {
             metadata.weeklyLabel
         }
@@ -1170,7 +1065,8 @@ enum CLIRenderer {
         func supportsStandardPace(provider: UsageProvider) -> Bool {
             switch self {
             case .session:
-                provider == .codex || provider == .claude || provider == .ollama || provider == .kimi
+                provider == .codex || provider == .claude || provider == .ollama || provider == .kimi ||
+                    provider == .notion
             case .weekly:
                 provider == .codex || provider == .claude || provider == .opencode || provider == .ollama ||
                     provider == .kimi
@@ -1222,7 +1118,9 @@ enum CLIRenderer {
             guard supportsWindow else { return nil }
         }
         // Only pace a real session window here; Claude w/o 5-hour data falls a 7-day window into primary.
-        if case .session = resolvedKind, let minutes = paceWindow.windowMinutes, minutes > 300 {
+        // Notion's rolling allowance is a 6-hour window, so it needs the wider ceiling to match the card.
+        let sessionCeilingMinutes = provider == .notion ? NotionProviderDescriptor.rollingWindowMaxMinutes : 300
+        if case .session = resolvedKind, let minutes = paceWindow.windowMinutes, minutes > sessionCeilingMinutes {
             return nil
         }
         if provider == .ollama, paceWindow.windowMinutes == nil {

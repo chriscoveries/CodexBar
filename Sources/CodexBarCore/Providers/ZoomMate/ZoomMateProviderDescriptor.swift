@@ -6,6 +6,7 @@ public enum ZoomMateProviderDescriptor {
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .zoommate,
+            settingsSection: .init(ZoomMateProviderSettingsKey.self, cookieSettings: ZoomMateProviderSettings.self),
             metadata: ProviderMetadata(
                 id: .zoommate,
                 displayName: "ZoomMate",
@@ -18,6 +19,7 @@ public enum ZoomMateProviderDescriptor {
                 toggleTitle: "Show ZoomMate usage",
                 cliName: "zoommate",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: ProviderBrowserCookieDefaults.chromeOnlyImportOrder,
@@ -34,7 +36,7 @@ public enum ZoomMateProviderDescriptor {
                     "Zoom Website",
                 ]),
             branding: ProviderBranding(
-                iconStyle: .zoommate,
+                iconStyle: .init(provider: .zoommate),
                 iconResourceName: "ProviderIcon-zoommate",
                 // Zoom Brand Center "Visual identity > Color", retrieved 2026-07-18:
                 // https://brand.zoom.com/document/1#/visual-identity/color

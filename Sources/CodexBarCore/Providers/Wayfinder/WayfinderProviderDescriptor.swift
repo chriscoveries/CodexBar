@@ -2,10 +2,14 @@ import Foundation
 
 public enum WayfinderProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+    private static let credentials = ProviderCredentialAdapter(environmentProjections: [
+        .enterpriseHost(WayfinderSettingsReader.baseURLEnvironmentKey),
+    ])
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .wayfinder,
+            credentials: self.credentials,
             metadata: ProviderMetadata(
                 id: .wayfinder,
                 displayName: "Wayfinder",
@@ -18,10 +22,11 @@ public enum WayfinderProviderDescriptor {
                 toggleTitle: "Show Wayfinder usage",
                 cliName: "wayfinder",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 dashboardURL: WayfinderSettingsReader.dashboardURL(environment: [:]).absoluteString,
                 statusPageURL: nil),
             branding: ProviderBranding(
-                iconStyle: .wayfinder,
+                iconStyle: .init(provider: .wayfinder),
                 iconResourceName: "ProviderIcon-wayfinder",
                 color: ProviderColor(red: 16 / 255, green: 163 / 255, blue: 127 / 255),
                 confettiPalette: [

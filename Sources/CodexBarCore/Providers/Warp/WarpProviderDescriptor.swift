@@ -2,10 +2,14 @@ import Foundation
 
 public enum WarpProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+    private static let credentials = ProviderCredentialAdapter.apiKey(
+        environmentKey: WarpSettingsReader.apiKeyEnvironmentKeys[0],
+        resolve: WarpSettingsReader.apiKey)
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .warp,
+            credentials: self.credentials,
             metadata: ProviderMetadata(
                 id: .warp,
                 displayName: "Warp",
@@ -18,13 +22,14 @@ public enum WarpProviderDescriptor {
                 toggleTitle: "Show Warp usage",
                 cliName: "warp",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: nil,
                 dashboardURL: "https://docs.warp.dev/reference/cli/api-keys",
                 statusPageURL: nil),
             branding: ProviderBranding(
-                iconStyle: .warp,
+                iconStyle: .init(provider: .warp),
                 iconResourceName: "ProviderIcon-warp",
                 color: ProviderColor(red: 147 / 255, green: 139 / 255, blue: 180 / 255),
                 confettiPalette: [

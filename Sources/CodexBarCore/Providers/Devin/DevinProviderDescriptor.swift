@@ -6,6 +6,7 @@ public enum DevinProviderDescriptor {
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .devin,
+            settingsSection: .init(DevinProviderSettingsKey.self),
             metadata: ProviderMetadata(
                 id: .devin,
                 displayName: "Devin",
@@ -25,7 +26,7 @@ public enum DevinProviderDescriptor {
                 subscriptionDashboardURL: "https://app.devin.ai/settings/usage",
                 statusPageURL: nil),
             branding: ProviderBranding(
-                iconStyle: .devin,
+                iconStyle: .init(provider: .devin),
                 iconResourceName: "ProviderIcon-devin",
                 color: ProviderColor(red: 70 / 255, green: 180 / 255, blue: 130 / 255),
                 confettiPalette: [

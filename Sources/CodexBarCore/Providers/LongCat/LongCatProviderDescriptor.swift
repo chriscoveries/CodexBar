@@ -2,10 +2,15 @@ import Foundation
 
 public enum LongCatProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+    private static let credentials = ProviderCredentialAdapter(environmentProjections: [
+        .cookieHeader(LongCatSettingsReader.cookieHeaderKey, onlyWhenManual: true),
+    ])
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .longcat,
+            settingsSection: .init(LongCatProviderSettingsKey.self, cookieSettings: LongCatProviderSettings.self),
+            credentials: self.credentials,
             metadata: ProviderMetadata(
                 id: .longcat,
                 displayName: "LongCat",
@@ -18,13 +23,14 @@ public enum LongCatProviderDescriptor {
                 toggleTitle: "Show LongCat usage",
                 cliName: "longcat",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: ProviderBrowserCookieDefaults.longcatCookieImportOrder,
                 dashboardURL: "https://longcat.chat/platform/",
                 statusPageURL: nil),
             branding: ProviderBranding(
-                iconStyle: .longcat,
+                iconStyle: .init(provider: .longcat),
                 iconResourceName: "ProviderIcon-longcat",
                 color: ProviderColor(red: 255 / 255, green: 209 / 255, blue: 0 / 255),
                 confettiPalette: [

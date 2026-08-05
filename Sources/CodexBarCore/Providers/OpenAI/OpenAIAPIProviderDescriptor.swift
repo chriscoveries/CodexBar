@@ -2,10 +2,23 @@ import Foundation
 
 public enum OpenAIAPIProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+    private static let credentials = ProviderCredentialAdapter.apiKey(
+        environmentKey: OpenAIAPISettingsReader.adminAPIKeyEnvironmentKey,
+        additionalProjections: [.workspaceID(OpenAIAPISettingsReader.projectIDEnvironmentKey)],
+        resolve: OpenAIAPISettingsReader.apiKey,
+        tokenAccountSupport: TokenAccountSupport(
+            title: "API keys",
+            subtitle: "Store multiple OpenAI API keys.",
+            placeholder: "sk-admin-...",
+            injection: .environment(key: OpenAIAPISettingsReader.adminAPIKeyEnvironmentKey),
+            requiresManualCookieSource: false,
+            cookieName: nil,
+            environmentKeysToScrub: [OpenAIAPISettingsReader.projectIDEnvironmentKey]))
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .openai,
+            credentials: self.credentials,
             metadata: ProviderMetadata(
                 id: .openai,
                 displayName: "OpenAI",
@@ -18,12 +31,13 @@ public enum OpenAIAPIProviderDescriptor {
                 toggleTitle: "Show OpenAI usage",
                 cliName: "openai",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 dashboardURL: "https://platform.openai.com/usage",
                 statusPageURL: "https://status.openai.com"),
             branding: ProviderBranding(
-                iconStyle: .openai,
+                iconStyle: .init(provider: .openai),
                 iconResourceName: "ProviderIcon-codex",
                 color: ProviderColor(red: 0.06, green: 0.51, blue: 0.43),
                 confettiPalette: [
@@ -34,13 +48,48 @@ public enum OpenAIAPIProviderDescriptor {
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: true,
                 noDataMessage: { "OpenAI usage needs an Admin API key for organization usage." }),
-            fetchPlan: ProviderFetchPlan(
-                sourceModes: [.auto, .api],
-                pipeline: ProviderFetchPipeline(resolveStrategies: { _ in [OpenAIAPIBalanceFetchStrategy()] })),
+            fetchPlan: self.fetchPlan(),
             cli: ProviderCLIConfig(
                 name: "openai",
                 aliases: ["openai-api"],
                 versionDetector: nil))
+    }
+
+    private static func fetchPlan() -> ProviderFetchPlan {
+        #if canImport(JavaScriptCore)
+        ProviderFetchPlan(
+            sourceModes: [.auto, .api],
+            pipeline: ProviderFetchPipeline(resolveStrategies: { context in
+                let swift = OpenAIAPIBalanceFetchStrategy()
+                guard ProviderPluginPrototype.isEnabled(environment: context.env) else { return [swift] }
+                return [
+                    ScriptFetchStrategy(
+                        id: "openai.js",
+                        provider: .openai,
+                        bundledPlugin: "openai",
+                        secretKey: OpenAIAPISettingsReader.apiKeyEnvironmentKey,
+                        resolveValues: { context in
+                            guard let credential = OpenAIAPIUsageCredential(environment: context.env)
+                            else { return nil }
+                            var settings: [String: String] = [:]
+                            if let projectID = credential.projectID {
+                                settings[OpenAIAPISettingsReader.projectIDEnvironmentKey] = projectID
+                            }
+                            settings["OPENAI_HISTORY_DAYS"] = String(context.costUsageHistoryDays)
+                            settings["OPENAI_ALLOW_BALANCE_FALLBACK"] =
+                                credential.allowsLegacyBalanceFallback ? "1" : "0"
+                            return ScriptFetchStrategy.Values(
+                                settings: settings,
+                                secrets: [OpenAIAPISettingsReader.apiKeyEnvironmentKey: credential.apiKey])
+                        }),
+                    swift,
+                ]
+            }))
+        #else
+        ProviderFetchPlan(
+            sourceModes: [.auto, .api],
+            pipeline: ProviderFetchPipeline(resolveStrategies: { _ in [OpenAIAPIBalanceFetchStrategy()] }))
+        #endif
     }
 }
 

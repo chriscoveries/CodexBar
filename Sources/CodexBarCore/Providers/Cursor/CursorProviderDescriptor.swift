@@ -2,10 +2,19 @@ import Foundation
 
 public enum CursorProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+    private static let credentials = ProviderCredentialAdapter(tokenAccountSupport: TokenAccountSupport(
+        title: "Session tokens",
+        subtitle: "Store multiple Cursor Cookie headers.",
+        placeholder: "Cookie: …",
+        injection: .cookieHeader,
+        requiresManualCookieSource: true,
+        cookieName: nil))
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .cursor,
+            settingsSection: .init(CursorProviderSettingsKey.self, cookieSettings: CursorProviderSettings.self),
+            credentials: self.credentials,
             metadata: ProviderMetadata(
                 id: .cursor,
                 displayName: "Cursor",
@@ -26,7 +35,7 @@ public enum CursorProviderDescriptor {
                 statusPageURL: "https://status.cursor.com",
                 statusLinkURL: nil),
             branding: ProviderBranding(
-                iconStyle: .cursor,
+                iconStyle: .init(provider: .cursor),
                 iconResourceName: "ProviderIcon-cursor",
                 color: ProviderColor(red: 0 / 255, green: 191 / 255, blue: 165 / 255),
                 confettiPalette: [

@@ -2,10 +2,14 @@ import Foundation
 
 public enum ChutesProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+    private static let credentials = ProviderCredentialAdapter.apiKey(
+        environmentKey: ChutesSettingsReader.apiKeyEnvironmentKey,
+        resolve: ChutesSettingsReader.apiKey)
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .chutes,
+            credentials: self.credentials,
             metadata: ProviderMetadata(
                 id: .chutes,
                 displayName: "Chutes",
@@ -18,13 +22,14 @@ public enum ChutesProviderDescriptor {
                 toggleTitle: "Show Chutes usage",
                 cliName: "chutes",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: nil,
                 dashboardURL: "https://chutes.ai",
                 statusPageURL: nil),
             branding: ProviderBranding(
-                iconStyle: .chutes,
+                iconStyle: .init(provider: .chutes),
                 iconResourceName: "ProviderIcon-chutes",
                 color: ProviderColor(red: 49 / 255, green: 132 / 255, blue: 255 / 255),
                 confettiPalette: [

@@ -2,10 +2,14 @@ import Foundation
 
 public enum ZenMuxProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+    private static let credentials = ProviderCredentialAdapter.apiKey(
+        environmentKey: ZenMuxSettingsReader.managementAPIKeyEnvironmentKey,
+        resolve: ZenMuxSettingsReader.managementAPIKey)
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .zenmux,
+            credentials: self.credentials,
             metadata: ProviderMetadata(
                 id: .zenmux,
                 displayName: "ZenMux",
@@ -18,10 +22,11 @@ public enum ZenMuxProviderDescriptor {
                 toggleTitle: "Show ZenMux usage",
                 cliName: "zenmux",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 dashboardURL: "https://zenmux.ai/platform/management",
                 statusPageURL: nil),
             branding: ProviderBranding(
-                iconStyle: .zenmux,
+                iconStyle: .init(provider: .zenmux),
                 iconResourceName: "ProviderIcon-zenmux",
                 color: ProviderColor(red: 108 / 255, green: 92 / 255, blue: 231 / 255),
                 confettiPalette: [

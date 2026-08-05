@@ -22,11 +22,10 @@ extension UsageMenuCardView.Model {
     static func applyPrimaryQuotaPresentation(
         _ presentation: inout PrimaryMetricPresentation,
         input: Input,
-        primary: RateWindow,
-        openRouterQuotaDetail: String?)
+        primary: RateWindow)
     {
-        if input.provider == .openrouter, let openRouterQuotaDetail {
-            presentation.resetText = openRouterQuotaDetail
+        if input.provider == .openrouter, let detail = self.trimmedResetDescription(primary) {
+            presentation.resetText = detail
         }
         if [.copilot, .zenmux].contains(input.provider),
            let detail = Self.trimmedResetDescription(primary)
@@ -58,11 +57,10 @@ extension UsageMenuCardView.Model {
             presentation.detailText = balance
         }
         if input.provider == .kiro,
-           let kiroUsage = input.snapshot?.kiroUsage,
-           kiroUsage.creditsTotal > 0
+           let remaining = input.snapshot?.detailRow(label: "Credits left")?.value,
+           let total = input.snapshot?.detailRow(label: "Credits total")?.value,
+           total != "0"
         {
-            let remaining = UsageFormatter.kiroCreditNumber(kiroUsage.creditsRemaining)
-            let total = UsageFormatter.kiroCreditNumber(kiroUsage.creditsTotal)
             presentation.detailLeft = String(format: L("%@ of %@ credits left"), remaining, total)
         }
         if input.provider == .alibaba || input.provider == .alibabatokenplan || input.provider == .manus,
@@ -139,11 +137,8 @@ extension UsageMenuCardView.Model {
         primary: RateWindow)
     {
         // Legacy request-based Cursor plans surface the raw used/limit quota on its own line.
-        if input.provider == .cursor, let requests = input.snapshot?.cursorRequests {
-            presentation.detailText = String(
-                format: L("Request quota: %@ / %@"),
-                "\(requests.used)",
-                "\(requests.limit)")
+        if input.provider == .cursor, let quota = input.snapshot?.detailRow(label: "Request quota")?.value {
+            presentation.detailText = "\(L("Request quota")): \(quota)"
         }
         if input.provider == .synthetic,
            let regen = Self.syntheticRollingRegenDetail(
@@ -227,10 +222,6 @@ extension UsageMenuCardView.Model {
     static func usageNotes(input: Input) -> [String] {
         let subscriptionNotes = self.subscriptionMetadataNotes(snapshot: input.snapshot, provider: input.provider)
 
-        if input.provider == .sub2api {
-            return self.sub2APIUsageNotes(input.snapshot?.sub2APIUsage) + subscriptionNotes
-        }
-
         if input.provider == .kiro {
             return self.kiroUsageNotes(input: input) + subscriptionNotes
         }
@@ -257,28 +248,14 @@ extension UsageMenuCardView.Model {
             return notes + subscriptionNotes
         }
 
-        guard input.provider == .openrouter,
-              let openRouter = input.snapshot?.openRouterUsage
-        else {
-            return subscriptionNotes
-        }
-
-        var notes = Self.openRouterSpendNotes(openRouter)
-        switch openRouter.keyQuotaStatus {
-        case .available:
-            break
-        case .noLimitConfigured:
-            notes.append(L("No limit set for the API key"))
-        case .unavailable:
-            notes.append(L("API key limit unavailable right now"))
-        }
-        return notes + subscriptionNotes
+        return subscriptionNotes
     }
 
     var isOverviewErrorOnly: Bool {
         self.subtitleStyle == .error &&
             self.metrics.isEmpty &&
             self.usageNotes.isEmpty &&
+            self.providerDetails.isEmpty &&
             self.openAIAPIUsage == nil &&
             self.inlineUsageDashboard == nil &&
             self.creditsRemaining == nil &&
@@ -290,6 +267,7 @@ extension UsageMenuCardView.Model {
     var hasUsageContent: Bool {
         !self.metrics.isEmpty ||
             !self.usageNotes.isEmpty ||
+            !self.providerDetails.isEmpty ||
             self.openAIAPIUsage != nil ||
             self.inlineUsageDashboard != nil ||
             self.codexResetCredits != nil ||
@@ -301,6 +279,7 @@ extension UsageMenuCardView.Model {
             self.inlineUsageDashboard != nil &&
             self.metrics.isEmpty &&
             self.usageNotes.isEmpty &&
+            self.providerDetails.isEmpty &&
             self.openAIAPIUsage == nil &&
             self.codexResetCredits == nil &&
             self.placeholder == nil
@@ -337,6 +316,7 @@ extension UsageMenuCardView.Model {
         guard self.provider == candidate.provider,
               !includeMetrics || self.metrics.count == candidate.metrics.count,
               self.usageNotes == candidate.usageNotes,
+              self.providerDetails == candidate.providerDetails,
               (self.openAIAPIUsage == nil) == (candidate.openAIAPIUsage == nil),
               Self.hasCompatibleCreditsLayout(
                   currentText: self.creditsText,
@@ -462,7 +442,7 @@ extension UsageMenuCardView.Model {
             return ("5-hour", L("Weekly"), L("Monthly"), true)
         }
         // Legacy request-based Cursor plans track a request quota, not the token-based "Total" pool.
-        let primaryLabel = if input.provider == .cursor, snapshot.cursorRequests != nil {
+        let primaryLabel = if input.provider == .cursor, snapshot.detailRow(label: "Request quota") != nil {
             "Requests"
         } else if input.provider == .crof {
             CrofProviderDescriptor.primaryLabel(snapshot: snapshot)
@@ -471,16 +451,16 @@ extension UsageMenuCardView.Model {
         } else if input.provider == .doubao {
             DoubaoProviderDescriptor.primaryLabel(window: snapshot.primary) ?? input.metadata.sessionLabel
         } else if input.provider == .sub2api {
-            Sub2APIProviderDescriptor.primaryLabel(details: snapshot.sub2APIUsage) ?? input.metadata.sessionLabel
+            Sub2APIProviderDescriptor.primaryLabel(snapshot: snapshot) ?? input.metadata.sessionLabel
         } else if input.provider == .amp {
-            AmpProviderDescriptor.primaryLabel(details: snapshot.ampUsage) ?? input.metadata.sessionLabel
+            AmpProviderDescriptor.primaryLabel(snapshot: snapshot) ?? input.metadata.sessionLabel
         } else if input.provider == .alibabatokenplan {
             AlibabaTokenPlanProviderDescriptor.primaryLabel(window: snapshot.primary) ?? input.metadata.sessionLabel
         } else {
             input.metadata.sessionLabel
         }
         let secondaryLabel = if input.provider == .amp {
-            AmpProviderDescriptor.secondaryLabel(details: snapshot.ampUsage) ?? input.metadata.weeklyLabel
+            AmpProviderDescriptor.secondaryLabel(snapshot: snapshot) ?? input.metadata.weeklyLabel
         } else if input.provider == .alibabatokenplan {
             AlibabaTokenPlanProviderDescriptor.secondaryLabel(window: snapshot.secondary) ?? input.metadata.weeklyLabel
         } else {
@@ -491,27 +471,6 @@ extension UsageMenuCardView.Model {
             L(secondaryLabel),
             input.metadata.opusLabel.map(L) ?? L("Sonnet"),
             input.metadata.supportsOpus)
-    }
-
-    static func sub2APIUsageNotes(_ usage: Sub2APIUsageDetails?) -> [String] {
-        guard let usage else { return [] }
-        var notes: [String] = []
-        if let balance = usage.balance {
-            notes.append("\(L("Balance")): \(UsageFormatter.currencyString(balance, currencyCode: usage.unit))")
-        }
-        if let today = usage.today {
-            notes.append("\(L("Today")): \(self.sub2APITotalsText(today, unit: usage.unit))")
-        }
-        if let total = usage.total {
-            notes.append("\(L("Total")): \(self.sub2APITotalsText(total, unit: usage.unit))")
-        }
-        return notes
-    }
-
-    private static func sub2APITotalsText(_ totals: Sub2APIUsageDetails.Totals, unit: String) -> String {
-        "\(UsageFormatter.tokenCountString(totals.requests)) \(L("requests")) · " +
-            "\(UsageFormatter.tokenCountString(totals.totalTokens)) \(L("tokens")) · " +
-            UsageFormatter.currencyString(totals.actualCostUSD, currencyCode: unit)
     }
 
     static func resetText(
@@ -720,7 +679,11 @@ extension UsageMenuCardView.Model {
               window.remainingPercent > 0
         else { return nil }
         let paceWindow = Self.resetWindowForPace(provider: input.provider, window: window)
-        let resolved = pace ?? UsagePace.weekly(
+        // A caller-supplied pace was measured against the raw window, so reuse it only when resolution
+        // left the duration alone. Trusting it for a monthly sentinel would score the billing period as
+        // a flat 30 days and silently undo the calendar-cycle resolution one line above.
+        let reusablePace = paceWindow.windowMinutes == window.windowMinutes ? pace : nil
+        let resolved = reusablePace ?? UsagePace.weekly(
             window: paceWindow,
             now: input.now,
             defaultWindowMinutes: 10080,
@@ -817,9 +780,11 @@ extension UsageMenuCardView.Model {
             let resetText = input.provider == .sub2api && namedWindow.window.resetsAt == nil
                 ? nil
                 : resolvedResetText
-            let detailText = input.provider == .sub2api
-                ? namedWindow.window.resetDescription
-                : nil
+            let detailText: String? = if input.provider == .sub2api {
+                namedWindow.window.resetDescription
+            } else {
+                nil
+            }
             let statusText: String? = if usageKnown {
                 nil
             } else if let resetText {
@@ -917,7 +882,9 @@ extension UsageMenuCardView.Model {
         window: RateWindow,
         input: Input) -> PaceDetail?
     {
-        if provider == .claude, window.windowMinutes != 10080 { return nil }
+        if provider == .claude, window.windowMinutes != 10080 {
+            return nil
+        }
         guard provider == .codex || provider == .claude || provider == .antigravity else { return nil }
         switch window.windowMinutes {
         case 300:
@@ -1007,43 +974,6 @@ extension UsageMenuCardView.Model {
             detailRightText: paceDetail?.rightLabel,
             pacePercent: paceDetail?.pacePercent,
             paceOnTop: paceDetail?.paceOnTop ?? true)
-    }
-
-    static func zaiLimitDetailText(limit: ZaiLimitEntry?) -> String? {
-        guard let limit else { return nil }
-
-        if let currentValue = limit.currentValue,
-           let usage = limit.usage,
-           let remaining = limit.remaining
-        {
-            let currentStr = UsageFormatter.tokenCountString(currentValue)
-            let usageStr = UsageFormatter.tokenCountString(usage)
-            let remainingStr = UsageFormatter.tokenCountString(remaining)
-            return String(format: L("%@ / %@ (%@ remaining)"), currentStr, usageStr, remainingStr)
-        }
-
-        return nil
-    }
-
-    static func openRouterQuotaDetail(
-        provider: UsageProvider,
-        snapshot: UsageSnapshot,
-        preferredCurrencyCode: String = "auto") -> String?
-    {
-        guard provider == .openrouter,
-              let usage = snapshot.openRouterUsage,
-              usage.hasValidKeyQuota,
-              let keyRemaining = usage.keyRemaining,
-              let keyLimit = usage.keyLimit
-        else {
-            return nil
-        }
-
-        let remaining = UsageFormatter.convertedCostString(
-            keyRemaining, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")
-        let limit = UsageFormatter.convertedCostString(
-            keyLimit, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")
-        return String(format: L("%@/%@ left"), remaining, limit)
     }
 
     static func syntheticRegenDetail(

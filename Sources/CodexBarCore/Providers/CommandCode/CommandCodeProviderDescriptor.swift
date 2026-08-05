@@ -6,18 +6,22 @@ public enum CommandCodeProviderDescriptor {
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .commandcode,
+            settingsSection: .init(
+                CommandCodeProviderSettingsKey.self,
+                cookieSettings: CommandCodeProviderSettings.self),
             metadata: ProviderMetadata(
                 id: .commandcode,
                 displayName: "Command Code",
-                sessionLabel: "Monthly credits",
-                weeklyLabel: "Monthly",
-                opusLabel: nil,
-                supportsOpus: false,
+                sessionLabel: "5-hour",
+                weeklyLabel: "Weekly",
+                opusLabel: "Monthly",
+                supportsOpus: true,
                 supportsCredits: true,
-                creditsHint: "Monthly USD credits from Command Code billing.",
+                creditsHint: "Monthly USD credits and rolling usage limits from Command Code billing.",
                 toggleTitle: "Show Command Code usage",
                 cliName: "commandcode",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: ProviderBrowserCookieDefaults.defaultImportOrder,
@@ -26,7 +30,7 @@ public enum CommandCodeProviderDescriptor {
                 statusPageURL: nil,
                 statusLinkURL: nil),
             branding: ProviderBranding(
-                iconStyle: .commandcode,
+                iconStyle: .init(provider: .commandcode),
                 iconResourceName: "ProviderIcon-commandcode",
                 color: ProviderColor(hex: 0xA04DFD),
                 confettiPalette: [
@@ -37,6 +41,7 @@ public enum CommandCodeProviderDescriptor {
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "Command Code cost summary is not yet supported." }),
+            pace: .calendarMonthResetWindow,
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .web],
                 pipeline: ProviderFetchPipeline(resolveStrategies: { _ in [CommandCodeWebFetchStrategy()] })),

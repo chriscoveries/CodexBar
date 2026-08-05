@@ -90,22 +90,6 @@ extension UsageMenuCardView.Model.ProviderCostSection {
 }
 
 extension UsageMenuCardView.Model {
-    static func sakanaPayAsYouGoSection(
-        _ usage: SakanaPayAsYouGoSnapshot?,
-        preferredCurrencyCode: String = "auto") -> ProviderCostSection?
-    {
-        guard let usage else { return nil }
-        return ProviderCostSection(
-            title: L("Extra usage"),
-            percentUsed: nil,
-            spendLine: "\(L("Balance")): \(usage.balanceDetail)",
-            percentLine: usage.periodUsageTotal.map { value in
-                let cost = UsageFormatter.convertedCostString(
-                    value, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")
-                return "\(L("Usage")): \(cost)"
-            })
-    }
-
     static func isRequiredOpenCodeZenBalance(_ snapshot: UsageSnapshot?) -> Bool {
         snapshot?.primary == nil &&
             snapshot?.secondary == nil &&
@@ -127,12 +111,11 @@ extension UsageMenuCardView.Model {
         preferredCurrencyCode: String = "auto") -> String?
     {
         guard metadata.supportsCredits else { return nil }
-        if metadata.id == .codex, credits == nil, error == nil { return nil }
-        if metadata.id == .amp,
-           let ampUsage = snapshot?.ampUsage,
-           let ampCredits = self.ampCreditsLine(ampUsage, preferredCurrencyCode: preferredCurrencyCode)
-        {
-            return ampCredits
+        if metadata.id == .codex, credits == nil, error == nil {
+            return nil
+        }
+        if metadata.id == .amp, snapshot != nil {
+            return nil
         }
         if let credits {
             if let creditLimit = credits.codexCreditLimit {
@@ -166,27 +149,10 @@ extension UsageMenuCardView.Model {
         return parts.joined(separator: " · ")
     }
 
-    private static func ampCreditsLine(
-        _ usage: AmpUsageDetails,
-        preferredCurrencyCode: String = "auto") -> String?
-    {
-        var lines: [String] = []
-        if let individualCredits = usage.individualCredits {
-            let cost = UsageFormatter.convertedCostString(
-                individualCredits, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")
-            lines.append("\(L("Individual credits")): \(cost)")
-        }
-        lines.append(contentsOf: usage.workspaceBalances.map { workspace in
-            "\(L("Workspace")) \(workspace.name): " +
-                UsageFormatter.convertedCostString(
-                    workspace.remaining, preferredCurrency: preferredCurrencyCode, providerCurrency: "USD")
-        })
-        return lines.isEmpty ? nil : lines.joined(separator: "\n")
-    }
-
     static func tokenUsageSection(
         provider: UsageProvider,
         enabled: Bool,
+        isRefreshing: Bool = false,
         comparisonPeriodsEnabled: Bool,
         snapshot: CostUsageTokenSnapshot?,
         error: String?,
@@ -253,6 +219,7 @@ extension UsageMenuCardView.Model {
         }
         let err = (error?.isEmpty ?? true) ? nil : error
         return TokenUsageSection(
+            isRefreshing: isRefreshing,
             sessionLine: sessionLine,
             monthLine: monthLine,
             meteredLine: meteredLine,
@@ -338,13 +305,19 @@ extension UsageMenuCardView.Model {
             return (entry, dayKey)
         }
         .max { lhs, rhs in
-            if lhs.dayKey != rhs.dayKey { return lhs.dayKey < rhs.dayKey }
+            if lhs.dayKey != rhs.dayKey {
+                return lhs.dayKey < rhs.dayKey
+            }
             let lCost = lhs.entry.costUSD ?? -1
             let rCost = rhs.entry.costUSD ?? -1
-            if lCost != rCost { return lCost < rCost }
+            if lCost != rCost {
+                return lCost < rCost
+            }
             let lTokens = lhs.entry.totalTokens ?? -1
             let rTokens = rhs.entry.totalTokens ?? -1
-            if lTokens != rTokens { return lTokens < rTokens }
+            if lTokens != rTokens {
+                return lTokens < rTokens
+            }
             return lhs.entry.date < rhs.entry.date
         }?.entry
     }
@@ -396,8 +369,12 @@ extension UsageMenuCardView.Model {
     private static func daysInBedrockBillingMonth(_ month: Int, year: Int) -> Int {
         switch month {
         case 2:
-            if year.isMultiple(of: 400) { return 29 }
-            if year.isMultiple(of: 100) { return 28 }
+            if year.isMultiple(of: 400) {
+                return 29
+            }
+            if year.isMultiple(of: 100) {
+                return 28
+            }
             return year.isMultiple(of: 4) ? 29 : 28
         case 4, 6, 9, 11:
             return 30

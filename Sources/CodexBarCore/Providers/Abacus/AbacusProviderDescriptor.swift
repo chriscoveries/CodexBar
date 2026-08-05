@@ -6,13 +6,23 @@ import SweetCookieKit
 
 public enum AbacusProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+    private static let credentials = ProviderCredentialAdapter(tokenAccountSupport: TokenAccountSupport(
+        title: "Session tokens",
+        subtitle: "Store multiple Abacus AI Cookie headers.",
+        placeholder: "Cookie: …",
+        injection: .cookieHeader,
+        requiresManualCookieSource: true,
+        cookieName: nil))
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .abacus,
+            settingsSection: .init(AbacusProviderSettingsKey.self, cookieSettings: AbacusProviderSettings.self),
+            credentials: self.credentials,
             metadata: ProviderMetadata(
                 id: .abacus,
                 displayName: "Abacus AI",
+                shortDisplayName: "Abacus",
                 sessionLabel: "Credits",
                 weeklyLabel: "Weekly",
                 opusLabel: nil,
@@ -22,6 +32,7 @@ public enum AbacusProviderDescriptor {
                 toggleTitle: "Show Abacus AI usage",
                 cliName: "abacusai",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: ProviderBrowserCookieDefaults.defaultImportOrder,
@@ -29,7 +40,7 @@ public enum AbacusProviderDescriptor {
                 statusPageURL: nil,
                 statusLinkURL: nil),
             branding: ProviderBranding(
-                iconStyle: .abacus,
+                iconStyle: .init(provider: .abacus),
                 iconResourceName: "ProviderIcon-abacus",
                 color: ProviderColor(red: 56 / 255, green: 189 / 255, blue: 248 / 255),
                 confettiPalette: [

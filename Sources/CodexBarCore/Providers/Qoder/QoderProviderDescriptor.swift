@@ -2,10 +2,19 @@ import Foundation
 
 public enum QoderProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+    private static let credentials = ProviderCredentialAdapter(tokenAccountSupport: TokenAccountSupport(
+        title: "Session tokens",
+        subtitle: "Store multiple Qoder Cookie headers.",
+        placeholder: "Cookie: …",
+        injection: .cookieHeader,
+        requiresManualCookieSource: true,
+        cookieName: nil))
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .qoder,
+            settingsSection: .init(QoderProviderSettingsKey.self, cookieSettings: QoderProviderSettings.self),
+            credentials: self.credentials,
             metadata: ProviderMetadata(
                 id: .qoder,
                 displayName: "Qoder",
@@ -18,6 +27,7 @@ public enum QoderProviderDescriptor {
                 toggleTitle: "Show Qoder usage",
                 cliName: "qoder",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: ProviderBrowserCookieDefaults.qoderCookieImportOrder,
@@ -25,7 +35,7 @@ public enum QoderProviderDescriptor {
                 statusPageURL: nil,
                 statusLinkURL: nil),
             branding: ProviderBranding(
-                iconStyle: .qoder,
+                iconStyle: .init(provider: .qoder),
                 iconResourceName: "ProviderIcon-qoder",
                 color: ProviderColor(red: 16 / 255, green: 185 / 255, blue: 129 / 255),
                 confettiPalette: [
@@ -36,13 +46,36 @@ public enum QoderProviderDescriptor {
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "Qoder cost summary is not supported." }),
-            fetchPlan: ProviderFetchPlan(
-                sourceModes: [.auto, .web],
-                pipeline: ProviderFetchPipeline(resolveStrategies: { _ in [QoderWebFetchStrategy()] })),
+            fetchPlan: self.fetchPlan(),
             cli: ProviderCLIConfig(
                 name: "qoder",
                 aliases: [],
                 versionDetector: nil))
+    }
+
+    private static func fetchPlan() -> ProviderFetchPlan {
+        ProviderFetchPlan(
+            sourceModes: [.auto, .web],
+            pipeline: ProviderFetchPipeline(resolveStrategies: { context in
+                let swift = QoderWebFetchStrategy()
+                #if canImport(JavaScriptCore)
+                guard ProviderPluginPrototype.isEnabled(environment: context.env) else { return [swift] }
+                return [
+                    ScriptFetchStrategy(
+                        id: "qoder.js",
+                        provider: .qoder,
+                        bundledPlugin: "qoder",
+                        kind: .web,
+                        resolveValues: { context in
+                            guard context.settings?.qoder?.cookieSource != .off else { return nil }
+                            return ScriptFetchStrategy.Values()
+                        }),
+                    swift,
+                ]
+                #else
+                return [swift]
+                #endif
+            }))
     }
 
     public static func dashboardURL(
@@ -170,8 +203,12 @@ struct QoderWebFetchStrategy: ProviderFetchStrategy {
         terminalNonAuthError: Error?,
         sawInvalidCredentials: Bool) -> Error?
     {
-        if let terminalNonAuthError { return terminalNonAuthError }
-        if sawInvalidCredentials { return QoderUsageError.invalidCredentials }
+        if let terminalNonAuthError {
+            return terminalNonAuthError
+        }
+        if sawInvalidCredentials {
+            return QoderUsageError.invalidCredentials
+        }
         return nil
     }
 

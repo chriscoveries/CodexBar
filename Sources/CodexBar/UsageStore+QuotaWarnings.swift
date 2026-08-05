@@ -56,7 +56,6 @@ extension UsageStore {
             self.clearQuotaLowHookUsage(provider: provider)
         }
         guard notificationsEnabled || hooksActive else { return }
-        if provider == .commandcode, snapshot.commandCodeSubscriptionEnrichmentUnavailable { return }
 
         let accountContext = QuotaWarningAccountContext(
             discriminator: accountDiscriminator,
@@ -83,10 +82,10 @@ extension UsageStore {
             secondaryWindow = suppressWindows ? nil : snapshot.secondary
         }
         let primaryWindowDisplayLabel = provider == .amp
-            ? AmpProviderDescriptor.primaryLabel(details: snapshot.ampUsage)
+            ? AmpProviderDescriptor.primaryLabel(snapshot: snapshot)
             : nil
         let secondaryWindowDisplayLabel = provider == .amp
-            ? AmpProviderDescriptor.secondaryLabel(details: snapshot.ampUsage)
+            ? AmpProviderDescriptor.secondaryLabel(snapshot: snapshot)
             : nil
         if notificationsEnabled {
             self.handleQuotaWarningTransition(

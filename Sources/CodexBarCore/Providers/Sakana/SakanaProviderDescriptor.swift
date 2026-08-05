@@ -2,13 +2,18 @@ import Foundation
 
 public enum SakanaProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+    private static let credentials = ProviderCredentialAdapter(environmentProjections: [
+        .cookieHeader(SakanaSettingsReader.cookieHeaderKey),
+    ])
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .sakana,
+            credentials: self.credentials,
             metadata: ProviderMetadata(
                 id: .sakana,
                 displayName: "Sakana AI",
+                shortDisplayName: "Sakana",
                 sessionLabel: "5-hour",
                 weeklyLabel: "Weekly",
                 opusLabel: nil,
@@ -18,13 +23,14 @@ public enum SakanaProviderDescriptor {
                 toggleTitle: "Show Sakana AI usage",
                 cliName: "sakana",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: nil,
                 dashboardURL: "https://console.sakana.ai/billing",
                 statusPageURL: nil),
             branding: ProviderBranding(
-                iconStyle: .sakana,
+                iconStyle: .init(provider: .sakana),
                 iconResourceName: "ProviderIcon-sakana",
                 color: ProviderColor(red: 0.16, green: 0.46, blue: 0.86),
                 confettiPalette: [

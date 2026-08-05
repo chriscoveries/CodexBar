@@ -2,10 +2,29 @@ import Foundation
 
 public enum DeepgramProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+    private static let credentials = ProviderCredentialAdapter(
+        supportsAPIKeyOverride: true,
+        environmentProjections: [
+            .apiKey(DeepgramSettingsReader.apiKeyEnvironmentKey),
+            .workspaceID(DeepgramSettingsReader.projectIDEnvironmentKey),
+        ],
+        tokenResolver: { kind, environment, _ in
+            let value: String? = switch kind {
+            case .primary: DeepgramSettingsReader.apiKey(environment: environment)
+            case .projectID: DeepgramSettingsReader.projectID(environment: environment)
+            case .secondary: nil
+            }
+            guard let value else { return nil }
+            return ProviderTokenResolution(token: value, source: .environment)
+        },
+        authDetector: { environment, _ in
+            DeepgramSettingsReader.apiKey(environment: environment) == nil ? [] : ["api"]
+        })
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .deepgram,
+            credentials: self.credentials,
             metadata: ProviderMetadata(
                 id: .deepgram,
                 displayName: "Deepgram",
@@ -18,6 +37,7 @@ public enum DeepgramProviderDescriptor {
                 toggleTitle: "Show Deepgram usage",
                 cliName: "deepgram",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: nil,
@@ -25,7 +45,7 @@ public enum DeepgramProviderDescriptor {
                 statusPageURL: nil,
                 statusLinkURL: "https://status.deepgram.com"),
             branding: ProviderBranding(
-                iconStyle: .deepgram,
+                iconStyle: .init(provider: .deepgram),
                 iconResourceName: "ProviderIcon-deepgram",
                 color: ProviderColor(
                     red: 100 / 255,
@@ -41,16 +61,51 @@ public enum DeepgramProviderDescriptor {
                 noDataMessage: {
                     "Deepgram cost summary is not yet supported."
                 }),
-            fetchPlan: ProviderFetchPlan(
-                sourceModes: [.auto, .api],
-                pipeline: ProviderFetchPipeline(
-                    resolveStrategies: { _ in
-                        [DeepgramAPIFetchStrategy()]
-                    })),
+            fetchPlan: self.fetchPlan(),
             cli: ProviderCLIConfig(
                 name: "deepgram",
                 aliases: ["dg"],
                 versionDetector: nil))
+    }
+
+    private static func fetchPlan() -> ProviderFetchPlan {
+        ProviderFetchPlan(
+            sourceModes: [.auto, .api],
+            pipeline: ProviderFetchPipeline(resolveStrategies: { context in
+                let swift = DeepgramAPIFetchStrategy()
+                #if canImport(JavaScriptCore)
+                guard ProviderPluginPrototype.isEnabled(environment: context.env) else { return [swift] }
+                return [
+                    ScriptFetchStrategy(
+                        id: "deepgram.js",
+                        provider: .deepgram,
+                        bundledPlugin: "deepgram",
+                        secretKey: DeepgramSettingsReader.apiKeyEnvironmentKey,
+                        resolveValues: { context in
+                            guard let key = ProviderTokenResolver.deepgramResolution(
+                                type: .apiKey,
+                                environment: context.env)
+                            else { return nil }
+                            var settings: [String: String] = [:]
+                            if let project = ProviderTokenResolver.deepgramResolution(
+                                type: .projectID,
+                                environment: context.env)
+                            {
+                                settings[DeepgramSettingsReader.projectIDEnvironmentKey] = project
+                            }
+                            if let apiURL = context.env[DeepgramUsageFetcher.apiURLKey] {
+                                settings[DeepgramUsageFetcher.apiURLKey] = apiURL
+                            }
+                            return ScriptFetchStrategy.Values(
+                                settings: settings,
+                                secrets: [DeepgramSettingsReader.apiKeyEnvironmentKey: key])
+                        }),
+                    swift,
+                ]
+                #else
+                return [swift]
+                #endif
+            }))
     }
 }
 

@@ -6,6 +6,7 @@ public enum T3ChatProviderDescriptor {
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .t3chat,
+            settingsSection: .init(T3ChatProviderSettingsKey.self, cookieSettings: T3ChatProviderSettings.self),
             metadata: ProviderMetadata(
                 id: .t3chat,
                 displayName: "T3 Chat",
@@ -18,6 +19,7 @@ public enum T3ChatProviderDescriptor {
                 toggleTitle: "Show T3 Chat usage",
                 cliName: "t3chat",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: ProviderBrowserCookieDefaults.defaultImportOrder,
@@ -25,7 +27,7 @@ public enum T3ChatProviderDescriptor {
                 subscriptionDashboardURL: "https://t3.chat/settings/subscription",
                 statusPageURL: nil),
             branding: ProviderBranding(
-                iconStyle: .t3chat,
+                iconStyle: .init(provider: .t3chat),
                 iconResourceName: "ProviderIcon-t3chat",
                 color: ProviderColor(red: 245 / 255, green: 102 / 255, blue: 71 / 255),
                 confettiPalette: [
@@ -36,13 +38,36 @@ public enum T3ChatProviderDescriptor {
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "T3 Chat cost summary is not supported." }),
-            fetchPlan: ProviderFetchPlan(
-                sourceModes: [.auto, .web],
-                pipeline: ProviderFetchPipeline(resolveStrategies: { _ in [T3ChatWebFetchStrategy()] })),
+            fetchPlan: self.fetchPlan(),
             cli: ProviderCLIConfig(
                 name: "t3chat",
                 aliases: ["t3-chat", "t3"],
                 versionDetector: nil))
+    }
+
+    private static func fetchPlan() -> ProviderFetchPlan {
+        ProviderFetchPlan(
+            sourceModes: [.auto, .web],
+            pipeline: ProviderFetchPipeline(resolveStrategies: { context in
+                let swift = T3ChatWebFetchStrategy()
+                #if canImport(JavaScriptCore)
+                guard ProviderPluginPrototype.isEnabled(environment: context.env) else { return [swift] }
+                return [
+                    ScriptFetchStrategy(
+                        id: "t3chat.js",
+                        provider: .t3chat,
+                        bundledPlugin: "t3chat",
+                        kind: .web,
+                        resolveValues: { context in
+                            guard context.settings?.t3chat?.cookieSource != .off else { return nil }
+                            return ScriptFetchStrategy.Values()
+                        }),
+                    swift,
+                ]
+                #else
+                return [swift]
+                #endif
+            }))
     }
 }
 

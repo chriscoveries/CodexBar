@@ -2,10 +2,21 @@ import Foundation
 
 public enum GroqProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+    private static let credentials = ProviderCredentialAdapter.apiKey(
+        environmentKey: GroqSettingsReader.apiKeyEnvironmentKey,
+        resolve: GroqSettingsReader.apiKey,
+        tokenAccountSupport: TokenAccountSupport(
+            title: "API keys",
+            subtitle: "Store multiple Groq API keys.",
+            placeholder: "Paste Groq API key…",
+            injection: .environment(key: GroqSettingsReader.apiKeyEnvironmentKey),
+            requiresManualCookieSource: false,
+            cookieName: nil))
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .groq,
+            credentials: self.credentials,
             metadata: ProviderMetadata(
                 id: .groq,
                 displayName: "Groq",
@@ -18,6 +29,7 @@ public enum GroqProviderDescriptor {
                 toggleTitle: "Show Groq usage",
                 cliName: "groqcloud",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
                 browserCookieOrder: nil,
@@ -25,7 +37,7 @@ public enum GroqProviderDescriptor {
                 statusPageURL: nil,
                 statusLinkURL: "https://status.groq.com"),
             branding: ProviderBranding(
-                iconStyle: .groq,
+                iconStyle: .init(provider: .groq),
                 iconResourceName: "ProviderIcon-groq",
                 color: ProviderColor(red: 245 / 255, green: 104 / 255, blue: 68 / 255),
                 confettiPalette: [
