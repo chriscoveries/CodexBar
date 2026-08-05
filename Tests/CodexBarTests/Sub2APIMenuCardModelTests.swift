@@ -151,7 +151,9 @@ struct Sub2APIMenuCardModelTests {
             bundledPlugin: "sub2api",
             transport: ProviderHTTPTransportHandler { request in
                 let response = try #require(HTTPURLResponse(
-                    url: request.url!, statusCode: 200, httpVersion: nil,
+                    url: request.url!,
+                    statusCode: 200,
+                    httpVersion: nil,
                     headerFields: ["Content-Type": "application/json"]))
                 return (Data(body.utf8), response)
             })

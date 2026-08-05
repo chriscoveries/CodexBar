@@ -153,7 +153,9 @@ struct Sub2APIPluginGoldenTests {
                     await recorder.append(request)
                 }
                 let response = try #require(HTTPURLResponse(
-                    url: request.url!, statusCode: status, httpVersion: nil,
+                    url: request.url!,
+                    statusCode: status,
+                    httpVersion: nil,
                     headerFields: ["Content-Type": "application/json"]))
                 return (Data(body.utf8), response)
             })

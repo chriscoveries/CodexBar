@@ -33,7 +33,9 @@ struct OpenRouterPluginGoldenTests {
 
     @Test
     func `credits error is classified without response body details`() async throws {
-        let body = #"{"error":"bad token sk-or-v1-abc123","token":"secret-token","authorization":"Bearer sk-or-v1-xyz789"}"#
+        let body = #"""
+        {"error":"bad token sk-or-v1-abc123","token":"secret-token","authorization":"Bearer sk-or-v1-xyz789"}
+        """#
 
         do {
             _ = try await Self.fetch(creditsBody: body, creditsStatus: 401)

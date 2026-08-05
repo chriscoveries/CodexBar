@@ -51,17 +51,20 @@ struct ProviderPluginParityTests {
     @Test(arguments: [UsageProvider.openrouter, .clawrouter, .deepgram])
     func `override preflight preserves provider validation errors`(provider: UsageProvider) async throws {
         let environment: [String: String] = switch provider {
-        case .openrouter: [
+        case .openrouter:
+            [
                 OpenRouterSettingsReader.envKey: "fixture-key",
                 OpenRouterSettingsReader.apiURLEnvironmentKey: "http://router.example.test",
                 ProviderPluginPrototype.environmentKey: "1",
             ]
-        case .clawrouter: [
+        case .clawrouter:
+            [
                 ClawRouterSettingsReader.apiKeyEnvironmentKey: "fixture-key",
                 ClawRouterSettingsReader.baseURLEnvironmentKey: "http://router.example.test",
                 ProviderPluginPrototype.environmentKey: "1",
             ]
-        case .deepgram: [
+        case .deepgram:
+            [
                 DeepgramSettingsReader.apiKeyEnvironmentKey: "fixture-key",
                 DeepgramSettingsReader.apiURLEnvironmentKey: "http://router.example.test",
                 ProviderPluginPrototype.environmentKey: "1",
