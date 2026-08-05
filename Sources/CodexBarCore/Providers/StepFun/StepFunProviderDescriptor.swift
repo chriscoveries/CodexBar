@@ -55,6 +55,7 @@ public enum StepFunProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                debugLogUnavailableMessage: "StepFun debug log not yet implemented",
                 browserCookieOrder: nil,
                 dashboardURL: "https://platform.stepfun.com/plan-usage",
                 statusPageURL: nil,
@@ -67,7 +68,8 @@ public enum StepFunProviderDescriptor {
                     ProviderColor(hex: 0x000000),
                     ProviderColor(hex: 0xFFFFFF),
                     ProviderColor(hex: 0x858585),
-                ]),
+                ],
+                widgetColor: ProviderColor(red: 255 / 255, green: 140 / 255, blue: 0 / 255)),
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "StepFun per-day cost history is not available via API." }),

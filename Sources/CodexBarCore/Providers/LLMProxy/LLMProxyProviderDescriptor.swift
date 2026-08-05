@@ -33,6 +33,7 @@ public enum LLMProxyProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                debugLogUnavailableMessage: "LLM Proxy debug log not yet implemented",
                 browserCookieOrder: nil,
                 dashboardURL: nil,
                 statusPageURL: nil),

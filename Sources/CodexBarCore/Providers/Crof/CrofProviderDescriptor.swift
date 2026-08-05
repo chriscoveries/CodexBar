@@ -27,6 +27,7 @@ public enum CrofProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                usesDetailBackedWindow: true,
                 browserCookieOrder: nil,
                 dashboardURL: "https://crof.ai/dashboard",
                 statusPageURL: nil,
@@ -39,7 +40,8 @@ public enum CrofProviderDescriptor {
                     ProviderColor(hex: 0x0A0A0A),
                     ProviderColor(hex: 0x8B7CFF),
                     ProviderColor(hex: 0xA99FFF),
-                ]),
+                ],
+                widgetColor: ProviderColor(red: 46 / 255, green: 171 / 255, blue: 148 / 255)),
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "Crof cost summary is not available via API." }),

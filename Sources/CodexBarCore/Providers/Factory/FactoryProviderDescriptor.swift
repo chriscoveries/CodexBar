@@ -33,6 +33,7 @@ public enum FactoryProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                debugLogUnavailableMessage: "Droid debug log not yet implemented",
                 browserCookieOrder: ProviderBrowserCookieDefaults.defaultImportOrder,
                 dashboardURL: "https://app.factory.ai/settings/billing",
                 statusPageURL: "https://status.factory.ai",

@@ -72,6 +72,11 @@ public enum AlibabaTokenPlanProviderDescriptor {
                 defaultEnabled: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                sharePlanLabels: [
+                    "token plan": "Token Plan", "token plan pro": "Token Plan Pro",
+                    "token plan plus": "Token Plan Plus",
+                ],
+                debugLogUnavailableMessage: "Alibaba Token Plan debug log not yet implemented",
                 browserCookieOrder: browserOrder,
                 dashboardURL: AlibabaTokenPlanUsageFetcher.dashboardURL.absoluteString,
                 statusPageURL: nil,

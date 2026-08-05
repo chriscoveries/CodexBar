@@ -25,6 +25,7 @@ public enum ClinePassProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                debugLogUnavailableMessage: "ClinePass debug log not yet implemented",
                 browserCookieOrder: nil,
                 dashboardURL: "https://app.cline.bot/dashboard/subscription?personal=true",
                 statusPageURL: nil,

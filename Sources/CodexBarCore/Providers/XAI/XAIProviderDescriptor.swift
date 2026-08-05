@@ -24,6 +24,7 @@ public enum XAIProviderDescriptor {
                 cliName: "xai",
                 defaultEnabled: false,
                 widgetSelectable: false,
+                debugLogUnavailableMessage: "xAI debug log not yet implemented",
                 dashboardURL: "https://console.x.ai",
                 statusPageURL: nil,
                 statusLinkURL: "https://status.x.ai"),

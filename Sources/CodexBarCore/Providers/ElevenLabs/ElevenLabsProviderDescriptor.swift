@@ -33,6 +33,11 @@ public enum ElevenLabsProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                sharePlanLabels: [
+                    "free": "Free", "starter": "Starter", "creator": "Creator", "pro": "Pro",
+                    "scale": "Scale", "business": "Business", "growing business": "Business",
+                    "enterprise": "Enterprise",
+                ],
                 browserCookieOrder: nil,
                 dashboardURL: "https://elevenlabs.io/app/developers/usage",
                 subscriptionDashboardURL: "https://elevenlabs.io/app/subscription",
@@ -46,7 +51,8 @@ public enum ElevenLabsProviderDescriptor {
                     ProviderColor(hex: 0x000000),
                     ProviderColor(hex: 0x808080),
                     ProviderColor(hex: 0xFDFCFC),
-                ]),
+                ],
+                widgetColor: ProviderColor(red: 235 / 255, green: 235 / 255, blue: 230 / 255)),
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "ElevenLabs cost history is not available via API yet." }),

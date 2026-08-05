@@ -25,6 +25,7 @@ public enum ClawRouterProviderDescriptor {
                 cliName: "clawrouter",
                 defaultEnabled: false,
                 widgetSelectable: false,
+                debugLogUnavailableMessage: "ClawRouter debug log not yet implemented",
                 dashboardURL: "https://clawrouter.openclaw.ai/dashboard/access",
                 statusPageURL: nil),
             branding: ProviderBranding(

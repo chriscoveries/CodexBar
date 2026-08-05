@@ -86,9 +86,15 @@ public enum OpenCodeGoProviderDescriptor {
 
     private static func requiresScopedWebStrategy(context: ProviderFetchContext) -> Bool {
         guard context.sourceMode == .auto else { return false }
-        if context.selectedTokenAccountID != nil { return true }
-        if context.settings?.opencodego?.cookieSource == .manual { return true }
-        if self.normalizedWorkspaceID(context.settings?.opencodego?.workspaceID) != nil { return true }
+        if context.selectedTokenAccountID != nil {
+            return true
+        }
+        if context.settings?.opencodego?.cookieSource == .manual {
+            return true
+        }
+        if self.normalizedWorkspaceID(context.settings?.opencodego?.workspaceID) != nil {
+            return true
+        }
         return self.normalizedWorkspaceID(context.env["CODEXBAR_OPENCODEGO_WORKSPACE_ID"]) != nil
     }
 

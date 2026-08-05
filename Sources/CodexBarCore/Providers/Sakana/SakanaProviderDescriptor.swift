@@ -26,6 +26,13 @@ public enum SakanaProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                sharePlanLabels: [
+                    "standard": "Standard",
+                    "standard $20/mo": "Standard",
+                    "pro": "Pro",
+                    "enterprise": "Enterprise",
+                ],
+                debugLogUnavailableMessage: "Sakana AI debug log not yet implemented",
                 browserCookieOrder: nil,
                 dashboardURL: "https://console.sakana.ai/billing",
                 statusPageURL: nil),
@@ -37,7 +44,8 @@ public enum SakanaProviderDescriptor {
                     ProviderColor(hex: 0xE10600),
                     ProviderColor(hex: 0x0D0D0D),
                     ProviderColor(hex: 0xFFFFFF),
-                ]),
+                ],
+                widgetColor: ProviderColor(red: 41 / 255, green: 117 / 255, blue: 219 / 255)),
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "Sakana AI cost summary is not supported." }),

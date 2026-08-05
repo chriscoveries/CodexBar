@@ -44,6 +44,8 @@ public enum KiloProviderDescriptor {
                 defaultEnabled: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                debugLogUnavailableMessage: "Kilo debug log not yet implemented",
+                usesDetailBackedWindow: true,
                 browserCookieOrder: nil,
                 dashboardURL: "https://app.kilo.ai/usage",
                 statusPageURL: nil),

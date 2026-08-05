@@ -32,6 +32,7 @@ public enum VeniceProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                debugLogUnavailableMessage: "Venice debug log not yet implemented",
                 browserCookieOrder: nil,
                 dashboardURL: "https://venice.ai/settings/api",
                 statusPageURL: nil,

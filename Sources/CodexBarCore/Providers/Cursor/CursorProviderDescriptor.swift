@@ -1,4 +1,5 @@
 import Foundation
+import SweetCookieKit
 
 public enum CursorProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
@@ -9,6 +10,15 @@ public enum CursorProviderDescriptor {
         injection: .cookieHeader,
         requiresManualCookieSource: true,
         cookieName: nil))
+
+    /// Active Cursor sessions often live only in Safari; Chromium profiles may carry stale tokens.
+    private static var browserCookieOrder: BrowserCookieImportOrder? {
+        #if os(macOS)
+        [.safari] + Browser.defaultImportOrder.filter { $0 != .safari }
+        #else
+        nil
+        #endif
+    }
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
@@ -29,7 +39,17 @@ public enum CursorProviderDescriptor {
                 defaultEnabled: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
-                browserCookieOrder: ProviderBrowserCookieDefaults.cursorCookieImportOrder
+                sharePlanLabels: [
+                    "free": "Cursor Free", "cursor free": "Cursor Free",
+                    "hobby": "Cursor Hobby", "cursor hobby": "Cursor Hobby",
+                    "pro": "Cursor Pro", "cursor pro": "Cursor Pro",
+                    "team": "Cursor Team", "cursor team": "Cursor Team",
+                    "business": "Cursor Business", "cursor business": "Cursor Business",
+                    "enterprise": "Cursor Enterprise", "cursor enterprise": "Cursor Enterprise",
+                    "ultra": "Cursor Ultra", "cursor ultra": "Cursor Ultra",
+                ],
+                debugPane: ProviderDebugPaneCapabilities(probeLogOrder: 2),
+                browserCookieOrder: self.browserCookieOrder
                     ?? ProviderBrowserCookieDefaults.defaultImportOrder,
                 dashboardURL: "https://cursor.com/dashboard?tab=usage",
                 statusPageURL: "https://status.cursor.com",
@@ -44,7 +64,9 @@ public enum CursorProviderDescriptor {
                 ]),
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: true,
-                noDataMessage: { "No Cursor cost usage found. Sign in to Cursor in your browser or the Cursor app." }),
+                noDataMessage: { "No Cursor cost usage found. Sign in to Cursor in your browser or the Cursor app." },
+                menuHintLines: [.estimate],
+                supportsTokenSnapshot: self.supportsTokenSnapshot),
             pace: ProviderPaceCapability(resetWindowPace: .windowDurationPresent),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .cli, .web],
@@ -52,6 +74,14 @@ public enum CursorProviderDescriptor {
             cli: ProviderCLIConfig(
                 name: "cursor",
                 versionDetector: nil))
+    }
+
+    private static var supportsTokenSnapshot: Bool {
+        #if os(macOS)
+        true
+        #else
+        false
+        #endif
     }
 }
 

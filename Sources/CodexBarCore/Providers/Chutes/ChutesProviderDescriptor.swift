@@ -25,6 +25,8 @@ public enum ChutesProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                debugLogUnavailableMessage: "Chutes debug log not yet implemented",
+                usesDetailBackedWindow: true,
                 browserCookieOrder: nil,
                 dashboardURL: "https://chutes.ai",
                 statusPageURL: nil),
@@ -36,7 +38,8 @@ public enum ChutesProviderDescriptor {
                     ProviderColor(hex: 0x121212),
                     ProviderColor(hex: 0xFFFFFF),
                     ProviderColor(hex: 0x63D297),
-                ]),
+                ],
+                widgetColor: ProviderColor(red: 24 / 255, green: 160 / 255, blue: 88 / 255)),
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "Chutes cost history is not available from CodexBar." }),

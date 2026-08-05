@@ -6,6 +6,36 @@ import Testing
 @MainActor
 struct SettingsStoreAdditionalTests {
     @Test
+    func `typed provider config bindings normalize every standard field`() {
+        let settings = Self.makeSettingsStore(suite: "SettingsStoreAdditionalTests-provider-config-bindings")
+
+        let fields: [(ProviderConfigStringField, String)] = [
+            (.apiKey, "api"),
+            (.secretKey, "secret"),
+            (.region, "region"),
+            (.endpoint, "https://example.test"),
+            (.workspace, "workspace"),
+            (.cookieHeader, "session=fixture"),
+        ]
+        for (field, value) in fields {
+            settings[providerConfig: .groq, field: field] = "  \(value)  "
+            #expect(settings[providerConfig: .groq, field: field] == value)
+        }
+
+        let binding = settings.providerConfigBinding(provider: .openai, field: .secretWorkspace(logField: "projectID"))
+        binding.wrappedValue = "  project  "
+        #expect(binding.wrappedValue == "project")
+
+        let cookieSource = settings.providerCookieSourceBinding(provider: .groq, fallback: .auto)
+        #expect(cookieSource.wrappedValue == .auto)
+        cookieSource.wrappedValue = .manual
+        #expect(cookieSource.wrappedValue == .manual)
+
+        settings[providerConfig: .groq, field: .apiKey] = "   "
+        #expect(settings.providerConfig(for: .groq)?.apiKey == nil)
+    }
+
+    @Test
     @MainActor
     func `antigravity two pool migration preserves released metric meaning`() {
         let primaryDefaults = UserDefaults(suiteName: #function + ".primary")!

@@ -268,21 +268,12 @@ extension UsageMenuCardView.Model {
     }
 
     static func tokenUsageHintLines(provider: UsageProvider) -> [String] {
-        switch provider {
-        case .codex:
-            [L("codex_api_estimate_hint")]
-        case .claude, .cursor:
-            [UsageFormatter.costEstimateHint(provider: provider)]
-        case .vertexai:
-            [L("cost_estimate_hint")]
-        case .bedrock:
-            [L("AWS Cost Explorer billing can lag.")]
-        case .openai:
-            [L("Reported by OpenAI Admin API organization usage.")]
-        case .mistral:
-            [L("Reported by Mistral billing usage.")]
-        default:
-            []
+        ProviderDescriptorRegistry.descriptor(for: provider).tokenCost.menuHintLines.map { hint in
+            switch hint {
+            case let .localized(key): L(key)
+            case .estimate: UsageFormatter.costEstimateHint(provider: provider)
+            case let .literal(text): L(text)
+            }
         }
     }
 

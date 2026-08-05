@@ -37,6 +37,7 @@ public enum PerplexityProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                sharePlanLabels: ["pro": "Pro", "max": "Max"],
                 browserCookieOrder: nil,
                 dashboardURL: "https://www.perplexity.ai/account/usage",
                 statusPageURL: nil,

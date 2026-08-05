@@ -129,6 +129,90 @@ struct ProviderArchitectureGatekeeperTests {
         }
     }
 
+    @Test
+    func `descriptor widget colors preserve the pre-derivation literals`() {
+        var widgetFingerprint: UInt64 = 1_469_598_103_934_665_603
+        var burnDownFingerprint = widgetFingerprint
+        for descriptor in ProviderDescriptorRegistry.all {
+            Self.hash(descriptor.id.rawValue.utf8, into: &widgetFingerprint)
+            Self.hash(descriptor.branding.widgetColor, into: &widgetFingerprint)
+            Self.hash(descriptor.id.rawValue.utf8, into: &burnDownFingerprint)
+            Self.hash(descriptor.branding.burnDownWidgetColor, into: &burnDownFingerprint)
+        }
+
+        #expect(widgetFingerprint == 8_322_639_844_029_602_741)
+        #expect(burnDownFingerprint == 3_478_078_203_311_670_951)
+    }
+
+    @Test
+    func `descriptor unavailable debug messages preserve the legacy table`() throws {
+        let descriptors = ProviderDescriptorRegistry.all.filter { $0.metadata.debugLogUnavailableMessage != nil }
+        var fingerprint: UInt64 = 1_469_598_103_934_665_603
+        for descriptor in descriptors {
+            Self.hash(descriptor.id.rawValue.utf8, into: &fingerprint)
+            try Self.hash(#require(descriptor.metadata.debugLogUnavailableMessage?.utf8), into: &fingerprint)
+        }
+
+        #expect(descriptors.count == 38)
+        #expect(fingerprint == 2_208_147_801_202_684_136)
+    }
+
+    @Test
+    func `debug pane provider curation preserves legacy membership and order`() {
+        let descriptors = ProviderDescriptorRegistry.all
+        let ordered: ((ProviderDebugPaneCapabilities) -> Int?) -> [UsageProvider] = { rank in
+            descriptors.compactMap { descriptor -> (UsageProvider, Int)? in
+                guard let value = rank(descriptor.metadata.debugPane) else { return nil }
+                return (descriptor.id, value)
+            }
+            .sorted { $0.1 < $1.1 }
+            .map(\.0)
+        }
+
+        #expect(ordered { $0.probeLogOrder } == [.codex, .claude, .cursor, .augment, .amp, .ollama])
+        #expect(ordered { $0.notificationSimulationOrder } == [.codex, .claude])
+        #expect(ordered { $0.errorSimulationOrder } == [
+            .codex, .claude, .gemini, .antigravity, .augment, .amp, .t3chat, .zoommate, .ollama,
+        ])
+    }
+
+    @Test
+    func `small provider capabilities preserve legacy registries`() {
+        let descriptors = ProviderDescriptorRegistry.all
+        #expect(Set(descriptors.filter(\.metadata.balanceOnly).map(\.id)) == [
+            .deepseek, .deepinfra, .mistral, .moonshot, .poe,
+        ])
+        #expect(Set(descriptors.filter(\.metadata.usesDetailBackedWindow).map(\.id)) == [
+            .warp, .kilo, .mistral, .deepseek, .deepinfra, .qoder, .crof, .chutes,
+        ])
+        #if os(macOS)
+        #expect(Set(descriptors.filter(\.tokenCost.supportsTokenSnapshot).map(\.id)) == [
+            .codex, .claude, .cursor, .vertexai, .bedrock,
+        ])
+        #else
+        #expect(Set(descriptors.filter(\.tokenCost.supportsTokenSnapshot).map(\.id)) == [
+            .codex, .claude, .vertexai, .bedrock,
+        ])
+        #endif
+        #expect(Set(descriptors.filter { $0.cli.binaryLocator != nil }.map(\.id)) == [
+            .codex, .claude, .gemini,
+        ])
+
+        #expect(CodexProviderDescriptor.descriptor.tokenCost.menuHintLines == [.localized("codex_api_estimate_hint")])
+        #expect(ClaudeProviderDescriptor.descriptor.tokenCost.menuHintLines == [.estimate])
+        #expect(CursorProviderDescriptor.descriptor.tokenCost.menuHintLines == [.estimate])
+        #expect(VertexAIProviderDescriptor.descriptor.tokenCost.menuHintLines == [.localized("cost_estimate_hint")])
+        #expect(BedrockProviderDescriptor.descriptor.tokenCost.menuHintLines == [
+            .literal("AWS Cost Explorer billing can lag."),
+        ])
+        #expect(OpenAIAPIProviderDescriptor.descriptor.tokenCost.menuHintLines == [
+            .literal("Reported by OpenAI Admin API organization usage."),
+        ])
+        #expect(MistralProviderDescriptor.descriptor.tokenCost.menuHintLines == [
+            .literal("Reported by Mistral billing usage."),
+        ])
+    }
+
     private static func repoRoot() throws -> URL {
         var directory = URL(filePath: #filePath).deletingLastPathComponent()
         for _ in 0..<12 {
@@ -140,5 +224,21 @@ struct ProviderArchitectureGatekeeperTests {
             directory.deleteLastPathComponent()
         }
         throw CocoaError(.fileNoSuchFile)
+    }
+
+    private static func hash(_ color: ProviderColor, into fingerprint: inout UInt64) {
+        for component in [color.red, color.green, color.blue] {
+            var bits = component.bitPattern
+            for _ in 0..<MemoryLayout<UInt64>.size {
+                fingerprint = (fingerprint ^ UInt64(UInt8(truncatingIfNeeded: bits))) &* 1_099_511_628_211
+                bits >>= 8
+            }
+        }
+    }
+
+    private static func hash(_ bytes: String.UTF8View, into fingerprint: inout UInt64) {
+        for byte in bytes {
+            fingerprint = (fingerprint ^ UInt64(byte)) &* 1_099_511_628_211
+        }
     }
 }

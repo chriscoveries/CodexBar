@@ -25,6 +25,7 @@ public enum PoeProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                balanceOnly: true,
                 browserCookieOrder: nil,
                 dashboardURL: "https://poe.com/api/keys",
                 statusPageURL: nil,

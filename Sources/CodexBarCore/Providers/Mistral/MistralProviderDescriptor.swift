@@ -1,4 +1,5 @@
 import Foundation
+import SweetCookieKit
 
 public enum MistralProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
@@ -9,6 +10,15 @@ public enum MistralProviderDescriptor {
         injection: .cookieHeader,
         requiresManualCookieSource: true,
         cookieName: nil))
+
+    /// Preserve Chrome-first behavior, then Firefox and Safari; other Chromium forks remain manual-only.
+    private static var browserCookieOrder: BrowserCookieImportOrder? {
+        #if os(macOS)
+        [.chrome, .firefox, .safari]
+        #else
+        nil
+        #endif
+    }
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
@@ -29,7 +39,9 @@ public enum MistralProviderDescriptor {
                 defaultEnabled: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
-                browserCookieOrder: ProviderBrowserCookieDefaults.mistralCookieImportOrder,
+                balanceOnly: true,
+                usesDetailBackedWindow: true,
+                browserCookieOrder: self.browserCookieOrder,
                 dashboardURL: "https://admin.mistral.ai/organization/usage",
                 statusPageURL: nil,
                 statusLinkURL: "https://status.mistral.ai"),
@@ -44,7 +56,8 @@ public enum MistralProviderDescriptor {
                 ]),
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: true,
-                noDataMessage: { "Mistral cost history needs a billing web session." }),
+                noDataMessage: { "Mistral cost history needs a billing web session." },
+                menuHintLines: [.literal("Reported by Mistral billing usage.")]),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .web],
                 pipeline: ProviderFetchPipeline(resolveStrategies: { _ in [MistralWebFetchStrategy()] })),

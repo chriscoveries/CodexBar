@@ -70,6 +70,13 @@ public enum MiniMaxProviderDescriptor {
                 defaultEnabled: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                sharePlanLabels: [
+                    "free": "Free", "pro": "Pro", "plus": "Plus", "max": "Max", "ultra": "Ultra",
+                    "minimax star": "MiniMax Star", "combo star": "Combo Star", "coding plan pro": "Coding Plan Pro",
+                    "token plan pro": "Token Plan Pro", "token plan · tokenplanplus-年度会员": "Token Plan Plus",
+                    "tokenplanplus-年度会员": "Token Plan Plus", "tokenplanmax-年度会员": "Token Plan Max",
+                    "tokenplanultra-年度会员": "Token Plan Ultra",
+                ],
                 browserCookieOrder: ProviderBrowserCookieDefaults.defaultImportOrder,
                 dashboardURL: "https://platform.minimax.io/user-center/payment/coding-plan?cycle_type=3",
                 statusPageURL: nil),
@@ -232,14 +239,18 @@ struct MiniMaxCodingPlanFetchStrategy: ProviderFetchStrategy {
         }
 
         guard Self.allowsBrowserCookieImport(context: context) else {
-            if let lastError { throw lastError }
+            if let lastError {
+                throw lastError
+            }
             throw MiniMaxSettingsError.missingCookie
         }
 
         let sessions = (try? MiniMaxCookieImporter.importSessions(
             browserDetection: context.browserDetection)) ?? []
         guard !sessions.isEmpty else {
-            if let lastError { throw lastError }
+            if let lastError {
+                throw lastError
+            }
             throw MiniMaxSettingsError.missingCookie
         }
 
@@ -373,7 +384,9 @@ struct MiniMaxCodingPlanFetchStrategy: ProviderFetchStrategy {
         for token in attempts {
             let tokenLabel: String = {
                 guard let token else { return "" }
-                if token == cookieToken { return " + HERTZ-SESSION bearer" }
+                if token == cookieToken {
+                    return " + HERTZ-SESSION bearer"
+                }
                 return " + access token"
             }()
             Self.log.debug("Trying MiniMax \(prefix)cookies from \(sourceLabel)\(tokenLabel)")
@@ -413,8 +426,12 @@ struct MiniMaxCodingPlanFetchStrategy: ProviderFetchStrategy {
     }
 
     private static func shouldTryNextBrowser(for error: Error) -> Bool {
-        if case MiniMaxUsageError.invalidCredentials = error { return true }
-        if case MiniMaxUsageError.parseFailed = error { return true }
+        if case MiniMaxUsageError.invalidCredentials = error {
+            return true
+        }
+        if case MiniMaxUsageError.parseFailed = error {
+            return true
+        }
         return false
     }
 }

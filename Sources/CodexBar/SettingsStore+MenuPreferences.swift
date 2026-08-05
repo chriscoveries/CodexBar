@@ -341,11 +341,6 @@ extension SettingsStore {
     }
 
     static func isBalanceOnlyProvider(_ provider: UsageProvider) -> Bool {
-        switch provider {
-        case .deepseek, .deepinfra, .mistral, .moonshot, .poe:
-            true
-        default:
-            false
-        }
+        ProviderDescriptorRegistry.descriptor(for: provider).metadata.balanceOnly
     }
 }

@@ -85,6 +85,18 @@ public enum ClaudeProviderDescriptor {
                 defaultEnabled: false,
                 isPrimaryProvider: true,
                 usesAccountFallback: false,
+                sharePlanLabels: [
+                    "free": "Free", "claude free": "Free", "pro": "Pro", "claude pro": "Pro",
+                    "max": "Max", "claude max": "Max", "max 5x": "Max 5x", "claude max 5x": "Max 5x",
+                    "max 20x": "Max 20x", "claude max 20x": "Max 20x", "team": "Team",
+                    "claude team": "Team", "claude team standard": "Team Standard",
+                    "claude team premium": "Team Premium", "enterprise": "Enterprise",
+                    "claude enterprise": "Enterprise", "ultra": "Ultra", "claude ultra": "Ultra",
+                ],
+                debugPane: ProviderDebugPaneCapabilities(
+                    probeLogOrder: 1,
+                    notificationSimulationOrder: 1,
+                    errorSimulationOrder: 1),
                 browserCookieOrder: ProviderBrowserCookieDefaults.defaultImportOrder,
                 dashboardURL: "https://console.anthropic.com/settings/billing",
                 subscriptionDashboardURL: "https://claude.ai/settings/usage",
@@ -98,15 +110,19 @@ public enum ClaudeProviderDescriptor {
                     ProviderColor(hex: 0xD97757),
                     ProviderColor(hex: 0xF0EEE6),
                     ProviderColor(hex: 0x141413),
-                ]),
+                ],
+                burnDownWidgetColor: ProviderColor(red: 0.880, green: 0.580, blue: 0.180)),
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: true,
-                noDataMessage: self.noDataMessage),
+                noDataMessage: self.noDataMessage,
+                menuHintLines: [.estimate],
+                supportsTokenSnapshot: true),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .api, .web, .cli, .oauth],
                 pipeline: ProviderFetchPipeline(resolveStrategies: self.resolveStrategies)),
             cli: ProviderCLIConfig(
                 name: "claude",
+                binaryLocator: { BinaryLocator.resolveClaudeBinary() },
                 versionDetector: { browserDetection in
                     ClaudeUsageFetcher(browserDetection: browserDetection).detectVersion()
                 }))

@@ -62,6 +62,11 @@ public enum AlibabaCodingPlanProviderDescriptor {
                 defaultEnabled: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                sharePlanLabels: [
+                    "lite": "Lite", "coding plan lite": "Lite", "pro": "Pro", "active pro": "Pro",
+                    "alibaba coding plan pro": "Pro", "starter": "Starter", "enterprise": "Enterprise",
+                ],
+                debugLogUnavailableMessage: "Alibaba Coding Plan debug log not yet implemented",
                 browserCookieOrder: browserOrder,
                 dashboardURL: AlibabaCodingPlanAPIRegion.international.dashboardURL.absoluteString,
                 statusPageURL: nil,

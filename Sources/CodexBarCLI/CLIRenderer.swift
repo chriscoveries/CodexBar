@@ -962,12 +962,7 @@ enum CLIRenderer {
     }
 
     private static func usesDetailBackedWindow(provider: UsageProvider) -> Bool {
-        switch provider {
-        case .warp, .kilo, .mistral, .deepseek, .deepinfra, .qoder, .crof, .chutes:
-            true
-        default:
-            false
-        }
+        ProviderDescriptorRegistry.descriptor(for: provider).metadata.usesDetailBackedWindow
     }
 
     private static func resetLineForDetailBackedWindow(

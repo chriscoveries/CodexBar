@@ -991,7 +991,6 @@ extension UsageStore {
         await AugmentStatusProbe.latestDumps()
     }
 
-    // swiftlint:disable:next function_body_length
     func debugLog(for provider: UsageProvider) async -> String {
         if let cached = self.probeLogs[provider.instanceID], !cached.isEmpty {
             return cached
@@ -1035,46 +1034,7 @@ extension UsageStore {
         let browserDetection = self.browserDetection
         let claudeDebugExecutionContext = self.currentClaudeDebugExecutionContext()
         let text = await Task.detached(priority: .utility) { () -> String in
-            let unimplementedDebugLogMessages: [UsageProvider: String] = [
-                .gemini: "Gemini debug log not yet implemented",
-                .antigravity: "Antigravity debug log not yet implemented",
-                .clinepass: "ClinePass debug log not yet implemented",
-                .opencode: "OpenCode debug log not yet implemented",
-                .alibaba: "Alibaba Coding Plan debug log not yet implemented",
-                .alibabatokenplan: "Alibaba Token Plan debug log not yet implemented",
-                .qwencloud: "Qwen Cloud debug log not yet implemented",
-                .factory: "Droid debug log not yet implemented",
-                .copilot: "Copilot debug log not yet implemented",
-                .manus: "Manus debug log not yet implemented",
-                .vertexai: "Vertex AI debug log not yet implemented",
-                .kilo: "Kilo debug log not yet implemented",
-                .kiro: "Kiro debug log not yet implemented",
-                .kimi: "Kimi debug log not yet implemented",
-                .jetbrains: "JetBrains AI debug log not yet implemented",
-                .mimo: "Xiaomi MiMo debug log not yet implemented",
-                .doubao: "Doubao debug log not yet implemented",
-                .sakana: "Sakana AI debug log not yet implemented",
-                .venice: "Venice debug log not yet implemented",
-                .deepinfra: "DeepInfra debug log not yet implemented",
-                .commandcode: "Command Code debug log not yet implemented",
-                .qoder: "Qoder debug log not yet implemented",
-                .stepfun: "StepFun debug log not yet implemented",
-                .bedrock: "Bedrock debug log not yet implemented",
-                .grok: "Grok debug log not yet implemented",
-                .groq: "Groq debug log not yet implemented",
-                .t3chat: "T3 Chat debug log not yet implemented",
-                .zoommate: "ZoomMate debug log not yet implemented",
-                .xai: "xAI debug log not yet implemented",
-                .llmproxy: "LLM Proxy debug log not yet implemented",
-                .litellm: "LiteLLM debug log not yet implemented",
-                .deepgram: "Deepgram debug log not yet implemented",
-                .chutes: "Chutes debug log not yet implemented",
-                .clawrouter: "ClawRouter debug log not yet implemented",
-                .wayfinder: "Wayfinder debug log not yet implemented",
-                .sub2api: "sub2api debug log not yet implemented",
-                .zenmux: "ZenMux debug log not yet implemented",
-                .aiand: "ai& debug log not yet implemented",
-            ]
+            // Provider-specific by design: implemented logs capture app-only settings and execution contexts.
             let buildText = {
                 switch provider {
                 case .codex:
@@ -1155,7 +1115,8 @@ extension UsageStore {
                         hasEnvToken: deepSeekHasEnvToken,
                         hasTokenAccount: deepSeekHasTokenAccount)
                 default:
-                    return unimplementedDebugLogMessages[provider] ?? "Debug log not yet implemented"
+                    return ProviderDescriptorRegistry.descriptor(for: provider).metadata.debugLogUnavailableMessage
+                        ?? "Debug log not yet implemented"
                 }
             }
             return await claudeDebugExecutionContext.apply {

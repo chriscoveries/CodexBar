@@ -1,7 +1,18 @@
 import Foundation
+import SweetCookieKit
 
 public enum CodexProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+
+    /// Preserve the legacy prompt behavior before probing Chromium variants that may trigger Safe Storage prompts.
+    private static var browserCookieOrder: BrowserCookieImportOrder? {
+        #if os(macOS)
+        let preferredPrefix: [Browser] = [.safari, .chrome, .firefox]
+        return preferredPrefix + Browser.defaultImportOrder.filter { !preferredPrefix.contains($0) }
+        #else
+        return nil
+        #endif
+    }
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
@@ -21,7 +32,21 @@ public enum CodexProviderDescriptor {
                 defaultEnabled: true,
                 isPrimaryProvider: true,
                 usesAccountFallback: true,
-                browserCookieOrder: ProviderBrowserCookieDefaults.codexCookieImportOrder
+                sharePlanLabels: [
+                    "guest": "Guest", "free": "Free", "go": "Go", "plus": "Plus", "plus plan": "Plus",
+                    "chatgpt plus": "Plus", "chatgpt-plus": "Plus", "chatgpt_plus": "Plus",
+                    "pro": "Pro 20x", "codex pro": "Pro 20x",
+                    "prolite": "Pro 5x", "pro_lite": "Pro 5x", "pro-lite": "Pro 5x",
+                    "pro lite": "Pro 5x", "codex pro lite": "Pro 5x",
+                    "free_workspace": "Free Workspace", "team": "Team", "business": "Business",
+                    "education": "Education", "quorum": "Quorum", "k12": "K12",
+                    "enterprise": "Enterprise", "edu": "Edu",
+                ],
+                debugPane: ProviderDebugPaneCapabilities(
+                    probeLogOrder: 0,
+                    notificationSimulationOrder: 0,
+                    errorSimulationOrder: 0),
+                browserCookieOrder: self.browserCookieOrder
                     ?? ProviderBrowserCookieDefaults.defaultImportOrder,
                 dashboardURL: "https://chatgpt.com/codex/settings/usage",
                 changelogURL: "https://github.com/openai/codex/releases",
@@ -34,15 +59,19 @@ public enum CodexProviderDescriptor {
                     ProviderColor(hex: 0x736BD4),
                     ProviderColor(hex: 0x97A9F7),
                     ProviderColor(hex: 0xCFD4F7),
-                ]),
+                ],
+                burnDownWidgetColor: ProviderColor(red: 0.120, green: 0.780, blue: 0.598)),
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: true,
-                noDataMessage: self.noDataMessage),
+                noDataMessage: self.noDataMessage,
+                menuHintLines: [.localized("codex_api_estimate_hint")],
+                supportsTokenSnapshot: true),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .web, .cli, .oauth],
                 pipeline: ProviderFetchPipeline(resolveStrategies: self.resolveStrategies)),
             cli: ProviderCLIConfig(
                 name: "codex",
+                binaryLocator: { BinaryLocator.resolveCodexBinary() },
                 versionDetector: { _ in ProviderVersionDetector.codexVersion() }))
     }
 
@@ -310,7 +339,9 @@ struct CodexOAuthFetchStrategy: ProviderFetchStrategy {
         do {
             cliResult = try await cliStrategy.fetch(context)
         } catch {
-            if error is CancellationError { throw error }
+            if error is CancellationError {
+                throw error
+            }
             return oauthResult
         }
         guard let cliLimit = cliResult.credits?.codexCreditLimit,
@@ -347,7 +378,9 @@ struct CodexOAuthFetchStrategy: ProviderFetchStrategy {
     }
 
     private static func defersResetCreditFetchToApp(_ context: ProviderFetchContext) -> Bool {
-        if case .app = context.runtime { return true }
+        if case .app = context.runtime {
+            return true
+        }
         return false
     }
 
@@ -363,7 +396,9 @@ struct CodexOAuthFetchStrategy: ProviderFetchStrategy {
         do {
             return try await fetcher(credentials)
         } catch {
-            if error is CancellationError || Task.isCancelled { throw CancellationError() }
+            if error is CancellationError || Task.isCancelled {
+                throw CancellationError()
+            }
             return nil
         }
     }

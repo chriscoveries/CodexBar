@@ -57,7 +57,8 @@ public enum OpenRouterProviderDescriptor {
                     ProviderColor(hex: 0x96A5B9),
                     ProviderColor(hex: 0x161616),
                     ProviderColor(hex: 0xFFFFFF),
-                ]),
+                ],
+                widgetColor: ProviderColor(red: 111 / 255, green: 66 / 255, blue: 193 / 255)),
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "OpenRouter cost summary is not yet supported." }),

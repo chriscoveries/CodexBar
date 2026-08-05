@@ -1,7 +1,17 @@
 import Foundation
+import SweetCookieKit
 
 public enum DevinProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+
+    /// Devin sessions are normally in Chrome; explicit selection handles other browsers.
+    private static var browserCookieOrder: BrowserCookieImportOrder? {
+        #if os(macOS)
+        [.chrome]
+        #else
+        nil
+        #endif
+    }
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
@@ -21,7 +31,14 @@ public enum DevinProviderDescriptor {
                 defaultEnabled: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
-                browserCookieOrder: ProviderBrowserCookieDefaults.devinCookieImportOrder,
+                sharePlanLabels: [
+                    "free": "Free",
+                    "core": "Core",
+                    "pro": "Pro",
+                    "team": "Team",
+                    "enterprise": "Enterprise",
+                ],
+                browserCookieOrder: self.browserCookieOrder,
                 dashboardURL: "https://app.devin.ai",
                 subscriptionDashboardURL: "https://app.devin.ai/settings/usage",
                 statusPageURL: nil),

@@ -21,8 +21,12 @@ public enum KimiProviderDescriptor {
         },
         authDetector: { environment, _ in
             var modes: [String] = []
-            if KimiSettingsReader.apiKey(environment: environment) != nil { modes.append("api") }
-            if KimiSettingsReader.authToken(environment: environment) != nil { modes.append("web") }
+            if KimiSettingsReader.apiKey(environment: environment) != nil {
+                modes.append("api")
+            }
+            if KimiSettingsReader.authToken(environment: environment) != nil {
+                modes.append("web")
+            }
             return modes
         },
         missingCredentialMessage: { _ in KimiAPIError.missingToken.errorDescription })
@@ -46,6 +50,7 @@ public enum KimiProviderDescriptor {
                 defaultEnabled: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                debugLogUnavailableMessage: "Kimi debug log not yet implemented",
                 browserCookieOrder: nil,
                 dashboardURL: "https://www.kimi.com/code/console",
                 statusPageURL: nil),

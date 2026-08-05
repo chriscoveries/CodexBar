@@ -26,6 +26,7 @@ public enum SyntheticProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                sharePlanLabels: ["starter": "Starter", "pro": "Pro", "team": "Team", "enterprise": "Enterprise"],
                 dashboardURL: nil,
                 statusPageURL: nil),
             branding: ProviderBranding(

@@ -51,6 +51,11 @@ public enum Sub2APIProviderDescriptor {
             cliName: "sub2api",
             defaultEnabled: false,
             widgetSelectable: false,
+            sharePlanLabels: [
+                "free": "Free", "pro": "Pro", "team": "Team", "claude team": "Team",
+                "enterprise": "Enterprise", "wallet plan": "Wallet",
+            ],
+            debugLogUnavailableMessage: "sub2api debug log not yet implemented",
             dashboardURL: nil,
             statusPageURL: nil),
         branding: ProviderBranding(

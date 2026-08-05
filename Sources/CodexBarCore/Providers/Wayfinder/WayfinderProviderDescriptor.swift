@@ -23,6 +23,7 @@ public enum WayfinderProviderDescriptor {
                 cliName: "wayfinder",
                 defaultEnabled: false,
                 widgetSelectable: false,
+                debugLogUnavailableMessage: "Wayfinder debug log not yet implemented",
                 dashboardURL: WayfinderSettingsReader.dashboardURL(environment: [:]).absoluteString,
                 statusPageURL: nil),
             branding: ProviderBranding(

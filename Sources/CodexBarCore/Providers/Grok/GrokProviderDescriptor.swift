@@ -1,7 +1,17 @@
 import Foundation
+import SweetCookieKit
 
 public enum GrokProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+
+    /// Grok is normally signed in through Chrome; avoid touching unrelated browser keychains.
+    private static var browserCookieOrder: BrowserCookieImportOrder? {
+        #if os(macOS)
+        [.chrome]
+        #else
+        nil
+        #endif
+    }
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
@@ -21,7 +31,8 @@ public enum GrokProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
-                browserCookieOrder: ProviderBrowserCookieDefaults.grokCookieImportOrder,
+                debugLogUnavailableMessage: "Grok debug log not yet implemented",
+                browserCookieOrder: self.browserCookieOrder,
                 dashboardURL: "https://grok.com/?_s=usage",
                 changelogURL: "https://x.ai/news",
                 statusPageURL: nil,

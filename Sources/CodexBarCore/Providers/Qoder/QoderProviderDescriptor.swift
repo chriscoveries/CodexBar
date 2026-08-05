@@ -1,4 +1,5 @@
 import Foundation
+import SweetCookieKit
 
 public enum QoderProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
@@ -9,6 +10,15 @@ public enum QoderProviderDescriptor {
         injection: .cookieHeader,
         requiresManualCookieSource: true,
         cookieName: nil))
+
+    /// Qoder documents Chrome cookie import; avoid probing unrelated browser keychains.
+    private static var browserCookieOrder: BrowserCookieImportOrder? {
+        #if os(macOS)
+        [.chrome]
+        #else
+        nil
+        #endif
+    }
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
@@ -30,7 +40,9 @@ public enum QoderProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
-                browserCookieOrder: ProviderBrowserCookieDefaults.qoderCookieImportOrder,
+                debugLogUnavailableMessage: "Qoder debug log not yet implemented",
+                usesDetailBackedWindow: true,
+                browserCookieOrder: self.browserCookieOrder,
                 dashboardURL: QoderWebSite.international.dashboardURL.absoluteString,
                 statusPageURL: nil,
                 statusLinkURL: nil),

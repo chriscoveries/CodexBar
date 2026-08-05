@@ -53,6 +53,7 @@ public enum MoonshotProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                balanceOnly: true,
                 browserCookieOrder: nil,
                 dashboardURL: "https://platform.moonshot.ai/console/account",
                 statusPageURL: nil),

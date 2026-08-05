@@ -32,6 +32,7 @@ public enum GroqProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                debugLogUnavailableMessage: "Groq debug log not yet implemented",
                 browserCookieOrder: nil,
                 dashboardURL: "https://console.groq.com/dashboard/usage",
                 statusPageURL: nil,

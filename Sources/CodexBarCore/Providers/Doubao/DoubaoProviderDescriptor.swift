@@ -45,6 +45,7 @@ public enum DoubaoProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                debugLogUnavailableMessage: "Doubao debug log not yet implemented",
                 browserCookieOrder: nil,
                 dashboardURL: "https://console.volcengine.com/ark/region:ark+cn-beijing/openManagement?LLM=%7B%7D&advancedActiveKey=subscribe",
                 statusPageURL: nil),
@@ -56,7 +57,8 @@ public enum DoubaoProviderDescriptor {
                     ProviderColor(hex: 0x0057FF),
                     ProviderColor(hex: 0xEFC5BA),
                     ProviderColor(hex: 0x493530),
-                ]),
+                ],
+                widgetColor: ProviderColor(red: 45 / 255, green: 136 / 255, blue: 255 / 255)),
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "Doubao cost summary is not available." }),
