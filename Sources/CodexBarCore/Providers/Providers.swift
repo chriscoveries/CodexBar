@@ -127,6 +127,7 @@ public struct ProviderMetadata: Sendable {
     public let widgetSelectable: Bool
     public let isPrimaryProvider: Bool
     public let usesAccountFallback: Bool
+    public let sharePlanLabels: [String: String]
     public let browserCookieOrder: BrowserCookieImportOrder?
     public let dashboardURL: String?
     public let subscriptionDashboardURL: String?
@@ -157,6 +158,7 @@ public struct ProviderMetadata: Sendable {
         widgetSelectable: Bool = true,
         isPrimaryProvider: Bool = false,
         usesAccountFallback: Bool = false,
+        sharePlanLabels: [String: String] = [:],
         browserCookieOrder: BrowserCookieImportOrder? = nil,
         dashboardURL: String?,
         subscriptionDashboardURL: String? = nil,
@@ -181,6 +183,7 @@ public struct ProviderMetadata: Sendable {
         self.widgetSelectable = widgetSelectable
         self.isPrimaryProvider = isPrimaryProvider
         self.usesAccountFallback = usesAccountFallback
+        self.sharePlanLabels = sharePlanLabels
         self.browserCookieOrder = browserCookieOrder
         self.dashboardURL = dashboardURL
         self.subscriptionDashboardURL = subscriptionDashboardURL

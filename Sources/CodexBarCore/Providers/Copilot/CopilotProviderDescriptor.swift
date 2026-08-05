@@ -46,6 +46,10 @@ public enum CopilotProviderDescriptor {
                 defaultEnabled: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                sharePlanLabels: [
+                    "free": "Free", "individual": "Individual", "pro": "Individual",
+                    "business": "Business", "enterprise": "Enterprise",
+                ],
                 browserCookieOrder: self.browserCookieOrder,
                 dashboardURL: "https://github.com/settings/copilot",
                 statusPageURL: "https://www.githubstatus.com/"),

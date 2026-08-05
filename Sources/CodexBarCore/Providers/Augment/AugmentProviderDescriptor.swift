@@ -54,6 +54,10 @@ public enum AugmentProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                sharePlanLabels: [
+                    "free": "Free", "community": "Community", "indie": "Indie", "pro": "Pro",
+                    "team": "Team", "enterprise": "Enterprise",
+                ],
                 browserCookieOrder: browserOrder,
                 dashboardURL: "https://app.augmentcode.com/account/subscription",
                 statusPageURL: "https://status.augmentcode.com"),

@@ -20,6 +20,10 @@ public enum GeminiProviderDescriptor {
                 defaultEnabled: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                sharePlanLabels: [
+                    "free": "Free", "paid": "Paid", "plus": "Plus", "workspace": "Workspace",
+                    "legacy": "Legacy", "gemini code assist in google one ai pro": "Google One AI Pro",
+                ],
                 dashboardURL: "https://gemini.google.com",
                 changelogURL: "https://github.com/google-gemini/gemini-cli/releases",
                 statusPageURL: nil,

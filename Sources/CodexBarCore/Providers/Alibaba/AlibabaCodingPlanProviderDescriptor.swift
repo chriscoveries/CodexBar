@@ -62,6 +62,10 @@ public enum AlibabaCodingPlanProviderDescriptor {
                 defaultEnabled: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                sharePlanLabels: [
+                    "lite": "Lite", "coding plan lite": "Lite", "pro": "Pro", "active pro": "Pro",
+                    "alibaba coding plan pro": "Pro", "starter": "Starter", "enterprise": "Enterprise",
+                ],
                 browserCookieOrder: browserOrder,
                 dashboardURL: AlibabaCodingPlanAPIRegion.international.dashboardURL.absoluteString,
                 statusPageURL: nil,

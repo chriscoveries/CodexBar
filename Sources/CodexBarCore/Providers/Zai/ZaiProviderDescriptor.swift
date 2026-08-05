@@ -76,6 +76,7 @@ public enum ZaiProviderDescriptor {
                 defaultEnabled: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                sharePlanLabels: ["free": "Free", "pro": "Pro", "max": "Max", "team": "Team"],
                 dashboardURL: ZaiAPIRegion.global.dashboardURL.absoluteString,
                 statusPageURL: nil),
             branding: ProviderBranding(

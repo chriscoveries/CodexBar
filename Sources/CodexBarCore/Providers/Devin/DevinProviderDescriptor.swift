@@ -31,6 +31,13 @@ public enum DevinProviderDescriptor {
                 defaultEnabled: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                sharePlanLabels: [
+                    "free": "Free",
+                    "core": "Core",
+                    "pro": "Pro",
+                    "team": "Team",
+                    "enterprise": "Enterprise",
+                ],
                 browserCookieOrder: self.browserCookieOrder,
                 dashboardURL: "https://app.devin.ai",
                 subscriptionDashboardURL: "https://app.devin.ai/settings/usage",

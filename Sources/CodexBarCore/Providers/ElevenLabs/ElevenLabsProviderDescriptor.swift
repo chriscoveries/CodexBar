@@ -33,6 +33,11 @@ public enum ElevenLabsProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                sharePlanLabels: [
+                    "free": "Free", "starter": "Starter", "creator": "Creator", "pro": "Pro",
+                    "scale": "Scale", "business": "Business", "growing business": "Business",
+                    "enterprise": "Enterprise",
+                ],
                 browserCookieOrder: nil,
                 dashboardURL: "https://elevenlabs.io/app/developers/usage",
                 subscriptionDashboardURL: "https://elevenlabs.io/app/subscription",

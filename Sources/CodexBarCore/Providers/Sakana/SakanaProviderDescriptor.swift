@@ -26,6 +26,12 @@ public enum SakanaProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                sharePlanLabels: [
+                    "standard": "Standard",
+                    "standard $20/mo": "Standard",
+                    "pro": "Pro",
+                    "enterprise": "Enterprise",
+                ],
                 browserCookieOrder: nil,
                 dashboardURL: "https://console.sakana.ai/billing",
                 statusPageURL: nil),

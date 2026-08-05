@@ -21,6 +21,10 @@ public enum ZedProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                sharePlanLabels: [
+                    "zed free": "Zed Free", "zed pro": "Zed Pro", "zed pro trial": "Zed Pro Trial",
+                    "zed student": "Zed Student", "zed business": "Zed Business",
+                ],
                 dashboardURL: nil,
                 statusPageURL: nil),
             branding: ProviderBranding(

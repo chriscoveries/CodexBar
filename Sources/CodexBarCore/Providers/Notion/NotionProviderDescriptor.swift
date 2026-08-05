@@ -50,6 +50,7 @@ public enum NotionProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                sharePlanLabels: ["free": "Free", "plus": "Plus", "business": "Business", "enterprise": "Enterprise"],
                 browserCookieOrder: self.browserCookieOrder,
                 dashboardURL: "https://app.notion.com/",
                 statusPageURL: nil,

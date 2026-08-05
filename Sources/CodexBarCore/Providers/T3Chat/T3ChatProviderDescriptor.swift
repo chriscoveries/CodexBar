@@ -22,6 +22,7 @@ public enum T3ChatProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                sharePlanLabels: ["free": "Free", "pro": "Pro", "team": "Team"],
                 browserCookieOrder: ProviderBrowserCookieDefaults.defaultImportOrder,
                 dashboardURL: "https://t3.chat/settings/customization",
                 subscriptionDashboardURL: "https://t3.chat/settings/subscription",

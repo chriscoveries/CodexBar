@@ -39,6 +39,15 @@ public enum CursorProviderDescriptor {
                 defaultEnabled: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                sharePlanLabels: [
+                    "free": "Cursor Free", "cursor free": "Cursor Free",
+                    "hobby": "Cursor Hobby", "cursor hobby": "Cursor Hobby",
+                    "pro": "Cursor Pro", "cursor pro": "Cursor Pro",
+                    "team": "Cursor Team", "cursor team": "Cursor Team",
+                    "business": "Cursor Business", "cursor business": "Cursor Business",
+                    "enterprise": "Cursor Enterprise", "cursor enterprise": "Cursor Enterprise",
+                    "ultra": "Cursor Ultra", "cursor ultra": "Cursor Ultra",
+                ],
                 browserCookieOrder: self.browserCookieOrder
                     ?? ProviderBrowserCookieDefaults.defaultImportOrder,
                 dashboardURL: "https://cursor.com/dashboard?tab=usage",
