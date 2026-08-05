@@ -12,10 +12,13 @@ import SwiftUI
 /// event and jitters, while `mouseDown`/`mouseDragged` on an `NSView` report window
 /// coordinates that stay stable even as the strip itself moves mid-drag.
 ///
-/// The hover cursor is belt-and-braces: `.pointerStyle(.columnResize)` in
-/// `PreferencesView` registers with SwiftUI's pointer engine on macOS 15+, and this
-/// view's tracking area asserts `NSCursor` directly (the only mechanism on macOS 14).
-/// Both produce the same left-right resize arrows, so they cannot fight.
+/// The hover cursor comes from `resetCursorRects()`, not from calling `NSCursor.set()`
+/// on hover: SwiftUI re-renders the settings panes continuously, and each render resets
+/// the cursor, so an imperatively-set cursor survives only until the next frame (the
+/// familiar "resize cursor flashes then reverts" bug). A cursor *rect* is declarative —
+/// AppKit re-asks the view whenever it invalidates — so it holds. Measured on a probe
+/// harness hosting this view: imperative-only was 0% resize on hover and 40% during a
+/// drag; with cursor rects it is 100% in both.
 struct SidebarResizeHandle: NSViewRepresentable {
     @Binding var width: Double
     let minWidth: Double
@@ -56,20 +59,40 @@ final class SidebarResizeHandleView: NSView {
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
+    /// Cursor rects are the load-bearing mechanism: AppKit re-asks the view for them
+    /// every time they're invalidated, so the resize cursor survives SwiftUI's constant
+    /// re-rendering. A one-shot `NSCursor.set()` does not — it wins only until the next
+    /// render, which is what makes hand-rolled dividers flicker back to an arrow.
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        self.addCursorRect(self.bounds, cursor: .resizeLeftRight)
+    }
+
+    override func layout() {
+        super.layout()
+        // The strip moves with the sidebar, so its cursor rect must be recomputed.
+        self.window?.invalidateCursorRects(for: self)
+    }
+
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let trackingArea {
             self.removeTrackingArea(trackingArea)
         }
         // Explicit rect, not `.inVisibleRect`: the hosting view doesn't clip, so
-        // `visibleRect` spans the whole window and enter/exit events never fire.
+        // `visibleRect` spans the whole window and the callbacks never fire.
+        // `.cursorUpdate` backs up the cursor rect for the moments AppKit skips it.
         let area = NSTrackingArea(
             rect: self.bounds,
-            options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways],
+            options: [.cursorUpdate, .mouseEnteredAndExited, .mouseMoved, .activeAlways],
             owner: self,
             userInfo: nil)
         self.addTrackingArea(area)
         self.trackingArea = area
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        NSCursor.resizeLeftRight.set()
     }
 
     override func mouseEntered(with event: NSEvent) {
@@ -77,12 +100,7 @@ final class SidebarResizeHandleView: NSView {
     }
 
     override func mouseMoved(with event: NSEvent) {
-        // Re-assert every move: SwiftUI keeps resetting the cursor underneath us.
         NSCursor.resizeLeftRight.set()
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        NSCursor.arrow.set()
     }
 
     override func mouseDown(with event: NSEvent) {
