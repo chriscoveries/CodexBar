@@ -66,6 +66,7 @@ struct CardsOptions: CommanderParsable {
 }
 
 extension CodexBarCLI {
+    // swiftlint:disable:next function_body_length
     static func runCards(_ values: ParsedValues) async {
         let output = CLIOutputPreferences.from(values: values)
         let config = Self.loadConfig(output: output)
