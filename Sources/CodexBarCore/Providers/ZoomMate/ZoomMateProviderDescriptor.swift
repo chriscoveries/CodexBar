@@ -1,7 +1,16 @@
 import Foundation
+import SweetCookieKit
 
 public enum ZoomMateProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+
+    private static var browserCookieOrder: BrowserCookieImportOrder? {
+        #if os(macOS)
+        [.chrome]
+        #else
+        nil
+        #endif
+    }
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
@@ -22,7 +31,7 @@ public enum ZoomMateProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
-                browserCookieOrder: ProviderBrowserCookieDefaults.chromeOnlyImportOrder,
+                browserCookieOrder: self.browserCookieOrder,
                 dashboardURL: "https://zoommate.zoom.us/#/?settings=credit-usage",
                 subscriptionDashboardURL: nil,
                 statusPageURL: "https://www.zoomstatus.com/",

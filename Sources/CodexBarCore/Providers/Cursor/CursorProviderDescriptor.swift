@@ -1,4 +1,5 @@
 import Foundation
+import SweetCookieKit
 
 public enum CursorProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
@@ -9,6 +10,15 @@ public enum CursorProviderDescriptor {
         injection: .cookieHeader,
         requiresManualCookieSource: true,
         cookieName: nil))
+
+    /// Active Cursor sessions often live only in Safari; Chromium profiles may carry stale tokens.
+    private static var browserCookieOrder: BrowserCookieImportOrder? {
+        #if os(macOS)
+        [.safari] + Browser.defaultImportOrder.filter { $0 != .safari }
+        #else
+        nil
+        #endif
+    }
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
@@ -29,7 +39,7 @@ public enum CursorProviderDescriptor {
                 defaultEnabled: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
-                browserCookieOrder: ProviderBrowserCookieDefaults.cursorCookieImportOrder
+                browserCookieOrder: self.browserCookieOrder
                     ?? ProviderBrowserCookieDefaults.defaultImportOrder,
                 dashboardURL: "https://cursor.com/dashboard?tab=usage",
                 statusPageURL: "https://status.cursor.com",

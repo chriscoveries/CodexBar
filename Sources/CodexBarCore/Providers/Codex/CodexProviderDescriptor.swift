@@ -1,7 +1,18 @@
 import Foundation
+import SweetCookieKit
 
 public enum CodexProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+
+    /// Preserve the legacy prompt behavior before probing Chromium variants that may trigger Safe Storage prompts.
+    private static var browserCookieOrder: BrowserCookieImportOrder? {
+        #if os(macOS)
+        let preferredPrefix: [Browser] = [.safari, .chrome, .firefox]
+        return preferredPrefix + Browser.defaultImportOrder.filter { !preferredPrefix.contains($0) }
+        #else
+        return nil
+        #endif
+    }
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
@@ -21,7 +32,7 @@ public enum CodexProviderDescriptor {
                 defaultEnabled: true,
                 isPrimaryProvider: true,
                 usesAccountFallback: true,
-                browserCookieOrder: ProviderBrowserCookieDefaults.codexCookieImportOrder
+                browserCookieOrder: self.browserCookieOrder
                     ?? ProviderBrowserCookieDefaults.defaultImportOrder,
                 dashboardURL: "https://chatgpt.com/codex/settings/usage",
                 changelogURL: "https://github.com/openai/codex/releases",
