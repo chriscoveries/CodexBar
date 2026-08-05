@@ -18,7 +18,21 @@ public enum StepFunProviderDescriptor {
             cookieName: nil),
         authDetector: { environment, _ in
             StepFunSettingsReader.token(environment: environment) == nil ? [] : ["api"]
-        })
+        },
+        manualTokenPersister: { try Self.persistManualToken($0) })
+
+    private static func persistManualToken(_ token: String) throws {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        let store = CodexBarConfigStore()
+        var config = try store.load() ?? .makeDefault()
+        var providerConfig = config.providerConfig(for: UsageProvider.stepfun.instanceID)
+            ?? ProviderConfig(id: UsageProvider.stepfun.instanceID)
+        providerConfig.region = trimmed
+        config.setProviderConfig(providerConfig)
+        try store.save(config)
+    }
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(

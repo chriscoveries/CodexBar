@@ -15,21 +15,19 @@ extension UsageStore {
     private nonisolated static let claudeOAuthPlanUtilizationAccountKeyPrefix = "__claude_oauth__:"
 
     func supportsPlanUtilizationHistory(for provider: UsageProvider) -> Bool {
-        switch provider {
-        case .codex, .claude, .antigravity, .opencodego:
-            true
-        default:
-            if self.planUtilizationHistory[provider.instanceID]?.isEmpty == false {
-                true
-            } else if self.settings.historicalTrackingEnabled, let snapshot = self.snapshots[provider.instanceID] {
-                !self.planUtilizationSeriesSamples(
-                    provider: provider,
-                    snapshot: snapshot,
-                    capturedAt: snapshot.updatedAt).isEmpty
-            } else {
-                false
-            }
+        if ProviderDescriptorRegistry.descriptor(for: provider).history.alwaysTracksPlanUtilization {
+            return true
         }
+        if self.planUtilizationHistory[provider.instanceID]?.isEmpty == false {
+            return true
+        }
+        guard self.settings.historicalTrackingEnabled, let snapshot = self.snapshots[provider.instanceID] else {
+            return false
+        }
+        return !self.planUtilizationSeriesSamples(
+            provider: provider,
+            snapshot: snapshot,
+            capturedAt: snapshot.updatedAt).isEmpty
     }
 
     private nonisolated static let planUtilizationMinSampleIntervalSeconds: TimeInterval = 60 * 60
@@ -339,12 +337,8 @@ extension UsageStore {
     }
 
     private func shouldRecordPlanUtilizationHistory(for provider: UsageProvider) -> Bool {
-        switch provider {
-        case .codex, .claude, .antigravity, .opencodego:
-            true
-        default:
+        ProviderDescriptorRegistry.descriptor(for: provider).history.alwaysTracksPlanUtilization ||
             self.settings.historicalTrackingEnabled
-        }
     }
 
     private nonisolated static func updatedPlanUtilizationHistories(
@@ -575,6 +569,7 @@ extension UsageStore {
             }
         }
 
+        // Provider-specific by design: payload shapes project different semantic lanes into history series.
         switch provider {
         case .codex:
             let projection = self.codexConsumerProjection(

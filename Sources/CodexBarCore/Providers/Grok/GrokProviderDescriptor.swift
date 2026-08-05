@@ -59,12 +59,20 @@ public enum GrokProviderDescriptor {
                     && timeUntilReset > 0
                     && timeUntilReset <= TimeInterval(windowMinutes) * 60
             }),
+            presentation: ProviderUsagePresentation(rateWindowLabeler: { metadata, snapshot, now in
+                ProviderRateWindowLabels(
+                    primary: Self.primaryLabel(window: snapshot.primary, now: now) ?? metadata.sessionLabel,
+                    secondary: metadata.weeklyLabel,
+                    tertiary: metadata.opusLabel ?? "Sonnet",
+                    showsTertiary: metadata.supportsOpus)
+            }),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .cli, .web],
                 pipeline: ProviderFetchPipeline(resolveStrategies: self.resolveStrategies)),
             cli: ProviderCLIConfig(
                 name: "grok",
-                versionDetector: { _ in GrokStatusProbe.detectVersion() }))
+                versionDetector: { _ in GrokStatusProbe.detectVersion() },
+                browserSupportExemption: { _, _, _ in true }))
     }
 
     private static func resolveStrategies(context: ProviderFetchContext) async -> [any ProviderFetchStrategy] {

@@ -36,6 +36,15 @@ public enum ClaudeProviderDescriptor {
             }),
         authDetector: { environment, _ in
             ClaudeAdminAPISettingsReader.apiKey(environment: environment) == nil ? [] : ["api"]
+        },
+        selectedAccountSourceModeResolver: { base, account, _ in
+            guard let account else { return base }
+            return switch ClaudeCredentialRouting.resolve(tokenAccountToken: account.token, manualCookieHeader: nil) {
+            case .adminAPIKey: .api
+            case .oauth: .oauth
+            case .webCookie: .web
+            case .none: base
+            }
         })
 
     static func makeDescriptor() -> ProviderDescriptor {
@@ -117,6 +126,37 @@ public enum ClaudeProviderDescriptor {
                 noDataMessage: self.noDataMessage,
                 menuHintLines: [.estimate],
                 supportsTokenSnapshot: true),
+            pace: ProviderPaceCapability(
+                primary: .session(maximumMinutes: 300),
+                secondary: .weekly,
+                tertiary: .weekly),
+            history: .alwaysTracked,
+            presentation: ProviderUsagePresentation(
+                identityPresenter: { provider, snapshot in
+                    guard let plan = snapshot.loginMethod(for: provider), !plan.isEmpty else {
+                        return ProviderIdentityPresentation(badge: nil, plan: nil)
+                    }
+                    let display = if plan.hasPrefix("Claude "),
+                                     ClaudePlan.fromCompatibilityLoginMethod(plan) != nil
+                    {
+                        plan
+                    } else {
+                        plan.capitalized
+                    }
+                    return ProviderIdentityPresentation(badge: display, plan: display)
+                },
+                costPresenter: { snapshot in
+                    guard let cost = snapshot.providerCost else { return ProviderCostPresentation() }
+                    let balances = cost.balance.map {
+                        [ProviderCostPresentation.Balance(
+                            label: "Extra usage balance",
+                            amount: $0,
+                            currencyCode: cost.currencyCode)]
+                    } ?? []
+                    return ProviderCostPresentation(
+                        showsGenericFallback: !(cost.used == 0 && cost.limit == 0 && cost.balance != nil),
+                        balances: balances)
+                }),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .api, .web, .cli, .oauth],
                 pipeline: ProviderFetchPipeline(resolveStrategies: self.resolveStrategies)),
@@ -125,7 +165,8 @@ public enum ClaudeProviderDescriptor {
                 binaryLocator: { BinaryLocator.resolveClaudeBinary() },
                 versionDetector: { browserDetection in
                     ClaudeUsageFetcher(browserDetection: browserDetection).detectVersion()
-                }))
+                },
+                browserSupportExemption: { sourceMode, _, _ in sourceMode == .auto }))
     }
 
     private static func resolveStrategies(context: ProviderFetchContext) async -> [any ProviderFetchStrategy] {

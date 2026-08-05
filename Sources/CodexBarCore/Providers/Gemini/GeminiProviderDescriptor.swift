@@ -44,6 +44,13 @@ public enum GeminiProviderDescriptor {
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "Gemini cost summary is not supported." }),
+            presentation: ProviderUsagePresentation(identityPresenter: { provider, snapshot in
+                guard let plan = snapshot.loginMethod(for: provider), !plan.isEmpty else {
+                    return ProviderIdentityPresentation(badge: nil, plan: nil)
+                }
+                let display = UsageFormatter.cleanPlanName(plan)
+                return ProviderIdentityPresentation(badge: display, plan: display)
+            }),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .api],
                 pipeline: ProviderFetchPipeline(resolveStrategies: { _ in [GeminiStatusFetchStrategy()] })),

@@ -60,12 +60,16 @@ public enum OpenCodeGoProviderDescriptor {
                     "No OpenCode Go local usage history found in ~/.local/share/opencode/opencode.db."
                 }),
             pace: .calendarMonthResetWindow,
+            history: .alwaysTracked,
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .web],
                 pipeline: ProviderFetchPipeline(resolveStrategies: self.resolveStrategies)),
             cli: ProviderCLIConfig(
                 name: "opencodego",
-                versionDetector: nil))
+                versionDetector: nil,
+                browserSupportExemption: { sourceMode, _, settings in
+                    sourceMode == .auto || settings?.opencodego?.cookieSource == .manual
+                }))
     }
 
     private static func resolveStrategies(context: ProviderFetchContext) async -> [any ProviderFetchStrategy] {

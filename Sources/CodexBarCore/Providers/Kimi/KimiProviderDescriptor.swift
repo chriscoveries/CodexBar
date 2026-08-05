@@ -67,14 +67,24 @@ public enum KimiProviderDescriptor {
                 supportsTokenCost: false,
                 noDataMessage: { "Kimi Code cost summary is not supported." }),
             pace: ProviderPaceCapability(
-                resetWindowPace: .windowDuration(minutes: self.weeklyWindowMinutes)),
+                resetWindowPace: .windowDuration(minutes: self.weeklyWindowMinutes),
+                primary: .exact(kind: .weekly, minutes: self.weeklyWindowMinutes),
+                secondary: .exact(kind: .session, minutes: self.sessionWindowMinutes),
+                tertiary: .exact(kind: .session, minutes: self.sessionWindowMinutes)),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .api, .web],
                 pipeline: ProviderFetchPipeline(resolveStrategies: self.resolveStrategies)),
             cli: ProviderCLIConfig(
                 name: "kimi",
                 aliases: ["kimi-ai"],
-                versionDetector: nil))
+                versionDetector: nil,
+                browserSupportExemption: { sourceMode, environment, _ in
+                    guard sourceMode == .auto else { return false }
+                    return environment.map { environment in
+                        ProviderTokenResolver.kimiAPIToken(environment: environment) != nil ||
+                            KimiSettingsReader.hasKimiCodeCredential(environment: environment)
+                    } == true
+                }))
     }
 
     private static func resolveStrategies(context: ProviderFetchContext) async -> [any ProviderFetchStrategy] {

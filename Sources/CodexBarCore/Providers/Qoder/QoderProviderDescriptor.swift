@@ -62,7 +62,10 @@ public enum QoderProviderDescriptor {
             cli: ProviderCLIConfig(
                 name: "qoder",
                 aliases: [],
-                versionDetector: nil))
+                versionDetector: nil,
+                browserSupportExemption: { _, _, settings in
+                    settings?.qoder?.cookieSource == .manual
+                }))
     }
 
     private static func fetchPlan() -> ProviderFetchPlan {

@@ -70,6 +70,13 @@ public enum Sub2APIProviderDescriptor {
         tokenCost: ProviderTokenCostConfig(
             supportsTokenCost: false,
             noDataMessage: { "sub2api spend is reported by its usage API." }),
+        presentation: ProviderUsagePresentation(rateWindowLabeler: { metadata, snapshot, _ in
+            ProviderRateWindowLabels(
+                primary: Self.primaryLabel(snapshot: snapshot) ?? metadata.sessionLabel,
+                secondary: metadata.weeklyLabel,
+                tertiary: metadata.opusLabel ?? "Sonnet",
+                showsTertiary: metadata.supportsOpus)
+        }),
         fetchPlan: Self.fetchPlan(),
         cli: ProviderCLIConfig(
             name: "sub2api",

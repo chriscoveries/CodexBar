@@ -25,6 +25,17 @@ public struct ProviderTokenCostConfig: Sendable {
     }
 }
 
+public struct ProviderHistoryCapability: Sendable, Equatable {
+    public static let optIn = ProviderHistoryCapability(alwaysTracksPlanUtilization: false)
+    public static let alwaysTracked = ProviderHistoryCapability(alwaysTracksPlanUtilization: true)
+
+    public let alwaysTracksPlanUtilization: Bool
+
+    public init(alwaysTracksPlanUtilization: Bool) {
+        self.alwaysTracksPlanUtilization = alwaysTracksPlanUtilization
+    }
+}
+
 public enum ProviderPaceWindowRule: Sendable {
     case unsupported
     case resetDatePresent
@@ -65,6 +76,53 @@ public enum ProviderPaceDurationRule: Sendable {
     }
 }
 
+public enum ProviderPaceKind: Sendable {
+    case session
+    case weekly
+
+    public var defaultWindowMinutes: Int {
+        switch self {
+        case .session: 300
+        case .weekly: 10080
+        }
+    }
+}
+
+public enum ProviderPaceSlot: Sendable {
+    case primary
+    case secondary
+    case tertiary
+}
+
+public struct ProviderStandardPaceLane: Sendable {
+    public let kind: ProviderPaceKind
+    public let windowRule: ProviderPaceWindowRule
+
+    public init(kind: ProviderPaceKind, windowRule: ProviderPaceWindowRule) {
+        self.kind = kind
+        self.windowRule = windowRule
+    }
+
+    public static func session(maximumMinutes: Int, requiresDuration: Bool = false) -> Self {
+        Self(kind: .session, windowRule: .custom { window, _ in
+            guard let minutes = window.windowMinutes else { return !requiresDuration }
+            return minutes <= maximumMinutes
+        })
+    }
+
+    public static var weekly: Self {
+        Self(kind: .weekly, windowRule: .custom { _, _ in true })
+    }
+
+    public static var weeklyWithDuration: Self {
+        Self(kind: .weekly, windowRule: .windowDurationPresent)
+    }
+
+    public static func exact(kind: ProviderPaceKind, minutes: Int) -> Self {
+        Self(kind: kind, windowRule: .windowDuration(minutes: minutes))
+    }
+}
+
 public struct ProviderPaceCapability: Sendable {
     public static let monthlyWindowSentinelMinutes = 30 * 24 * 60
     public static let unsupported = ProviderPaceCapability()
@@ -74,13 +132,25 @@ public struct ProviderPaceCapability: Sendable {
 
     public let resetWindowPace: ProviderPaceWindowRule
     public let inferredMonthlyDuration: ProviderPaceDurationRule
+    public let primary: ProviderStandardPaceLane?
+    public let secondary: ProviderStandardPaceLane?
+    public let tertiary: ProviderStandardPaceLane?
+    public let showsHeadroomHint: Bool
 
     public init(
         resetWindowPace: ProviderPaceWindowRule = .unsupported,
-        inferredMonthlyDuration: ProviderPaceDurationRule = .unsupported)
+        inferredMonthlyDuration: ProviderPaceDurationRule = .unsupported,
+        primary: ProviderStandardPaceLane? = nil,
+        secondary: ProviderStandardPaceLane? = nil,
+        tertiary: ProviderStandardPaceLane? = nil,
+        showsHeadroomHint: Bool = false)
     {
         self.resetWindowPace = resetWindowPace
         self.inferredMonthlyDuration = inferredMonthlyDuration
+        self.primary = primary
+        self.secondary = secondary
+        self.tertiary = tertiary
+        self.showsHeadroomHint = showsHeadroomHint
     }
 
     public func supportsResetWindowPace(window: RateWindow, now: Date) -> Bool {
@@ -105,6 +175,19 @@ public struct ProviderPaceCapability: Sendable {
             isSyntheticPlaceholder: window.isSyntheticPlaceholder)
     }
 
+    public func resolvedKind(slot: ProviderPaceSlot, window: RateWindow, now: Date) -> ProviderPaceKind? {
+        if self.supportsResetWindowPace(window: window, now: now) {
+            return .weekly
+        }
+        let lane = switch slot {
+        case .primary: self.primary
+        case .secondary: self.secondary
+        case .tertiary: self.tertiary
+        }
+        guard let lane, lane.windowRule.matches(window: window, now: now) else { return nil }
+        return lane.kind
+    }
+
     private static func inferredMonthlyWindowMinutes(endingAt resetsAt: Date) -> Int? {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? calendar.timeZone
@@ -121,6 +204,8 @@ public struct ProviderDescriptor: Sendable {
     public let branding: ProviderBranding
     public let tokenCost: ProviderTokenCostConfig
     public let pace: ProviderPaceCapability
+    public let history: ProviderHistoryCapability
+    public let presentation: ProviderUsagePresentation
     public let settingsSection: ProviderSettingsSectionRegistration
     public let credentials: ProviderCredentialAdapter?
     public let fetchPlan: ProviderFetchPlan
@@ -135,6 +220,8 @@ public struct ProviderDescriptor: Sendable {
         branding: ProviderBranding,
         tokenCost: ProviderTokenCostConfig,
         pace: ProviderPaceCapability = .unsupported,
+        history: ProviderHistoryCapability = .optIn,
+        presentation: ProviderUsagePresentation = ProviderUsagePresentation(),
         fetchPlan: ProviderFetchPlan,
         cli: ProviderCLIConfig,
         configNormalizer: @escaping @Sendable (inout ProviderConfig) -> Void = { _ in })
@@ -145,6 +232,8 @@ public struct ProviderDescriptor: Sendable {
         self.branding = branding
         self.tokenCost = tokenCost
         self.pace = pace
+        self.history = history
+        self.presentation = presentation
         self.credentials = credentials
         self.fetchPlan = fetchPlan
         self.cli = cli

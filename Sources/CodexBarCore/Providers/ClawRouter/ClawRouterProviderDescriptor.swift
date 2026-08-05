@@ -40,6 +40,9 @@ public enum ClawRouterProviderDescriptor {
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "ClawRouter spend is reported by its usage API." }),
+            presentation: ProviderUsagePresentation(costPresenter: { _ in
+                ProviderCostPresentation(showsGenericFallback: false)
+            }),
             fetchPlan: self.fetchPlan(),
             cli: ProviderCLIConfig(
                 name: "clawrouter",

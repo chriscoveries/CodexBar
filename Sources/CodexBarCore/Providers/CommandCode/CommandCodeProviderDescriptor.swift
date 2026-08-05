@@ -50,7 +50,10 @@ public enum CommandCodeProviderDescriptor {
             cli: ProviderCLIConfig(
                 name: "commandcode",
                 aliases: ["command-code"],
-                versionDetector: nil))
+                versionDetector: nil,
+                browserSupportExemption: { _, _, settings in
+                    settings?.commandcode?.cookieSource == .manual
+                }))
     }
 }
 

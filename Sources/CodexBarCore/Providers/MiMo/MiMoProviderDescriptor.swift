@@ -49,6 +49,17 @@ public enum MiMoProviderDescriptor {
                 supportsTokenCost: false,
                 noDataMessage: { "Xiaomi MiMo cost summary is not supported." }),
             pace: .calendarMonthResetWindow,
+            presentation: ProviderUsagePresentation(identityPresenter: { provider, snapshot in
+                let balance = snapshot.detailRow(label: "Balance")?.value
+                guard let plan = snapshot.loginMethod(for: provider),
+                      !plan.isEmpty,
+                      !plan.localizedCaseInsensitiveContains("balance:")
+                else {
+                    return ProviderIdentityPresentation(badge: balance, plan: nil)
+                }
+                let display = UsageFormatter.cleanPlanName(plan)
+                return ProviderIdentityPresentation(badge: balance ?? display, plan: display)
+            }),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .web],
                 pipeline: ProviderFetchPipeline(resolveStrategies: { context in
@@ -60,7 +71,11 @@ public enum MiMoProviderDescriptor {
             cli: ProviderCLIConfig(
                 name: "mimo",
                 aliases: ["xiaomi-mimo"],
-                versionDetector: nil))
+                versionDetector: nil,
+                browserSupportExemption: { sourceMode, environment, _ in
+                    guard sourceMode == .auto, let environment else { return false }
+                    return MiMoLocalUsageFallback.cacheExists(environment: environment)
+                }))
     }
 }
 

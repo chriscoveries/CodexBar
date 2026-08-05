@@ -52,12 +52,22 @@ public enum OllamaProviderDescriptor {
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "Ollama cost summary is not supported." }),
+            pace: ProviderPaceCapability(
+                primary: .session(maximumMinutes: 300, requiresDuration: true),
+                secondary: .weeklyWithDuration),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .web, .api],
                 pipeline: ProviderFetchPipeline(resolveStrategies: self.resolveStrategies)),
             cli: ProviderCLIConfig(
                 name: "ollama",
-                versionDetector: nil))
+                versionDetector: nil,
+                browserSupportExemption: { sourceMode, environment, settings in
+                    guard sourceMode == .auto else { return false }
+                    let hasEnvironmentToken = environment.map {
+                        ProviderTokenResolver.ollamaToken(environment: $0) != nil
+                    } == true
+                    return settings?.ollama?.cookieSource == .off || hasEnvironmentToken
+                }))
     }
 
     private static func resolveStrategies(context: ProviderFetchContext) async -> [any ProviderFetchStrategy] {

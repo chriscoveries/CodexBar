@@ -50,6 +50,20 @@ public enum FactoryProviderDescriptor {
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "Droid cost summary is not supported." }),
+            presentation: ProviderUsagePresentation(rateWindowLabeler: { metadata, snapshot, _ in
+                guard snapshot.tertiary != nil else {
+                    return ProviderRateWindowLabels(
+                        primary: metadata.sessionLabel,
+                        secondary: metadata.weeklyLabel,
+                        tertiary: metadata.opusLabel ?? "Sonnet",
+                        showsTertiary: metadata.supportsOpus)
+                }
+                return ProviderRateWindowLabels(
+                    primary: "5-hour",
+                    secondary: "Weekly",
+                    tertiary: "Monthly",
+                    showsTertiary: true)
+            }),
             fetchPlan: ProviderFetchPlan(
                 // `.cli` remains as an Auto compatibility alias for persisted configs from older builds
                 // that advertised `[.auto, .cli]` while only implementing the web strategy.
@@ -57,7 +71,11 @@ public enum FactoryProviderDescriptor {
                 pipeline: ProviderFetchPipeline(resolveStrategies: self.resolveStrategies)),
             cli: ProviderCLIConfig(
                 name: "factory",
-                versionDetector: nil))
+                versionDetector: nil,
+                browserSupportExemption: { sourceMode, environment, _ in
+                    guard sourceMode == .auto || sourceMode == .cli else { return false }
+                    return environment.map { FactorySettingsReader.apiKey(environment: $0) != nil } == true
+                }))
     }
 
     private static func resolveStrategies(context: ProviderFetchContext) async -> [any ProviderFetchStrategy] {

@@ -57,7 +57,11 @@ public enum SakanaProviderDescriptor {
             cli: ProviderCLIConfig(
                 name: "sakana",
                 aliases: ["sakana-ai"],
-                versionDetector: nil))
+                versionDetector: nil,
+                browserSupportExemption: { sourceMode, environment, _ in
+                    guard sourceMode == .auto || sourceMode == .web else { return false }
+                    return environment.map { SakanaSettingsReader.cookieHeader(environment: $0) != nil } == true
+                }))
     }
 }
 

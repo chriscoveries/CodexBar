@@ -43,12 +43,20 @@ public enum AmpProviderDescriptor {
                 supportsTokenCost: false,
                 noDataMessage: { "Amp cost summary is not supported." }),
             pace: .calendarMonthResetWindow,
+            presentation: ProviderUsagePresentation(rateWindowLabeler: { metadata, snapshot, _ in
+                ProviderRateWindowLabels(
+                    primary: Self.primaryLabel(snapshot: snapshot) ?? metadata.sessionLabel,
+                    secondary: Self.secondaryLabel(snapshot: snapshot) ?? metadata.weeklyLabel,
+                    tertiary: metadata.opusLabel ?? "Sonnet",
+                    showsTertiary: metadata.supportsOpus)
+            }),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .api, .web, .cli],
                 pipeline: ProviderFetchPipeline(resolveStrategies: self.resolveStrategies)),
             cli: ProviderCLIConfig(
                 name: "amp",
-                versionDetector: nil))
+                versionDetector: nil,
+                browserSupportExemption: { _, _, _ in true }))
     }
 
     public static func primaryLabel(snapshot: UsageSnapshot) -> String? {

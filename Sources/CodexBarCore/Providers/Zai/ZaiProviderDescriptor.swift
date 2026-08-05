@@ -91,6 +91,9 @@ public enum ZaiProviderDescriptor {
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "z.ai cost summary is not supported." }),
+            presentation: ProviderUsagePresentation(extraRateWindowSelector: { snapshot in
+                (snapshot.extraRateWindows ?? []).filter { $0.id == "zai-mcp" }
+            }),
             fetchPlan: self.fetchPlan(),
             cli: ProviderCLIConfig(
                 name: "zai",
