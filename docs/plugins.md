@@ -91,6 +91,9 @@ example, `acme-usage` and `API_KEY` use `CODEXBAR_PLUGIN_ACME_USAGE_API_KEY`.
 - `ctx.settings.get(key)` reads a declared `plain` setting.
 - `ctx.settings.getSecret(key)` reads a declared `secure` setting. Missing values return `null`; kind mismatches and
   undeclared keys throw.
+- `ctx.fail` creates classified errors for `authenticationExpired`, `missingCredential`, `permissionDenied`,
+  `rateLimited`, `providerUnavailable`, `parseFailure`, `networkFailure`, and `apiFailure`. Throw the returned error,
+  for example `throw ctx.fail.rateLimited("Provider rate limit reached")`; ordinary errors retain generic mapping.
 - `await ctx.browser.cookieHeader(domain)` returns a cookie header only with the `browser-cookies` capability and for a
   declared domain. The app imports from Chrome only. Cookie values are secret-equivalent and redacted.
 - `ctx.html.metaContent(html, name)` returns the first matching quoted meta value or `null`.

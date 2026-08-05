@@ -323,6 +323,49 @@ struct ProviderPluginRuntimeTests {
         }
     }
 
+    @Test(arguments: ProviderFetchClassifiedError.Kind.allCases)
+    func `classified failures preserve kind and message`(kind: ProviderFetchClassifiedError.Kind) async throws {
+        let apiName = switch kind {
+        case .authenticationExpired: "authenticationExpired"
+        case .missingCredential: "missingCredential"
+        case .permissionDenied: "permissionDenied"
+        case .rateLimited: "rateLimited"
+        case .providerUnavailable: "providerUnavailable"
+        case .parseFailure: "parseFailure"
+        case .networkFailure: "networkFailure"
+        case .apiFailure: "apiFailure"
+        }
+        let runtime = try ProviderPluginRuntime(source: Self.plugin(fetchBody: """
+        throw ctx.fail.\(apiName)("classified fixture");
+        """))
+
+        do {
+            _ = try await runtime.fetchUsage(secrets: ["TEST_KEY": "secret"])
+            Issue.record("Expected classified failure")
+        } catch let error as ProviderFetchClassifiedError {
+            #expect(error.kind == kind)
+            #expect(error.message == "classified fixture")
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+    }
+
+    @Test
+    func `unclassified failures retain generic script mapping`() async throws {
+        let runtime = try ProviderPluginRuntime(source: Self.plugin(fetchBody: """
+        throw new Error("ordinary fixture");
+        """))
+
+        do {
+            _ = try await runtime.fetchUsage(secrets: ["TEST_KEY": "secret"])
+            Issue.record("Expected script failure")
+        } catch let error as ProviderPluginError {
+            #expect(error == .script("ordinary fixture"))
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+    }
+
     @Test
     func `script errors redact known secrets`() async throws {
         let secret = "super-secret-fixture-value"

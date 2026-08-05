@@ -97,6 +97,9 @@ built-ins, but no browser or Node host environment. Tests assert that `fetch`, `
   and transport uses `ProviderHTTPClient`, including its same-origin HTTPS redirect policy.
 - `ctx.settings.get(key)` reads only a declared `plain` setting; `ctx.settings.getSecret(key)` reads only a declared
   `secure` setting. Kind mismatches and undeclared keys throw. Only secure values are tracked for redaction.
+- `ctx.fail` creates typed host failures for authentication, missing credentials, permission, rate limiting, provider
+  availability, parsing, network, and API errors. Plugins throw the returned error; ordinary exceptions retain the
+  generic script-error mapping.
 - `await ctx.browser.cookieHeader(domain)` returns a Cookie header only for a declared domain and only when the
   `browser-cookies` capability is present. The broker honors the provider's auto/manual/off setting, cache, and browser
   priority order. Cookie headers and individual cookie values are secret-equivalent and redacted at the bridge.

@@ -36,6 +36,21 @@
     },
   });
 
+  const failureKinds = Object.freeze({
+    authenticationExpired: "authentication-expired",
+    missingCredential: "missing-credential",
+    permissionDenied: "permission-denied",
+    rateLimited: "rate-limited",
+    providerUnavailable: "provider-unavailable",
+    parseFailure: "parse-failure",
+    networkFailure: "network-failure",
+    apiFailure: "api-failure",
+  });
+  const classifiedFailure = kind => message =>
+    new Error(`__CODEXBAR_FAILURE__:${kind}:${String(message)}`);
+  ctx.fail = Object.freeze(Object.fromEntries(
+    Object.entries(failureKinds).map(([name, kind]) => [name, classifiedFailure(kind)])));
+
   ctx.browser = Object.freeze({
     cookieHeader(domain) {
       return new Promise((resolve, reject) => host.cookieHeader(String(domain), resolve, reject));

@@ -164,6 +164,9 @@ public final class ProviderPluginRuntime: @unchecked Sendable {
             case .script: return ProviderPluginError.script(message.removingPluginErrorPrefix)
             }
         }
+        if let classifiedError = error as? ProviderFetchClassifiedError {
+            return ProviderFetchClassifiedError(kind: classifiedError.kind, message: message)
+        }
         return ProviderPluginError.script(message)
     }
 }
@@ -405,7 +408,7 @@ private final class ProviderPluginWorker: @unchecked Sendable {
         let reject: @convention(block) (JSValue) -> Void = { [weak self] value in
             guard let self else { return }
             defer { self.retainedCallbacks[callbackID] = nil }
-            completion(.failure(ProviderPluginError.script(redactionValues.redact(self.message(from: value)))))
+            completion(.failure(self.failure(from: value, redactionValues: redactionValues)))
         }
         self.retainedCallbacks[callbackID] = [resolve, reject]
 
@@ -754,6 +757,23 @@ private final class ProviderPluginWorker: @unchecked Sendable {
             return message.toString()
         }
         return value.toString()
+    }
+
+    private func failure(
+        from value: JSValue,
+        redactionValues: ProviderPluginRedactionValues) -> Error
+    {
+        let message = redactionValues.redact(self.message(from: value))
+        let marker = "__CODEXBAR_FAILURE__:"
+        if message.hasPrefix(marker),
+           let separator = message[message.index(message.startIndex, offsetBy: marker.count)...].firstIndex(of: ":"),
+           let kind = ProviderFetchClassifiedError.Kind(
+               rawValue: String(message[message.index(message.startIndex, offsetBy: marker.count)..<separator]))
+        {
+            let body = String(message[message.index(after: separator)...])
+            return ProviderFetchClassifiedError(kind: kind, message: body)
+        }
+        return ProviderPluginError.script(message)
     }
 
     private static func exceptionMessage(_ context: JSContext) -> String? {
