@@ -987,6 +987,7 @@ extension StatusItemController {
                     }
                     switch selection {
                     case .overview:
+                        // Provider-specific by design: Codex is the persisted fallback for an empty overview.
                         self.lastMenuProvider = (provider ?? .codex).instanceID
                     case let .provider(provider):
                         self.lastMenuProvider = provider
@@ -1061,6 +1062,7 @@ extension StatusItemController {
 
     @discardableResult
     private func handleCodexVisibleAccountSelection(_ account: CodexVisibleAccount, menu: NSMenu?) -> Bool {
+        // Provider-specific by design: managed Codex selection rebuilds after account-scoped reconciliation.
         let visibleAccountID = account.id
         self.advanceMenuInteraction(for: menu)
         self.settings.selectDisplayedCodexVisibleAccount(account)
@@ -1560,6 +1562,7 @@ extension StatusItemController {
     /// Providers that surface the live component list as a native submenu. Every other provider
     /// keeps the plain "Status Page" link that opens the website. Kept deliberately small: these
     /// are the statuspage.io/incident.io feeds we actively curate and trust to render well.
+    /// Provider-specific by design: these four curated status feeds expose component trees rendered by the app.
     static let statusComponentsSubmenuProviders: Set<UsageProvider> = [.claude, .codex, .augment, .zoommate]
 
     /// Filters `components` down to a provider's descriptor-owned named allowlist, if configured;
