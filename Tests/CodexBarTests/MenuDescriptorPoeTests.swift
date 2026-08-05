@@ -73,8 +73,9 @@ struct MenuDescriptorPoeTests {
             settings: settings)
 
         let now = Date()
-        let calendar = Calendar.current
-        // Fixed calendar-day fixtures keep this stable around midnight.
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(secondsFromGMT: 0))
+        // Match Poe's UTC day boundary so this remains stable across local time zones and UTC midnight.
         let today = calendar.date(bySettingHour: 12, minute: 0, second: 0, of: now) ?? now
         let yesterday = calendar.date(byAdding: .day, value: -1, to: today) ?? now.addingTimeInterval(-86400)
         let history = PoeUsageHistorySnapshot(
