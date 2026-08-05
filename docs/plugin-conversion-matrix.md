@@ -26,8 +26,8 @@ that remain cheap to convert. Remaining buckets name the next blocker after this
 
 | Status | Count |
 |---|---:|
-| `cut-over` | 3 |
-| `converted` | 12 |
+| `cut-over` | 4 |
+| `converted` | 11 |
 | `convertible-now` | 8 |
 | `needs-cookie-import` | 19 |
 | `needs-files/subprocess/oauth-broker` | 15 |
@@ -96,7 +96,7 @@ that remain cheap to convert. Remaining buckets name the next blocker after this
 | poe | `converted` | Yes | Converted: fixed-origin bearer GET balance/history pagination with daily points and model/type summaries. |
 | chutes | `convertible-now` | No | Verified bearer GET fan-out on the canonical origin; dynamic quota lanes map to named windows. |
 | neuralwatt | `convertible-now` | No | Verified canonical bearer GET; quota lanes and prepaid cost/energy project generically. |
-| clawrouter | `converted` | Yes | Cutover stopped: the plugin supports only the canonical origin, while native production accepts a validated `CLAWROUTER_BASE_URL`. |
+| clawrouter | `cut-over` | Yes | Cut over on JavaScriptCore: validated configured origins, classified failures, exact confidence, budget/ledger details, and provider charts match native behavior; the native fetch core is Linux-only. |
 | longcat | `needs-cookie-import` | No | Skipped: browser-cookie retry needs domain/path-aware cookie selection across multiple imported sessions; the generic broker currently returns one flattened header. |
 | sub2api | `converted` | Yes | Cutover stopped: the plugin does not preserve the native total-request deadline and 401/403 invalid-credential classification. |
 | wayfinder | `needs-pty/webview/native` | No | The local unauthenticated HTTP gateway, metrics text, and routing/savings model violate HTTPS-only generic scope. |

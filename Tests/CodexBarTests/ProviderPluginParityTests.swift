@@ -28,6 +28,7 @@ struct ProviderPluginParityTests {
             (UsageProvider.crof, "CROF_API_KEY"),
             (.venice, "VENICE_API_KEY"),
             (.openrouter, "OPENROUTER_API_KEY"),
+            (.clawrouter, "CLAWROUTER_API_KEY"),
         ] {
             let descriptor = ProviderDescriptorRegistry.descriptor(for: provider)
             let context = Self.context(environment: [key: "fixture-key"])

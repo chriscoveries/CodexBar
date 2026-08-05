@@ -10,7 +10,6 @@ struct ProviderPluginDetailsParityTests {
             (.openai, ["openai.api.balance"], ["openai.js", "openai.api.balance"]),
             (.zai, ["zai.api"], ["zai.js", "zai.api"]),
             (.poe, ["poe.api"], ["poe.js", "poe.api"]),
-            (.clawrouter, ["clawrouter.api"], ["clawrouter.js", "clawrouter.api"]),
         ]
 
         for (provider, defaultIDs, enabledIDs) in fixtures {
@@ -89,22 +88,18 @@ struct ProviderPluginDetailsParityTests {
     }
 
     @Test
-    func `ClawRouter fixture has Swift core parity and stable details`() async throws {
+    func `ClawRouter fixture matches stable cut-over details`() async throws {
         let transport = Self.transport { request in
             guard request.url?.path == "/v1/usage" else { throw FixtureError.unexpectedURL(request.url) }
             return Self.clawRouter
         }
         let now = Date(timeIntervalSince1970: 1_785_686_400)
-        let swift = try await ClawRouterUsageFetcher.fetchUsage(
-            apiKey: "fixture-key",
-            baseURL: #require(URL(string: "https://clawrouter.openclaw.ai")),
-            transport: transport,
-            updatedAt: now).toUsageSnapshot()
         let script = try await ProviderPluginRuntime(bundledPlugin: "clawrouter", transport: transport)
             .fetchUsage(secrets: ["CLAWROUTER_API_KEY": "fixture-key"], now: now)
 
-        Self.expectCoreParity(swift, script)
-        #expect(swift.details == script.details)
+        #expect(script.primary?.usedPercent == 0.024)
+        #expect(script.providerCost?.used == 0.006)
+        #expect(script.providerCost?.limit == 25)
         #expect(try script.details == [
             Self.section("Usage", rows: [
                 Self.row("Requests", "6", "5 succeeded · 1 failed"),
@@ -164,24 +159,19 @@ struct ProviderPluginDetailsParityTests {
     }
 
     @Test(arguments: [false, true])
-    func `ClawRouter default and overridden requests match Swift`(overridden: Bool) async throws {
+    func `ClawRouter cut-over honors default and overridden requests`(overridden: Bool) async throws {
         let baseURL = try #require(URL(string: overridden
                 ? "https://router.example.test/gateway/v1"
                 : "https://clawrouter.openclaw.ai"))
         let requests = PluginRequestRecorder()
         let transport = Self.recordingTransport(requests) { _ in Self.clawRouter }
 
-        _ = try await ClawRouterUsageFetcher.fetchUsage(
-            apiKey: "fixture-key",
-            baseURL: baseURL,
-            transport: transport)
         _ = try await ProviderPluginRuntime(bundledPlugin: "clawrouter", transport: transport).fetchUsage(
             settings: [ClawRouterSettingsReader.baseURLEnvironmentKey: baseURL.absoluteString],
             secrets: [ClawRouterSettingsReader.apiKeyEnvironmentKey: "fixture-key"])
 
         let recorded = await requests.requests
-        #expect(recorded.count == 2)
-        #expect(recorded[0].url == recorded[1].url)
+        #expect(recorded.count == 1)
         #expect(recorded[0].url?.absoluteString == (overridden
                 ? "https://router.example.test/gateway/v1/usage"
                 : "https://clawrouter.openclaw.ai/v1/usage"))
