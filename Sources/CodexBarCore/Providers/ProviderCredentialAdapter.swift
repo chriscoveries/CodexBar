@@ -79,41 +79,56 @@ public struct ProviderCredentialAdapter: Sendable {
     public typealias AuthDetector = @Sendable (
         _ environment: [String: String],
         _ settings: ProviderSettingsSnapshot?) -> [String]
-    public typealias SettingsContribution = @Sendable (
-        _ context: ProviderCredentialSettingsContext) -> ProviderSettingsSnapshotContribution?
+    public typealias DiagnosticSummary = @Sendable (
+        _ account: ProviderTokenAccount?,
+        _ config: ProviderConfig?,
+        _ environment: [String: String],
+        _ settings: ProviderSettingsSnapshot?) -> ProviderDiagnosticAuthSummary
     public typealias ConfigValidator = @Sendable (_ config: ProviderConfig) -> [CodexBarConfigIssue]
     public typealias MissingCredentialMessage = @Sendable (_ environment: [String: String]) -> String?
+    public typealias AccountEnvironmentOverride = @Sendable (
+        _ environment: inout [String: String],
+        _ account: ProviderTokenAccount) -> Void
 
     public let supportsAPIKeyOverride: Bool
+    public let usesRegion: Bool
+    public let usesSecretKey: Bool
     public let environmentProjections: [ProviderCredentialEnvironmentProjection]
     public let tokenAccountSupport: TokenAccountSupport?
     private let environmentOverride: EnvironmentOverride?
     private let tokenResolver: TokenResolver
     private let authDetector: AuthDetector
-    private let settingsContribution: SettingsContribution
+    private let diagnosticSummary: DiagnosticSummary?
     private let configValidator: ConfigValidator
     private let missingCredentialMessage: MissingCredentialMessage?
+    private let accountEnvironmentOverride: AccountEnvironmentOverride
 
     public init(
         supportsAPIKeyOverride: Bool = false,
+        usesRegion: Bool = false,
+        usesSecretKey: Bool = false,
         environmentProjections: [ProviderCredentialEnvironmentProjection] = [],
         environmentOverride: EnvironmentOverride? = nil,
         tokenResolver: @escaping TokenResolver = { _, _, _ in nil },
         tokenAccountSupport: TokenAccountSupport? = nil,
         authDetector: @escaping AuthDetector = { _, _ in [] },
-        settingsContribution: @escaping SettingsContribution = { _ in nil },
+        diagnosticSummary: DiagnosticSummary? = nil,
         configValidator: @escaping ConfigValidator = { _ in [] },
-        missingCredentialMessage: MissingCredentialMessage? = nil)
+        missingCredentialMessage: MissingCredentialMessage? = nil,
+        accountEnvironmentOverride: @escaping AccountEnvironmentOverride = { _, _ in })
     {
         self.supportsAPIKeyOverride = supportsAPIKeyOverride
+        self.usesRegion = usesRegion
+        self.usesSecretKey = usesSecretKey
         self.environmentProjections = environmentProjections
         self.environmentOverride = environmentOverride
         self.tokenResolver = tokenResolver
         self.tokenAccountSupport = tokenAccountSupport
         self.authDetector = authDetector
-        self.settingsContribution = settingsContribution
+        self.diagnosticSummary = diagnosticSummary
         self.configValidator = configValidator
         self.missingCredentialMessage = missingCredentialMessage
+        self.accountEnvironmentOverride = accountEnvironmentOverride
     }
 
     public func applyConfig(base: [String: String], config: ProviderConfig?) -> [String: String] {
@@ -142,6 +157,9 @@ public struct ProviderCredentialAdapter: Sendable {
         environment: [String: String],
         settings: ProviderSettingsSnapshot?) -> ProviderDiagnosticAuthSummary
     {
+        if let diagnosticSummary {
+            return diagnosticSummary(account, config, environment, settings)
+        }
         var modes = account == nil ? [] : ["tokenAccount"]
         if config?.sanitizedAPIKey != nil || config?.sanitizedSecretKey != nil {
             modes.append("api")
@@ -155,18 +173,19 @@ public struct ProviderCredentialAdapter: Sendable {
         return ProviderDiagnosticAuthSummary(configured: !modes.isEmpty, modes: modes)
     }
 
-    public func makeSettingsContribution(
-        context: ProviderCredentialSettingsContext) -> ProviderSettingsSnapshotContribution?
-    {
-        self.settingsContribution(context)
-    }
-
     public func validateConfig(_ config: ProviderConfig) -> [CodexBarConfigIssue] {
         self.configValidator(config)
     }
 
     public func unavailableMessage(environment: [String: String]) -> String? {
         self.missingCredentialMessage?(environment)
+    }
+
+    public func applySelectedAccount(
+        environment: inout [String: String],
+        account: ProviderTokenAccount)
+    {
+        self.accountEnvironmentOverride(&environment, account)
     }
 }
 
@@ -208,6 +227,24 @@ extension ProviderCredentialEnvironmentProjection {
 }
 
 extension ProviderCredentialAdapter {
+    public static func regionValidator(
+        displayName: String,
+        isValid: @escaping @Sendable (String) -> Bool) -> ConfigValidator
+    {
+        { config in
+            guard let provider = config.id.firstPartyProvider,
+                  let region = config.sanitizedRegion,
+                  !isValid(region)
+            else { return [] }
+            return [CodexBarConfigIssue(
+                severity: .error,
+                provider: provider,
+                field: "region",
+                code: "invalid_region",
+                message: "Region \(region) is not a valid \(displayName) region.")]
+        }
+    }
+
     public static func apiKey(
         environmentKey: String,
         additionalProjections: [ProviderCredentialEnvironmentProjection] = [],
@@ -215,10 +252,14 @@ extension ProviderCredentialAdapter {
         environmentHasValue: @escaping @Sendable ([String: String]) -> Bool = { _ in false },
         resolve: @escaping @Sendable ([String: String]) -> String?,
         tokenAccountSupport: TokenAccountSupport? = nil,
-        missingCredentialMessage: MissingCredentialMessage? = nil) -> Self
+        usesRegion: Bool = false,
+        configValidator: @escaping ConfigValidator = { _ in [] },
+        missingCredentialMessage: MissingCredentialMessage? = nil,
+        accountEnvironmentOverride: @escaping AccountEnvironmentOverride = { _, _ in }) -> Self
     {
         Self(
             supportsAPIKeyOverride: true,
+            usesRegion: usesRegion,
             environmentProjections: [
                 .apiKey(
                     environmentKey,
@@ -231,6 +272,8 @@ extension ProviderCredentialAdapter {
             },
             tokenAccountSupport: tokenAccountSupport,
             authDetector: { environment, _ in resolve(environment) == nil ? [] : ["api"] },
-            missingCredentialMessage: missingCredentialMessage)
+            configValidator: configValidator,
+            missingCredentialMessage: missingCredentialMessage,
+            accountEnvironmentOverride: accountEnvironmentOverride)
     }
 }

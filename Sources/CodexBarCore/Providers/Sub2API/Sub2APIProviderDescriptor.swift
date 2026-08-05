@@ -12,6 +12,19 @@ public enum Sub2APIProviderDescriptor {
             injection: .environment(key: Sub2APISettingsReader.apiKeyEnvironmentKey),
             requiresManualCookieSource: false,
             cookieName: nil),
+        configValidator: { config in
+            guard let raw = config.sanitizedEnterpriseHost,
+                  Sub2APISettingsReader.baseURL(environment: [
+                      Sub2APISettingsReader.baseURLEnvironmentKey: raw,
+                  ]) == nil
+            else { return [] }
+            return [CodexBarConfigIssue(
+                severity: .error,
+                provider: .sub2api,
+                field: "enterpriseHost",
+                code: "invalid_enterprise_host",
+                message: Sub2APISettingsError.invalidBaseURL.errorDescription ?? "Invalid sub2api base URL.")]
+        },
         missingCredentialMessage: { environment in
             Sub2APISettingsReader.apiKey(environment: environment) == nil
                 ? Sub2APIUsageError.missingCredentials.errorDescription
@@ -24,7 +37,7 @@ public enum Sub2APIProviderDescriptor {
 
     public static let descriptor = ProviderDescriptor(
         id: .sub2api,
-        credentials: Self.credentials,
+        credentials: self.credentials,
         metadata: ProviderMetadata(
             id: .sub2api,
             displayName: "sub2api",

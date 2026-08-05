@@ -219,11 +219,9 @@ public enum CodexBarConfigValidator {
 
         self.validateSecretKey(entry, issues: &issues)
 
-        self.validateSub2APIBaseURL(entry, issues: &issues)
+        issues.append(contentsOf: descriptor.credentials?.validateConfig(entry) ?? [])
 
         self.validateRegion(entry, issues: &issues)
-
-        self.validateZaiTeamContext(entry, issues: &issues)
 
         if let workspaceID = entry.workspaceID,
            !workspaceID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -265,8 +263,7 @@ public enum CodexBarConfigValidator {
         guard let secretKey = entry.secretKey,
               !secretKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               let provider = entry.id.firstPartyProvider,
-              provider != .bedrock,
-              provider != .doubao
+              ProviderDescriptorRegistry.descriptor(for: provider).credentials?.usesSecretKey != true
         else {
             return
         }
@@ -277,46 +274,6 @@ public enum CodexBarConfigValidator {
             field: "secretKey",
             code: "secret_key_unused",
             message: "secretKey is set but only bedrock and doubao use secretKey."))
-    }
-
-    private static func validateSub2APIBaseURL(_ entry: ProviderConfig, issues: inout [CodexBarConfigIssue]) {
-        guard entry.id == .sub2api,
-              let raw = entry.enterpriseHost?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !raw.isEmpty,
-              Sub2APISettingsReader.baseURL(environment: [Sub2APISettingsReader.baseURLEnvironmentKey: raw]) == nil
-        else {
-            return
-        }
-
-        issues.append(CodexBarConfigIssue(
-            severity: .error,
-            provider: .sub2api,
-            field: "enterpriseHost",
-            code: "invalid_enterprise_host",
-            message: Sub2APISettingsError.invalidBaseURL.errorDescription ?? "Invalid sub2api base URL."))
-    }
-
-    private static func validateZaiTeamContext(_ entry: ProviderConfig, issues: inout [CodexBarConfigIssue]) {
-        guard entry.id == .zai else { return }
-
-        guard let tokenAccounts = entry.tokenAccounts else { return }
-        for account in tokenAccounts.accounts
-            where account.sanitizedUsageScope?.lowercased() == ZaiUsageScope.team.rawValue
-        {
-            if account.sanitizedOrganizationID == nil || account.sanitizedWorkspaceID == nil {
-                issues.append(self.zaiMissingTeamContextIssue(field: "tokenAccounts"))
-                return
-            }
-        }
-    }
-
-    private static func zaiMissingTeamContextIssue(field: String) -> CodexBarConfigIssue {
-        CodexBarConfigIssue(
-            severity: .warning,
-            provider: .zai,
-            field: field,
-            code: "zai_team_context_missing",
-            message: "z.ai Team mode requires both organizationID and workspaceID.")
     }
 
     private static func providerSupportsWorkspaceID(_ provider: UsageProvider) -> Bool {
@@ -366,67 +323,12 @@ public enum CodexBarConfigValidator {
             return
         }
 
-        switch provider {
-        case .minimax:
-            self.validateKnownRegion(
-                region,
-                provider: provider,
-                isValid: MiniMaxAPIRegion(rawValue: region) != nil,
-                displayName: "MiniMax",
-                issues: &issues)
-        case .zai:
-            self.validateKnownRegion(
-                region,
-                provider: provider,
-                isValid: ZaiAPIRegion(rawValue: region) != nil,
-                displayName: "z.ai",
-                issues: &issues)
-        case .alibaba:
-            self.validateKnownRegion(
-                region,
-                provider: provider,
-                isValid: AlibabaCodingPlanAPIRegion(rawValue: region) != nil,
-                displayName: "Alibaba Coding Plan",
-                issues: &issues)
-        case .alibabatokenplan:
-            self.validateKnownRegion(
-                region,
-                provider: provider,
-                isValid: AlibabaTokenPlanAPIRegion(rawValue: region) != nil,
-                displayName: "Alibaba Token Plan",
-                issues: &issues)
-        case .moonshot:
-            self.validateKnownRegion(
-                region,
-                provider: provider,
-                isValid: MoonshotRegion(rawValue: region) != nil,
-                displayName: "Moonshot",
-                issues: &issues)
-        case .bedrock, .doubao:
-            break
-        default:
-            issues.append(CodexBarConfigIssue(
-                severity: .warning,
-                provider: provider,
-                field: "region",
-                code: "region_unused",
-                message: "region is set but \(provider.rawValue) does not use regions."))
-        }
-    }
-
-    private static func validateKnownRegion(
-        _ region: String,
-        provider: UsageProvider,
-        isValid: Bool,
-        displayName: String,
-        issues: inout [CodexBarConfigIssue])
-    {
-        guard !isValid else { return }
+        guard ProviderDescriptorRegistry.descriptor(for: provider).credentials?.usesRegion != true else { return }
         issues.append(CodexBarConfigIssue(
-            severity: .error,
+            severity: .warning,
             provider: provider,
             field: "region",
-            code: "invalid_region",
-            message: "Region \(region) is not a valid \(displayName) region."))
+            code: "region_unused",
+            message: "region is set but \(provider.rawValue) does not use regions."))
     }
 }

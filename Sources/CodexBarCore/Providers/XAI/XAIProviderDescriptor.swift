@@ -2,10 +2,15 @@ import Foundation
 
 public enum XAIProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+    private static let credentials = ProviderCredentialAdapter.apiKey(
+        environmentKey: XAISettingsReader.apiKeyEnvironmentKey,
+        additionalProjections: [.workspaceID(XAISettingsReader.teamIDEnvironmentKey)],
+        resolve: XAISettingsReader.apiKey)
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .xai,
+            credentials: self.credentials,
             metadata: ProviderMetadata(
                 id: .xai,
                 displayName: "xAI",

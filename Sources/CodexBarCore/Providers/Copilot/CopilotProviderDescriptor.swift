@@ -2,6 +2,16 @@ import Foundation
 
 public enum CopilotProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+    private static let credentials = ProviderCredentialAdapter.apiKey(
+        environmentKey: "COPILOT_API_TOKEN",
+        resolve: { ProviderConfig.clean($0["COPILOT_API_TOKEN"]) },
+        tokenAccountSupport: TokenAccountSupport(
+            title: "GitHub accounts",
+            subtitle: "Sign in with multiple GitHub accounts via OAuth.",
+            placeholder: "Paste GitHub token…",
+            injection: .environment(key: "COPILOT_API_TOKEN"),
+            requiresManualCookieSource: false,
+            cookieName: nil))
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
@@ -11,6 +21,7 @@ public enum CopilotProviderDescriptor {
                     cookieSource: settings.budgetCookieSource,
                     manualCookieHeader: settings.manualBudgetCookieHeader)
             }),
+            credentials: self.credentials,
             metadata: ProviderMetadata(
                 id: .copilot,
                 displayName: "Copilot",

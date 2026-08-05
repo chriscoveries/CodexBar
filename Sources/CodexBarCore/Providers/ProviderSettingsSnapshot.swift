@@ -82,17 +82,21 @@ public struct ProviderSettingsSectionRegistration: Sendable {
     let sectionTypeID: ObjectIdentifier
     public let defaultContribution: ProviderSettingsSnapshotContribution?
     private let cookieSettingsReader: @Sendable (ProviderSettingsSnapshot) -> CookieProviderSettings?
+    private let credentialContributionReader: @Sendable (
+        ProviderCredentialSettingsContext) -> ProviderSettingsSnapshotContribution?
 
     public init<Key: ProviderSettingsSectionKey>(_ key: Key.Type) {
         self.providerID = key.providerID
         self.sectionTypeID = ObjectIdentifier(Key.Section.self)
         self.defaultContribution = nil
         self.cookieSettingsReader = { _ in nil }
+        self.credentialContributionReader = { _ in nil }
     }
 
     public init<Key: ProviderSettingsSectionKey>(
         _ key: Key.Type,
-        cookieSettings: @escaping @Sendable (Key.Section) -> CookieProviderSettings?)
+        cookieSettings: @escaping @Sendable (Key.Section) -> CookieProviderSettings?,
+        credentialSettings: @escaping @Sendable (ProviderCredentialSettingsContext) -> Key.Section? = { _ in nil })
     {
         self.providerID = key.providerID
         self.sectionTypeID = ObjectIdentifier(Key.Section.self)
@@ -100,17 +104,36 @@ public struct ProviderSettingsSectionRegistration: Sendable {
         self.cookieSettingsReader = { snapshot in
             snapshot[key].flatMap(cookieSettings)
         }
+        self.credentialContributionReader = { context in
+            credentialSettings(context).map { ProviderSettingsSnapshotContribution($0, for: key) }
+        }
+    }
+
+    public init<Key: ProviderSettingsSectionKey>(
+        _ key: Key.Type,
+        credentialSettings: @escaping @Sendable (ProviderCredentialSettingsContext) -> Key.Section?)
+    {
+        self.init(key, cookieSettings: { _ in nil }, credentialSettings: credentialSettings)
     }
 
     public init<Key: ProviderSettingsSectionKey>(
         _ key: Key.Type,
         cookieSettings _: Key.Section.Type) where Key.Section: ProviderCookieSettings
     {
-        self.init(key, cookieSettings: { settings in
-            CookieProviderSettings(
-                cookieSource: settings.cookieSource,
-                manualCookieHeader: settings.manualCookieHeader)
-        })
+        self.init(
+            key,
+            cookieSettings: { settings in
+                CookieProviderSettings(
+                    cookieSource: settings.cookieSource,
+                    manualCookieHeader: settings.manualCookieHeader)
+            },
+            credentialSettings: { context in
+                guard let provider = key.providerID.firstPartyProvider else { return nil }
+                let settings = context.cookieSettings(for: provider)
+                return Key.Section(
+                    cookieSource: settings.cookieSource,
+                    manualCookieHeader: settings.manualCookieHeader)
+            })
     }
 
     static func empty(for providerID: ProviderInstanceID) -> Self {
@@ -121,19 +144,23 @@ public struct ProviderSettingsSectionRegistration: Sendable {
             providerID: providerID,
             sectionTypeID: contribution.sectionTypeID,
             defaultContribution: contribution,
-            cookieSettingsReader: { _ in nil })
+            cookieSettingsReader: { _ in nil },
+            credentialContributionReader: { _ in nil })
     }
 
     private init(
         providerID: ProviderInstanceID,
         sectionTypeID: ObjectIdentifier,
         defaultContribution: ProviderSettingsSnapshotContribution?,
-        cookieSettingsReader: @escaping @Sendable (ProviderSettingsSnapshot) -> CookieProviderSettings?)
+        cookieSettingsReader: @escaping @Sendable (ProviderSettingsSnapshot) -> CookieProviderSettings?,
+        credentialContributionReader: @escaping @Sendable (
+            ProviderCredentialSettingsContext) -> ProviderSettingsSnapshotContribution?)
     {
         self.providerID = providerID
         self.sectionTypeID = sectionTypeID
         self.defaultContribution = defaultContribution
         self.cookieSettingsReader = cookieSettingsReader
+        self.credentialContributionReader = credentialContributionReader
     }
 
     public func accepts(_ contribution: ProviderSettingsSnapshotContribution) -> Bool {
@@ -146,6 +173,12 @@ public struct ProviderSettingsSectionRegistration: Sendable {
 
     public func cookieSettings(from snapshot: ProviderSettingsSnapshot) -> CookieProviderSettings? {
         self.cookieSettingsReader(snapshot)
+    }
+
+    public func credentialContribution(
+        context: ProviderCredentialSettingsContext) -> ProviderSettingsSnapshotContribution?
+    {
+        self.credentialContributionReader(context)
     }
 }
 

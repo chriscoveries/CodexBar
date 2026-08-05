@@ -198,7 +198,7 @@ public enum ProviderTokenResolver {
     public static func bedrockResolution(
         environment: [String: String] = ProcessInfo.processInfo.environment) -> ProviderTokenResolution?
     {
-        self.resolveEnv(BedrockSettingsReader.accessKeyID(environment: environment))
+        self.resolution(for: .bedrock, environment: environment)
     }
 
     public static func ampResolution(
@@ -210,7 +210,7 @@ public enum ProviderTokenResolver {
     public static func deepseekResolution(
         environment: [String: String] = ProcessInfo.processInfo.environment) -> ProviderTokenResolution?
     {
-        self.resolveEnv(DeepSeekSettingsReader.apiKey(environment: environment))
+        self.resolution(for: .deepseek, environment: environment)
     }
 
     public static func deepInfraResolution(
@@ -247,19 +247,19 @@ public enum ProviderTokenResolver {
     public static func stepfunResolution(
         environment: [String: String] = ProcessInfo.processInfo.environment) -> ProviderTokenResolution?
     {
-        self.resolveEnv(StepFunSettingsReader.token(environment: environment))
+        self.resolution(for: .stepfun, environment: environment)
     }
 
     public static func doubaoResolution(
         environment: [String: String] = ProcessInfo.processInfo.environment) -> ProviderTokenResolution?
     {
-        self.resolveEnv(DoubaoSettingsReader.apiKey(environment: environment))
+        self.resolution(for: .doubao, environment: environment)
     }
 
     public static func zaiResolution(
         environment: [String: String] = ProcessInfo.processInfo.environment) -> ProviderTokenResolution?
     {
-        self.resolveEnv(ZaiSettingsReader.apiToken(environment: environment))
+        self.resolution(for: .zai, environment: environment)
     }
 
     public static func syntheticResolution(
@@ -271,19 +271,19 @@ public enum ProviderTokenResolver {
     public static func openAIAPIResolution(
         environment: [String: String] = ProcessInfo.processInfo.environment) -> ProviderTokenResolution?
     {
-        self.resolveEnv(OpenAIAPISettingsReader.apiKey(environment: environment))
+        self.resolution(for: .openai, environment: environment)
     }
 
     public static func azureOpenAIResolution(
         environment: [String: String] = ProcessInfo.processInfo.environment) -> ProviderTokenResolution?
     {
-        self.resolveEnv(AzureOpenAISettingsReader.apiKey(environment: environment))
+        self.resolution(for: .azureopenai, environment: environment)
     }
 
     public static func claudeAdminAPIResolution(
         environment: [String: String] = ProcessInfo.processInfo.environment) -> ProviderTokenResolution?
     {
-        self.resolveEnv(ClaudeAdminAPISettingsReader.apiKey(environment: environment))
+        self.resolution(for: .claude, environment: environment)
     }
 
     public static func clinePassResolution(
@@ -295,62 +295,56 @@ public enum ProviderTokenResolver {
     public static func copilotResolution(
         environment: [String: String] = ProcessInfo.processInfo.environment) -> ProviderTokenResolution?
     {
-        self.resolveEnv(self.cleaned(environment["COPILOT_API_TOKEN"]))
+        self.resolution(for: .copilot, environment: environment)
     }
 
     public static func minimaxTokenResolution(
         environment: [String: String] = ProcessInfo.processInfo.environment) -> ProviderTokenResolution?
     {
-        self.resolveEnv(MiniMaxAPISettingsReader.apiToken(environment: environment))
+        self.resolution(for: .minimax, environment: environment)
     }
 
     public static func alibabaTokenResolution(
         environment: [String: String] = ProcessInfo.processInfo.environment) -> ProviderTokenResolution?
     {
-        self.resolveEnv(AlibabaCodingPlanSettingsReader.apiToken(environment: environment))
+        self.resolution(for: .alibaba, environment: environment)
     }
 
     public static func minimaxCookieResolution(
         environment: [String: String] = ProcessInfo.processInfo.environment) -> ProviderTokenResolution?
     {
-        self.resolveEnv(MiniMaxSettingsReader.cookieHeader(environment: environment))
+        self.resolution(for: .minimax, kind: .secondary, environment: environment)
     }
 
     public static func kimiAuthResolution(
         environment: [String: String] = ProcessInfo.processInfo.environment) -> ProviderTokenResolution?
     {
-        self.resolveEnv(KimiSettingsReader.authToken(environment: environment))
+        self.resolution(for: .kimi, environment: environment)
     }
 
     public static func kimiAPIResolution(
         environment: [String: String] = ProcessInfo.processInfo.environment) -> ProviderTokenResolution?
     {
-        self.resolveEnv(KimiSettingsReader.apiKey(environment: environment))
+        self.resolution(for: .kimi, kind: .secondary, environment: environment)
     }
 
     public static func moonshotResolution(
         environment: [String: String] = ProcessInfo.processInfo.environment) -> ProviderTokenResolution?
     {
-        self.resolveEnv(MoonshotSettingsReader.apiKey(environment: environment))
+        self.resolution(for: .moonshot, environment: environment)
     }
 
     public static func ollamaResolution(
         environment: [String: String] = ProcessInfo.processInfo.environment) -> ProviderTokenResolution?
     {
-        self.resolveEnv(OllamaAPISettingsReader.apiKey(environment: environment))
+        self.resolution(for: .ollama, environment: environment)
     }
 
     public static func kiloResolution(
         environment: [String: String] = ProcessInfo.processInfo.environment,
         authFileURL: URL? = nil) -> ProviderTokenResolution?
     {
-        if let resolution = self.resolveEnv(KiloSettingsReader.apiKey(environment: environment)) {
-            return resolution
-        }
-        if let token = KiloSettingsReader.authToken(authFileURL: authFileURL) {
-            return ProviderTokenResolution(token: token, source: .authFile)
-        }
-        return nil
+        self.resolution(for: .kilo, environment: environment, authFileURL: authFileURL)
     }
 
     public static func warpResolution(
@@ -412,10 +406,10 @@ public enum ProviderTokenResolver {
     {
         switch type {
         case .apiKey:
-            self.resolveEnv(DeepgramSettingsReader.apiKey(environment: environment))?.token
+            self.resolution(for: .deepgram, environment: environment)?.token
 
         case .projectID:
-            self.resolveEnv(DeepgramSettingsReader.projectID(environment: environment))?.token
+            self.resolution(for: .deepgram, kind: .projectID, environment: environment)?.token
         }
     }
 
@@ -423,51 +417,12 @@ public enum ProviderTokenResolver {
         environment: [String: String] = ProcessInfo.processInfo.environment,
         authFileURL: URL? = nil) -> ProviderTokenResolution?
     {
-        if let resolution = self.resolveEnv(CodebuffSettingsReader.apiKey(environment: environment)) {
-            return resolution
-        }
-        if let token = CodebuffSettingsReader.authToken(authFileURL: authFileURL) {
-            return ProviderTokenResolution(token: token, source: .authFile)
-        }
-        return nil
+        self.resolution(for: .codebuff, environment: environment, authFileURL: authFileURL)
     }
 
     public static func perplexityResolution(
         environment: [String: String] = ProcessInfo.processInfo.environment) -> ProviderTokenResolution?
     {
-        if let resolution = self.resolveEnv(PerplexitySettingsReader.sessionToken(environment: environment)) {
-            return resolution
-        }
-        #if os(macOS)
-        do {
-            let session = try PerplexityCookieImporter.importSession()
-            if let token = session.sessionToken {
-                return ProviderTokenResolution(token: token, source: .environment)
-            }
-        } catch {
-            // No browser cookies found, continue to fallback
-        }
-        #endif
-        return nil
-    }
-
-    private static func cleaned(_ raw: String?) -> String? {
-        guard var value = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
-            return nil
-        }
-
-        if (value.hasPrefix("\"") && value.hasSuffix("\"")) ||
-            (value.hasPrefix("'") && value.hasSuffix("'"))
-        {
-            value = String(value.dropFirst().dropLast())
-        }
-
-        value = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return value.isEmpty ? nil : value
-    }
-
-    private static func resolveEnv(_ token: String?) -> ProviderTokenResolution? {
-        guard let token else { return nil }
-        return ProviderTokenResolution(token: token, source: .environment)
+        self.resolution(for: .perplexity, environment: environment)
     }
 }

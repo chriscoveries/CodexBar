@@ -6,7 +6,9 @@ public enum JetBrainsProviderDescriptor {
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .jetbrains,
-            settingsSection: .init(JetBrainsProviderSettingsKey.self),
+            settingsSection: .init(JetBrainsProviderSettingsKey.self, credentialSettings: { _ in
+                JetBrainsProviderSettings(ideBasePath: nil)
+            }),
             metadata: ProviderMetadata(
                 id: .jetbrains,
                 displayName: "JetBrains AI",
