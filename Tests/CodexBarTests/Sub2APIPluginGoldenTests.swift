@@ -82,7 +82,14 @@ struct Sub2APIPluginGoldenTests {
         #expect(request.url?.path == "/v1/usage")
         let queryItems = try URLComponents(url: #require(request.url), resolvingAgainstBaseURL: false)?.queryItems ?? []
         #expect(queryItems.contains(URLQueryItem(name: "days", value: "30")))
-        #expect(queryItems.contains(URLQueryItem(name: "timezone", value: TimeZone.current.identifier)))
+        // Foundation says "GMT" where JS Intl says "UTC" on UTC-configured machines; both are the
+        // same zone, so accept either alias instead of the exact identifier.
+        let sentTimezone = try #require(queryItems.first { $0.name == "timezone" }?.value)
+        let currentIdentifier = TimeZone.current.identifier
+        let zeroOffsetAliases: Set = ["GMT", "UTC", "Etc/UTC", "Etc/GMT"]
+        #expect(
+            sentTimezone == currentIdentifier
+                || (zeroOffsetAliases.contains(sentTimezone) && zeroOffsetAliases.contains(currentIdentifier)))
         #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer fixture-key")
         #expect(request.timeoutInterval == 15)
     }
