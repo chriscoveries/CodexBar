@@ -53,11 +53,15 @@ final class SidebarResizeHandleView: NSView {
     private var dragStartWidth: Double = 0
     private var trackingArea: NSTrackingArea?
 
-    // Clicks here must resize, never drag the window (the strip reaches up into the
-    // transparent-titlebar region).
-    override var mouseDownCanMoveWindow: Bool { false }
+    /// Clicks here must resize, never drag the window (the strip reaches up into the
+    /// transparent-titlebar region).
+    override var mouseDownCanMoveWindow: Bool {
+        false
+    }
 
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
 
     /// Cursor rects are the load-bearing mechanism: AppKit re-asks the view for them
     /// every time they're invalidated, so the resize cursor survives SwiftUI's constant
