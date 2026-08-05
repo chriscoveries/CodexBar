@@ -11,17 +11,20 @@ public struct ProviderTokenCostConfig: Sendable {
     public let noDataMessage: @Sendable () -> String
     public let menuHintLines: [ProviderTokenCostHint]
     public let supportsTokenSnapshot: Bool
+    public let showsHintInProviderDetails: Bool
 
     public init(
         supportsTokenCost: Bool,
         noDataMessage: @escaping @Sendable () -> String,
         menuHintLines: [ProviderTokenCostHint] = [],
-        supportsTokenSnapshot: Bool = false)
+        supportsTokenSnapshot: Bool = false,
+        showsHintInProviderDetails: Bool = false)
     {
         self.supportsTokenCost = supportsTokenCost
         self.noDataMessage = noDataMessage
         self.menuHintLines = menuHintLines
         self.supportsTokenSnapshot = supportsTokenSnapshot
+        self.showsHintInProviderDetails = showsHintInProviderDetails
     }
 }
 

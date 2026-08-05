@@ -22,7 +22,10 @@ extension SettingsStore {
     /// Cursor keeps saved manual credentials when browser login switches back to Automatic, but those credentials
     /// stay passive until the user explicitly selects one again.
     func effectiveSelectedTokenAccount(for provider: UsageProvider) -> ProviderTokenAccount? {
-        if provider == .cursor, self.cursorCookieSource == .auto {
+        let support = TokenAccountSupportCatalog.support(for: provider)
+        if support?.selectedAccountRequiresManualCookieSource == true,
+           (self.providerConfig(for: provider)?.cookieSource ?? .auto) == .auto
+        {
             return nil
         }
         return self.selectedTokenAccount(for: provider)
@@ -87,7 +90,7 @@ extension SettingsStore {
             activeIndex: accounts.count)
         self.updateProviderConfig(provider: provider) { entry in
             entry.tokenAccounts = updated
-            if provider == .copilot {
+            if TokenAccountSupportCatalog.support(for: provider)?.clearsAPIKeyOnMutation == true {
                 entry.apiKey = nil
             }
         }
@@ -115,7 +118,9 @@ extension SettingsStore {
 
         let trimmedLabel = label?.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedToken = token?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let trimmedToken, trimmedToken.isEmpty { return }
+        if let trimmedToken, trimmedToken.isEmpty {
+            return
+        }
 
         let existing = data.accounts[index]
         let resolvedIdentifier: String?
@@ -165,7 +170,7 @@ extension SettingsStore {
             activeIndex: data.clampedActiveIndex())
         self.updateProviderConfig(provider: provider) { entry in
             entry.tokenAccounts = updated
-            if provider == .copilot {
+            if TokenAccountSupportCatalog.support(for: provider)?.clearsAPIKeyOnMutation == true {
                 entry.apiKey = nil
             }
         }
@@ -200,7 +205,7 @@ extension SettingsStore {
                     accounts: filtered,
                     activeIndex: nextActiveIndex)
             }
-            if provider == .copilot {
+            if TokenAccountSupportCatalog.support(for: provider)?.clearsAPIKeyOnMutation == true {
                 entry.apiKey = nil
             }
         }
@@ -217,7 +222,9 @@ extension SettingsStore {
     }
 
     func ensureTokenAccountsLoaded() {
-        if self.tokenAccountsLoaded { return }
+        if self.tokenAccountsLoaded {
+            return
+        }
         self.tokenAccountsLoaded = true
     }
 

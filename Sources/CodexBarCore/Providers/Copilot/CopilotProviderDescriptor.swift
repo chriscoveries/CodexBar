@@ -12,7 +12,9 @@ public enum CopilotProviderDescriptor {
             placeholder: "Paste GitHub token…",
             injection: .environment(key: "COPILOT_API_TOKEN"),
             requiresManualCookieSource: false,
-            cookieName: nil))
+            cookieName: nil,
+            clearsAPIKeyOnMutation: true,
+            primaryAddActionTitle: "Add Account"))
 
     /// Budget imports stay Chrome-only to avoid prompting unrelated browsers.
     private static var browserCookieOrder: BrowserCookieImportOrder? {

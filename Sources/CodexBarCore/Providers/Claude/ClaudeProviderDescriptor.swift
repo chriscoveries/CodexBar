@@ -18,6 +18,7 @@ public enum ClaudeProviderDescriptor {
             injection: .cookieHeader,
             requiresManualCookieSource: true,
             cookieName: "sessionKey",
+            showsOrganizationField: true,
             environmentOverride: { token in
                 switch ClaudeCredentialRouting.resolve(tokenAccountToken: token, manualCookieHeader: nil) {
                 case let .oauth(accessToken):

@@ -67,7 +67,8 @@ public enum CodexProviderDescriptor {
                 supportsTokenCost: true,
                 noDataMessage: self.noDataMessage,
                 menuHintLines: [.localized("codex_api_estimate_hint")],
-                supportsTokenSnapshot: true),
+                supportsTokenSnapshot: true,
+                showsHintInProviderDetails: true),
             pace: ProviderPaceCapability(
                 primary: .session(maximumMinutes: 300),
                 secondary: .weekly,

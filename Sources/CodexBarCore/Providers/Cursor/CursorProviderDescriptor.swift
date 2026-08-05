@@ -9,7 +9,8 @@ public enum CursorProviderDescriptor {
         placeholder: "Cookie: …",
         injection: .cookieHeader,
         requiresManualCookieSource: true,
-        cookieName: nil))
+        cookieName: nil,
+        selectedAccountRequiresManualCookieSource: true))
 
     /// Active Cursor sessions often live only in Safari; Chromium profiles may carry stale tokens.
     private static var browserCookieOrder: BrowserCookieImportOrder? {

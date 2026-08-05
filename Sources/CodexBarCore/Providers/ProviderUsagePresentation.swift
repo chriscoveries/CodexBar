@@ -36,6 +36,22 @@ public struct ProviderIdentityPresentation: Sendable, Equatable {
     }
 }
 
+public struct ProviderPlanRowPresentation: Sendable, Equatable {
+    public let label: String
+    public let balancePrefixedLabel: String
+    public let stripsBalancePrefix: Bool
+
+    public init(
+        label: String = "Plan",
+        balancePrefixedLabel: String = "Balance",
+        stripsBalancePrefix: Bool = false)
+    {
+        self.label = label
+        self.balancePrefixedLabel = balancePrefixedLabel
+        self.stripsBalancePrefix = stripsBalancePrefix
+    }
+}
+
 public struct ProviderCostPresentation: Sendable, Equatable {
     public struct Balance: Sendable, Equatable {
         public let label: String
@@ -377,6 +393,7 @@ public struct ProviderUsagePresentation: Sendable {
     public let secondaryGloballyCapsPrimary: Bool
     public let menuCard: ProviderMenuCardPresentation
     public let menu: ProviderMenuDescriptorPresentation
+    public let planRow: ProviderPlanRowPresentation
 
     public init(
         rateWindowLabeler: RateWindowLabeler? = nil,
@@ -400,7 +417,8 @@ public struct ProviderUsagePresentation: Sendable {
         widgetRowLimitResolver: @escaping WidgetRowLimitResolver = { _, _ in nil },
         secondaryGloballyCapsPrimary: Bool = false,
         menuCard: ProviderMenuCardPresentation = ProviderMenuCardPresentation(),
-        menu: ProviderMenuDescriptorPresentation = ProviderMenuDescriptorPresentation())
+        menu: ProviderMenuDescriptorPresentation = ProviderMenuDescriptorPresentation(),
+        planRow: ProviderPlanRowPresentation = ProviderPlanRowPresentation())
     {
         self.rateWindowLabeler = rateWindowLabeler
         self.identityPresenter = identityPresenter
@@ -422,6 +440,7 @@ public struct ProviderUsagePresentation: Sendable {
         self.secondaryGloballyCapsPrimary = secondaryGloballyCapsPrimary
         self.menuCard = menuCard
         self.menu = menu
+        self.planRow = planRow
     }
 
     public func rateWindowLabels(
