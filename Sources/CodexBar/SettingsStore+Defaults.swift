@@ -613,6 +613,21 @@ extension SettingsStore {
         }
     }
 
+    /// Explicit opt-in for reading Claude Code's own Keychain item (#2634). Feeds
+    /// `ClaudeOAuthDirectKeychainReadConsent`, the single consent source behind
+    /// `ClaudeOAuthCredentialsStore.keychainAccessAllowed`.
+    var claudeOAuthDirectKeychainReadAllowed: Bool {
+        get { self.defaultsState.claudeOAuthDirectKeychainReadAllowed }
+        set {
+            self.defaultsState.claudeOAuthDirectKeychainReadAllowed = newValue
+            self.userDefaults.set(newValue, forKey: ClaudeOAuthDirectKeychainReadConsent.userDefaultsKey)
+            CodexBarLog.logger(LogCategories.settings).info(
+                "Claude direct Keychain read consent updated",
+                metadata: ["allowed": newValue ? "1" : "0"])
+            self.noteBackgroundWorkSettingsChanged()
+        }
+    }
+
     var claudeOAuthPromptFreeCredentialsEnabled: Bool {
         get { self.claudeOAuthKeychainPromptMode == .never }
         set {
