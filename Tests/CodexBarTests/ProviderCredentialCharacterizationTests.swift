@@ -147,6 +147,7 @@ struct ProviderCredentialCharacterizationTests {
             (.llmproxy, "LLM_PROXY_API_KEY", "LLM_PROXY_BASE_URL"),
             (.litellm, "LITELLM_API_KEY", "LITELLM_BASE_URL"),
             (.clawrouter, "CLAWROUTER_API_KEY", "CLAWROUTER_BASE_URL"),
+            (.openrouter, "OPENROUTER_API_KEY", "OPENROUTER_API_URL"),
             (.sub2api, "SUB2API_API_KEY", "SUB2API_BASE_URL"),
         ]
         for (provider, keyName, endpointName) in endpointFixtures {
@@ -155,6 +156,18 @@ struct ProviderCredentialCharacterizationTests {
                 provider: provider,
                 config: ProviderConfig(id: provider.instanceID, apiKey: "key", enterpriseHost: "https://api.example"))
             #expect(environment == [keyName: "key", endpointName: "https://api.example"])
+        }
+        for (provider, endpointName) in [
+            (UsageProvider.openrouter, OpenRouterSettingsReader.apiURLEnvironmentKey),
+            (.clawrouter, ClawRouterSettingsReader.baseURLEnvironmentKey),
+        ] {
+            let environment = ProviderConfigEnvironment.applyProviderConfigOverrides(
+                base: [endpointName: "https://environment.example"],
+                provider: provider,
+                config: ProviderConfig(
+                    id: provider.instanceID,
+                    enterpriseHost: "https://config.example"))
+            #expect(environment[endpointName] == "https://config.example")
         }
 
         let wayfinder = ProviderConfigEnvironment.applyProviderConfigOverrides(
@@ -316,6 +329,12 @@ struct ProviderCredentialCharacterizationTests {
         #expect(!Self.issueCodes(for: ProviderConfig(
             id: .sub2api,
             enterpriseHost: "https://api.example")).contains("invalid_enterprise_host"))
+        #expect(Self.issueCodes(for: ProviderConfig(
+            id: .openrouter,
+            enterpriseHost: "http://api.example")).contains("invalid_enterprise_host"))
+        #expect(!Self.issueCodes(for: ProviderConfig(
+            id: .openrouter,
+            enterpriseHost: "api.example/v1")).contains("invalid_enterprise_host"))
 
         let incompleteTeam = ProviderTokenAccount(
             id: UUID(),

@@ -39,6 +39,39 @@ struct ProviderPluginParityTests {
         }
     }
 
+    @Test(arguments: [UsageProvider.openrouter, .clawrouter])
+    func `override preflight preserves provider validation errors`(provider: UsageProvider) async throws {
+        let environment: [String: String] = switch provider {
+        case .openrouter: [
+                OpenRouterSettingsReader.envKey: "fixture-key",
+                OpenRouterSettingsReader.apiURLEnvironmentKey: "http://router.example.test",
+                ProviderPluginPrototype.environmentKey: "1",
+            ]
+        case .clawrouter: [
+                ClawRouterSettingsReader.apiKeyEnvironmentKey: "fixture-key",
+                ClawRouterSettingsReader.baseURLEnvironmentKey: "http://router.example.test",
+                ProviderPluginPrototype.environmentKey: "1",
+            ]
+        default: [:]
+        }
+        let context = Self.context(environment: environment)
+        let strategy = try #require(await ProviderDescriptorRegistry.descriptor(for: provider)
+            .fetchPlan.pipeline.resolveStrategies(context).first)
+
+        do {
+            _ = try await strategy.fetch(context)
+            Issue.record("Expected invalid endpoint override")
+        } catch let error as OpenRouterSettingsError {
+            #expect(provider == .openrouter)
+            #expect(error == .invalidEndpointOverride(OpenRouterSettingsReader.apiURLEnvironmentKey))
+        } catch let error as ClawRouterSettingsError {
+            #expect(provider == .clawrouter)
+            #expect(error == .invalidEndpointOverride(ClawRouterSettingsReader.baseURLEnvironmentKey))
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+    }
+
     @Test
     func `Synthetic fixture has Swift and JS snapshot parity`() async throws {
         let body = """

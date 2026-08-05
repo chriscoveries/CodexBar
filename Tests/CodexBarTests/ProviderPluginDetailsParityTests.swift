@@ -130,6 +130,79 @@ struct ProviderPluginDetailsParityTests {
         ])
     }
 
+    @Test(arguments: [false, true])
+    func `OpenRouter default and overridden requests match Swift`(overridden: Bool) async throws {
+        let environment: [String: String] = overridden ? [
+            OpenRouterSettingsReader.apiURLEnvironmentKey: "https://router.example.test/gateway/v1",
+            OpenRouterSettingsReader.httpRefererEnvironmentKey: " https://codexbar.example ",
+            OpenRouterSettingsReader.clientTitleEnvironmentKey: "CodexBar QA",
+        ] : [:]
+        let settings: [String: String] = [
+            OpenRouterSettingsReader.apiURLEnvironmentKey:
+                OpenRouterSettingsReader.apiURL(environment: environment).absoluteString,
+            OpenRouterSettingsReader.clientTitleEnvironmentKey:
+                OpenRouterSettingsReader.clientTitle(environment: environment),
+            OpenRouterSettingsReader.httpRefererEnvironmentKey:
+                OpenRouterSettingsReader.httpReferer(environment: environment) ?? "",
+        ]
+        let requests = PluginRequestRecorder()
+        let transport = Self.recordingTransport(requests) { request in
+            request.url?.path.hasSuffix("/key") == true ? Self.openRouterKey : Self.openRouterCredits
+        }
+
+        _ = try await OpenRouterUsageFetcher.fetchUsage(
+            apiKey: "fixture-key",
+            environment: environment,
+            transport: transport)
+        _ = try await ProviderPluginRuntime(bundledPlugin: "openrouter", transport: transport).fetchUsage(
+            settings: settings,
+            secrets: [OpenRouterSettingsReader.envKey: "fixture-key"])
+
+        let recorded = await requests.requests
+        #expect(recorded.count == 4)
+        #expect(recorded[0].url == recorded[2].url)
+        #expect(recorded[1].url == recorded[3].url)
+        #expect(recorded[0].url?.absoluteString == (overridden
+                ? "https://router.example.test/gateway/v1/credits"
+                : "https://openrouter.ai/api/v1/credits"))
+        #expect(recorded[1].url?.absoluteString == (overridden
+                ? "https://router.example.test/gateway/v1/key"
+                : "https://openrouter.ai/api/v1/key"))
+        #expect(recorded[0].value(forHTTPHeaderField: "X-Title") == (overridden ? "CodexBar QA" : "CodexBar"))
+        #expect(recorded[0].value(forHTTPHeaderField: "HTTP-Referer") ==
+            (overridden ? "https://codexbar.example" : nil))
+        #expect(recorded[0].value(forHTTPHeaderField: "X-Title") ==
+            recorded[2].value(forHTTPHeaderField: "X-Title"))
+        #expect(recorded[0].value(forHTTPHeaderField: "HTTP-Referer") ==
+            recorded[2].value(forHTTPHeaderField: "HTTP-Referer"))
+        #expect(recorded[1].value(forHTTPHeaderField: "X-Title") == nil)
+        #expect(recorded[3].value(forHTTPHeaderField: "X-Title") == nil)
+    }
+
+    @Test(arguments: [false, true])
+    func `ClawRouter default and overridden requests match Swift`(overridden: Bool) async throws {
+        let baseURL = try #require(URL(string: overridden
+                ? "https://router.example.test/gateway/v1"
+                : "https://clawrouter.openclaw.ai"))
+        let requests = PluginRequestRecorder()
+        let transport = Self.recordingTransport(requests) { _ in Self.clawRouter }
+
+        _ = try await ClawRouterUsageFetcher.fetchUsage(
+            apiKey: "fixture-key",
+            baseURL: baseURL,
+            transport: transport)
+        _ = try await ProviderPluginRuntime(bundledPlugin: "clawrouter", transport: transport).fetchUsage(
+            settings: [ClawRouterSettingsReader.baseURLEnvironmentKey: baseURL.absoluteString],
+            secrets: [ClawRouterSettingsReader.apiKeyEnvironmentKey: "fixture-key"])
+
+        let recorded = await requests.requests
+        #expect(recorded.count == 2)
+        #expect(recorded[0].url == recorded[1].url)
+        #expect(recorded[0].url?.absoluteString == (overridden
+                ? "https://router.example.test/gateway/v1/usage"
+                : "https://clawrouter.openclaw.ai/v1/usage"))
+    }
+
     @Test
     func `Poe fixture has Swift core parity and stable details`() async throws {
         let transport = Self.transport { request in
@@ -273,6 +346,21 @@ struct ProviderPluginDetailsParityTests {
         ProviderHTTPTransportHandler { request in
             #expect(request.httpMethod == "GET")
             #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer fixture-key")
+            let response = try #require(HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]))
+            return try (Data(body(request).utf8), response)
+        }
+    }
+
+    private static func recordingTransport(
+        _ recorder: PluginRequestRecorder,
+        body: @escaping @Sendable (URLRequest) throws -> String) -> ProviderHTTPTransportHandler
+    {
+        ProviderHTTPTransportHandler { request in
+            await recorder.append(request)
             let response = try #require(HTTPURLResponse(
                 url: request.url!,
                 statusCode: 200,
@@ -427,6 +515,14 @@ private struct FixtureClaudeFetcher: ClaudeUsageFetching {
 
     func detectVersion() -> String? {
         nil
+    }
+}
+
+private actor PluginRequestRecorder {
+    private(set) var requests: [URLRequest] = []
+
+    func append(_ request: URLRequest) {
+        self.requests.append(request)
     }
 }
 #endif

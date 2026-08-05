@@ -59,7 +59,20 @@ public enum ClawRouterProviderDescriptor {
                         provider: .clawrouter,
                         bundledPlugin: "clawrouter",
                         secretKey: ClawRouterSettingsReader.apiKeyEnvironmentKey,
-                        resolveSecret: { ProviderTokenResolver.clawRouterToken(environment: $0) }),
+                        validateContext: { context in
+                            try ClawRouterSettingsReader.validateEndpointOverride(environment: context.env)
+                        },
+                        resolveValues: { context in
+                            guard let token = ProviderTokenResolver.clawRouterToken(environment: context.env) else {
+                                return nil
+                            }
+                            return ScriptFetchStrategy.Values(
+                                settings: [
+                                    ClawRouterSettingsReader.baseURLEnvironmentKey:
+                                        ClawRouterSettingsReader.baseURL(environment: context.env).absoluteString,
+                                ],
+                                secrets: [ClawRouterSettingsReader.apiKeyEnvironmentKey: token])
+                        }),
                     swift,
                 ]
             }))

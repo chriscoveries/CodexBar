@@ -1,17 +1,22 @@
 defineProvider({
   id: "clawrouter",
   name: "ClawRouter",
-  endpoints: ["https://clawrouter.openclaw.ai"],
+  endpoints: ["https://clawrouter.openclaw.ai", { setting: "CLAWROUTER_BASE_URL", policy: "https" }],
   auth: { type: "bearer", secret: "CLAWROUTER_API_KEY" },
-  settings: [{
-    key: "CLAWROUTER_API_KEY",
-    title: "API key",
-    subtitle: "ClawRouter policy key used for the usage ledger.",
-    type: "secure",
-  }],
+  settings: [
+    {
+      key: "CLAWROUTER_API_KEY",
+      title: "API key",
+      subtitle: "ClawRouter policy key used for the usage ledger.",
+      type: "secure",
+    },
+    { key: "CLAWROUTER_BASE_URL", title: "Base URL", type: "plain" },
+  ],
 
   async fetchUsage(ctx) {
-    const response = await ctx.http.getJSON("https://clawrouter.openclaw.ai/v1/usage");
+    let base = (ctx.settings.get("CLAWROUTER_BASE_URL") || "https://clawrouter.openclaw.ai").replace(/\/+$/, "");
+    if (!/\/v1$/.test(base)) base += "/v1";
+    const response = await ctx.http.getJSON(`${base}/usage`);
     if (response.status === 401 || response.status === 403) {
       throw new Error("ClawRouter rejected the API key");
     }

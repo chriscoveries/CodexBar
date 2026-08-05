@@ -1,18 +1,27 @@
 defineProvider({
   id: "openrouter",
   name: "OpenRouter",
-  endpoints: ["https://openrouter.ai"],
+  endpoints: ["https://openrouter.ai", { setting: "OPENROUTER_API_URL", policy: "https" }],
   auth: { type: "bearer", secret: "OPENROUTER_API_KEY" },
-  settings: [{
-    key: "OPENROUTER_API_KEY",
-    title: "API key",
-    subtitle: "OpenRouter API key used for credits and key quota.",
-    type: "secure",
-  }],
+  settings: [
+    {
+      key: "OPENROUTER_API_KEY",
+      title: "API key",
+      subtitle: "OpenRouter API key used for credits and key quota.",
+      type: "secure",
+    },
+    { key: "OPENROUTER_API_URL", title: "API URL", type: "plain" },
+    { key: "OPENROUTER_HTTP_REFERER", title: "HTTP referer", type: "plain" },
+    { key: "OPENROUTER_X_TITLE", title: "Client title", type: "plain" },
+  ],
 
   async fetchUsage(ctx) {
-    const creditsResponse = await ctx.http.getJSON("https://openrouter.ai/api/v1/credits", {
-      headers: { "X-Title": "CodexBar" },
+    const base = (ctx.settings.get("OPENROUTER_API_URL") || "https://openrouter.ai/api/v1").replace(/\/+$/, "");
+    const headers = { "X-Title": ctx.settings.get("OPENROUTER_X_TITLE") || "CodexBar" };
+    const referer = ctx.settings.get("OPENROUTER_HTTP_REFERER");
+    if (referer) headers["HTTP-Referer"] = referer;
+    const creditsResponse = await ctx.http.getJSON(`${base}/credits`, {
+      headers,
     });
     if (creditsResponse.status !== 200) {
       throw new Error(`OpenRouter API error: HTTP ${creditsResponse.status}`);
@@ -35,7 +44,7 @@ defineProvider({
     const balance = Math.max(0, totalCredits - totalUsage);
     let keyData = null;
     try {
-      const keyResponse = await ctx.http.getJSON("https://openrouter.ai/api/v1/key");
+      const keyResponse = await ctx.http.getJSON(`${base}/key`);
       if (keyResponse.status === 200 && keyResponse.json &&
           keyResponse.json.data && typeof keyResponse.json.data === "object") {
         keyData = keyResponse.json.data;
