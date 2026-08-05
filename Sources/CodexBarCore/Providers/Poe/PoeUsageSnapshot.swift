@@ -27,7 +27,7 @@ public struct PoeUsageSnapshot: Sendable {
             rows.append(.makeRow(label: "Current balance", value: "\(Self.compactNumber(balance)) points"))
         }
         if let history = self.history {
-            let today = history.currentDay(now: self.updatedAt)
+            let today = history.currentDay(now: self.updatedAt, calendar: Self.utcCalendar)
             let seven = history.last7Days
             let thirty = history.last30Days
             rows.append(Self.summaryRow(label: "Today", summary: today))
@@ -92,10 +92,17 @@ public struct PoeUsageSnapshot: Sendable {
             secondaryValue: secondary)
     }
 
+    private static let utcCalendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        return calendar
+    }()
+
     private static func timeString(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = .current
+        // Poe reports in UTC; daily buckets already use it, and local zones would flake the goldens.
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
         formatter.dateFormat = "MM-dd HH:mm"
         return formatter.string(from: date)
     }

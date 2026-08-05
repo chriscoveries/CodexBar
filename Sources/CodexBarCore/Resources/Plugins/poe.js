@@ -50,7 +50,7 @@ defineProvider({
     }
     function timeString(date) {
       const pad = value => String(value).padStart(2, "0");
-      return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+      return `${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())} ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}`;
     }
     function summaryRow(label, summary) {
       const secondary = [`${summary.requests} requests`];
@@ -120,10 +120,8 @@ defineProvider({
     const seven = summarize(7);
     const thirty = summarize(30);
     const now = new Date(Date.now());
-    const todayEntries = entries.filter(entry =>
-      entry.date.getFullYear() === now.getFullYear() &&
-      entry.date.getMonth() === now.getMonth() &&
-      entry.date.getDate() === now.getDate());
+    const todayUTC = now.toISOString().slice(0, 10);
+    const todayEntries = entries.filter(entry => entry.date.toISOString().slice(0, 10) === todayUTC);
     const today = todayEntries.reduce((sum, entry) => {
       sum.points += entry.points;
       sum.requests += 1;
