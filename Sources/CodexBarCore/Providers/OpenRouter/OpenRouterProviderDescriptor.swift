@@ -30,7 +30,9 @@ public enum OpenRouterProviderDescriptor {
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .openrouter,
+            menuBarMetrics: ProviderMenuBarMetricCapabilities(supported: [.automatic, .primary]),
             credentials: self.credentials,
+            config: ProviderConfigCapabilities(supportsEnterpriseHost: true),
             metadata: ProviderMetadata(
                 id: .openrouter,
                 displayName: "OpenRouter",

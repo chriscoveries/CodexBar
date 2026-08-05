@@ -36,6 +36,50 @@ public struct ProviderHistoryCapability: Sendable, Equatable {
     }
 }
 
+public struct ProviderConfigCapabilities: Sendable, Equatable {
+    public let workspaceIDValidationOrder: Int?
+    public let supportsEnterpriseHost: Bool
+
+    public init(
+        workspaceIDValidationOrder: Int? = nil,
+        supportsEnterpriseHost: Bool = false)
+    {
+        self.workspaceIDValidationOrder = workspaceIDValidationOrder
+        self.supportsEnterpriseHost = supportsEnterpriseHost
+    }
+}
+
+public enum ProviderMenuBarMetric: Sendable, Hashable {
+    case automatic
+    case primary
+    case secondary
+    case primaryAndSecondary
+    case tertiary
+    case extraUsage
+    case average
+    case monthlyPlan
+}
+
+public struct ProviderMenuBarMetricCapabilities: Sendable, Equatable {
+    public static let automaticOnly = Self(supported: [.automatic])
+    public static let standard = Self(supported: [.automatic, .primary, .secondary])
+
+    public let supported: Set<ProviderMenuBarMetric>
+    public let tertiaryRequiresWindow: Bool
+
+    public init(
+        supported: Set<ProviderMenuBarMetric>,
+        tertiaryRequiresWindow: Bool = false)
+    {
+        self.supported = supported
+        self.tertiaryRequiresWindow = tertiaryRequiresWindow
+    }
+
+    public func supports(_ metric: ProviderMenuBarMetric) -> Bool {
+        self.supported.contains(metric)
+    }
+}
+
 public enum ProviderPaceWindowRule: Sendable {
     case unsupported
     case resetDatePresent
@@ -208,14 +252,18 @@ public struct ProviderDescriptor: Sendable {
     public let presentation: ProviderUsagePresentation
     public let settingsSection: ProviderSettingsSectionRegistration
     public let credentials: ProviderCredentialAdapter?
+    public let config: ProviderConfigCapabilities
+    public let menuBarMetrics: ProviderMenuBarMetricCapabilities
     public let fetchPlan: ProviderFetchPlan
     public let cli: ProviderCLIConfig
     private let configNormalizer: @Sendable (inout ProviderConfig) -> Void
 
     public init(
         id: UsageProvider,
+        menuBarMetrics: ProviderMenuBarMetricCapabilities? = nil,
         settingsSection: ProviderSettingsSectionRegistration? = nil,
         credentials: ProviderCredentialAdapter? = nil,
+        config: ProviderConfigCapabilities = ProviderConfigCapabilities(),
         metadata: ProviderMetadata,
         branding: ProviderBranding,
         tokenCost: ProviderTokenCostConfig,
@@ -235,6 +283,8 @@ public struct ProviderDescriptor: Sendable {
         self.history = history
         self.presentation = presentation
         self.credentials = credentials
+        self.config = config
+        self.menuBarMetrics = menuBarMetrics ?? (metadata.balanceOnly ? .automaticOnly : .standard)
         self.fetchPlan = fetchPlan
         self.cli = cli
         self.configNormalizer = configNormalizer
