@@ -71,6 +71,7 @@ extension UsageStore {
     }
 
     func requestOpenAIDashboardRefreshIfStale(reason: String) {
+        // Provider-specific by design: the OpenAI WKWebView session lifecycle attaches only to Codex consumer usage.
         guard self.isEnabled(.codex),
               self.settings.openAIWebAccessEnabled,
               self.settings.codexCookieSource.isEnabled

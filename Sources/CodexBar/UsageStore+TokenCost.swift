@@ -25,6 +25,7 @@ extension UsageStore {
     }
 
     func prepareCursorCostCookie(for provider: UsageProvider) -> CursorCostCookiePreparation {
+        // Provider-specific by design: Cursor's dashboard cost fetch consumes its manually selected browser cookie.
         guard provider == .cursor, self.settings.cursorCookieSource == .manual else {
             return .proceed(nil)
         }
@@ -53,6 +54,7 @@ extension UsageStore {
 
         let fetcher = self.costUsageFetcher
         let timeoutSeconds = self.tokenFetchTimeout
+        // Provider-specific by design: the Codex ledger owns pricing refresh while Bedrock resolves AWS environment.
         let allowPricingRefresh = provider != .codex || !self.settings.codexLocalSessionCostLedgerEnabled
         let environment = provider == .bedrock
             ? ProviderRegistry.makeEnvironment(

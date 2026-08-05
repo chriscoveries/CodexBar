@@ -62,6 +62,7 @@ extension UsageStore {
             return PlanUtilizationHistorySelection(accountKey: nil, histories: providerBuckets.histories(for: nil))
         }
         var providerBuckets = self.planUtilizationHistory[provider.instanceID] ?? PlanUtilizationHistoryBuckets()
+        // Provider-specific by design: Claude OAuth provenance can outrank configured token-account selection.
         if provider == .claude,
            providerBuckets.preferredAccountKey == Self.planUtilizationUnscopedPreferredKey
            || Self.isClaudeOAuthPlanUtilizationAccountKey(providerBuckets.preferredAccountKey)

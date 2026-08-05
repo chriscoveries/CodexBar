@@ -88,7 +88,9 @@ extension UsageStore {
         snapshot: UsageSnapshot,
         sourceLabel: String?)
     {
-        guard provider != .cursor || self.settings.cursorCookieSource != .auto else { return }
+        let support = TokenAccountSupportCatalog.support(for: provider)
+        let cookieSource = self.settings.providerConfig(for: provider)?.cookieSource ?? .auto
+        guard support?.selectedAccountRequiresManualCookieSource != true || cookieSource != .auto else { return }
         let cached = TokenAccountUsageSnapshot(
             account: account,
             snapshot: snapshot,

@@ -110,6 +110,7 @@ extension UsageStore {
     /// Returns true if the Claude account appears to be a subscription (Max, Pro, Ultra, Team).
     /// Returns false for API users or when plan cannot be determined.
     func isClaudeSubscription() -> Bool {
+        // Provider-specific by design: Claude subscription plans choose its consumer dashboard account action.
         Self.isSubscriptionPlan(self.loginMethod(for: .claude))
     }
 

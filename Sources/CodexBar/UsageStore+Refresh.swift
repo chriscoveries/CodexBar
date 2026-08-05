@@ -81,6 +81,7 @@ extension UsageStore {
         if let tokenAccount {
             return self.warningTokenAccountDiscriminator(tokenAccount)
         }
+        // Provider-specific by design: Codex owner keys and Claude OAuth observations scope warning deduplication.
         if provider == .codex {
             return context.codexSessionQuotaOwnerKey?.rawValue
         }
@@ -122,6 +123,7 @@ extension UsageStore {
     }
 
     func prepareRefreshState(for provider: UsageProvider? = nil) {
+        // Provider-specific by design: Codex active-source correction reconciles managed profile filesystem state.
         guard provider == nil || provider == .codex else { return }
         _ = self.settings.persistResolvedCodexActiveSourceCorrectionIfNeeded()
     }
