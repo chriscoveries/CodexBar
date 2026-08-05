@@ -4448,8 +4448,8 @@ enum CostUsageScanner {
         guard cache.codexScanCatchUpPending == true,
               let previous = cache.codexPreviousReport,
               previous.matches(
-                  scanSinceKey: range.scanSinceKey,
-                  scanUntilKey: range.scanUntilKey,
+                  scanSinceKey: range.sinceKey,
+                  scanUntilKey: range.untilKey,
                   timeZoneIdentifier: range.calendar.timeZone.identifier,
                   roots: rootsFingerprint)
         else { return nil }
@@ -4461,7 +4461,9 @@ enum CostUsageScanner {
             provider: .codex,
             cache: cache,
             cacheRoot: options.cacheRoot,
-            calendar: range.calendar)
+            calendar: range.calendar,
+            requestedScanWindow: (sinceKey: range.scanSinceKey, untilKey: range.scanUntilKey),
+            reportWindow: (sinceKey: range.sinceKey, untilKey: range.untilKey))
     }
 
     // swiftlint:disable:next function_body_length
