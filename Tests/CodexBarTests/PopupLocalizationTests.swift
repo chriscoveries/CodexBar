@@ -58,6 +58,8 @@ struct PopupLocalizationTests {
                 usedPercent: 40,
                 keyDataFetched: true,
                 keyLimit: 25,
+                keyLimitRemaining: 15,
+                keyLimitReset: "monthly",
                 keyUsage: 10,
                 keyUsageDaily: 1.25,
                 keyUsageWeekly: 7.5,
@@ -88,7 +90,8 @@ struct PopupLocalizationTests {
             #expect(model.metrics.first?.title == "額度")
             let apiKey = try #require(model.providerDetails.first { $0.title == "API key" })
             #expect(apiKey.rows.map(\.label) == [
-                "API key budget", "API key used", "Today", "This week", "This month", "Rate limit",
+                "API key budget", "API key remaining", "API key used", "Reset window",
+                "Today", "This week", "This month", "Rate limit",
             ])
             #expect(apiKey.chart?.points.map(\.label) == ["Today", "This week", "This month"])
             #expect(apiKey.rows.last?.value == "100 requests / 10s")

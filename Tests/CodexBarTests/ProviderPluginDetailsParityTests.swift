@@ -79,7 +79,9 @@ struct ProviderPluginDetailsParityTests {
                 "API key",
                 rows: [
                     Self.row("API key budget", "$20.00"),
+                    Self.row("API key remaining", "$15.00"),
                     Self.row("API key used", "$5.00"),
+                    Self.row("Reset window", "monthly"),
                     Self.row("Today", "$1.00"),
                     Self.row("This week", "$2.00"),
                     Self.row("This month", "$4.00"),
@@ -361,7 +363,8 @@ struct ProviderPluginDetailsParityTests {
 
     private static let openRouterCredits = #"{"data":{"total_credits":100,"total_usage":40}}"#
     private static let openRouterKey = #"""
-    {"data":{"limit":20,"usage":5,"usage_daily":1,"usage_weekly":2,"usage_monthly":4,
+    {"data":{"limit":20,"limit_remaining":15,"limit_reset":"monthly","usage":5,
+    "usage_daily":1,"usage_weekly":2,"usage_monthly":4,
     "rate_limit":{"requests":120,"interval":"10s"}}}
     """#
     private static let poeBalance = #"{"current_point_balance":2500}"#
