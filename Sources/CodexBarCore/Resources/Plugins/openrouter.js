@@ -42,14 +42,38 @@ defineProvider({
       }
     } catch (_) {}
 
+    function resetWindowUsage(reset) {
+      const windowKey =
+        reset === "daily" ? "usage_daily" :
+        reset === "weekly" ? "usage_weekly" :
+        reset === "monthly" ? "usage_monthly" : null;
+      if (!windowKey) return null;
+      return finite(keyData[windowKey], `key.${windowKey}`, true);
+    }
+
+    // Match the Swift quota path: prefer the server-reported remaining amount, then the
+    // usage field matching the declared reset window, and finally cumulative usage.
+    function keyUsedForQuota() {
+      const limitRemaining = finite(keyData.limit_remaining, "key.limit_remaining", true);
+      if (limitRemaining !== null) {
+        // Clamp to [0, keyLimit] like Swift so remaining above the configured
+        // limit renders 0% used instead of suppressing the meter.
+        return keyLimit - Math.min(keyLimit, Math.max(0, limitRemaining));
+      }
+      const windowUsage = resetWindowUsage(keyData.limit_reset);
+      if (windowUsage !== null) return windowUsage;
+      return keyUsage;
+    }
+
     let primary;
     let keyLimit = null;
     let keyUsage = null;
     if (keyData) {
       keyLimit = finite(keyData.limit, "key.limit", true);
       keyUsage = finite(keyData.usage, "key.usage", true);
-      if (keyLimit !== null && keyLimit > 0 && keyUsage !== null && keyUsage >= 0) {
-        primary = { usedPercent: ctx.pct(keyUsage, keyLimit) };
+      const used = keyUsedForQuota();
+      if (keyLimit !== null && keyLimit > 0 && used !== null && Number.isFinite(used) && used >= 0) {
+        primary = { usedPercent: ctx.pct(used, keyLimit) };
       }
     }
 
