@@ -2,11 +2,32 @@ import Foundation
 
 public enum OpenCodeGoProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+    private static let credentials = ProviderCredentialAdapter(tokenAccountSupport: TokenAccountSupport(
+        title: "Session tokens",
+        subtitle: "Store multiple OpenCode Go Cookie headers.",
+        placeholder: "Cookie: …",
+        injection: .cookieHeader,
+        requiresManualCookieSource: true,
+        cookieName: nil))
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .opencodego,
-            settingsSection: .init(OpenCodeGoProviderSettingsKey.self),
+            settingsSection: .init(
+                OpenCodeGoProviderSettingsKey.self,
+                cookieSettings: { settings in
+                    CookieProviderSettings(
+                        cookieSource: settings.cookieSource,
+                        manualCookieHeader: settings.manualCookieHeader)
+                },
+                credentialSettings: { context in
+                    let settings = context.cookieSettings(for: .opencodego)
+                    return OpenCodeProviderSettings(
+                        cookieSource: settings.cookieSource,
+                        manualCookieHeader: settings.manualCookieHeader,
+                        workspaceID: context.config?.workspaceID)
+                }),
+            credentials: self.credentials,
             metadata: ProviderMetadata(
                 id: .opencodego,
                 displayName: "OpenCode Go",

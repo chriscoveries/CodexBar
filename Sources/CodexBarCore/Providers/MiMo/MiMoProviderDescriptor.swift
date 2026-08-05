@@ -6,7 +6,7 @@ public enum MiMoProviderDescriptor {
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .mimo,
-            settingsSection: .init(MiMoProviderSettingsKey.self),
+            settingsSection: .init(MiMoProviderSettingsKey.self, cookieSettings: MiMoProviderSettings.self),
             metadata: ProviderMetadata(
                 id: .mimo,
                 displayName: "Xiaomi MiMo",

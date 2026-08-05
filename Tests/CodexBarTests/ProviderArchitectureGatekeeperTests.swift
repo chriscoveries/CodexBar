@@ -24,6 +24,24 @@ struct ProviderArchitectureGatekeeperTests {
     }
 
     @Test
+    func `every provider with credential behavior registers an adapter`() {
+        let expected: Set<UsageProvider> = [
+            .abacus, .aiand, .alibaba, .alibabatokenplan, .amp, .antigravity, .augment,
+            .azureopenai, .bedrock, .chutes, .claude, .clawrouter, .clinepass, .codebuff,
+            .copilot, .crof, .cursor, .deepgram, .deepinfra, .deepseek, .doubao, .elevenlabs,
+            .factory, .groq, .kilo, .kimi, .litellm, .llmproxy, .longcat, .manus, .minimax,
+            .mistral, .moonshot, .neuralwatt, .ollama, .openai, .opencode, .opencodego,
+            .openrouter, .perplexity, .poe, .qoder, .qwencloud, .sakana, .stepfun, .sub2api,
+            .synthetic, .venice, .warp, .wayfinder, .xai, .zai, .zenmux,
+        ]
+        let actual = Set(ProviderDescriptorRegistry.all.compactMap { descriptor in
+            descriptor.credentials == nil ? nil : descriptor.id
+        })
+
+        #expect(actual == expected)
+    }
+
+    @Test
     func `every provider can produce and read its registered settings section`() {
         let settings = testSettingsStore(suiteName: "ProviderArchitectureGatekeeperTests-settings-sections")
         let context = ProviderSettingsSnapshotContext(settings: settings, tokenOverride: nil)

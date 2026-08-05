@@ -49,6 +49,12 @@ core folder, registers that key on its descriptor, and contributes the payload f
 accessors keep fetch strategies fully typed. Providers that share a payload type still declare a distinct key for each
 `ProviderInstanceID`, while providers with no runtime settings receive an empty section from the descriptor default.
 
+Credential and config behavior follows the descriptor boundary too. Providers with credentials register a Sendable
+`ProviderCredentialAdapter` that owns config-to-environment projection, token resolution, token-account support,
+diagnose classification, validation, and missing-credential messaging; a missing adapter means the provider has no
+credential behavior. Typed settings-section registrations optionally expose cookie settings and a CLI credential
+contribution, so the app, CLI, and plugin cookie broker consume the same provider-owned settings shape.
+
 ## Provider descriptor (source of truth)
 
 Introduce a single descriptor per provider:
@@ -199,6 +205,10 @@ The mandatory registration checklist is intentionally short:
 If the provider has runtime settings, add its section key and payload beside the descriptor, pass the key as the
 descriptor's `settingsSection`, and return a typed contribution from the app implementation. No central settings file
 or builder switch changes are needed.
+
+If the provider has credential behavior, define its credential adapter beside the descriptor. Register token-account
+metadata and config validation there, and register any cookie/settings projection through the descriptor's typed
+settings section; do not add provider cases to the generic config, diagnose, CLI, or plugin broker consumers.
 
 Everything else is derived from the descriptor: icon-style identity, log-category construction, display and compact
 labels, default enablement, fetch/CLI metadata, icon validation, and widget display representations. The provider

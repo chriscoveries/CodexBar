@@ -107,6 +107,7 @@ public struct ProviderDescriptor: Sendable {
     public let tokenCost: ProviderTokenCostConfig
     public let pace: ProviderPaceCapability
     public let settingsSection: ProviderSettingsSectionRegistration
+    public let credentials: ProviderCredentialAdapter?
     public let fetchPlan: ProviderFetchPlan
     public let cli: ProviderCLIConfig
     private let configNormalizer: @Sendable (inout ProviderConfig) -> Void
@@ -114,6 +115,7 @@ public struct ProviderDescriptor: Sendable {
     public init(
         id: UsageProvider,
         settingsSection: ProviderSettingsSectionRegistration? = nil,
+        credentials: ProviderCredentialAdapter? = nil,
         metadata: ProviderMetadata,
         branding: ProviderBranding,
         tokenCost: ProviderTokenCostConfig,
@@ -128,6 +130,7 @@ public struct ProviderDescriptor: Sendable {
         self.branding = branding
         self.tokenCost = tokenCost
         self.pace = pace
+        self.credentials = credentials
         self.fetchPlan = fetchPlan
         self.cli = cli
         self.configNormalizer = configNormalizer

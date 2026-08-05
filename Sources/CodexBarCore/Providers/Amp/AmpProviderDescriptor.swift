@@ -2,11 +2,15 @@ import Foundation
 
 public enum AmpProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+    private static let credentials = ProviderCredentialAdapter.apiKey(
+        environmentKey: AmpSettingsReader.apiTokenKey,
+        resolve: AmpSettingsReader.apiToken)
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .amp,
-            settingsSection: .init(AmpProviderSettingsKey.self),
+            settingsSection: .init(AmpProviderSettingsKey.self, cookieSettings: AmpProviderSettings.self),
+            credentials: self.credentials,
             metadata: ProviderMetadata(
                 id: .amp,
                 displayName: "Amp",

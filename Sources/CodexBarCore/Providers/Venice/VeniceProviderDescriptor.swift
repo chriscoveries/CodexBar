@@ -2,10 +2,21 @@ import Foundation
 
 public enum VeniceProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+    private static let credentials = ProviderCredentialAdapter.apiKey(
+        environmentKey: VeniceSettingsReader.apiKeyEnvironmentKey,
+        resolve: VeniceSettingsReader.apiKey,
+        tokenAccountSupport: TokenAccountSupport(
+            title: "API tokens",
+            subtitle: "Store multiple Venice API keys.",
+            placeholder: "Paste API key…",
+            injection: .environment(key: VeniceSettingsReader.apiKeyEnvironmentKey),
+            requiresManualCookieSource: false,
+            cookieName: nil))
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .venice,
+            credentials: self.credentials,
             metadata: ProviderMetadata(
                 id: .venice,
                 displayName: "Venice",
