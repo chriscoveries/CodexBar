@@ -48,6 +48,7 @@ public enum CursorProviderDescriptor {
                     "enterprise": "Cursor Enterprise", "cursor enterprise": "Cursor Enterprise",
                     "ultra": "Cursor Ultra", "cursor ultra": "Cursor Ultra",
                 ],
+                debugPane: ProviderDebugPaneCapabilities(probeLogOrder: 2),
                 browserCookieOrder: self.browserCookieOrder
                     ?? ProviderBrowserCookieDefaults.defaultImportOrder,
                 dashboardURL: "https://cursor.com/dashboard?tab=usage",

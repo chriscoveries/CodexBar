@@ -157,6 +157,25 @@ struct ProviderArchitectureGatekeeperTests {
         #expect(fingerprint == 2_208_147_801_202_684_136)
     }
 
+    @Test
+    func `debug pane provider curation preserves legacy membership and order`() {
+        let descriptors = ProviderDescriptorRegistry.all
+        let ordered: ((ProviderDebugPaneCapabilities) -> Int?) -> [UsageProvider] = { rank in
+            descriptors.compactMap { descriptor -> (UsageProvider, Int)? in
+                guard let value = rank(descriptor.metadata.debugPane) else { return nil }
+                return (descriptor.id, value)
+            }
+            .sorted { $0.1 < $1.1 }
+            .map(\.0)
+        }
+
+        #expect(ordered { $0.probeLogOrder } == [.codex, .claude, .cursor, .augment, .amp, .ollama])
+        #expect(ordered { $0.notificationSimulationOrder } == [.codex, .claude])
+        #expect(ordered { $0.errorSimulationOrder } == [
+            .codex, .claude, .gemini, .antigravity, .augment, .amp, .t3chat, .zoommate, .ollama,
+        ])
+    }
+
     private static func repoRoot() throws -> URL {
         var directory = URL(filePath: #filePath).deletingLastPathComponent()
         for _ in 0..<12 {

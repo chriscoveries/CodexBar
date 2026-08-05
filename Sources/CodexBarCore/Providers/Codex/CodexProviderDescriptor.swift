@@ -42,6 +42,10 @@ public enum CodexProviderDescriptor {
                     "education": "Education", "quorum": "Quorum", "k12": "K12",
                     "enterprise": "Enterprise", "edu": "Edu",
                 ],
+                debugPane: ProviderDebugPaneCapabilities(
+                    probeLogOrder: 0,
+                    notificationSimulationOrder: 0,
+                    errorSimulationOrder: 0),
                 browserCookieOrder: self.browserCookieOrder
                     ?? ProviderBrowserCookieDefaults.defaultImportOrder,
                 dashboardURL: "https://chatgpt.com/codex/settings/usage",

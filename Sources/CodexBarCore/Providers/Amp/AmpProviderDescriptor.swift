@@ -26,6 +26,7 @@ public enum AmpProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                debugPane: ProviderDebugPaneCapabilities(probeLogOrder: 4, errorSimulationOrder: 5),
                 browserCookieOrder: ProviderBrowserCookieDefaults.defaultImportOrder,
                 dashboardURL: "https://ampcode.com/settings/usage",
                 statusPageURL: nil),

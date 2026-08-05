@@ -93,6 +93,10 @@ public enum ClaudeProviderDescriptor {
                     "claude team premium": "Team Premium", "enterprise": "Enterprise",
                     "claude enterprise": "Enterprise", "ultra": "Ultra", "claude ultra": "Ultra",
                 ],
+                debugPane: ProviderDebugPaneCapabilities(
+                    probeLogOrder: 1,
+                    notificationSimulationOrder: 1,
+                    errorSimulationOrder: 1),
                 browserCookieOrder: ProviderBrowserCookieDefaults.defaultImportOrder,
                 dashboardURL: "https://console.anthropic.com/settings/billing",
                 subscriptionDashboardURL: "https://claude.ai/settings/usage",

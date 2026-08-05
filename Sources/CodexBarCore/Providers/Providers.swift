@@ -1,6 +1,22 @@
 import Foundation
 import SweetCookieKit
 
+public struct ProviderDebugPaneCapabilities: Sendable {
+    public let probeLogOrder: Int?
+    public let notificationSimulationOrder: Int?
+    public let errorSimulationOrder: Int?
+
+    public init(
+        probeLogOrder: Int? = nil,
+        notificationSimulationOrder: Int? = nil,
+        errorSimulationOrder: Int? = nil)
+    {
+        self.probeLogOrder = probeLogOrder
+        self.notificationSimulationOrder = notificationSimulationOrder
+        self.errorSimulationOrder = errorSimulationOrder
+    }
+}
+
 // swiftformat:disable sortDeclarations
 public enum UsageProvider: String, CaseIterable, Sendable, Codable {
     case codex
@@ -129,6 +145,7 @@ public struct ProviderMetadata: Sendable {
     public let usesAccountFallback: Bool
     public let sharePlanLabels: [String: String]
     public let debugLogUnavailableMessage: String?
+    public let debugPane: ProviderDebugPaneCapabilities
     public let browserCookieOrder: BrowserCookieImportOrder?
     public let dashboardURL: String?
     public let subscriptionDashboardURL: String?
@@ -161,6 +178,7 @@ public struct ProviderMetadata: Sendable {
         usesAccountFallback: Bool = false,
         sharePlanLabels: [String: String] = [:],
         debugLogUnavailableMessage: String? = nil,
+        debugPane: ProviderDebugPaneCapabilities = .init(),
         browserCookieOrder: BrowserCookieImportOrder? = nil,
         dashboardURL: String?,
         subscriptionDashboardURL: String? = nil,
@@ -187,6 +205,7 @@ public struct ProviderMetadata: Sendable {
         self.usesAccountFallback = usesAccountFallback
         self.sharePlanLabels = sharePlanLabels
         self.debugLogUnavailableMessage = debugLogUnavailableMessage
+        self.debugPane = debugPane
         self.browserCookieOrder = browserCookieOrder
         self.dashboardURL = dashboardURL
         self.subscriptionDashboardURL = subscriptionDashboardURL

@@ -36,6 +36,7 @@ public enum OllamaProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                debugPane: ProviderDebugPaneCapabilities(probeLogOrder: 5, errorSimulationOrder: 8),
                 browserCookieOrder: ProviderBrowserCookieDefaults.defaultImportOrder,
                 dashboardURL: "https://ollama.com/settings",
                 statusPageURL: nil),

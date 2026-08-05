@@ -24,6 +24,7 @@ public enum T3ChatProviderDescriptor {
                 usesAccountFallback: false,
                 sharePlanLabels: ["free": "Free", "pro": "Pro", "team": "Team"],
                 debugLogUnavailableMessage: "T3 Chat debug log not yet implemented",
+                debugPane: ProviderDebugPaneCapabilities(errorSimulationOrder: 6),
                 browserCookieOrder: ProviderBrowserCookieDefaults.defaultImportOrder,
                 dashboardURL: "https://t3.chat/settings/customization",
                 subscriptionDashboardURL: "https://t3.chat/settings/subscription",

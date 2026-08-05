@@ -58,6 +58,7 @@ public enum AugmentProviderDescriptor {
                     "free": "Free", "community": "Community", "indie": "Indie", "pro": "Pro",
                     "team": "Team", "enterprise": "Enterprise",
                 ],
+                debugPane: ProviderDebugPaneCapabilities(probeLogOrder: 3, errorSimulationOrder: 4),
                 browserCookieOrder: browserOrder,
                 dashboardURL: "https://app.augmentcode.com/account/subscription",
                 statusPageURL: "https://status.augmentcode.com"),
