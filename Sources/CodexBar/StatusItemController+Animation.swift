@@ -239,6 +239,7 @@ extension StatusItemController {
     }
 
     @discardableResult
+    // swiftlint:disable:next function_body_length
     func applyIcon(
         phase: Double?,
         bypassMergedMenuTrackingDeferral: Bool = false) -> Bool

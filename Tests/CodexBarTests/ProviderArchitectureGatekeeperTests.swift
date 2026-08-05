@@ -241,7 +241,7 @@ struct ProviderArchitectureGatekeeperTests {
                         .contains { $0.contains("Provider-specific by design:") }
                     if !hasMarker {
                         failures.append(
-                            "\(relativePath):\(cluster.lowerBound + 1) has an unjustified UsageProvider case cluster; " +
+                            "\(relativePath):\(cluster.lowerBound + 1) has an unjustified provider case cluster; " +
                                 "derive it or add '// Provider-specific by design: <specific reason>' immediately " +
                                 "before the cluster.")
                     }
