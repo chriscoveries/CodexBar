@@ -26,8 +26,8 @@ that remain cheap to convert. Remaining buckets name the next blocker after this
 
 | Status | Count |
 |---|---:|
-| `cut-over` | 5 |
-| `converted` | 10 |
+| `cut-over` | 6 |
+| `converted` | 9 |
 | `convertible-now` | 8 |
 | `needs-cookie-import` | 19 |
 | `needs-files/subprocess/oauth-broker` | 15 |
@@ -98,7 +98,7 @@ that remain cheap to convert. Remaining buckets name the next blocker after this
 | neuralwatt | `convertible-now` | No | Verified canonical bearer GET; quota lanes and prepaid cost/energy project generically. |
 | clawrouter | `cut-over` | Yes | Cut over on JavaScriptCore: validated configured origins, classified failures, exact confidence, budget/ledger details, and provider charts match native behavior; the native fetch core is Linux-only. |
 | longcat | `needs-cookie-import` | No | Skipped: browser-cookie retry needs domain/path-aware cookie selection across multiple imported sessions; the generic broker currently returns one flattened header. |
-| sub2api | `converted` | Yes | Cutover stopped: the plugin does not preserve the native total-request deadline and 401/403 invalid-credential classification. |
+| sub2api | `cut-over` | Yes | Cut over on JavaScriptCore: configured HTTPS/loopback origins, a hard 15-second request deadline, strict parsing, exact confidence, and classified failures match native behavior; the native fetch core is Linux-only. |
 | wayfinder | `needs-pty/webview/native` | No | The local unauthenticated HTTP gateway, metrics text, and routing/savings model violate HTTPS-only generic scope. |
 | zenmux | `convertible-now` | No | Verified fixed-origin bearer GET pair; subscription and optional PAYG balance map generically. |
 | aiand | `convertible-now` | No | Verified fixed-origin bearer GET pagination; 30-day spend maps to generic cost. |

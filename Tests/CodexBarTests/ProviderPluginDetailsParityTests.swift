@@ -158,6 +158,28 @@ struct ProviderPluginDetailsParityTests {
         #expect(recorded[1].value(forHTTPHeaderField: "X-Title") == nil)
     }
 
+    @Test
+    func `OpenRouter credential adapter projects and validates configured origin`() throws {
+        let endpointKey = OpenRouterSettingsReader.apiURLEnvironmentKey
+        let configured = ProviderConfigEnvironment.applyProviderConfigOverrides(
+            base: [endpointKey: "https://environment.example"],
+            provider: .openrouter,
+            config: ProviderConfig(
+                id: .openrouter,
+                apiKey: "config-key",
+                enterpriseHost: "https://config.example/v1"))
+
+        #expect(configured[OpenRouterSettingsReader.envKey] == "config-key")
+        #expect(configured[endpointKey] == "https://config.example/v1")
+        let credentials = try #require(ProviderDescriptorRegistry.descriptor(for: .openrouter).credentials)
+        #expect(credentials.validateConfig(ProviderConfig(
+            id: .openrouter,
+            enterpriseHost: "http://api.example")).contains { $0.code == "invalid_enterprise_host" })
+        #expect(credentials.validateConfig(ProviderConfig(
+            id: .openrouter,
+            enterpriseHost: "api.example/v1")).isEmpty)
+    }
+
     @Test(arguments: [false, true])
     func `ClawRouter cut-over honors default and overridden requests`(overridden: Bool) async throws {
         let baseURL = try #require(URL(string: overridden

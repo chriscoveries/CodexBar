@@ -30,17 +30,20 @@ struct ProviderPluginParityTests {
             (.openrouter, "OPENROUTER_API_KEY"),
             (.clawrouter, "CLAWROUTER_API_KEY"),
             (.deepgram, "DEEPGRAM_API_KEY"),
+            (.sub2api, "SUB2API_API_KEY"),
         ] {
             let descriptor = ProviderDescriptorRegistry.descriptor(for: provider)
-            let context = Self.context(environment: [key: "fixture-key"])
+            var environment = [key: "fixture-key"]
+            if provider == .sub2api {
+                environment[Sub2APISettingsReader.baseURLEnvironmentKey] = "https://api.example.com"
+            }
+            let context = Self.context(environment: environment)
             let strategies = await descriptor.fetchPlan.pipeline.resolveStrategies(context)
 
             #expect(strategies.map(\.id) == ["\(provider.rawValue).js"])
             #expect(await strategies[0].isAvailable(context))
-            let flagged = await descriptor.fetchPlan.pipeline.resolveStrategies(Self.context(environment: [
-                key: "fixture-key",
-                ProviderPluginPrototype.environmentKey: "1",
-            ]))
+            environment[ProviderPluginPrototype.environmentKey] = "1"
+            let flagged = await descriptor.fetchPlan.pipeline.resolveStrategies(Self.context(environment: environment))
             #expect(flagged.map(\.id) == ["\(provider.rawValue).js"])
         }
     }
