@@ -128,7 +128,8 @@ be positive integers.
 `nextRegenAmount`, and `balance` are optional. A missing limit maps to zero. `identity` accepts bounded, trimmed `email`,
 `organization`, `loginMethod`, and `accountID` strings; Swift always scopes it to the manifest provider ID.
 `subscriptionRenewsAt` and `subscriptionExpiresAt` accept a JavaScript `Date` or ISO-8601 string. Missing optionals are
-fine, while a present value of the wrong type fails the entire fetch with its property path.
+fine. `dataConfidence` accepts `exact`, `estimated`, `percentOnly`, or `unknown` and defaults to `unknown`; a present
+value of the wrong type fails the entire fetch with its property path.
 
 ### Declarative details
 

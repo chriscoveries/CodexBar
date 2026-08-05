@@ -128,6 +128,7 @@ return {
   cost: { used: 8.5, limit: 20, currency: "USD", period: "This month", balance: 11.5 },
   identity: { email: "user@example.com", organization: "Acme", loginMethod: "API key", accountID: "123" },
   subscriptionRenewsAt: "2026-09-01T00:00:00Z",
+  dataConfidence: "exact", // exact | estimated | percentOnly | unknown
   details: [{
     title: "Usage summary",
     rows: [{ label: "Requests", value: "1,240", secondaryValue: "Last 30 days" }],
@@ -143,7 +144,7 @@ return {
 
 Percentages must be finite and are clamped to 0–100. Window minutes are positive integers. Cost requires finite `used`
 and a three-letter uppercase currency. Dates are JavaScript `Date` values or ISO-8601 strings. Snapshot identity is
-always scoped to the manifest's instance ID. Details allow at most 8 sections, 24 rows per section, 120 chart points,
+always scoped to the manifest's instance ID. Data confidence defaults to `unknown`. Details allow at most 8 sections, 24 rows per section, 120 chart points,
 and 120 characters per detail string. Wrong types and limit violations fail the whole fetch instead of truncating it.
 
 ## TypeScript

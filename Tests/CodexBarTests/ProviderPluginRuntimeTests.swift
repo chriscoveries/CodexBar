@@ -315,6 +315,33 @@ struct ProviderPluginRuntimeTests {
         }
     }
 
+    @Test(arguments: [
+        ("exact", UsageDataConfidence.exact),
+        ("estimated", .estimated),
+        ("percentOnly", .percentOnly),
+        ("unknown", .unknown),
+    ])
+    func `data confidence maps validated values`(rawValue: String, expected: UsageDataConfidence) async throws {
+        let runtime = try ProviderPluginRuntime(source: Self.plugin(fetchBody: """
+        return { primary: { usedPercent: 1 }, dataConfidence: "\(rawValue)" };
+        """))
+
+        let snapshot = try await runtime.fetchUsage(secrets: ["TEST_KEY": "secret"])
+
+        #expect(snapshot.dataConfidence == expected)
+    }
+
+    @Test(arguments: [#""certain""#, "42"])
+    func `invalid data confidence fails the snapshot`(value: String) async throws {
+        let runtime = try ProviderPluginRuntime(source: Self.plugin(fetchBody: """
+        return { primary: { usedPercent: 1 }, dataConfidence: \(value) };
+        """))
+
+        await #expect(throws: ProviderPluginError.self) {
+            _ = try await runtime.fetchUsage(secrets: ["TEST_KEY": "secret"])
+        }
+    }
+
     @Test
     func `details map strictly and trim display strings`() async throws {
         let runtime = try ProviderPluginRuntime(source: Self.plugin(fetchBody: """
