@@ -37,7 +37,7 @@ public enum Sub2APIProviderDescriptor {
 
     public static let descriptor = ProviderDescriptor(
         id: .sub2api,
-        credentials: self.credentials,
+        credentials: Self.credentials,
         metadata: ProviderMetadata(
             id: .sub2api,
             displayName: "sub2api",
