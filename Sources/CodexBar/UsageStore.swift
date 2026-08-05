@@ -991,7 +991,6 @@ extension UsageStore {
         await AugmentStatusProbe.latestDumps()
     }
 
-    // swiftlint:disable:next function_body_length
     func debugLog(for provider: UsageProvider) async -> String {
         if let cached = self.probeLogs[provider.instanceID], !cached.isEmpty {
             return cached
