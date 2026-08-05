@@ -194,6 +194,7 @@ struct CLIUnificationGoldenTests {
         #expect(output == expected)
     }
 
+    // swiftlint:disable:next function_body_length
     @Test
     func `affected provider JSON output golden`() throws {
         let payloads = Self.paceFixtures.map { fixture in
