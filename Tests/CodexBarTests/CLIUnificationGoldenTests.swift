@@ -194,7 +194,7 @@ struct CLIUnificationGoldenTests {
         #expect(output == expected)
     }
 
-    // swiftlint:disable:next function_body_length
+    // swiftlint:disable function_body_length
     @Test
     func `affected provider JSON output golden`() throws {
         let payloads = Self.paceFixtures.map { fixture in
@@ -404,6 +404,8 @@ struct CLIUnificationGoldenTests {
         """
         #expect(output == expected)
     }
+
+    // swiftlint:enable function_body_length
 
     private struct Fixture {
         let provider: UsageProvider
