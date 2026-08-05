@@ -32,6 +32,7 @@
 - Claude: report a provably unreadable OAuth delegated refresh as terminal with a long cooldown, instead of looping "run claude login, then retry" and relaunching the CLI every poll cycle (#2650, refs #2634). Thanks @kes02!
 - Usage & Spend: keep priced Codex model rows visible when the history also contains unpriced Auto Review routing rows, labeled as a partial breakdown with ranking removed (#2643). Thanks @akshayprabhu200!
 - Perplexity: pin the promo expiry date to English formatting regardless of system locale, matching the rest of the string and the JS plugin (#2651). Thanks @kes02!
+- OpenRouter: use the server-reported current-period remaining for the key-limit meter and "left" text instead of deriving both from cumulative lifetime usage (#2612, fixes #2605). Thanks @Yuxin-Qiao!
 
 ## 0.47.0 — 2026-08-03
 
