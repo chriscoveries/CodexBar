@@ -93,8 +93,9 @@ built-ins, but no browser or Node host environment. Tests assert that `fetch`, `
 - `await ctx.http.get(url, opts?)` performs a GET and returns `{status, headers, bodyText}`.
 - `await ctx.http.postJSON(url, {body, headers?})` performs a POST and returns `{status, headers, json}`. `body` must be
   JSON-serializable. The serialized body is passed directly to the broker and is never logged.
-- `opts.headers` may contain string header values. Requests have a 15-second timeout, responses are capped at 5 MiB,
-  and transport uses `ProviderHTTPClient`, including its same-origin HTTPS redirect policy.
+- `opts.headers` may contain string header values. `opts.timeoutSeconds` sets a hard deadline from 1 through 30 seconds
+  (default 15), responses are capped at 5 MiB, and transport uses `ProviderHTTPClient`, including its same-origin HTTPS
+  redirect policy.
 - `ctx.settings.get(key)` reads only a declared `plain` setting; `ctx.settings.getSecret(key)` reads only a declared
   `secure` setting. Kind mismatches and undeclared keys throw. Only secure values are tracked for redaction.
 - `ctx.fail` creates typed host failures for authentication, missing credentials, permission, rate limiting, provider

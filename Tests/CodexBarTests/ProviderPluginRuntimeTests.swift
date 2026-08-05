@@ -52,6 +52,65 @@ struct ProviderPluginRuntimeTests {
     }
 
     @Test
+    func `HTTP request deadline defaults to fifteen seconds and accepts bounded override`() async throws {
+        let requests = RequestRecorder()
+        let runtime = try ProviderPluginRuntime(
+            source: Self.plugin(fetchBody: """
+            await ctx.http.getJSON("https://api.example.test/default");
+            const response = await ctx.http.getJSON("https://api.example.test/override", { timeoutSeconds: 7.5 });
+            return { primary: { usedPercent: response.json.used } };
+            """),
+            transport: Self.transport(recorder: requests, body: #"{"used":11}"#))
+
+        let snapshot = try await runtime.fetchUsage(secrets: ["TEST_KEY": "secret-value"])
+
+        #expect(snapshot.primary?.usedPercent == 11)
+        let recorded = await requests.all
+        #expect(recorded.map(\.timeoutInterval) == [15, 7.5])
+    }
+
+    @Test(arguments: ["0", "0.5", "31", #""slow""#])
+    func `HTTP request deadline rejects values outside one through thirty seconds`(value: String) async throws {
+        let requests = RequestRecorder()
+        let runtime = try ProviderPluginRuntime(
+            source: Self.plugin(fetchBody: """
+            await ctx.http.getJSON("https://api.example.test/usage", { timeoutSeconds: \(value) });
+            return { primary: { usedPercent: 1 } };
+            """),
+            transport: Self.transport(recorder: requests))
+
+        await #expect(throws: ProviderPluginError.self) {
+            _ = try await runtime.fetchUsage(secrets: ["TEST_KEY": "secret-value"])
+        }
+        #expect(await requests.isEmpty)
+    }
+
+    @Test
+    func `HTTP request deadline cancels a transport that exceeds it`() async throws {
+        let runtime = try ProviderPluginRuntime(
+            source: Self.plugin(fetchBody: """
+            await ctx.http.getJSON("https://api.example.test/slow", { timeoutSeconds: 1 });
+            return { primary: { usedPercent: 1 } };
+            """),
+            transport: ProviderHTTPTransportHandler { request in
+                try await Task.sleep(for: .seconds(5))
+                let response = try #require(HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "application/json"]))
+                return (Data(#"{"used":1}"#.utf8), response)
+            })
+        let startedAt = ContinuousClock.now
+
+        await #expect(throws: ProviderPluginError.self) {
+            _ = try await runtime.fetchUsage(secrets: ["TEST_KEY": "secret-value"])
+        }
+
+        #expect(ContinuousClock.now - startedAt < .seconds(2))
+    }
+
+    @Test
     func `settings split enforces kind and only secrets are redacted`() async throws {
         let runtime = try ProviderPluginRuntime(source: Self.plugin(
             settings: """
@@ -462,6 +521,10 @@ private actor RequestRecorder {
 
     var first: URLRequest? {
         self.requests.first
+    }
+
+    var all: [URLRequest] {
+        self.requests
     }
 
     func append(_ request: URLRequest) {
