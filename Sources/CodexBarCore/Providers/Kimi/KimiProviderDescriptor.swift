@@ -67,7 +67,10 @@ public enum KimiProviderDescriptor {
                 supportsTokenCost: false,
                 noDataMessage: { "Kimi Code cost summary is not supported." }),
             pace: ProviderPaceCapability(
-                resetWindowPace: .windowDuration(minutes: self.weeklyWindowMinutes)),
+                resetWindowPace: .windowDuration(minutes: self.weeklyWindowMinutes),
+                primary: .exact(kind: .weekly, minutes: self.weeklyWindowMinutes),
+                secondary: .exact(kind: .session, minutes: self.sessionWindowMinutes),
+                tertiary: .exact(kind: .session, minutes: self.sessionWindowMinutes)),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .api, .web],
                 pipeline: ProviderFetchPipeline(resolveStrategies: self.resolveStrategies)),

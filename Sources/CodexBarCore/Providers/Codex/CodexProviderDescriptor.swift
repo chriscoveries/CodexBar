@@ -66,6 +66,19 @@ public enum CodexProviderDescriptor {
                 noDataMessage: self.noDataMessage,
                 menuHintLines: [.localized("codex_api_estimate_hint")],
                 supportsTokenSnapshot: true),
+            pace: ProviderPaceCapability(
+                primary: .session(maximumMinutes: 300),
+                secondary: .weekly,
+                showsHeadroomHint: true),
+            presentation: ProviderUsagePresentation(
+                identityPresenter: { provider, snapshot in
+                    guard let plan = snapshot.loginMethod(for: provider), !plan.isEmpty else {
+                        return ProviderIdentityPresentation(badge: nil, plan: nil)
+                    }
+                    let display = CodexPlanFormatting.displayName(plan) ?? plan
+                    return ProviderIdentityPresentation(badge: display, plan: display)
+                },
+                creditResolver: { $0.codexCreditLimit?.remaining ?? $0.remaining }),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .web, .cli, .oauth],
                 pipeline: ProviderFetchPipeline(resolveStrategies: self.resolveStrategies)),

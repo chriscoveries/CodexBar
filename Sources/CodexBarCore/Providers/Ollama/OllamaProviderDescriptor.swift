@@ -52,6 +52,9 @@ public enum OllamaProviderDescriptor {
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "Ollama cost summary is not supported." }),
+            pace: ProviderPaceCapability(
+                primary: .session(maximumMinutes: 300, requiresDuration: true),
+                secondary: .weeklyWithDuration),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .web, .api],
                 pipeline: ProviderFetchPipeline(resolveStrategies: self.resolveStrategies)),

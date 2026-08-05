@@ -40,6 +40,18 @@ public enum XAIProviderDescriptor {
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "xAI spend history comes from the Management API billing endpoints." }),
+            presentation: ProviderUsagePresentation(
+                identityPresenter: { provider, snapshot in
+                    guard let plan = snapshot.loginMethod(for: provider), !plan.isEmpty else {
+                        return ProviderIdentityPresentation(badge: nil, plan: nil)
+                    }
+                    let display = UsageFormatter.cleanPlanName(plan)
+                    return ProviderIdentityPresentation(badge: display, plan: display)
+                },
+                costPresenter: { snapshot in
+                    let showsFallback = snapshot.providerCost?.period != "Prepaid credits"
+                    return ProviderCostPresentation(showsGenericFallback: showsFallback)
+                }),
             fetchPlan: self.fetchPlan(),
             cli: ProviderCLIConfig(
                 name: "xai",

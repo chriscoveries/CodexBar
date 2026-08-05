@@ -71,7 +71,11 @@ public enum NotionProviderDescriptor {
                 noDataMessage: { "Notion AI cost summary is not supported." }),
             // The billing-period window renews on a calendar cycle, so pace has to measure the real
             // month ending at the reset rather than the 30-day sentinel the snapshot carries.
-            pace: .calendarMonthResetWindow,
+            pace: ProviderPaceCapability(
+                resetWindowPace: .windowDuration(minutes: ProviderPaceCapability.monthlyWindowSentinelMinutes),
+                inferredMonthlyDuration: .windowDuration(
+                    minutes: ProviderPaceCapability.monthlyWindowSentinelMinutes),
+                primary: .session(maximumMinutes: self.rollingWindowMaxMinutes)),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .web],
                 pipeline: ProviderFetchPipeline(resolveStrategies: { _ in [NotionWebFetchStrategy()] })),
