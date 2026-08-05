@@ -130,7 +130,7 @@ for provider in "${PROVIDERS[@]}"; do
   descriptor_matches=()
   while IFS= read -r match; do
     [[ -n "$match" ]] && descriptor_matches+=("$match")
-  done < <(rg -l --glob '*ProviderDescriptor.swift' "id: \\.${provider}," "$DESCRIPTOR_DIR" || true)
+  done < <(grep -rlE "id: \\.${provider}," --include='*ProviderDescriptor.swift' "$DESCRIPTOR_DIR" || true)
   if [[ "${#descriptor_matches[@]}" -ne 1 ]]; then
     echo "error: provider '${provider}' must have exactly one descriptor file declaring 'id: .${provider},'; found ${#descriptor_matches[@]}" >&2
     exit 1
@@ -145,7 +145,7 @@ for provider in "${PROVIDERS[@]}"; do
   implementation_matches=()
   while IFS= read -r match; do
     [[ -n "$match" ]] && implementation_matches+=("$match")
-  done < <(rg -l --glob '*ProviderImplementation.swift' "let id: UsageProvider = \\.${provider}$" "$IMPLEMENTATION_DIR" || true)
+  done < <(grep -rlE "let id: UsageProvider = \\.${provider}\$" --include='*ProviderImplementation.swift' "$IMPLEMENTATION_DIR" || true)
   if [[ "${#implementation_matches[@]}" -ne 1 ]]; then
     echo "error: provider '${provider}' must have exactly one implementation file declaring 'let id: UsageProvider = .${provider}'; found ${#implementation_matches[@]}" >&2
     exit 1
