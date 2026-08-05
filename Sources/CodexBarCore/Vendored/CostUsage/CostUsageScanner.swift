@@ -1703,6 +1703,7 @@ enum CostUsageScanner {
         let emptyReport = CostUsageDailyReport(data: [], summary: nil)
         try checkCancellation?()
 
+        // Provider-specific by design: Codex JSONL and Claude/Vertex transcripts have distinct parsers and caches.
         switch provider {
         case .codex:
             return try self.loadCodexDaily(

@@ -28,6 +28,7 @@ enum CostUsageCacheIO {
     /// Parsing and attribution changes rotate the Codex parser producer key.
     /// Increment this artifact version only when the stored schema or cache layout becomes incompatible.
     private static func artifactVersion(for provider: UsageProvider) -> Int {
+        // Provider-specific by design: scanner parser/schema compatibility versions differ by cache producer.
         switch provider {
         case .codex:
             11
@@ -59,6 +60,7 @@ enum CostUsageCacheIO {
         maxCacheBytes: Int = CostUsageCacheIO.maxCacheLoadBytes) -> CostUsageCache
     {
         let url = self.cacheFileURL(provider: provider, cacheRoot: cacheRoot)
+        // Provider-specific by design: only Codex persistence carries bounded resume/discovery scan state.
         // Only Codex has bounded persistence pruning on save; other providers would be
         // rejected, rebuilt, and written oversized again on every refresh.
         let effectiveMaxBytes = provider == .codex ? maxCacheBytes : Int.max

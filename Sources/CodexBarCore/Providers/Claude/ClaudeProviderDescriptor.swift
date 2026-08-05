@@ -128,7 +128,9 @@ public enum ClaudeProviderDescriptor {
                 supportsTokenCost: true,
                 noDataMessage: self.noDataMessage,
                 menuHintLines: [.estimate],
-                supportsTokenSnapshot: true),
+                supportsTokenSnapshot: true,
+                estimateDisclaimer: "Estimated from local Claude logs at API rates; token totals include cache " +
+                    "read/write tokens and may differ from Claude Code /status."),
             pace: ProviderPaceCapability(
                 primary: .session(maximumMinutes: 300),
                 secondary: .weekly,

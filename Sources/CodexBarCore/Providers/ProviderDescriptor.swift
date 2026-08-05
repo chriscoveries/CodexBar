@@ -13,6 +13,7 @@ public struct ProviderTokenCostConfig: Sendable {
     public let supportsTokenSnapshot: Bool
     public let showsHintInProviderDetails: Bool
     public let showsCostMenuSection: Bool
+    public let estimateDisclaimer: String
 
     public init(
         supportsTokenCost: Bool,
@@ -20,7 +21,8 @@ public struct ProviderTokenCostConfig: Sendable {
         menuHintLines: [ProviderTokenCostHint] = [],
         supportsTokenSnapshot: Bool = false,
         showsHintInProviderDetails: Bool = false,
-        showsCostMenuSection: Bool = true)
+        showsCostMenuSection: Bool = true,
+        estimateDisclaimer: String = "Estimated from local logs · may differ from your bill")
     {
         self.supportsTokenCost = supportsTokenCost
         self.noDataMessage = noDataMessage
@@ -28,6 +30,7 @@ public struct ProviderTokenCostConfig: Sendable {
         self.supportsTokenSnapshot = supportsTokenSnapshot
         self.showsHintInProviderDetails = showsHintInProviderDetails
         self.showsCostMenuSection = showsCostMenuSection
+        self.estimateDisclaimer = estimateDisclaimer
     }
 }
 
