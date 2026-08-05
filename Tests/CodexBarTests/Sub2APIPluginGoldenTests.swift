@@ -86,7 +86,7 @@ struct Sub2APIPluginGoldenTests {
         // same zone, so accept either alias instead of the exact identifier.
         let sentTimezone = try #require(queryItems.first { $0.name == "timezone" }?.value)
         let currentIdentifier = TimeZone.current.identifier
-        let zeroOffsetAliases: Set<String> = ["GMT", "UTC", "Etc/UTC", "Etc/GMT"]
+        let zeroOffsetAliases: Set = ["GMT", "UTC", "Etc/UTC", "Etc/GMT"]
         #expect(
             sentTimezone == currentIdentifier
                 || (zeroOffsetAliases.contains(sentTimezone) && zeroOffsetAliases.contains(currentIdentifier)))
