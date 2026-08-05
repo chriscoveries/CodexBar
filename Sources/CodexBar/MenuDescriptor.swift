@@ -723,7 +723,13 @@ struct MenuDescriptor {
         if provider == .factory, snapshot.tertiary != nil {
             return ("5-hour", L("Weekly"), L("Monthly"), true)
         }
-        let primaryLabel = if provider == .grok {
+        let primaryLabel = if provider == .codex {
+            CodexConsumerProjection.rateTitle(
+                lane: .session,
+                windowMinutes: snapshot.primary?.windowMinutes,
+                sessionLabel: metadata.sessionLabel,
+                weeklyLabel: metadata.weeklyLabel)
+        } else if provider == .grok {
             GrokProviderDescriptor.primaryLabel(window: snapshot.primary) ?? metadata.sessionLabel
         } else if provider == .crof {
             CrofProviderDescriptor.primaryLabel(snapshot: snapshot)
@@ -738,7 +744,13 @@ struct MenuDescriptor {
         } else {
             metadata.sessionLabel
         }
-        let secondaryLabel = if provider == .amp {
+        let secondaryLabel = if provider == .codex {
+            CodexConsumerProjection.rateTitle(
+                lane: .weekly,
+                windowMinutes: snapshot.secondary?.windowMinutes,
+                sessionLabel: metadata.sessionLabel,
+                weeklyLabel: metadata.weeklyLabel)
+        } else if provider == .amp {
             AmpProviderDescriptor.secondaryLabel(details: snapshot.ampUsage) ?? metadata.weeklyLabel
         } else if provider == .alibabatokenplan {
             AlibabaTokenPlanProviderDescriptor.secondaryLabel(window: snapshot.secondary) ?? metadata.weeklyLabel
