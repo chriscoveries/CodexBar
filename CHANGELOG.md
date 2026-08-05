@@ -23,6 +23,7 @@
 - Codex: define Fast cost as estimated API Fast USD, resolve it models.dev-first with model-specific API ratios, and refresh GPT-5.6 Terra/Luna fallback rates (refs #2175). Thanks @iam-brain!
 
 ### Fixed
+- Widgets: bound widget-snapshot file I/O with a defensive timeout and skip further container access once it wedges, so a blocked macOS 26 app-group open() can no longer beachball the app or hang the widget (#2267 follow-up).
 - Command Code: parse and display 5-hour and weekly rolling limits alongside monthly credits and reset times (#2466). Thanks @derekszen!
 - OpenCode Go: include Zen balance in CLI usage reads without waiting beyond five seconds (#2583). Thanks @Yuxin-Qiao!
 - Usage & Spend: keep validated Codex totals visible while the local scanner catches up, with refresh indicators in the dashboard and menu cost rows (#2397). Thanks @hhh2210!
