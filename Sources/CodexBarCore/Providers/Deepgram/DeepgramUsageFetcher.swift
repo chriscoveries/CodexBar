@@ -1,3 +1,5 @@
+// Linux compatibility only. JavaScriptCore platforms use the bundled Deepgram plugin.
+#if !canImport(JavaScriptCore)
 import Foundation
 #if canImport(FoundationNetworking)
 import FoundationNetworking
@@ -584,3 +586,4 @@ public struct DeepgramUsageFetcher: Sendable {
         }
     }
 }
+#endif

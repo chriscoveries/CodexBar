@@ -29,6 +29,7 @@ struct ProviderPluginParityTests {
             (.venice, "VENICE_API_KEY"),
             (.openrouter, "OPENROUTER_API_KEY"),
             (.clawrouter, "CLAWROUTER_API_KEY"),
+            (.deepgram, "DEEPGRAM_API_KEY"),
         ] {
             let descriptor = ProviderDescriptorRegistry.descriptor(for: provider)
             let context = Self.context(environment: [key: "fixture-key"])
@@ -44,7 +45,7 @@ struct ProviderPluginParityTests {
         }
     }
 
-    @Test(arguments: [UsageProvider.openrouter, .clawrouter])
+    @Test(arguments: [UsageProvider.openrouter, .clawrouter, .deepgram])
     func `override preflight preserves provider validation errors`(provider: UsageProvider) async throws {
         let environment: [String: String] = switch provider {
         case .openrouter: [
@@ -55,6 +56,11 @@ struct ProviderPluginParityTests {
         case .clawrouter: [
                 ClawRouterSettingsReader.apiKeyEnvironmentKey: "fixture-key",
                 ClawRouterSettingsReader.baseURLEnvironmentKey: "http://router.example.test",
+                ProviderPluginPrototype.environmentKey: "1",
+            ]
+        case .deepgram: [
+                DeepgramSettingsReader.apiKeyEnvironmentKey: "fixture-key",
+                DeepgramSettingsReader.apiURLEnvironmentKey: "http://router.example.test",
                 ProviderPluginPrototype.environmentKey: "1",
             ]
         default: [:]
@@ -72,6 +78,13 @@ struct ProviderPluginParityTests {
         } catch let error as ClawRouterSettingsError {
             #expect(provider == .clawrouter)
             #expect(error == .invalidEndpointOverride(ClawRouterSettingsReader.baseURLEnvironmentKey))
+        } catch let error as DeepgramSettingsError {
+            #expect(provider == .deepgram)
+            guard case let .invalidEndpointOverride(key) = error else {
+                Issue.record("Unexpected Deepgram settings error: \(error)")
+                return
+            }
+            #expect(key == DeepgramSettingsReader.apiURLEnvironmentKey)
         } catch {
             Issue.record("Unexpected error: \(error)")
         }

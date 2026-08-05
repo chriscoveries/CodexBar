@@ -13,9 +13,9 @@ This document describes the bundled first-party conversion prototype. User-insta
 
 This prototype proves that an existing first-party `UsageProvider` can define its manifest, HTTP requests, response
 parsing, and generic `UsageSnapshot` projection in one bundled JavaScript file. It is deliberately not a user-plugin
-system: IDs remain compile-time `UsageProvider` cases and scripts ship inside CodexBar. Crof, Venice, OpenRouter, and
-ClawRouter have cut over
-to the bundled script on JavaScriptCore platforms; their native fetch cores remain compiled only for the Linux CLI.
+system: IDs remain compile-time `UsageProvider` cases and scripts ship inside CodexBar. Crof, Venice, OpenRouter,
+ClawRouter, and Deepgram have cut over to the bundled script on JavaScriptCore platforms; their native fetch cores
+remain compiled only for the Linux CLI.
 
 Plugin manifests and their projected snapshots now carry a validated `ProviderInstanceID`. The prototype still maps
 that instance ID to an existing first-party `UsageProvider` before using browser-cookie brokerage or other bespoke
@@ -24,13 +24,13 @@ case therefore remain out of scope for this prototype.
 
 ## Enable and test
 
-Set `CODEXBAR_JS_PROVIDERS=1` in CodexBar's environment. Synthetic, OpenAI, z.ai, Poe,
-Deepgram, sub2api, xAI, Manus, Perplexity, T3 Chat, and Qoder then prepend a script strategy to their existing pipeline.
+Set `CODEXBAR_JS_PROVIDERS=1` in CodexBar's environment. Synthetic, OpenAI, z.ai, Poe, sub2api, xAI, Manus,
+Perplexity, T3 Chat, and Qoder then prepend a script strategy to their existing pipeline.
 A missing required secret or disabled cookie source leaves the script
 strategy unavailable and permits the Swift strategy to run; a loaded script that fails does not fall back, so parity
 defects stay visible. Without the variable, the resolver returns the original Swift strategy only and does not load
-JavaScriptCore or a plugin resource for those providers. Crof, Venice, OpenRouter, and ClawRouter always resolve only their script strategy on
-JavaScriptCore platforms; `CODEXBAR_JS_PROVIDERS` does not affect them.
+JavaScriptCore or a plugin resource for those providers. Crof, Venice, OpenRouter, ClawRouter, and Deepgram always
+resolve only their script strategy on JavaScriptCore platforms; `CODEXBAR_JS_PROVIDERS` does not affect them.
 
 Run the focused proof with:
 

@@ -59,7 +59,7 @@ struct ProviderPluginExtensionParityTests {
     }
 
     @Test
-    func `Deepgram plugin matches generic Swift projection and details golden`() async throws {
+    func `Deepgram plugin matches the cut-over details golden`() async throws {
         let transport = Self.transport { request in
             switch request.url?.path {
             case "/v1/projects":
@@ -70,14 +70,11 @@ struct ProviderPluginExtensionParityTests {
                 throw URLError(.badURL)
             }
         }
-        let swift = try await DeepgramUsageFetcher.fetchUsage(apiKey: "fixture-key", transport: transport)
-            .toUsageSnapshot()
         let script = try await ProviderPluginRuntime(bundledPlugin: "deepgram", transport: transport)
             .fetchUsage(secrets: ["DEEPGRAM_API_KEY": "fixture-key"])
 
-        #expect(script.primary == swift.primary)
-        #expect(script.identity?.loginMethod == swift.identity?.loginMethod)
-        #expect(script.details == swift.details)
+        #expect(script.primary == nil)
+        #expect(script.identity?.loginMethod == "Project: Alpha")
         #expect(try script.details == [ProviderDetailSection(
             title: "Usage summary",
             rows: [
