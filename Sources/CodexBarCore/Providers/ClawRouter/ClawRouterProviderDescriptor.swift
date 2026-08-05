@@ -6,7 +6,7 @@ public enum ClawRouterProviderDescriptor {
         environmentKey: ClawRouterSettingsReader.apiKeyEnvironmentKey,
         additionalProjections: [.enterpriseHost(ClawRouterSettingsReader.baseURLEnvironmentKey)],
         resolve: ClawRouterSettingsReader.apiKey,
-        missingCredentialMessage: { _ in ClawRouterUsageError.missingCredentials.errorDescription })
+        missingCredentialMessage: { _ in ClawRouterSettingsReader.missingCredentialsMessage })
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
@@ -50,20 +50,31 @@ public enum ClawRouterProviderDescriptor {
         #if canImport(JavaScriptCore)
         ProviderFetchPlan(
             sourceModes: [.auto, .api],
-            pipeline: ProviderFetchPipeline(resolveStrategies: { context in
-                let swift = ClawRouterAPIFetchStrategy()
-                guard ProviderPluginPrototype.isEnabled(environment: context.env) else { return [swift] }
-                return [
-                    ScriptFetchStrategy(
-                        id: "clawrouter.js",
-                        provider: .clawrouter,
-                        bundledPlugin: "clawrouter",
-                        secretKey: ClawRouterSettingsReader.apiKeyEnvironmentKey,
-                        resolveSecret: { ProviderTokenResolver.clawRouterToken(environment: $0) }),
-                    swift,
-                ]
+            pipeline: ProviderFetchPipeline(resolveStrategies: { _ in
+                [ScriptFetchStrategy(
+                    id: "clawrouter.js",
+                    provider: .clawrouter,
+                    bundledPlugin: "clawrouter",
+                    secretKey: ClawRouterSettingsReader.apiKeyEnvironmentKey,
+                    sourceLabel: "api",
+                    validateContext: { context in
+                        try ClawRouterSettingsReader.validateEndpointOverride(environment: context.env)
+                    },
+                    resolveValues: { context in
+                        guard let token = self.credentials.resolveToken(environment: context.env)?.token else {
+                            return nil
+                        }
+                        return ScriptFetchStrategy.Values(
+                            settings: [
+                                ClawRouterSettingsReader.baseURLEnvironmentKey:
+                                    ClawRouterSettingsReader.baseURL(environment: context.env).absoluteString,
+                            ],
+                            secrets: [ClawRouterSettingsReader.apiKeyEnvironmentKey: token])
+                    },
+                    isEnabled: { _ in true })]
             }))
         #else
+        // Linux compatibility only. JavaScriptCore platforms use the bundled ClawRouter plugin above.
         ProviderFetchPlan(
             sourceModes: [.auto, .api],
             pipeline: ProviderFetchPipeline(resolveStrategies: { _ in [ClawRouterAPIFetchStrategy()] }))
@@ -71,6 +82,7 @@ public enum ClawRouterProviderDescriptor {
     }
 }
 
+#if !canImport(JavaScriptCore)
 struct ClawRouterAPIFetchStrategy: ProviderFetchStrategy {
     let id = "clawrouter.api"
     let kind: ProviderFetchKind = .apiToken
@@ -94,3 +106,4 @@ struct ClawRouterAPIFetchStrategy: ProviderFetchStrategy {
         false
     }
 }
+#endif
