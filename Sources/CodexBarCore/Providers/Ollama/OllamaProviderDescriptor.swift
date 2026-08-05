@@ -56,6 +56,13 @@ public enum OllamaProviderDescriptor {
                 primary: .session(maximumMinutes: 300, requiresDuration: true),
                 secondary: .weeklyWithDuration,
                 sessionPaceWindowRule: .windowDurationPresent),
+            presentation: ProviderUsagePresentation(menuCard: ProviderMenuCardPresentation(
+                usageNotesResolver: { context in
+                    guard context.snapshot?.identity?.loginMethod == "API key" else { return .unhandled }
+                    return .localized([
+                        "API key verified. Cloud quotas need browser cookies. Sign in to Ollama.",
+                    ])
+                })),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .web, .api],
                 pipeline: ProviderFetchPipeline(resolveStrategies: self.resolveStrategies)),

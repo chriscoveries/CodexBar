@@ -88,7 +88,8 @@ public enum CopilotProviderDescriptor {
                           let secondary = context.snapshot.secondary
                     else { return .unhandled }
                     return .resolved(primary.usedPercent >= secondary.usedPercent ? primary : secondary)
-                }),
+                },
+                menuCard: ProviderMenuCardPresentation(primaryDescriptionPlacement: .detailLeft)),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .api],
                 pipeline: ProviderFetchPipeline(resolveStrategies: { _ in [CopilotAPIFetchStrategy()] })),

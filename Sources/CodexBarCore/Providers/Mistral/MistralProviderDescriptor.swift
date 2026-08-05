@@ -64,7 +64,16 @@ public enum MistralProviderDescriptor {
                 return .resolved(context.snapshot.extraRateWindows?.first {
                     $0.id == "mistral-monthly-plan"
                 }?.window)
-            }),
+            }, menuCard: ProviderMenuCardPresentation(
+                usesProviderCostHistoryAsPrimaryDashboard: true,
+                primaryCostHistoryResolver: { snapshot, tokenSnapshot in
+                    if let projected = snapshot?.mistralUsage?.toCostUsageTokenSnapshot() {
+                        return projected
+                    }
+                    return snapshot == nil ? tokenSnapshot : nil
+                },
+                showsPrimaryBalanceDescription: true,
+                hidesPrimaryResetWithoutDate: true)),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .web],
                 pipeline: ProviderFetchPipeline(resolveStrategies: { _ in [MistralWebFetchStrategy()] })),

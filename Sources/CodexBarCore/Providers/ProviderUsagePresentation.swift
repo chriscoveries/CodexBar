@@ -155,6 +155,184 @@ public enum ProviderWidgetFamily: Sendable {
     case medium
 }
 
+public struct ProviderUsageNotesContext: Sendable {
+    public let snapshot: UsageSnapshot?
+    public let isRefreshing: Bool
+    public let tokenCostInlineDashboardEnabled: Bool
+    public let showOptionalUsage: Bool
+
+    public init(
+        snapshot: UsageSnapshot?,
+        isRefreshing: Bool,
+        tokenCostInlineDashboardEnabled: Bool,
+        showOptionalUsage: Bool)
+    {
+        self.snapshot = snapshot
+        self.isRefreshing = isRefreshing
+        self.tokenCostInlineDashboardEnabled = tokenCostInlineDashboardEnabled
+        self.showOptionalUsage = showOptionalUsage
+    }
+}
+
+public enum ProviderUsageNotesResolution: Sendable {
+    case unhandled
+    case openAIAPI(OpenAIAPIUsageSnapshot)
+    case localized([String])
+}
+
+public enum ProviderCreditsVisibility: Sendable, Equatable {
+    case standard
+    case requiresValueOrError
+    case hiddenWhenUsageSnapshotPresent
+    case hidden
+}
+
+public struct ProviderCostVisibilityContext: Sendable {
+    public let snapshot: UsageSnapshot?
+    public let showOptionalUsage: Bool
+
+    public init(snapshot: UsageSnapshot?, showOptionalUsage: Bool) {
+        self.snapshot = snapshot
+        self.showOptionalUsage = showOptionalUsage
+    }
+}
+
+public enum ProviderPrimaryDescriptionPlacement: Sendable {
+    case standard
+    case reset
+    case detail
+    case detailLeft
+    case detailBySecondaryPresence
+}
+
+public enum ProviderPrimaryDetailKind: Sendable {
+    case none
+    case poeBalance
+    case kiroCredits
+    case requestQuota
+}
+
+public struct ProviderMenuCardPresentation: Sendable {
+    public typealias UsageNotesResolver = @Sendable (ProviderUsageNotesContext) -> ProviderUsageNotesResolution
+    public typealias CostVisibilityResolver = @Sendable (ProviderCostVisibilityContext) -> Bool
+    public typealias SnapshotPredicate = @Sendable (_ snapshot: UsageSnapshot?) -> Bool
+    public typealias PrimaryCostHistoryResolver = @Sendable (
+        _ snapshot: UsageSnapshot?,
+        _ tokenSnapshot: CostUsageTokenSnapshot?) -> CostUsageTokenSnapshot?
+
+    private let usageNotesResolver: UsageNotesResolver
+    private let costVisibilityResolver: CostVisibilityResolver
+    private let movePrimaryDetailToStatus: SnapshotPredicate
+    private let primaryCostHistoryResolver: PrimaryCostHistoryResolver
+    public let creditsVisibility: ProviderCreditsVisibility
+    public let showsCreditsSection: Bool
+    public let usesProviderCostHistoryAsPrimaryDashboard: Bool
+    public let supportsInlineTokenCostDashboard: Bool
+    public let primaryDescriptionPlacement: ProviderPrimaryDescriptionPlacement
+    public let showsPrimaryBalanceDescription: Bool
+    public let hidesPrimaryResetWithoutDate: Bool
+    public let hidesPrimaryResetWithoutSecondary: Bool
+    public let clearsPrimaryReset: Bool
+    public let primaryDetailKind: ProviderPrimaryDetailKind
+    public let usesAbacusPace: Bool
+    public let usesSyntheticRollingRegen: Bool
+    public let usesRawPrimaryResetDescription: Bool
+    public let resetWindowUsesWeeklyPace: Bool
+
+    public init(
+        usageNotesResolver: @escaping UsageNotesResolver = { _ in .unhandled },
+        creditsVisibility: ProviderCreditsVisibility = .standard,
+        showsCreditsSection: Bool = true,
+        costVisibilityResolver: @escaping CostVisibilityResolver = { _ in true },
+        usesProviderCostHistoryAsPrimaryDashboard: Bool = false,
+        primaryCostHistoryResolver: @escaping PrimaryCostHistoryResolver = { _, tokenSnapshot in tokenSnapshot },
+        supportsInlineTokenCostDashboard: Bool = false,
+        primaryDescriptionPlacement: ProviderPrimaryDescriptionPlacement = .standard,
+        showsPrimaryBalanceDescription: Bool = false,
+        hidesPrimaryResetWithoutDate: Bool = false,
+        hidesPrimaryResetWithoutSecondary: Bool = false,
+        clearsPrimaryReset: Bool = false,
+        movePrimaryDetailToStatus: @escaping SnapshotPredicate = { _ in false },
+        primaryDetailKind: ProviderPrimaryDetailKind = .none,
+        usesAbacusPace: Bool = false,
+        usesSyntheticRollingRegen: Bool = false,
+        usesRawPrimaryResetDescription: Bool = false,
+        resetWindowUsesWeeklyPace: Bool = false)
+    {
+        self.usageNotesResolver = usageNotesResolver
+        self.creditsVisibility = creditsVisibility
+        self.showsCreditsSection = showsCreditsSection
+        self.costVisibilityResolver = costVisibilityResolver
+        self.usesProviderCostHistoryAsPrimaryDashboard = usesProviderCostHistoryAsPrimaryDashboard
+        self.primaryCostHistoryResolver = primaryCostHistoryResolver
+        self.supportsInlineTokenCostDashboard = supportsInlineTokenCostDashboard
+        self.primaryDescriptionPlacement = primaryDescriptionPlacement
+        self.showsPrimaryBalanceDescription = showsPrimaryBalanceDescription
+        self.hidesPrimaryResetWithoutDate = hidesPrimaryResetWithoutDate
+        self.hidesPrimaryResetWithoutSecondary = hidesPrimaryResetWithoutSecondary
+        self.clearsPrimaryReset = clearsPrimaryReset
+        self.movePrimaryDetailToStatus = movePrimaryDetailToStatus
+        self.primaryDetailKind = primaryDetailKind
+        self.usesAbacusPace = usesAbacusPace
+        self.usesSyntheticRollingRegen = usesSyntheticRollingRegen
+        self.usesRawPrimaryResetDescription = usesRawPrimaryResetDescription
+        self.resetWindowUsesWeeklyPace = resetWindowUsesWeeklyPace
+    }
+
+    public func usageNotes(context: ProviderUsageNotesContext) -> ProviderUsageNotesResolution {
+        self.usageNotesResolver(context)
+    }
+
+    public func showsProviderCost(context: ProviderCostVisibilityContext) -> Bool {
+        self.costVisibilityResolver(context)
+    }
+
+    public func movesPrimaryDetailToStatus(snapshot: UsageSnapshot?) -> Bool {
+        self.movePrimaryDetailToStatus(snapshot)
+    }
+
+    public func primaryCostHistory(
+        snapshot: UsageSnapshot?,
+        tokenSnapshot: CostUsageTokenSnapshot?) -> CostUsageTokenSnapshot?
+    {
+        self.primaryCostHistoryResolver(snapshot, tokenSnapshot)
+    }
+}
+
+public enum ProviderSecondaryDescriptionMode: Sendable, Equatable {
+    case standard
+    case resetOverride
+    case detailWhenResetDatePresent
+}
+
+public struct ProviderMenuDescriptorPresentation: Sendable {
+    public typealias SnapshotPredicate = @Sendable (_ snapshot: UsageSnapshot) -> Bool
+
+    private let primaryDescriptionIsDetail: SnapshotPredicate
+    public let duplicatesPrimaryDetailWhenResetDatePresent: Bool
+    public let showsPrimaryWeeklyPace: Bool
+    public let secondaryDescriptionMode: ProviderSecondaryDescriptionMode
+    public let tertiaryDescriptionOverridesReset: Bool
+
+    public init(
+        primaryDescriptionIsDetail: @escaping SnapshotPredicate = { _ in false },
+        duplicatesPrimaryDetailWhenResetDatePresent: Bool = false,
+        showsPrimaryWeeklyPace: Bool = false,
+        secondaryDescriptionMode: ProviderSecondaryDescriptionMode = .standard,
+        tertiaryDescriptionOverridesReset: Bool = false)
+    {
+        self.primaryDescriptionIsDetail = primaryDescriptionIsDetail
+        self.duplicatesPrimaryDetailWhenResetDatePresent = duplicatesPrimaryDetailWhenResetDatePresent
+        self.showsPrimaryWeeklyPace = showsPrimaryWeeklyPace
+        self.secondaryDescriptionMode = secondaryDescriptionMode
+        self.tertiaryDescriptionOverridesReset = tertiaryDescriptionOverridesReset
+    }
+
+    public func usesPrimaryDescriptionAsDetail(snapshot: UsageSnapshot) -> Bool {
+        self.primaryDescriptionIsDetail(snapshot)
+    }
+}
+
 public struct ProviderUsagePresentation: Sendable {
     public typealias RateWindowLabeler = @Sendable (
         _ metadata: ProviderMetadata,
@@ -197,6 +375,8 @@ public struct ProviderUsagePresentation: Sendable {
     public let requestedMenuBarLaneOrders: [ProviderMenuBarMetric: [ProviderUsageLane]]
     public let automaticSelectionPrioritizesExhaustedWindow: Bool
     public let secondaryGloballyCapsPrimary: Bool
+    public let menuCard: ProviderMenuCardPresentation
+    public let menu: ProviderMenuDescriptorPresentation
 
     public init(
         rateWindowLabeler: RateWindowLabeler? = nil,
@@ -218,7 +398,9 @@ public struct ProviderUsagePresentation: Sendable {
         planUtilizationSeriesResolver: @escaping PlanUtilizationSeriesResolver = Self.standardPlanUtilizationSeries,
         planUtilizationSeriesNormalizer: @escaping PlanUtilizationSeriesNormalizer = { series, _ in series },
         widgetRowLimitResolver: @escaping WidgetRowLimitResolver = { _, _ in nil },
-        secondaryGloballyCapsPrimary: Bool = false)
+        secondaryGloballyCapsPrimary: Bool = false,
+        menuCard: ProviderMenuCardPresentation = ProviderMenuCardPresentation(),
+        menu: ProviderMenuDescriptorPresentation = ProviderMenuDescriptorPresentation())
     {
         self.rateWindowLabeler = rateWindowLabeler
         self.identityPresenter = identityPresenter
@@ -238,6 +420,8 @@ public struct ProviderUsagePresentation: Sendable {
         self.planUtilizationSeriesNormalizer = planUtilizationSeriesNormalizer
         self.widgetRowLimitResolver = widgetRowLimitResolver
         self.secondaryGloballyCapsPrimary = secondaryGloballyCapsPrimary
+        self.menuCard = menuCard
+        self.menu = menu
     }
 
     public func rateWindowLabels(

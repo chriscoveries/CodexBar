@@ -96,7 +96,10 @@ public enum CodexProviderDescriptor {
                     else { return series }
                     return .monthly
                 },
-                secondaryGloballyCapsPrimary: true),
+                secondaryGloballyCapsPrimary: true,
+                menuCard: ProviderMenuCardPresentation(
+                    creditsVisibility: .requiresValueOrError,
+                    supportsInlineTokenCostDashboard: true)),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .web, .cli, .oauth],
                 pipeline: ProviderFetchPipeline(resolveStrategies: self.resolveStrategies)),

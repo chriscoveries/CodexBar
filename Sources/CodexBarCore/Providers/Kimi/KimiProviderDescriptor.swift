@@ -92,7 +92,8 @@ public enum KimiProviderDescriptor {
                 primarySemanticWindow: .weekly,
                 secondarySemanticWindow: .session,
                 menuBarWindowResolver: self.menuBarWindow,
-                widgetRowLimitResolver: { _, _ in 3 }),
+                widgetRowLimitResolver: { _, _ in 3 },
+                menuCard: ProviderMenuCardPresentation(resetWindowUsesWeeklyPace: true)),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .api, .web],
                 pipeline: ProviderFetchPipeline(resolveStrategies: self.resolveStrategies)),

@@ -43,7 +43,13 @@ public enum WarpProviderDescriptor {
                 noDataMessage: { "Warp cost summary is not available." }),
             presentation: ProviderUsagePresentation(
                 iconDecorations: [.warp],
-                treatsExhaustedSecondaryIconWindowAsMissing: true),
+                treatsExhaustedSecondaryIconWindowAsMissing: true,
+                menuCard: ProviderMenuCardPresentation(
+                    showsPrimaryBalanceDescription: true,
+                    hidesPrimaryResetWithoutDate: true),
+                menu: ProviderMenuDescriptorPresentation(
+                    primaryDescriptionIsDetail: { _ in true },
+                    secondaryDescriptionMode: .resetOverride)),
             fetchPlan: .apiToken(
                 strategyID: "warp.api",
                 resolveToken: { ProviderTokenResolver.warpToken(environment: $0) },

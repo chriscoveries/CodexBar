@@ -76,7 +76,11 @@ public enum CursorProviderDescriptor {
                     .tertiary: [.tertiary, .secondary, .primary],
                 ],
                 automaticSelectionPrioritizesExhaustedWindow: false,
-                menuBarWindowResolver: self.menuBarWindow),
+                menuBarWindowResolver: self.menuBarWindow,
+                menuCard: ProviderMenuCardPresentation(
+                    costVisibilityResolver: { $0.showOptionalUsage },
+                    supportsInlineTokenCostDashboard: true,
+                    primaryDetailKind: .requestQuota)),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .cli, .web],
                 pipeline: ProviderFetchPipeline(resolveStrategies: { _ in [CursorStatusFetchStrategy()] })),

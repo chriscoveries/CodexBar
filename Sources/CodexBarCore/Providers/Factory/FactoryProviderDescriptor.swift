@@ -66,7 +66,8 @@ public enum FactoryProviderDescriptor {
                         showsTertiary: true)
                 },
                 iconDecorations: [.factory],
-                menuBarWindowResolver: self.secondaryFirstMenuBarWindow),
+                menuBarWindowResolver: self.secondaryFirstMenuBarWindow,
+                menuCard: ProviderMenuCardPresentation(costVisibilityResolver: { $0.showOptionalUsage })),
             fetchPlan: ProviderFetchPlan(
                 // `.cli` remains as an Auto compatibility alias for persisted configs from older builds
                 // that advertised `[.auto, .cli]` while only implementing the web strategy.

@@ -70,7 +70,10 @@ public enum PerplexityProviderDescriptor {
                 menuBarWindowResolver: { context in
                     guard context.metric == .automatic else { return .unhandled }
                     return .resolved(context.snapshot.automaticPerplexityWindow())
-                }),
+                },
+                menu: ProviderMenuDescriptorPresentation(
+                    secondaryDescriptionMode: .resetOverride,
+                    tertiaryDescriptionOverridesReset: true)),
             fetchPlan: self.fetchPlan(),
             cli: ProviderCLIConfig(
                 name: "perplexity",

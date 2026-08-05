@@ -176,7 +176,12 @@ public enum ClaudeProviderDescriptor {
                     }
                     return series
                 },
-                secondaryGloballyCapsPrimary: true),
+                secondaryGloballyCapsPrimary: true,
+                menuCard: ProviderMenuCardPresentation(
+                    costVisibilityResolver: { context in
+                        context.showOptionalUsage || context.snapshot?.loginMethod(for: .claude) == "Admin API"
+                    },
+                    supportsInlineTokenCostDashboard: true)),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .api, .web, .cli, .oauth],
                 pipeline: ProviderFetchPipeline(resolveStrategies: self.resolveStrategies)),
