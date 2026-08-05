@@ -40,6 +40,7 @@ public enum DeepgramProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                debugLogUnavailableMessage: "Deepgram debug log not yet implemented",
                 browserCookieOrder: nil,
                 dashboardURL: "https://console.deepgram.com/project/",
                 statusPageURL: nil,

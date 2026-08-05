@@ -32,6 +32,7 @@ public enum SakanaProviderDescriptor {
                     "pro": "Pro",
                     "enterprise": "Enterprise",
                 ],
+                debugLogUnavailableMessage: "Sakana AI debug log not yet implemented",
                 browserCookieOrder: nil,
                 dashboardURL: "https://console.sakana.ai/billing",
                 statusPageURL: nil),

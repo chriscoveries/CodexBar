@@ -31,6 +31,7 @@ public enum ZoomMateProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                debugLogUnavailableMessage: "ZoomMate debug log not yet implemented",
                 browserCookieOrder: self.browserCookieOrder,
                 dashboardURL: "https://zoommate.zoom.us/#/?settings=credit-usage",
                 subscriptionDashboardURL: nil,

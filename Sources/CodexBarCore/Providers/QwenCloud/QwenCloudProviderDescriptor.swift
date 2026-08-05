@@ -35,6 +35,7 @@ public enum QwenCloudProviderDescriptor {
                 defaultEnabled: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                debugLogUnavailableMessage: "Qwen Cloud debug log not yet implemented",
                 browserCookieOrder: browserOrder,
                 dashboardURL: QwenCloudUsageFetcher.dashboardURL.absoluteString,
                 statusPageURL: nil,

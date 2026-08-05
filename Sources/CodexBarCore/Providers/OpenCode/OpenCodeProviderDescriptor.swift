@@ -52,6 +52,7 @@ public enum OpenCodeProviderDescriptor {
                 defaultEnabled: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                debugLogUnavailableMessage: "OpenCode debug log not yet implemented",
                 browserCookieOrder: self.browserCookieOrder,
                 dashboardURL: "https://opencode.ai/auth",
                 statusPageURL: nil),

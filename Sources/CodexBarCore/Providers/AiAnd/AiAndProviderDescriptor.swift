@@ -23,6 +23,7 @@ public enum AiAndProviderDescriptor {
                 cliName: "aiand",
                 defaultEnabled: false,
                 widgetSelectable: false,
+                debugLogUnavailableMessage: "ai& debug log not yet implemented",
                 dashboardURL: "https://console.aiand.com",
                 statusPageURL: nil),
             branding: ProviderBranding(

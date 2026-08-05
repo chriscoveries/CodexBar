@@ -50,6 +50,7 @@ public enum CopilotProviderDescriptor {
                     "free": "Free", "individual": "Individual", "pro": "Individual",
                     "business": "Business", "enterprise": "Enterprise",
                 ],
+                debugLogUnavailableMessage: "Copilot debug log not yet implemented",
                 browserCookieOrder: self.browserCookieOrder,
                 dashboardURL: "https://github.com/settings/copilot",
                 statusPageURL: "https://www.githubstatus.com/"),

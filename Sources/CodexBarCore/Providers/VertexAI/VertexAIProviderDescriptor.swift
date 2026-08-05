@@ -22,6 +22,7 @@ public enum VertexAIProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                debugLogUnavailableMessage: "Vertex AI debug log not yet implemented",
                 dashboardURL: "https://console.cloud.google.com/vertex-ai",
                 statusPageURL: nil,
                 statusLinkURL: "https://status.cloud.google.com"),
@@ -82,7 +83,9 @@ struct VertexAIOAuthFetchStrategy: ProviderFetchStrategy {
     }
 
     func shouldFallback(on error: Error, context _: ProviderFetchContext) -> Bool {
-        if error is VertexAIOAuthCredentialsError { return true }
+        if error is VertexAIOAuthCredentialsError {
+            return true
+        }
         if let fetchError = error as? VertexAIFetchError {
             switch fetchError {
             case .unauthorized, .forbidden:

@@ -41,6 +41,7 @@ public enum BedrockProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                debugLogUnavailableMessage: "Bedrock debug log not yet implemented",
                 dashboardURL: "https://console.aws.amazon.com/bedrock",
                 statusPageURL: nil,
                 statusLinkURL: "https://health.aws.amazon.com/health/status"),

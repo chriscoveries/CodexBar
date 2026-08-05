@@ -144,6 +144,19 @@ struct ProviderArchitectureGatekeeperTests {
         #expect(burnDownFingerprint == 3_478_078_203_311_670_951)
     }
 
+    @Test
+    func `descriptor unavailable debug messages preserve the legacy table`() throws {
+        let descriptors = ProviderDescriptorRegistry.all.filter { $0.metadata.debugLogUnavailableMessage != nil }
+        var fingerprint: UInt64 = 1_469_598_103_934_665_603
+        for descriptor in descriptors {
+            Self.hash(descriptor.id.rawValue.utf8, into: &fingerprint)
+            try Self.hash(#require(descriptor.metadata.debugLogUnavailableMessage?.utf8), into: &fingerprint)
+        }
+
+        #expect(descriptors.count == 38)
+        #expect(fingerprint == 2_208_147_801_202_684_136)
+    }
+
     private static func repoRoot() throws -> URL {
         var directory = URL(filePath: #filePath).deletingLastPathComponent()
         for _ in 0..<12 {

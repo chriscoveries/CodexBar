@@ -33,6 +33,7 @@ public enum AntigravityProviderDescriptor {
                     "free": "Free", "paid": "Paid", "pro": "Pro",
                     "ultra": "Google AI Ultra", "google ai ultra": "Google AI Ultra",
                 ],
+                debugLogUnavailableMessage: "Antigravity debug log not yet implemented",
                 dashboardURL: nil,
                 statusPageURL: nil,
                 statusLinkURL: "https://www.google.com/appsstatus/dashboard/products/npdyhgECDJ6tB66MxXyo/history",

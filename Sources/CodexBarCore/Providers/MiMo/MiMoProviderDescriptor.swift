@@ -33,6 +33,7 @@ public enum MiMoProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                debugLogUnavailableMessage: "Xiaomi MiMo debug log not yet implemented",
                 browserCookieOrder: self.browserCookieOrder,
                 dashboardURL: "https://platform.xiaomimimo.com/#/console/balance",
                 statusPageURL: nil),

@@ -55,6 +55,7 @@ public enum StepFunProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                debugLogUnavailableMessage: "StepFun debug log not yet implemented",
                 browserCookieOrder: nil,
                 dashboardURL: "https://platform.stepfun.com/plan-usage",
                 statusPageURL: nil,

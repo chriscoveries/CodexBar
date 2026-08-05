@@ -24,6 +24,7 @@ public enum GeminiProviderDescriptor {
                     "free": "Free", "paid": "Paid", "plus": "Plus", "workspace": "Workspace",
                     "legacy": "Legacy", "gemini code assist in google one ai pro": "Google One AI Pro",
                 ],
+                debugLogUnavailableMessage: "Gemini debug log not yet implemented",
                 dashboardURL: "https://gemini.google.com",
                 changelogURL: "https://github.com/google-gemini/gemini-cli/releases",
                 statusPageURL: nil,

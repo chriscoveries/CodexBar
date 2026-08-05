@@ -25,6 +25,7 @@ public enum ChutesProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                debugLogUnavailableMessage: "Chutes debug log not yet implemented",
                 browserCookieOrder: nil,
                 dashboardURL: "https://chutes.ai",
                 statusPageURL: nil),

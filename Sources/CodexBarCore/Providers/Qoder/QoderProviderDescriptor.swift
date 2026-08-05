@@ -40,6 +40,7 @@ public enum QoderProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                debugLogUnavailableMessage: "Qoder debug log not yet implemented",
                 browserCookieOrder: self.browserCookieOrder,
                 dashboardURL: QoderWebSite.international.dashboardURL.absoluteString,
                 statusPageURL: nil,

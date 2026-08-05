@@ -24,6 +24,7 @@ public enum CommandCodeProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                debugLogUnavailableMessage: "Command Code debug log not yet implemented",
                 browserCookieOrder: ProviderBrowserCookieDefaults.defaultImportOrder,
                 dashboardURL: "https://commandcode.ai/studio",
                 subscriptionDashboardURL: "https://commandcode.ai/settings/billing",

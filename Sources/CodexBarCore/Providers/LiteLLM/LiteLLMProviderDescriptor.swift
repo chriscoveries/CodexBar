@@ -33,6 +33,7 @@ public enum LiteLLMProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                debugLogUnavailableMessage: "LiteLLM debug log not yet implemented",
                 dashboardURL: nil,
                 statusPageURL: nil),
             branding: ProviderBranding(

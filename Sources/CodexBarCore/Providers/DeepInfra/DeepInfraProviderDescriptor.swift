@@ -33,6 +33,7 @@ public enum DeepInfraProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                debugLogUnavailableMessage: "DeepInfra debug log not yet implemented",
                 browserCookieOrder: nil,
                 dashboardURL: "https://deepinfra.com/dash",
                 statusPageURL: nil,
