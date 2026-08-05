@@ -258,7 +258,9 @@ extension OpenRouterUsageSnapshot {
             } else {
                 rows.append(.makeRow(label: "API key budget", value: "No limit configured"))
             }
-            if let keyLimitReset = self.keyLimitReset?.nilIfEmpty {
+            if let keyLimitReset = self.keyLimitReset?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !keyLimitReset.isEmpty
+            {
                 rows.append(.makeRow(label: "Reset window", value: keyLimitReset))
             }
             let periods = [
