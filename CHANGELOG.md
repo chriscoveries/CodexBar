@@ -3,6 +3,7 @@
 ## 0.47.1 — Unreleased
 
 ### Added
+- CLI: expose Codex cost-history completeness in JSON and add an experimental provider-native-only scan mode (#2520). Thanks @NickGuAI!
 - Usage & Spend: add an accessible daily, weekly, and cumulative token-activity heatmap backed by the existing persistent cost scan cache (#2548). Thanks @Yuxin-Qiao!
 - z.ai/GLM: route BigModel aliases and relay-file keys only to China endpoints, reject canonical cross-region overrides before bearer auth, and keep Kimi browser import disabled when Cookie Source is Off (#2351). Thanks @Leehow!
 - Kimi: enrich Code API and CLI usage with the monthly membership pool from a signed-in Kimi Desktop session, using WAL-safe read-only cookie access (#2351). Thanks @Leehow!
