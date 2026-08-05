@@ -60,6 +60,7 @@ public enum OpenCodeGoProviderDescriptor {
                     "No OpenCode Go local usage history found in ~/.local/share/opencode/opencode.db."
                 }),
             pace: .calendarMonthResetWindow,
+            history: .alwaysTracked,
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .web],
                 pipeline: ProviderFetchPipeline(resolveStrategies: self.resolveStrategies)),

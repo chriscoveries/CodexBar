@@ -70,6 +70,7 @@ public enum CodexProviderDescriptor {
                 primary: .session(maximumMinutes: 300),
                 secondary: .weekly,
                 showsHeadroomHint: true),
+            history: .alwaysTracked,
             presentation: ProviderUsagePresentation(
                 identityPresenter: { provider, snapshot in
                     guard let plan = snapshot.loginMethod(for: provider), !plan.isEmpty else {

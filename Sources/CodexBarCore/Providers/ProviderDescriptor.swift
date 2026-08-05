@@ -25,6 +25,17 @@ public struct ProviderTokenCostConfig: Sendable {
     }
 }
 
+public struct ProviderHistoryCapability: Sendable, Equatable {
+    public static let optIn = ProviderHistoryCapability(alwaysTracksPlanUtilization: false)
+    public static let alwaysTracked = ProviderHistoryCapability(alwaysTracksPlanUtilization: true)
+
+    public let alwaysTracksPlanUtilization: Bool
+
+    public init(alwaysTracksPlanUtilization: Bool) {
+        self.alwaysTracksPlanUtilization = alwaysTracksPlanUtilization
+    }
+}
+
 public enum ProviderPaceWindowRule: Sendable {
     case unsupported
     case resetDatePresent
@@ -193,6 +204,7 @@ public struct ProviderDescriptor: Sendable {
     public let branding: ProviderBranding
     public let tokenCost: ProviderTokenCostConfig
     public let pace: ProviderPaceCapability
+    public let history: ProviderHistoryCapability
     public let presentation: ProviderUsagePresentation
     public let settingsSection: ProviderSettingsSectionRegistration
     public let credentials: ProviderCredentialAdapter?
@@ -208,6 +220,7 @@ public struct ProviderDescriptor: Sendable {
         branding: ProviderBranding,
         tokenCost: ProviderTokenCostConfig,
         pace: ProviderPaceCapability = .unsupported,
+        history: ProviderHistoryCapability = .optIn,
         presentation: ProviderUsagePresentation = ProviderUsagePresentation(),
         fetchPlan: ProviderFetchPlan,
         cli: ProviderCLIConfig,
@@ -219,6 +232,7 @@ public struct ProviderDescriptor: Sendable {
         self.branding = branding
         self.tokenCost = tokenCost
         self.pace = pace
+        self.history = history
         self.presentation = presentation
         self.credentials = credentials
         self.fetchPlan = fetchPlan
