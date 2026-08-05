@@ -1,3 +1,5 @@
+// Linux compatibility only. JavaScriptCore platforms use the bundled OpenRouter plugin.
+#if !canImport(JavaScriptCore)
 import Foundation
 #if canImport(FoundationNetworking)
 import FoundationNetworking
@@ -557,3 +559,4 @@ public enum OpenRouterUsageError: LocalizedError, Sendable {
         }
     }
 }
+#endif

@@ -70,35 +70,39 @@ public enum OpenRouterProviderDescriptor {
 
     private static func fetchPlan() -> ProviderFetchPlan {
         #if canImport(JavaScriptCore)
-        .scriptPrototypeAPI(
-            configuration: .init(
-                provider: .openrouter,
-                plugin: "openrouter",
-                secretKey: OpenRouterSettingsReader.envKey,
-                strategyID: "openrouter.api"),
-            resolveToken: { ProviderTokenResolver.openRouterToken(environment: $0) },
-            resolveSettings: { environment in
-                var settings = [
-                    OpenRouterSettingsReader.apiURLEnvironmentKey:
-                        OpenRouterSettingsReader.apiURL(environment: environment).absoluteString,
-                    OpenRouterSettingsReader.clientTitleEnvironmentKey:
-                        OpenRouterSettingsReader.clientTitle(environment: environment),
-                ]
-                if let referer = OpenRouterSettingsReader.httpReferer(environment: environment) {
-                    settings[OpenRouterSettingsReader.httpRefererEnvironmentKey] = referer
-                }
-                return settings
-            },
-            validateContext: { context in
-                try OpenRouterSettingsReader.validateEndpointOverrides(environment: context.env)
-            },
-            missingCredentialsError: { OpenRouterSettingsError.missingToken },
-            loadUsage: { apiKey, context in
-                try await OpenRouterUsageFetcher.fetchUsage(
-                    apiKey: apiKey,
-                    environment: context.env).toUsageSnapshot()
-            })
+        ProviderFetchPlan(
+            sourceModes: [.auto, .api],
+            pipeline: ProviderFetchPipeline(resolveStrategies: { _ in
+                [ScriptFetchStrategy(
+                    id: "openrouter.js",
+                    provider: .openrouter,
+                    bundledPlugin: "openrouter",
+                    secretKey: OpenRouterSettingsReader.envKey,
+                    sourceLabel: "api",
+                    validateContext: { context in
+                        try OpenRouterSettingsReader.validateEndpointOverrides(environment: context.env)
+                    },
+                    resolveValues: { context in
+                        guard let token = self.credentials.resolveToken(environment: context.env)?.token else {
+                            return nil
+                        }
+                        var settings = [
+                            OpenRouterSettingsReader.apiURLEnvironmentKey:
+                                OpenRouterSettingsReader.apiURL(environment: context.env).absoluteString,
+                            OpenRouterSettingsReader.clientTitleEnvironmentKey:
+                                OpenRouterSettingsReader.clientTitle(environment: context.env),
+                        ]
+                        if let referer = OpenRouterSettingsReader.httpReferer(environment: context.env) {
+                            settings[OpenRouterSettingsReader.httpRefererEnvironmentKey] = referer
+                        }
+                        return ScriptFetchStrategy.Values(
+                            settings: settings,
+                            secrets: [OpenRouterSettingsReader.envKey: token])
+                    },
+                    isEnabled: { _ in true })]
+            }))
         #else
+        // Linux compatibility only. JavaScriptCore platforms use the bundled OpenRouter plugin above.
         .apiToken(
             strategyID: "openrouter.api",
             resolveToken: { ProviderTokenResolver.openRouterToken(environment: $0) },

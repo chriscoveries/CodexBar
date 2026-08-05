@@ -13,7 +13,7 @@ This document describes the bundled first-party conversion prototype. User-insta
 
 This prototype proves that an existing first-party `UsageProvider` can define its manifest, HTTP requests, response
 parsing, and generic `UsageSnapshot` projection in one bundled JavaScript file. It is deliberately not a user-plugin
-system: IDs remain compile-time `UsageProvider` cases and scripts ship inside CodexBar. Crof and Venice have cut over
+system: IDs remain compile-time `UsageProvider` cases and scripts ship inside CodexBar. Crof, Venice, and OpenRouter have cut over
 to the bundled script on JavaScriptCore platforms; their native fetch cores remain compiled only for the Linux CLI.
 
 Plugin manifests and their projected snapshots now carry a validated `ProviderInstanceID`. The prototype still maps
@@ -23,12 +23,12 @@ case therefore remain out of scope for this prototype.
 
 ## Enable and test
 
-Set `CODEXBAR_JS_PROVIDERS=1` in CodexBar's environment. Synthetic, OpenAI, z.ai, OpenRouter, Poe, ClawRouter,
+Set `CODEXBAR_JS_PROVIDERS=1` in CodexBar's environment. Synthetic, OpenAI, z.ai, Poe, ClawRouter,
 Deepgram, sub2api, xAI, Manus, Perplexity, T3 Chat, and Qoder then prepend a script strategy to their existing pipeline.
 A missing required secret or disabled cookie source leaves the script
 strategy unavailable and permits the Swift strategy to run; a loaded script that fails does not fall back, so parity
 defects stay visible. Without the variable, the resolver returns the original Swift strategy only and does not load
-JavaScriptCore or a plugin resource for those providers. Crof and Venice always resolve only their script strategy on
+JavaScriptCore or a plugin resource for those providers. Crof, Venice, and OpenRouter always resolve only their script strategy on
 JavaScriptCore platforms; `CODEXBAR_JS_PROVIDERS` does not affect them.
 
 Run the focused proof with:
@@ -39,9 +39,9 @@ swift test --filter ProviderPluginParityTests
 swift test --filter ProviderPluginDetailsParityTests
 ```
 
-The parity suites send the same canned responses through an injected `ProviderHTTPTransport` to both implementations
-and compare core windows, percentages, reset dates, cost, subscription dates, and identity fields. Details-provider
-fixtures additionally characterize the complete declarative section output.
+The parity suites send canned responses through an injected `ProviderHTTPTransport`. Flag-gated providers compare the
+Swift and JavaScript implementations, while cut-over providers use JavaScript goldens for windows, percentages, reset
+dates, cost, subscription dates, identity, and complete declarative detail output.
 
 ## Manifest
 
@@ -175,7 +175,7 @@ cannot interrupt the abandoned JavaScriptCore thread, which may remain alive unt
 runtime needs a public interrupt API or a killable helper-process boundary before accepting untrusted scripts.
 
 The same watchdog is production-default for first-party cut-over providers. It is part of the shared runtime, not the
-prototype flag, so Crof and Venice retain timeout and fresh-context recovery without `CODEXBAR_JS_PROVIDERS`.
+prototype flag, so cut-over providers retain timeout and fresh-context recovery without `CODEXBAR_JS_PROVIDERS`.
 
 ## Current limitations
 

@@ -9,7 +9,6 @@ struct ProviderPluginDetailsParityTests {
         let fixtures: [(UsageProvider, [String], [String])] = [
             (.openai, ["openai.api.balance"], ["openai.js", "openai.api.balance"]),
             (.zai, ["zai.api"], ["zai.js", "zai.api"]),
-            (.openrouter, ["openrouter.api"], ["openrouter.js", "openrouter.api"]),
             (.poe, ["poe.api"], ["poe.js", "poe.api"]),
             (.clawrouter, ["clawrouter.api"], ["clawrouter.js", "clawrouter.api"]),
         ]
@@ -51,7 +50,7 @@ struct ProviderPluginDetailsParityTests {
     }
 
     @Test
-    func `OpenRouter fixture has Swift core parity and stable details`() async throws {
+    func `OpenRouter fixture matches stable cut-over details`() async throws {
         let transport = Self.transport { request in
             switch request.url?.path {
             case "/api/v1/credits": Self.openRouterCredits
@@ -60,15 +59,11 @@ struct ProviderPluginDetailsParityTests {
             }
         }
         let now = Date(timeIntervalSince1970: 1_785_686_400)
-        let swift = try await OpenRouterUsageFetcher.fetchUsage(
-            apiKey: "fixture-key",
-            environment: [:],
-            transport: transport).toUsageSnapshot()
         let script = try await ProviderPluginRuntime(bundledPlugin: "openrouter", transport: transport)
             .fetchUsage(secrets: ["OPENROUTER_API_KEY": "fixture-key"], now: now)
 
-        Self.expectCoreParity(swift, script)
-        #expect(swift.details == script.details)
+        #expect(script.primary?.usedPercent == 25)
+        #expect(script.identity?.loginMethod == "Balance: $60.00")
         #expect(try script.details == [
             Self.section("Credits", rows: [
                 Self.row("Remaining", "$60.00"),
@@ -131,7 +126,7 @@ struct ProviderPluginDetailsParityTests {
     }
 
     @Test(arguments: [false, true])
-    func `OpenRouter default and overridden requests match Swift`(overridden: Bool) async throws {
+    func `OpenRouter cut-over honors default and overridden requests`(overridden: Bool) async throws {
         let environment: [String: String] = overridden ? [
             OpenRouterSettingsReader.apiURLEnvironmentKey: "https://router.example.test/gateway/v1",
             OpenRouterSettingsReader.httpRefererEnvironmentKey: " https://codexbar.example ",
@@ -150,18 +145,12 @@ struct ProviderPluginDetailsParityTests {
             request.url?.path.hasSuffix("/key") == true ? Self.openRouterKey : Self.openRouterCredits
         }
 
-        _ = try await OpenRouterUsageFetcher.fetchUsage(
-            apiKey: "fixture-key",
-            environment: environment,
-            transport: transport)
         _ = try await ProviderPluginRuntime(bundledPlugin: "openrouter", transport: transport).fetchUsage(
             settings: settings,
             secrets: [OpenRouterSettingsReader.envKey: "fixture-key"])
 
         let recorded = await requests.requests
-        #expect(recorded.count == 4)
-        #expect(recorded[0].url == recorded[2].url)
-        #expect(recorded[1].url == recorded[3].url)
+        #expect(recorded.count == 2)
         #expect(recorded[0].url?.absoluteString == (overridden
                 ? "https://router.example.test/gateway/v1/credits"
                 : "https://openrouter.ai/api/v1/credits"))
@@ -171,12 +160,7 @@ struct ProviderPluginDetailsParityTests {
         #expect(recorded[0].value(forHTTPHeaderField: "X-Title") == (overridden ? "CodexBar QA" : "CodexBar"))
         #expect(recorded[0].value(forHTTPHeaderField: "HTTP-Referer") ==
             (overridden ? "https://codexbar.example" : nil))
-        #expect(recorded[0].value(forHTTPHeaderField: "X-Title") ==
-            recorded[2].value(forHTTPHeaderField: "X-Title"))
-        #expect(recorded[0].value(forHTTPHeaderField: "HTTP-Referer") ==
-            recorded[2].value(forHTTPHeaderField: "HTTP-Referer"))
         #expect(recorded[1].value(forHTTPHeaderField: "X-Title") == nil)
-        #expect(recorded[3].value(forHTTPHeaderField: "X-Title") == nil)
     }
 
     @Test(arguments: [false, true])
