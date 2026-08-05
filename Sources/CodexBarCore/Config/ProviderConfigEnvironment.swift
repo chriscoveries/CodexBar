@@ -6,6 +6,9 @@ public enum ProviderConfigEnvironment {
         provider: UsageProvider,
         config: ProviderConfig?) -> [String: String]
     {
+        if let adapter = ProviderDescriptorRegistry.descriptor(for: provider).credentials {
+            return adapter.applyConfig(base: base, config: config)
+        }
         if let env = self.applyDedicatedProviderOverrides(base: base, provider: provider, config: config) {
             return env
         }
@@ -47,6 +50,9 @@ public enum ProviderConfigEnvironment {
     }
 
     public static func supportsAPIKeyOverride(for provider: UsageProvider) -> Bool {
+        if let adapter = ProviderDescriptorRegistry.descriptor(for: provider).credentials {
+            return adapter.supportsAPIKeyOverride
+        }
         if self.directAPIKeyEnvironmentKey(for: provider) != nil {
             return true
         }

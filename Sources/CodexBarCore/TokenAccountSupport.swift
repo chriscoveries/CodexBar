@@ -38,7 +38,8 @@ public struct TokenAccountSupport: Sendable {
 
 public enum TokenAccountSupportCatalog {
     public static func support(for provider: UsageProvider) -> TokenAccountSupport? {
-        supportByProvider[provider]
+        ProviderDescriptorRegistry.descriptor(for: provider).credentials?.tokenAccountSupport
+            ?? supportByProvider[provider]
     }
 
     public static func envOverride(for provider: UsageProvider, token: String) -> [String: String]? {

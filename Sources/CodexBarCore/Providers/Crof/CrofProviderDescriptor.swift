@@ -2,10 +2,16 @@ import Foundation
 
 public enum CrofProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+    private static let credentials = ProviderCredentialAdapter.apiKey(
+        environmentKey: CrofSettingsReader.apiKeyEnvironmentKeys[0],
+        precedence: .environment,
+        environmentHasValue: { CrofSettingsReader.apiKey(environment: $0) != nil },
+        resolve: CrofSettingsReader.apiKey)
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .crof,
+            credentials: self.credentials,
             metadata: ProviderMetadata(
                 id: .crof,
                 displayName: "Crof",

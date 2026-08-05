@@ -167,6 +167,17 @@ extension UsageStore {
             return nil
         }
 
+        if let adapter = ProviderDescriptorRegistry.descriptor(for: provider).credentials {
+            let environment = ProviderRegistry.makeEnvironment(
+                base: self.environmentBase,
+                provider: provider,
+                settings: self.settings,
+                tokenOverride: nil)
+            if let message = adapter.unavailableMessage(environment: environment) {
+                return message
+            }
+        }
+
         switch provider {
         case .synthetic:
             return SyntheticSettingsError.missingToken.errorDescription

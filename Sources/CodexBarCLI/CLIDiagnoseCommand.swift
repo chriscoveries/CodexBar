@@ -167,6 +167,13 @@ extension CodexBarCLI {
         environment: [String: String],
         settings: ProviderSettingsSnapshot?) -> ProviderDiagnosticAuthSummary
     {
+        if let adapter = ProviderDescriptorRegistry.descriptor(for: provider).credentials {
+            return adapter.diagnosticAuthSummary(
+                account: account,
+                config: config,
+                environment: environment,
+                settings: settings)
+        }
         if provider == .minimax {
             let authMode = self.resolveMiniMaxAuthMode(environment: environment, settings: settings)
             return ProviderDiagnosticAuthSummary(
