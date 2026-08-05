@@ -85,7 +85,8 @@ public enum CodexProviderDescriptor {
             cli: ProviderCLIConfig(
                 name: "codex",
                 binaryLocator: { BinaryLocator.resolveCodexBinary() },
-                versionDetector: { _ in ProviderVersionDetector.codexVersion() }))
+                versionDetector: { _ in ProviderVersionDetector.codexVersion() },
+                browserSupportExemption: { sourceMode, _, _ in sourceMode == .auto }))
     }
 
     private static func resolveStrategies(context: ProviderFetchContext) async -> [any ProviderFetchStrategy] {

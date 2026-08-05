@@ -77,7 +77,14 @@ public enum KimiProviderDescriptor {
             cli: ProviderCLIConfig(
                 name: "kimi",
                 aliases: ["kimi-ai"],
-                versionDetector: nil))
+                versionDetector: nil,
+                browserSupportExemption: { sourceMode, environment, _ in
+                    guard sourceMode == .auto else { return false }
+                    return environment.map { environment in
+                        ProviderTokenResolver.kimiAPIToken(environment: environment) != nil ||
+                            KimiSettingsReader.hasKimiCodeCredential(environment: environment)
+                    } == true
+                }))
     }
 
     private static func resolveStrategies(context: ProviderFetchContext) async -> [any ProviderFetchStrategy] {

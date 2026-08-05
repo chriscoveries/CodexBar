@@ -98,7 +98,13 @@ public enum MiniMaxProviderDescriptor {
             cli: ProviderCLIConfig(
                 name: "minimax",
                 aliases: ["mini-max"],
-                versionDetector: nil))
+                versionDetector: nil,
+                browserSupportExemption: { sourceMode, environment, _ in
+                    // Standard sk-api keys select the Coding Plan web strategy; other tokens use HTTPS directly.
+                    guard sourceMode == .auto, let environment,
+                          MiniMaxAPISettingsReader.apiToken(environment: environment) != nil else { return false }
+                    return MiniMaxAPISettingsReader.apiKeyKind(environment: environment) != .standard
+                }))
     }
 
     private static func resolveStrategies(context: ProviderFetchContext) async -> [any ProviderFetchStrategy] {

@@ -60,7 +60,14 @@ public enum OllamaProviderDescriptor {
                 pipeline: ProviderFetchPipeline(resolveStrategies: self.resolveStrategies)),
             cli: ProviderCLIConfig(
                 name: "ollama",
-                versionDetector: nil))
+                versionDetector: nil,
+                browserSupportExemption: { sourceMode, environment, settings in
+                    guard sourceMode == .auto else { return false }
+                    let hasEnvironmentToken = environment.map {
+                        ProviderTokenResolver.ollamaToken(environment: $0) != nil
+                    } == true
+                    return settings?.ollama?.cookieSource == .off || hasEnvironmentToken
+                }))
     }
 
     private static func resolveStrategies(context: ProviderFetchContext) async -> [any ProviderFetchStrategy] {

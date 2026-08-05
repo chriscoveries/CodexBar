@@ -58,7 +58,17 @@ public enum QwenCloudProviderDescriptor {
             cli: ProviderCLIConfig(
                 name: "qwen-cloud",
                 aliases: ["qwencloud", "qwen", "qwen-token-plan"],
-                versionDetector: nil))
+                versionDetector: nil,
+                browserSupportExemption: { sourceMode, environment, settings in
+                    guard sourceMode == .auto || sourceMode == .web,
+                          settings?.qwenCloud?.cookieSource != .off else { return false }
+                    let hasEnvironmentCookie = environment.map {
+                        QwenCloudSettingsReader.cookieHeader(environment: $0) != nil
+                    } == true
+                    let hasManualCookie = settings?.qwenCloud?.cookieSource == .manual &&
+                        CookieHeaderNormalizer.normalize(settings?.qwenCloud?.manualCookieHeader) != nil
+                    return hasEnvironmentCookie || hasManualCookie
+                }))
     }
 
     private static func resolveStrategies(context: ProviderFetchContext) async -> [any ProviderFetchStrategy] {

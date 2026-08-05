@@ -73,7 +73,15 @@ public enum CursorProviderDescriptor {
                 pipeline: ProviderFetchPipeline(resolveStrategies: { _ in [CursorStatusFetchStrategy()] })),
             cli: ProviderCLIConfig(
                 name: "cursor",
-                versionDetector: nil))
+                versionDetector: nil,
+                browserSupportExemption: { _, _, settings in
+                    #if os(Linux)
+                    // Linux uses Cursor app auth and manual cookies; browser import remains macOS-only.
+                    settings?.cursor?.cookieSource != .off
+                    #else
+                    false
+                    #endif
+                }))
     }
 
     private static var supportsTokenSnapshot: Bool {

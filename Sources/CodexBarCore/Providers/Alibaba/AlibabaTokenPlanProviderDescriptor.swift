@@ -100,7 +100,11 @@ public enum AlibabaTokenPlanProviderDescriptor {
             cli: ProviderCLIConfig(
                 name: "alibaba-token-plan",
                 aliases: ["alibaba-token", "bailian-token-plan"],
-                versionDetector: nil))
+                versionDetector: nil,
+                browserSupportExemption: { _, _, settings in
+                    // Manual cookies use plain URLSession; only browser import is platform-bound.
+                    settings?.alibabaTokenPlan?.cookieSource == .manual
+                }))
     }
 
     private static func resolveStrategies(context: ProviderFetchContext) async -> [any ProviderFetchStrategy] {

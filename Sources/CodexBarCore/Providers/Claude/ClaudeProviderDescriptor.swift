@@ -155,7 +155,8 @@ public enum ClaudeProviderDescriptor {
                 binaryLocator: { BinaryLocator.resolveClaudeBinary() },
                 versionDetector: { browserDetection in
                     ClaudeUsageFetcher(browserDetection: browserDetection).detectVersion()
-                }))
+                },
+                browserSupportExemption: { sourceMode, _, _ in sourceMode == .auto }))
     }
 
     private static func resolveStrategies(context: ProviderFetchContext) async -> [any ProviderFetchStrategy] {

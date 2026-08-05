@@ -71,7 +71,11 @@ public enum MiMoProviderDescriptor {
             cli: ProviderCLIConfig(
                 name: "mimo",
                 aliases: ["xiaomi-mimo"],
-                versionDetector: nil))
+                versionDetector: nil,
+                browserSupportExemption: { sourceMode, environment, _ in
+                    guard sourceMode == .auto, let environment else { return false }
+                    return MiMoLocalUsageFallback.cacheExists(environment: environment)
+                }))
     }
 }
 

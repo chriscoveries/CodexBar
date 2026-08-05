@@ -55,7 +55,8 @@ public enum AmpProviderDescriptor {
                 pipeline: ProviderFetchPipeline(resolveStrategies: self.resolveStrategies)),
             cli: ProviderCLIConfig(
                 name: "amp",
-                versionDetector: nil))
+                versionDetector: nil,
+                browserSupportExemption: { _, _, _ in true }))
     }
 
     public static func primaryLabel(snapshot: UsageSnapshot) -> String? {
