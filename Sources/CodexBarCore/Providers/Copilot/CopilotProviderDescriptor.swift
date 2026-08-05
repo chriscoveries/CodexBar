@@ -6,7 +6,11 @@ public enum CopilotProviderDescriptor {
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .copilot,
-            settingsSection: .init(CopilotProviderSettingsKey.self),
+            settingsSection: .init(CopilotProviderSettingsKey.self, cookieSettings: { settings in
+                CookieProviderSettings(
+                    cookieSource: settings.budgetCookieSource,
+                    manualCookieHeader: settings.manualBudgetCookieHeader)
+            }),
             metadata: ProviderMetadata(
                 id: .copilot,
                 displayName: "Copilot",

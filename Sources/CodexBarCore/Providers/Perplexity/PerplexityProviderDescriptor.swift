@@ -6,7 +6,9 @@ public enum PerplexityProviderDescriptor {
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .perplexity,
-            settingsSection: .init(PerplexityProviderSettingsKey.self),
+            settingsSection: .init(
+                PerplexityProviderSettingsKey.self,
+                cookieSettings: PerplexityProviderSettings.self),
             metadata: ProviderMetadata(
                 id: .perplexity,
                 displayName: "Perplexity",

@@ -24,7 +24,11 @@ public enum AlibabaCodingPlanProviderDescriptor {
 
         return ProviderDescriptor(
             id: .alibaba,
-            settingsSection: .init(AlibabaCodingPlanProviderSettingsKey.self),
+            settingsSection: .init(AlibabaCodingPlanProviderSettingsKey.self, cookieSettings: { settings in
+                CookieProviderSettings(
+                    cookieSource: settings.cookieSource,
+                    manualCookieHeader: settings.manualCookieHeader)
+            }),
             metadata: ProviderMetadata(
                 id: .alibaba,
                 displayName: "Alibaba",

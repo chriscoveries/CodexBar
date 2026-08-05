@@ -9,7 +9,7 @@ public enum AmpProviderDescriptor {
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .amp,
-            settingsSection: .init(AmpProviderSettingsKey.self),
+            settingsSection: .init(AmpProviderSettingsKey.self, cookieSettings: AmpProviderSettings.self),
             credentials: self.credentials,
             metadata: ProviderMetadata(
                 id: .amp,

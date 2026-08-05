@@ -6,7 +6,11 @@ public enum MiniMaxProviderDescriptor {
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .minimax,
-            settingsSection: .init(MiniMaxProviderSettingsKey.self),
+            settingsSection: .init(MiniMaxProviderSettingsKey.self, cookieSettings: { settings in
+                CookieProviderSettings(
+                    cookieSource: settings.cookieSource,
+                    manualCookieHeader: settings.manualCookieHeader)
+            }),
             metadata: ProviderMetadata(
                 id: .minimax,
                 displayName: "MiniMax",

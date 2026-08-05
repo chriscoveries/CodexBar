@@ -6,7 +6,7 @@ public enum CursorProviderDescriptor {
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .cursor,
-            settingsSection: .init(CursorProviderSettingsKey.self),
+            settingsSection: .init(CursorProviderSettingsKey.self, cookieSettings: CursorProviderSettings.self),
             metadata: ProviderMetadata(
                 id: .cursor,
                 displayName: "Cursor",

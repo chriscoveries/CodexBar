@@ -6,7 +6,7 @@ public enum MistralProviderDescriptor {
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .mistral,
-            settingsSection: .init(MistralProviderSettingsKey.self),
+            settingsSection: .init(MistralProviderSettingsKey.self, cookieSettings: MistralProviderSettings.self),
             metadata: ProviderMetadata(
                 id: .mistral,
                 displayName: "Mistral",

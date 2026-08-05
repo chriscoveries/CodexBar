@@ -6,7 +6,11 @@ public enum OpenCodeProviderDescriptor {
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .opencode,
-            settingsSection: .init(OpenCodeProviderSettingsKey.self),
+            settingsSection: .init(OpenCodeProviderSettingsKey.self, cookieSettings: { settings in
+                CookieProviderSettings(
+                    cookieSource: settings.cookieSource,
+                    manualCookieHeader: settings.manualCookieHeader)
+            }),
             metadata: ProviderMetadata(
                 id: .opencode,
                 displayName: "OpenCode",

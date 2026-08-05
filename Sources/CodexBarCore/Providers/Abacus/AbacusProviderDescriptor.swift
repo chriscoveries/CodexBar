@@ -10,7 +10,7 @@ public enum AbacusProviderDescriptor {
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .abacus,
-            settingsSection: .init(AbacusProviderSettingsKey.self),
+            settingsSection: .init(AbacusProviderSettingsKey.self, cookieSettings: AbacusProviderSettings.self),
             metadata: ProviderMetadata(
                 id: .abacus,
                 displayName: "Abacus AI",

@@ -6,7 +6,7 @@ public enum OllamaProviderDescriptor {
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .ollama,
-            settingsSection: .init(OllamaProviderSettingsKey.self),
+            settingsSection: .init(OllamaProviderSettingsKey.self, cookieSettings: OllamaProviderSettings.self),
             metadata: ProviderMetadata(
                 id: .ollama,
                 displayName: "Ollama",

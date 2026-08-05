@@ -8,7 +8,7 @@ public enum KimiProviderDescriptor {
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .kimi,
-            settingsSection: .init(KimiProviderSettingsKey.self),
+            settingsSection: .init(KimiProviderSettingsKey.self, cookieSettings: KimiProviderSettings.self),
             metadata: ProviderMetadata(
                 id: .kimi,
                 displayName: "Kimi Code",

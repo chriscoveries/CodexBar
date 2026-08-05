@@ -6,7 +6,11 @@ public enum StepFunProviderDescriptor {
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .stepfun,
-            settingsSection: .init(StepFunProviderSettingsKey.self),
+            settingsSection: .init(StepFunProviderSettingsKey.self, cookieSettings: { settings in
+                CookieProviderSettings(
+                    cookieSource: settings.cookieSource,
+                    manualCookieHeader: settings.manualToken)
+            }),
             metadata: ProviderMetadata(
                 id: .stepfun,
                 displayName: "StepFun",
