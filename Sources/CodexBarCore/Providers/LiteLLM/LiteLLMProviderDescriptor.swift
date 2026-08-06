@@ -50,6 +50,12 @@ public enum LiteLLMProviderDescriptor {
                 supportsTokenCost: false,
                 noDataMessage: { "LiteLLM spend is reported by the provider API." }),
             presentation: ProviderUsagePresentation(
+                costPresenter: { snapshot in
+                    let style: ProviderCostMenuCardStyle = (snapshot.providerCost?.limit ?? 1) <= 0
+                        ? .apiSpend
+                        : .hidden
+                    return ProviderCostPresentation(menuCardStyle: style)
+                },
                 menuBarWindowResolver: { context in
                     guard context.metric == .automatic else { return .unhandled }
                     return .resolved(

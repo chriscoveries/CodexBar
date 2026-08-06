@@ -161,7 +161,8 @@ public enum ClaudeProviderDescriptor {
                     } ?? []
                     return ProviderCostPresentation(
                         showsGenericFallback: !(cost.used == 0 && cost.limit == 0 && cost.balance != nil),
-                        balances: balances)
+                        balances: balances,
+                        menuCardStyle: .claude)
                 },
                 iconDecorations: [.notches],
                 automaticSelectionPrioritizesExhaustedWindow: false,

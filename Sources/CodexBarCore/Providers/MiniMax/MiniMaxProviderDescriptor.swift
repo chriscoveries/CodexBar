@@ -93,6 +93,12 @@ public enum MiniMaxProviderDescriptor {
                 supportsTokenCost: false,
                 noDataMessage: { "MiniMax cost summary is not supported." }),
             presentation: ProviderUsagePresentation(
+                costPresenter: { snapshot in
+                    let style: ProviderCostMenuCardStyle = snapshot.providerCost?.period == "MiniMax points balance"
+                        ? .pointsBalance
+                        : .generic
+                    return ProviderCostPresentation(menuCardStyle: style)
+                },
                 automaticSelectionPrioritizesExhaustedWindow: false,
                 menuBarWindowResolver: { context in
                     guard context.metric == .automatic else { return .unhandled }
@@ -100,7 +106,9 @@ public enum MiniMaxProviderDescriptor {
                         context.snapshot.primary,
                         context.snapshot.secondary,
                         context.snapshot.tertiary))
-                }),
+                },
+                optionalDetails: ProviderOptionalDetailsPresentation(
+                    hiddenTitlesWithoutOptionalUsage: ["Billing history"])),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .web, .api],
                 pipeline: ProviderFetchPipeline(resolveStrategies: self.resolveStrategies)),
