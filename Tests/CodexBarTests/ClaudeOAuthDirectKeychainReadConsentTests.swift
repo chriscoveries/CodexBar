@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+@testable import CodexBar
 @testable import CodexBarCore
 
 /// Coverage for the #2634 consent gate: reading Claude Code's own Keychain item is allowed only after an
@@ -21,7 +22,10 @@ struct ClaudeOAuthDirectKeychainReadConsentTests {
         }
     }
 
-    private func makeContext(runtime: ProviderRuntime, sourceMode: ProviderSourceMode) -> ProviderFetchContext {
+    private func makeContext(
+        runtime: CodexBarCore.ProviderRuntime,
+        sourceMode: ProviderSourceMode) -> ProviderFetchContext
+    {
         ProviderFetchContext(
             runtime: runtime,
             sourceMode: sourceMode,
@@ -149,5 +153,53 @@ struct ClaudeOAuthDirectKeychainReadConsentTests {
         #expect(degraded.dataConfidence == .percentOnly)
         let oauth = ClaudeOAuthFetchStrategy._snapshotForTesting(from: usage)
         #expect(oauth.dataConfidence == .unknown)
+    }
+
+    // MARK: - Consent revocation invalidates cached credentials
+
+    @Test
+    @MainActor
+    func `revoking consent drops codexbar cached claude credentials and reroutes to the cli fallback`() throws {
+        let suite = "codexbar-consent-revocation-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let settings = SettingsStore(
+            userDefaults: defaults,
+            configStore: testConfigStore(suiteName: suite),
+            zaiTokenStore: NoopZaiTokenStore(),
+            syntheticTokenStore: NoopSyntheticTokenStore())
+
+        let memory = ClaudeOAuthCredentialsStore.MemoryCacheStore()
+        try ClaudeOAuthCredentialsStore.$taskMemoryCacheStoreOverride.withValue(memory) {
+            // Consent on: a credential read from Claude Code's Keychain lands in CodexBar's caches.
+            settings.claudeOAuthDirectKeychainReadAllowed = true
+            memory.record = ClaudeOAuthCredentialRecord(
+                credentials: ClaudeOAuthCredentials(
+                    accessToken: "cached-from-claude-keychain",
+                    refreshToken: nil,
+                    expiresAt: Date(timeIntervalSinceNow: 3600),
+                    scopes: ["user:profile"],
+                    rateLimitTier: nil),
+                owner: .claudeCLI,
+                source: .claudeKeychain)
+            memory.timestamp = Date()
+            memory.profileIdentifier = ClaudeOAuthCredentialsStore.credentialsProfileIdentifier(
+                environment: [:])
+            #expect(memory.record != nil)
+
+            // Consent off: the cached copy must not outlive the permission that obtained it.
+            settings.claudeOAuthDirectKeychainReadAllowed = false
+            #expect(memory.record == nil)
+            #expect(settings.claudeOAuthDirectKeychainReadAllowed == false)
+
+            // The direct-read gate is closed again, and with no readable credential the explicit
+            // OAuth route hands off to the owner CLI usage fallback instead of reusing stale caches.
+            ClaudeOAuthDirectKeychainReadConsent.withTaskOverrideForTesting(false) {
+                #expect(ClaudeOAuthCredentialsStore.keychainAccessAllowed == false)
+            }
+            #expect(ClaudeOAuthFetchStrategy().shouldFallback(
+                on: ClaudeOAuthCredentialsError.notFound,
+                context: self.makeContext(runtime: .app, sourceMode: .oauth)))
+        }
     }
 }
