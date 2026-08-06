@@ -8,6 +8,14 @@ import Testing
 // The exact-anchor catalog intentionally makes this test data file long.
 // swiftlint:disable file_length
 
+/// Provider architecture drift tripwire for honest mistakes by future contributors and AI agents.
+///
+/// This is deliberately not an adversarially complete analyzer. It lexically scans shipped Swift in `Sources/**`
+/// and `WidgetExtension/**` for dotted provider cases, raw-ID literals in policy contexts, and labeled or positional
+/// arguments. String concatenation, reflection, and dynamic lookups are out of scope because they defeat lexical
+/// analysis and adversarial insiders are not the threat. `Tests/**` is out of scope because fixtures legitimately name
+/// providers; `Scripts/**` and non-Swift files are out of scope because this tripwire guards shipped Swift
+/// architecture.
 @MainActor
 // swiftlint:disable:next type_body_length
 struct ProviderArchitectureGatekeeperTests {
