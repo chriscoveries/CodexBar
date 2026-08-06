@@ -5,7 +5,11 @@ import Testing
 @testable import CodexBarCore
 @testable import CodexBarWidget
 
+// The exact-anchor catalog intentionally makes this test data file long.
+// swiftlint:disable file_length
+
 @MainActor
+// swiftlint:disable:next type_body_length
 struct ProviderArchitectureGatekeeperTests {
     @Test
     func `every provider has descriptor and implementation manifest entries`() {
@@ -378,8 +382,10 @@ struct ProviderArchitectureGatekeeperTests {
     private static let providerCaseClusterGap = 12
     private static let providerCaseClusterWindow = 40
 
-    /// Each entry names one uniquely anchored construct and pins its complete provider-reference fingerprint.
-    /// Adding or removing a reference invalidates the entry instead of silently expanding an exemption.
+    // Each entry names one uniquely anchored construct and pins its complete provider-reference fingerprint.
+    // Adding or removing a reference invalidates the entry instead of silently expanding an exemption.
+    // Anchor literals must remain byte-for-byte single lines for exact source verification.
+    // swiftlint:disable line_length
     private static let allowedProviderConstructs: [AllowedProviderConstruct] = [
         AllowedProviderConstruct(
             path: "Sources/CodexBar/CodexHistoryOwnership.swift",
@@ -2160,6 +2166,7 @@ struct ProviderArchitectureGatekeeperTests {
             expectedReferenceCount: 1,
             reason: "This exact WidgetKit construct preserves its compile-time provider selection contract."),
     ]
+    // swiftlint:enable line_length
 
     private static func shippedSwiftSources(root: URL) throws -> [SourceFile] {
         var files: [SourceFile] = []
@@ -2216,7 +2223,8 @@ struct ProviderArchitectureGatekeeperTests {
                   lines[anchorLine].trimmingCharacters(in: .whitespaces) == construct.anchor
             else {
                 failures.append(
-                    "\(file.path):\(construct.line) allowlisted construct anchor no longer matches '\(construct.anchor)'")
+                    "\(file.path):\(construct.line) allowlisted construct anchor no longer matches " +
+                        "'\(construct.anchor)'")
                 continue
             }
             let candidateIndices = clusters.indices.filter { index in
