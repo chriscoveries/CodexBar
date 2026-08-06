@@ -1192,7 +1192,8 @@ extension TTYCommandRunner {
     private static func isClaudeBinary(requested: String, resolved: String, environment: [String: String]) -> Bool {
         let requestedName = URL(fileURLWithPath: requested).lastPathComponent
         let resolvedName = URL(fileURLWithPath: resolved).lastPathComponent
-        if requested == "claude" || requestedName == "claude" || resolvedName == "claude" {
+        let cliName = ClaudeProviderDescriptor.descriptor.cli.name
+        if requested == cliName || requestedName == cliName || resolvedName == cliName {
             return true
         }
 
