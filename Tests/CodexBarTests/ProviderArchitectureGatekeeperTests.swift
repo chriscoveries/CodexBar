@@ -231,7 +231,7 @@ struct ProviderArchitectureGatekeeperTests {
         let root = try Self.repoRoot()
         let files = try Self.shippedSwiftSources(root: root)
         let providerIDs = Set(UsageProvider.allCases.map(\.rawValue))
-        let providerFolderNames = Set(providerIDs.map { $0.lowercased() })
+        let providerIDsByFolderName = Dictionary(uniqueKeysWithValues: providerIDs.map { ($0.lowercased(), $0) })
         var failures: [String] = []
         var constructsByPath: [String: [AllowedProviderConstruct]] = [:]
         var suppressionsByPath: [String: [SuppressedProviderReference]] = [:]
@@ -244,12 +244,12 @@ struct ProviderArchitectureGatekeeperTests {
         }
 
         for file in files {
-            if Self.isProviderImplementationPath(file.path, providerFolderNames: providerFolderNames) {
-                continue
-            }
+            let ownedProviderID = Self.providerImplementationID(
+                file.path,
+                providerIDsByFolderName: providerIDsByFolderName)
             let result = Self.analyze(
                 file: file,
-                providerIDs: providerIDs,
+                providerIDs: providerIDs.subtracting(ownedProviderID.map { [$0] } ?? []),
                 allowedConstructs: constructsByPath.removeValue(forKey: file.path) ?? [],
                 suppressedReferences: suppressionsByPath.removeValue(forKey: file.path) ?? [])
             failures.append(contentsOf: result)
@@ -327,14 +327,36 @@ struct ProviderArchitectureGatekeeperTests {
     }
 
     @Test
+    func `provider reference scanner catches raw IDs in multiline policy statements`() {
+        let source = #"""
+        let handlers = [
+            "claude": handler,
+        ]
+        let providerIDs = [
+            "codex",
+        ]
+        """#
+        let references = Self.providerReferences(in: source, providerIDs: ["claude", "codex"])
+
+        #expect(references.map(\.providerIDs) == [["claude"], ["codex"]])
+    }
+
+    @Test
     func `provider reference scanner ignores generic URLs and log categories`() {
         let source = #"""
         let url = "https://example.com/claude/status"
+        if endpoint == "https://chat.openai.com" { return }
         let category = "codex"
         logger.info("claude request completed")
+        logger.info(
+            "codex request completed"
+        )
+        let labels = [
+            "claude",
+        ]
         """#
 
-        #expect(Self.providerReferences(in: source, providerIDs: ["claude", "codex"]).isEmpty)
+        #expect(Self.providerReferences(in: source, providerIDs: ["claude", "codex", "openai"]).isEmpty)
     }
 
     @Test
@@ -349,18 +371,56 @@ struct ProviderArchitectureGatekeeperTests {
     }
 
     @Test
-    func `provider implementation path requires a real provider folder`() {
-        let folders: Set = ["claude", "codex"]
+    func `exact suppression leaves repeated provider tokens visible`() {
+        let path = "Sources/App/Shared.swift"
+        let anchor = "let rows = [makeRow(provider: .claude), makeRow(provider: .claude)]"
+        let suppression = SuppressedProviderReference(
+            path: path,
+            line: 1,
+            anchor: anchor,
+            expectedProviderIDs: ["claude"],
+            reason: "The fixture suppresses exactly one token.")
+        let failures = Self.analyze(
+            file: SourceFile(path: path, source: anchor),
+            providerIDs: ["claude"],
+            allowedConstructs: [],
+            suppressedReferences: [suppression])
 
-        #expect(Self.isProviderImplementationPath(
+        #expect(failures.count == 1)
+        #expect(failures.first?.contains("references: 1") == true)
+    }
+
+    @Test
+    func `provider implementation path identifies only a real provider folder`() {
+        let folders = ["claude": "claude", "codex": "codex"]
+
+        #expect(Self.providerImplementationID(
             "Sources/CodexBar/Providers/Claude/ClaudeSettings.swift",
-            providerFolderNames: folders))
-        #expect(!Self.isProviderImplementationPath(
+            providerIDsByFolderName: folders) == "claude")
+        #expect(Self.providerImplementationID(
             "Sources/CodexBar/Providers/Shared/ProviderHelpers.swift",
-            providerFolderNames: folders))
-        #expect(!Self.isProviderImplementationPath(
+            providerIDsByFolderName: folders) == nil)
+        #expect(Self.providerImplementationID(
             "Sources/CodexBar/NotProviders/ClaudeSettings.swift",
-            providerFolderNames: folders))
+            providerIDsByFolderName: folders) == nil)
+    }
+
+    @Test
+    func `provider folders exempt only their own provider references`() {
+        let file = SourceFile(
+            path: "Sources/CodexBar/Providers/Claude/ClaudeSettings.swift",
+            source: "let providers: [UsageProvider] = [.claude, .codex]")
+        let ownedProviderID = Self.providerImplementationID(
+            file.path,
+            providerIDsByFolderName: ["claude": "claude", "codex": "codex"])
+        let failures = Self.analyze(
+            file: file,
+            providerIDs: Set(["claude", "codex"]).subtracting(ownedProviderID.map { [$0] } ?? []),
+            allowedConstructs: [])
+
+        #expect(failures.count == 1)
+        #expect(failures.first?.contains("codex") == true)
+        #expect(failures.first?.contains("claude") == false)
     }
 
     @Test
@@ -449,6 +509,31 @@ struct ProviderArchitectureGatekeeperTests {
             allowedConstructs: [construct]).isEmpty == false)
     }
 
+    @Test
+    func `allowlist fingerprints preserve repeated occurrences on one line`() {
+        let original = "let anchor = true\nlet values = [.codex]"
+        let changed = "let anchor = true\nlet values = [.codex, .codex]"
+        let construct = AllowedProviderConstruct(
+            path: "Sources/App/Shared.swift",
+            line: 1,
+            anchor: "let anchor = true",
+            expectedProviderIDs: ["codex"],
+            expectedReferenceCount: 1,
+            expectedReferenceFingerprint: ["codex@0"],
+            reason: "The fixture verifies per-occurrence fingerprints.")
+
+        #expect(Self.analyze(
+            file: SourceFile(path: construct.path, source: original),
+            providerIDs: ["codex"],
+            allowedConstructs: [construct]).isEmpty)
+        let failures = Self.analyze(
+            file: SourceFile(path: construct.path, source: changed),
+            providerIDs: ["codex"],
+            allowedConstructs: [construct])
+        #expect(failures.count == 2)
+        #expect(failures.first?.contains("found [\"codex\"]/2/[\"codex@0\", \"codex@0\"]") == true)
+    }
+
     private struct SourceFile {
         let path: String
         let source: String
@@ -456,8 +541,45 @@ struct ProviderArchitectureGatekeeperTests {
 
     private struct ProviderReference: Equatable {
         let line: Int
-        var providerIDs: Set<String>
-        var newlyRecognizedProviderIDs: Set<String> = []
+        var providerOccurrences: [String]
+        var newlyRecognizedProviderOccurrences: [String]
+
+        var providerIDs: Set<String> {
+            Set(self.providerOccurrences)
+        }
+
+        var newlyRecognizedProviderIDs: Set<String> {
+            Set(self.newlyRecognizedProviderOccurrences)
+        }
+
+        init(
+            line: Int,
+            providerIDs: Set<String>,
+            newlyRecognizedProviderIDs: Set<String> = [])
+        {
+            self.line = line
+            self.providerOccurrences = providerIDs.sorted()
+            self.newlyRecognizedProviderOccurrences = newlyRecognizedProviderIDs.sorted()
+        }
+
+        init(
+            line: Int,
+            providerOccurrences: [String],
+            newlyRecognizedProviderOccurrences: [String])
+        {
+            self.line = line
+            self.providerOccurrences = providerOccurrences.sorted()
+            self.newlyRecognizedProviderOccurrences = newlyRecognizedProviderOccurrences.sorted()
+        }
+
+        mutating func suppressOneOccurrence(of providerID: String) -> Bool {
+            guard let newlyRecognizedIndex = self.newlyRecognizedProviderOccurrences.firstIndex(of: providerID),
+                  let occurrenceIndex = self.providerOccurrences.firstIndex(of: providerID)
+            else { return false }
+            self.newlyRecognizedProviderOccurrences.remove(at: newlyRecognizedIndex)
+            self.providerOccurrences.remove(at: occurrenceIndex)
+            return true
+        }
     }
 
     private struct ProviderReferenceCluster {
@@ -472,18 +594,18 @@ struct ProviderArchitectureGatekeeperTests {
         }
 
         var referenceCount: Int {
-            self.references.reduce(0) { $0 + $1.providerIDs.count }
+            self.references.reduce(0) { $0 + $1.providerOccurrences.count }
         }
 
         var referenceFingerprint: [String] {
             self.references.flatMap { reference in
-                reference.providerIDs.sorted().map { "\($0)@\(reference.line - self.lineRange.lowerBound)" }
+                reference.providerOccurrences.sorted().map { "\($0)@\(reference.line - self.lineRange.lowerBound)" }
             }
         }
 
         var newlyRecognizedFingerprint: [String] {
             self.references.flatMap { reference in
-                reference.newlyRecognizedProviderIDs.sorted().map {
+                reference.newlyRecognizedProviderOccurrences.sorted().map {
                     "\($0)@\(reference.line - self.lineRange.lowerBound)"
                 }
             }
@@ -1347,8 +1469,8 @@ struct ProviderArchitectureGatekeeperTests {
             line: 31,
             anchor: "snapshot?.accountEmail(for: .codex) ??",
             expectedProviderIDs: ["codex"],
-            expectedReferenceCount: 2,
-            expectedReferenceFingerprint: ["codex@0", "codex@1"],
+            expectedReferenceCount: 3,
+            expectedReferenceFingerprint: ["codex@0", "codex@1", "codex@1"],
             reason: "This exact shared construct dispatches a provider-owned capability at the generic integration boundary."),
         AllowedProviderConstruct(
             path: "Sources/CodexBar/CodexOwnershipContext.swift",
@@ -2027,16 +2149,16 @@ struct ProviderArchitectureGatekeeperTests {
             line: 441,
             anchor: "?? (self.store.isEnabled(.codex) ? .codex : self.store.enabledFirstPartyProviders().first)",
             expectedProviderIDs: ["codex"],
-            expectedReferenceCount: 3,
-            expectedReferenceFingerprint: ["codex@0", "codex@2", "codex@8"],
+            expectedReferenceCount: 4,
+            expectedReferenceFingerprint: ["codex@0", "codex@0", "codex@2", "codex@8"],
             reason: "This exact app-runtime bridge coordinates provider-owned state through the shared controller."),
         AllowedProviderConstruct(
             path: "Sources/CodexBar/StatusItemController+Actions.swift",
             line: 462,
             anchor: "?? (self.store.isEnabled(.codex) ? .codex : self.store.enabledFirstPartyProviders().first)",
             expectedProviderIDs: ["claude", "codex"],
-            expectedReferenceCount: 3,
-            expectedReferenceFingerprint: ["codex@0", "codex@2", "claude@10"],
+            expectedReferenceCount: 4,
+            expectedReferenceFingerprint: ["codex@0", "codex@0", "codex@2", "claude@10"],
             reason: "This exact app-runtime bridge coordinates provider-owned state through the shared controller."),
         AllowedProviderConstruct(
             path: "Sources/CodexBar/StatusItemController+Actions.swift",
@@ -2211,8 +2333,8 @@ struct ProviderArchitectureGatekeeperTests {
             line: 65,
             anchor: "snapshot.accountEmail(for: .codex) ?? self.accountInfo(for: .codex).email),",
             expectedProviderIDs: ["codex", "deepseek"],
-            expectedReferenceCount: 3,
-            expectedReferenceFingerprint: ["codex@0", "deepseek@10", "deepseek@16"],
+            expectedReferenceCount: 5,
+            expectedReferenceFingerprint: ["codex@0", "codex@0", "deepseek@10", "deepseek@16", "deepseek@16"],
             reason: "This exact app-runtime bridge coordinates provider-owned state through the shared controller."),
         AllowedProviderConstruct(
             path: "Sources/CodexBar/UsageStore+Accessors.swift",
@@ -2235,8 +2357,8 @@ struct ProviderArchitectureGatekeeperTests {
             line: 252,
             anchor: "self.lastTokenFetchAt[.codex] = now",
             expectedProviderIDs: ["codex"],
-            expectedReferenceCount: 5,
-            expectedReferenceFingerprint: ["codex@0", "codex@1", "codex@4", "codex@7", "codex@9"],
+            expectedReferenceCount: 6,
+            expectedReferenceFingerprint: ["codex@0", "codex@1", "codex@4", "codex@4", "codex@7", "codex@9"],
             reason: "This exact app-runtime bridge coordinates provider-owned state through the shared controller."),
         AllowedProviderConstruct(
             path: "Sources/CodexBar/UsageStore+CodexCostCatchUp.swift",
@@ -2347,8 +2469,8 @@ struct ProviderArchitectureGatekeeperTests {
             line: 861,
             anchor: "guard let identity = snapshot.identity(for: .claude) else { return nil }",
             expectedProviderIDs: ["claude"],
-            expectedReferenceCount: 2,
-            expectedReferenceFingerprint: ["claude@0", "claude@9"],
+            expectedReferenceCount: 3,
+            expectedReferenceFingerprint: ["claude@0", "claude@9", "claude@9"],
             reason: "This exact app-runtime bridge coordinates provider-owned state through the shared controller."),
         AllowedProviderConstruct(
             path: "Sources/CodexBar/UsageStore+PlanUtilization.swift",
@@ -2403,8 +2525,8 @@ struct ProviderArchitectureGatekeeperTests {
             line: 398,
             anchor: "let priorClaudeSourceLabel = provider == .claude ? self.lastSourceLabels[.claude] : nil",
             expectedProviderIDs: ["claude"],
-            expectedReferenceCount: 1,
-            expectedReferenceFingerprint: ["claude@0"],
+            expectedReferenceCount: 2,
+            expectedReferenceFingerprint: ["claude@0", "claude@0"],
             reason: "This exact app-runtime bridge coordinates provider-owned state through the shared controller."),
         AllowedProviderConstruct(
             path: "Sources/CodexBar/UsageStore+Refresh.swift",
@@ -3066,8 +3188,8 @@ struct ProviderArchitectureGatekeeperTests {
             line: 93,
             anchor: "guard AgentPSOutputParser.provider(for: process) == .codex else { return nil }",
             expectedProviderIDs: ["codex"],
-            expectedReferenceCount: 2,
-            expectedReferenceFingerprint: ["codex@0", "codex@5"],
+            expectedReferenceCount: 1,
+            expectedReferenceFingerprint: ["codex@0"],
             reason: "This exact host integration maps a provider-owned process, path, or window contract."),
         AllowedProviderConstruct(
             path: "Sources/CodexBarCore/LocalAgentSessionScanner.swift",
@@ -3209,9 +3331,9 @@ struct ProviderArchitectureGatekeeperTests {
             path: "Sources/CodexBarCore/SessionWindowFocuser.swift",
             line: 70,
             anchor: "case (.claude, .desktopApp): \"com.anthropic.claudefordesktop\"",
-            expectedProviderIDs: ["claude", "codex", "openai"],
-            expectedReferenceCount: 3,
-            expectedReferenceFingerprint: ["claude@0", "codex@1", "openai@1"],
+            expectedProviderIDs: ["claude", "codex"],
+            expectedReferenceCount: 2,
+            expectedReferenceFingerprint: ["claude@0", "codex@1"],
             reason: "This exact host integration maps a provider-owned process, path, or window contract."),
         AllowedProviderConstruct(
             path: "Sources/CodexBarCore/UsageSnapshot+SwitcherWeeklyWindow.swift",
@@ -3318,14 +3440,6 @@ struct ProviderArchitectureGatekeeperTests {
             expectedReferenceFingerprint: ["openai@0"],
             reason: "This exact cost scanner dispatch selects a provider-owned transcript, cache, or pricing format."),
         AllowedProviderConstruct(
-            path: "Sources/CodexBarCore/Vendored/CostUsage/CostUsageScanner.swift",
-            line: 803,
-            anchor: "|| path.contains(\"/.codex/worktrees/\")",
-            expectedProviderIDs: ["codex"],
-            expectedReferenceCount: 1,
-            expectedReferenceFingerprint: ["codex@0"],
-            reason: "This exact cost scanner dispatch selects a provider-owned transcript, cache, or pricing format."),
-        AllowedProviderConstruct(
             path: "Sources/CodexBarCore/Vendored/CostUsage/ModelsDevPricing.swift",
             line: 75,
             anchor: "[\"anthropic\", \"openai\"].allSatisfy { providerID in",
@@ -3393,16 +3507,16 @@ struct ProviderArchitectureGatekeeperTests {
         return files.sorted { $0.path < $1.path }
     }
 
-    private static func isProviderImplementationPath(
+    private static func providerImplementationID(
         _ path: String,
-        providerFolderNames: Set<String>) -> Bool
+        providerIDsByFolderName: [String: String]) -> String?
     {
         let components = path.split(separator: "/").map(String.init)
         guard components.count >= 5,
               components[0] == "Sources",
               components[2] == "Providers"
-        else { return false }
-        return providerFolderNames.contains(components[3].lowercased())
+        else { return nil }
+        return providerIDsByFolderName[components[3].lowercased()]
     }
 
     private static func analyze(
@@ -3446,10 +3560,15 @@ struct ProviderArchitectureGatekeeperTests {
                         "\(suppression.expectedProviderIDs.sorted())")
                 continue
             }
-            references[referenceIndex].providerIDs.subtract(suppression.expectedProviderIDs)
-            references[referenceIndex].newlyRecognizedProviderIDs.subtract(suppression.expectedProviderIDs)
+            for providerID in suppression.expectedProviderIDs.sorted() {
+                guard references[referenceIndex].suppressOneOccurrence(of: providerID) else {
+                    failures.append(
+                        "\(file.path):\(suppression.line) suppressed provider token no longer matches \(providerID)")
+                    break
+                }
+            }
         }
-        references.removeAll { $0.providerIDs.isEmpty }
+        references.removeAll { $0.providerOccurrences.isEmpty }
         let clusters = self.providerReferenceClusters(references)
         let markerLines = lines.indices.filter { self.providerMarkerReason(in: lines[$0]) != nil }
         var allowedClusterIndices: Set<Int> = []
@@ -3562,18 +3681,19 @@ struct ProviderArchitectureGatekeeperTests {
     }
 
     private static func providerReferences(in source: String, providerIDs: Set<String>) -> [ProviderReference] {
-        source.components(separatedBy: .newlines).enumerated().flatMap { index, line -> [ProviderReference] in
+        let lines = source.components(separatedBy: .newlines)
+        let statementContexts = self.statementContexts(for: lines)
+        return lines.enumerated().flatMap { index, line -> [ProviderReference] in
             let code = self.codeBeforeLineComment(line)
             guard !code.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
-            var strongMatches: Set<String> = []
-            var weakMatches: Set<String> = []
-            var qualifiedMatches: Set<String> = []
+            var matches: [String] = []
+            var newlyRecognizedMatches: [String] = []
             for providerID in providerIDs {
-                switch self.dottedProviderReferenceStrength(providerID, in: code) {
-                case .strong: strongMatches.insert(providerID)
-                case .weakArgument: weakMatches.insert(providerID)
-                case .fullyQualified: qualifiedMatches.insert(providerID)
-                case nil: break
+                for strength in self.dottedProviderReferenceStrengths(providerID, in: code) {
+                    matches.append(providerID)
+                    if strength != .strong {
+                        newlyRecognizedMatches.append(providerID)
+                    }
                 }
             }
             for literal in self.quotedStringLiterals(in: code) {
@@ -3581,42 +3701,45 @@ struct ProviderArchitectureGatekeeperTests {
                     providerID,
                     literal: literal.value,
                     range: literal.range,
-                    line: code)
+                    line: code,
+                    statement: statementContexts[index])
                 {
-                    strongMatches.insert(providerID)
+                    matches.append(providerID)
                 }
             }
-            let newlyRecognizedMatches = weakMatches.union(qualifiedMatches).subtracting(strongMatches)
-            let matches = strongMatches.union(newlyRecognizedMatches)
             guard !matches.isEmpty else { return [] }
             return [ProviderReference(
                 line: index,
-                providerIDs: matches,
-                newlyRecognizedProviderIDs: newlyRecognizedMatches)]
+                providerOccurrences: matches,
+                newlyRecognizedProviderOccurrences: newlyRecognizedMatches)]
         }
     }
 
-    private enum ProviderReferenceStrength {
+    private enum ProviderReferenceStrength: Equatable {
         case strong
         case weakArgument
         case fullyQualified
     }
 
-    private static func dottedProviderReferenceStrength(
+    private static func dottedProviderReferenceStrengths(
         _ rawValue: String,
-        in line: String) -> ProviderReferenceStrength?
+        in line: String) -> [ProviderReferenceStrength]
     {
         let needle = ".\(rawValue)"
+        let plainStringRanges = self.quotedStringLiterals(in: line).compactMap { literal -> Range<String.Index>? in
+            line[literal.range].contains("\\(") ? nil : literal.range
+        }
         var searchStart = line.startIndex
-        var found: ProviderReferenceStrength?
+        var found: [ProviderReferenceStrength] = []
         while let range = line.range(of: needle, range: searchStart..<line.endIndex) {
+            if plainStringRanges.contains(where: { $0.contains(range.lowerBound) }) {
+                searchStart = range.upperBound
+                continue
+            }
             if range.upperBound == line.endIndex || !Self.isIdentifierCharacter(line[range.upperBound]),
                let strength = self.providerPolicyPosition(rawValue, range: range, line: line)
             {
-                if strength == .strong {
-                    return .strong
-                }
-                found = strength
+                found.append(strength)
             }
             searchStart = range.upperBound
         }
@@ -3666,15 +3789,18 @@ struct ProviderArchitectureGatekeeperTests {
         _ providerID: String,
         literal: String,
         range: Range<String.Index>,
-        line: String) -> Bool
+        line: String,
+        statement: String) -> Bool
     {
         let lowercasedLiteral = literal.lowercased()
         guard self.containsWord(providerID, in: lowercasedLiteral) else { return false }
-        let lowercasedLine = line.lowercased()
+        let lowercasedStatement = statement.lowercased()
         if lowercasedLiteral.contains("http://") || lowercasedLiteral.contains("https://") {
             return false
         }
-        if self.isLogLiteral(range: range, in: line) {
+        if self.isLogLiteral(range: range, in: line) ||
+            (statement.contains("\n") && self.isLogStatement(lowercasedStatement))
+        {
             return false
         }
         if literal != lowercasedLiteral {
@@ -3686,8 +3812,9 @@ struct ProviderArchitectureGatekeeperTests {
             "provider", "rawvalue", "representedobject", "fallback", "default", "selected",
             "case ", "return ", "command", "route", "routing", "tool", "binary", "executable",
         ]
-        return lowercasedLine.contains("==") || lowercasedLine.contains("!=") ||
-            policyKeywords.contains(where: lowercasedLine.contains)
+        let suffix = line[range.upperBound...].trimmingCharacters(in: .whitespaces)
+        return suffix.hasPrefix(":") || lowercasedStatement.contains("==") || lowercasedStatement.contains("!=") ||
+            policyKeywords.contains(where: lowercasedStatement.contains)
     }
 
     private static func isLogLiteral(range: Range<String.Index>, in line: String) -> Bool {
@@ -3695,6 +3822,63 @@ struct ProviderArchitectureGatekeeperTests {
         let statement = prefix.split(separator: ";", omittingEmptySubsequences: false).last ?? prefix[...]
         return statement.contains("logger.") || statement.contains("log.") ||
             statement.trimmingCharacters(in: .whitespaces).hasSuffix("category:")
+    }
+
+    private static func isLogStatement(_ lowercasedStatement: String) -> Bool {
+        let trimmed = lowercasedStatement.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.contains("logger.") || trimmed.contains("log.") || trimmed.contains("category:")
+    }
+
+    private static func statementContexts(for lines: [String]) -> [String] {
+        var contexts = Array(repeating: "", count: lines.count)
+        var statementLines: [Int] = []
+        var fragments: [String] = []
+        var delimiterDepth = 0
+
+        func finishStatement() {
+            guard let header = fragments.first else { return }
+            for (offset, line) in statementLines.enumerated() {
+                contexts[line] = offset == 0 ? header : "\(header)\n\(fragments[offset])"
+            }
+            statementLines.removeAll(keepingCapacity: true)
+            fragments.removeAll(keepingCapacity: true)
+        }
+
+        for (index, line) in lines.enumerated() {
+            let code = self.codeBeforeLineComment(line)
+            statementLines.append(index)
+            fragments.append(code)
+            delimiterDepth += self.statementDelimiterDelta(in: code)
+            let trimmed = code.trimmingCharacters(in: .whitespaces)
+            let explicitlyContinued = trimmed.hasSuffix("=") || trimmed.hasSuffix("->")
+            if delimiterDepth <= 0, !explicitlyContinued {
+                finishStatement()
+                delimiterDepth = 0
+            }
+        }
+        if !statementLines.isEmpty {
+            finishStatement()
+        }
+        return contexts
+    }
+
+    private static func statementDelimiterDelta(in line: String) -> Int {
+        var delta = 0
+        var previous: Character?
+        var isInsideString = false
+        for character in line {
+            if character == "\"", previous != "\\" {
+                isInsideString.toggle()
+            } else if !isInsideString {
+                if character == "(" || character == "[" {
+                    delta += 1
+                } else if character == ")" || character == "]" {
+                    delta -= 1
+                }
+            }
+            previous = character
+        }
+        return delta
     }
 
     private static func providerMarkerReason(in line: String) -> String? {
