@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.48.0 — Unreleased
+## 0.48.0 — 2026-08-06
 
 ### Added
 - CLI: add a built-in auto-refreshing web dashboard at `/` to `codexbar serve`.
