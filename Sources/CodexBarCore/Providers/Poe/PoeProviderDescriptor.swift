@@ -2,10 +2,14 @@ import Foundation
 
 public enum PoeProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+    private static let credentials = ProviderCredentialAdapter.apiKey(
+        environmentKey: PoeSettingsReader.apiKeyEnvironmentKey,
+        resolve: PoeSettingsReader.apiKey)
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .poe,
+            credentials: self.credentials,
             metadata: ProviderMetadata(
                 id: .poe,
                 displayName: "Poe",
@@ -21,6 +25,7 @@ public enum PoeProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                balanceOnly: true,
                 browserCookieOrder: nil,
                 dashboardURL: "https://poe.com/api/keys",
                 statusPageURL: nil,
@@ -37,6 +42,9 @@ public enum PoeProviderDescriptor {
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "Poe usage history is unavailable." }),
+            presentation: ProviderUsagePresentation(
+                menuCard: ProviderMenuCardPresentation(primaryDetailKind: .poeBalance),
+                planRow: ProviderPlanRowPresentation(label: "Balance", stripsBalancePrefix: true)),
             fetchPlan: self.fetchPlan(),
             cli: ProviderCLIConfig(
                 name: "poe",
@@ -52,7 +60,7 @@ public enum PoeProviderDescriptor {
                 plugin: "poe",
                 secretKey: PoeSettingsReader.apiKeyEnvironmentKey,
                 strategyID: "poe.api"),
-            resolveToken: { ProviderTokenResolver.poeToken(environment: $0) },
+            resolveToken: { ProviderTokenResolver.token(for: .poe, environment: $0) },
             missingCredentialsError: { PoeUsageError.missingCredentials },
             loadUsage: { apiKey, _ in
                 try await PoeUsageFetcher.fetchUsage(apiKey: apiKey).toUsageSnapshot()
@@ -88,6 +96,6 @@ struct PoeAPIFetchStrategy: ProviderFetchStrategy {
     }
 
     private static func resolveToken(environment: [String: String]) -> String? {
-        ProviderTokenResolver.poeToken(environment: environment)
+        ProviderTokenResolver.token(for: .poe, environment: environment)
     }
 }
