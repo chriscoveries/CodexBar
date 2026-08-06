@@ -737,8 +737,10 @@ public struct TTYCommandRunner {
 
         let deadline = Date().addingTimeInterval(options.timeout)
         let trimmed = script.trimmingCharacters(in: .whitespacesAndNewlines)
-        let isCodex = (binaryName == "codex") || options.forceCodexStatusMode
-        let isCodexStatus = isCodex && trimmed == "/status"
+        let ttyStatusCommand = ProviderDescriptorRegistry.all
+            .first { $0.cli.name == binaryName }?.cli.ttyStatusCommand
+        let isCodex = ttyStatusCommand != nil || options.forceCodexStatusMode
+        let isCodexStatus = isCodex && trimmed == (ttyStatusCommand ?? "/status")
 
         var buffer = BoundedOutputBuffer()
         var didExceedOutputLimit = false
@@ -1178,10 +1180,10 @@ extension TTYCommandRunner {
     }
 
     public static func which(_ tool: String) -> String? {
-        if tool == "codex", let located = BinaryLocator.resolveCodexBinary() {
-            return located
-        }
-        if tool == "claude", let located = BinaryLocator.resolveClaudeBinary() {
+        if let cli = ProviderDescriptorRegistry.all.first(where: { $0.cli.name == tool })?.cli,
+           cli.prefersBinaryLocatorForWhich,
+           let located = cli.binaryLocator?()
+        {
             return located
         }
         return self.runWhich(tool)
@@ -1190,7 +1192,8 @@ extension TTYCommandRunner {
     private static func isClaudeBinary(requested: String, resolved: String, environment: [String: String]) -> Bool {
         let requestedName = URL(fileURLWithPath: requested).lastPathComponent
         let resolvedName = URL(fileURLWithPath: resolved).lastPathComponent
-        if requested == "claude" || requestedName == "claude" || resolvedName == "claude" {
+        let cliName = ClaudeProviderDescriptor.descriptor.cli.name
+        if requested == cliName || requestedName == cliName || resolvedName == cliName {
             return true
         }
 
