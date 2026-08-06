@@ -52,7 +52,8 @@ public enum ElevenLabsProviderDescriptor {
                     ProviderColor(hex: 0x808080),
                     ProviderColor(hex: 0xFDFCFC),
                 ],
-                widgetColor: ProviderColor(red: 235 / 255, green: 235 / 255, blue: 230 / 255)),
+                widgetColor: ProviderColor(red: 235 / 255, green: 235 / 255, blue: 230 / 255),
+                progressColorStyle: .label),
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "ElevenLabs cost history is not available via API yet." }),

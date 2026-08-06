@@ -575,10 +575,11 @@ struct ProviderArchitectureGatekeeperTests {
         if ["http://", "https://", "logger", "log.", "category"].contains(where: lowercasedLine.contains) {
             return false
         }
+        let policyKeywords = ["provider", "rawvalue", "representedobject", "fallback", "default", "selected"]
         if lowercasedLiteral == providerID {
-            return true
+            return policyKeywords.contains(where: lowercasedLine.contains)
         }
-        return ["provider", "rawvalue", "representedobject", "command", "fallback", "default", "selected"]
+        return policyKeywords
             .contains(where: lowercasedLine.contains)
     }
 

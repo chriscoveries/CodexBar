@@ -6,6 +6,22 @@ public enum ProviderTokenCostHint: Sendable, Equatable {
     case literal(String)
 }
 
+public enum ProviderTokenCostHistoryTitleStyle: Sendable, Equatable {
+    case standard
+    case compact
+}
+
+public enum ProviderTokenCostPrimaryValue: Sendable, Equatable {
+    case session
+    case latestDaily
+}
+
+public enum ProviderTokenCostHintPlacement: Sendable, Equatable {
+    case beforeRequestHistory
+    case afterRequestHistory
+    case hidden
+}
+
 public struct ProviderTokenCostConfig: Sendable {
     public let supportsTokenCost: Bool
     public let noDataMessage: @Sendable () -> String
@@ -14,6 +30,11 @@ public struct ProviderTokenCostConfig: Sendable {
     public let showsHintInProviderDetails: Bool
     public let showsCostMenuSection: Bool
     public let estimateDisclaimer: String
+    public let historyTitleStyle: ProviderTokenCostHistoryTitleStyle
+    public let primaryValue: ProviderTokenCostPrimaryValue
+    public let showsRequestHistory: Bool
+    public let hintPlacement: ProviderTokenCostHintPlacement
+    public let chartEstimateDisclaimer: ProviderTokenCostHint?
 
     public init(
         supportsTokenCost: Bool,
@@ -22,7 +43,12 @@ public struct ProviderTokenCostConfig: Sendable {
         supportsTokenSnapshot: Bool = false,
         showsHintInProviderDetails: Bool = false,
         showsCostMenuSection: Bool = true,
-        estimateDisclaimer: String = "Estimated from local logs · may differ from your bill")
+        estimateDisclaimer: String = "Estimated from local logs · may differ from your bill",
+        historyTitleStyle: ProviderTokenCostHistoryTitleStyle = .standard,
+        primaryValue: ProviderTokenCostPrimaryValue = .session,
+        showsRequestHistory: Bool = true,
+        hintPlacement: ProviderTokenCostHintPlacement = .afterRequestHistory,
+        chartEstimateDisclaimer: ProviderTokenCostHint? = nil)
     {
         self.supportsTokenCost = supportsTokenCost
         self.noDataMessage = noDataMessage
@@ -31,6 +57,11 @@ public struct ProviderTokenCostConfig: Sendable {
         self.showsHintInProviderDetails = showsHintInProviderDetails
         self.showsCostMenuSection = showsCostMenuSection
         self.estimateDisclaimer = estimateDisclaimer
+        self.historyTitleStyle = historyTitleStyle
+        self.primaryValue = primaryValue
+        self.showsRequestHistory = showsRequestHistory
+        self.hintPlacement = hintPlacement
+        self.chartEstimateDisclaimer = chartEstimateDisclaimer
     }
 }
 

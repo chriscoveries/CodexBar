@@ -53,6 +53,7 @@ public enum NeuralWattProviderDescriptor {
                 supportsTokenCost: false,
                 noDataMessage: { "Neuralwatt token cost history is not available via the quota API." }),
             presentation: ProviderUsagePresentation(
+                costPresenter: { _ in ProviderCostPresentation(menuCardStyle: .payAsYouGoBalance) },
                 menuCard: ProviderMenuCardPresentation(
                     showsPrimaryBalanceDescription: true,
                     hidesPrimaryResetWithoutDate: true),
