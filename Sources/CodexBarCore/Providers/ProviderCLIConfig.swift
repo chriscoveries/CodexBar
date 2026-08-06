@@ -11,6 +11,8 @@ public struct ProviderCLIConfig: Sendable {
     public let binaryLocator: (@Sendable () -> String?)?
     public let versionDetector: (@Sendable (BrowserDetection) -> String?)?
     public let supportsCostCommand: Bool
+    public let prefersBinaryLocatorForWhich: Bool
+    public let ttyStatusCommand: String?
     private let browserSupportExemption: BrowserSupportExemption
 
     public init(
@@ -19,6 +21,8 @@ public struct ProviderCLIConfig: Sendable {
         binaryLocator: (@Sendable () -> String?)? = nil,
         versionDetector: (@Sendable (BrowserDetection) -> String?)?,
         supportsCostCommand: Bool = false,
+        prefersBinaryLocatorForWhich: Bool = false,
+        ttyStatusCommand: String? = nil,
         browserSupportExemption: @escaping BrowserSupportExemption = { _, _, _ in false })
     {
         self.name = name
@@ -26,6 +30,8 @@ public struct ProviderCLIConfig: Sendable {
         self.binaryLocator = binaryLocator
         self.versionDetector = versionDetector
         self.supportsCostCommand = supportsCostCommand
+        self.prefersBinaryLocatorForWhich = prefersBinaryLocatorForWhich
+        self.ttyStatusCommand = ttyStatusCommand
         self.browserSupportExemption = browserSupportExemption
     }
 

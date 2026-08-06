@@ -199,6 +199,9 @@ struct ProviderArchitectureGatekeeperTests {
         #expect(Set(descriptors.filter { $0.cli.binaryLocator != nil }.map(\.id)) == [
             .codex, .claude, .gemini,
         ])
+        #expect(descriptors.compactMap { descriptor in
+            descriptor.credentials?.apiKeyDebugLabel.map { (descriptor.id, $0) }
+        }.map(\.0) == [.openai, .azureopenai, .openrouter, .elevenlabs])
 
         #expect(CodexProviderDescriptor.descriptor.tokenCost.menuHintLines == [.localized("codex_api_estimate_hint")])
         #expect(ClaudeProviderDescriptor.descriptor.tokenCost.menuHintLines == [.estimate])
@@ -743,7 +746,7 @@ struct ProviderArchitectureGatekeeperTests {
             anchor: "Text(L(\"The default Codex account on this Mac.\"))",
             expectedProviderIDs: ["codex"],
             expectedReferenceCount: 1,
-            reason: "This exact app-runtime bridge coordinates provider-owned state through the shared controller."),
+            reason: "This exact preferences footer is display copy describing the surrounding Codex account controls."),
         AllowedProviderConstruct(
             path: "Sources/CodexBar/PreferencesProvidersPane+Testing.swift",
             line: 115,
@@ -1733,7 +1736,7 @@ struct ProviderArchitectureGatekeeperTests {
             reason: "This exact app-runtime bridge coordinates provider-owned state through the shared controller."),
         AllowedProviderConstruct(
             path: "Sources/CodexBar/UsageStore.swift",
-            line: 1032,
+            line: 1031,
             anchor: "let deepSeekHasTokenAccount = self.settings.selectedTokenAccount(for: .deepseek) != nil",
             expectedProviderIDs: ["deepseek"],
             expectedReferenceCount: 1,
@@ -1741,13 +1744,13 @@ struct ProviderArchitectureGatekeeperTests {
         AllowedProviderConstruct(
             path: "Sources/CodexBar/UsageStore.swift",
             line: 1088,
-            anchor: "case .augment:",
-            expectedProviderIDs: ["amp", "augment", "deepseek", "elevenlabs", "notion", "ollama", "openrouter", "warp"],
-            expectedReferenceCount: 8,
+            anchor: "case .amp:",
+            expectedProviderIDs: ["amp", "deepseek", "notion", "ollama", "warp"],
+            expectedReferenceCount: 5,
             reason: "This exact app-runtime bridge coordinates provider-owned state through the shared controller."),
         AllowedProviderConstruct(
             path: "Sources/CodexBar/UsageStore.swift",
-            line: 1149,
+            line: 1143,
             anchor: "let claudeSettings = snapshot.claude ?? ProviderSettingsSnapshot.ClaudeProviderSettings(",
             expectedProviderIDs: ["claude"],
             expectedReferenceCount: 1,
@@ -1810,18 +1813,32 @@ struct ProviderArchitectureGatekeeperTests {
             reason: "This exact CLI construct preserves the provider-specific command and output contract."),
         AllowedProviderConstruct(
             path: "Sources/CodexBarCore/AgentSession.swift",
-            line: 258,
-            anchor: "return .codex",
+            line: 198,
+            anchor: "return AgentSession.Provider.claude.rawValue",
+            expectedProviderIDs: ["claude"],
+            expectedReferenceCount: 1,
+            reason: "This exact host integration normalizes the Claude Desktop wrapper to its agent provider name."),
+        AllowedProviderConstruct(
+            path: "Sources/CodexBarCore/AgentSession.swift",
+            line: 231,
+            anchor: "if basename == AgentSession.Provider.codex.rawValue {",
             expectedProviderIDs: ["claude", "codex"],
-            expectedReferenceCount: 2,
+            expectedReferenceCount: 5,
             reason: "This exact host integration maps a provider-owned process, path, or window contract."),
         AllowedProviderConstruct(
             path: "Sources/CodexBarCore/AgentSession.swift",
             line: 287,
             anchor: "guard self.provider(for: record) == .claude else { return .cli }",
+            expectedProviderIDs: ["claude", "codex"],
+            expectedReferenceCount: 2,
+            reason: "This exact host integration maps a provider-owned process, path, or window contract."),
+        AllowedProviderConstruct(
+            path: "Sources/CodexBarCore/AgentSession.swift",
+            line: 306,
+            anchor: "URL(fileURLWithPath: $0).lastPathComponent == AgentSession.Provider.claude.rawValue",
             expectedProviderIDs: ["claude"],
             expectedReferenceCount: 1,
-            reason: "This exact host integration maps a provider-owned process, path, or window contract."),
+            reason: "This exact host integration strips the Claude executable from normalized process arguments."),
         AllowedProviderConstruct(
             path: "Sources/CodexBarCore/CodexLocalDataScope.swift",
             line: 29,
@@ -1835,7 +1852,7 @@ struct ProviderArchitectureGatekeeperTests {
             anchor: "public static let localChatFallbackTitle = \"Local Codex chat\"",
             expectedProviderIDs: ["codex"],
             expectedReferenceCount: 1,
-            reason: "This exact shared construct dispatches a provider-owned capability at the generic integration boundary."),
+            reason: "This exact constant is user-facing fallback copy for an untitled local Codex chat."),
         AllowedProviderConstruct(
             path: "Sources/CodexBarCore/Config/CodexBarConfig.swift",
             line: 172,
@@ -1996,7 +2013,7 @@ struct ProviderArchitectureGatekeeperTests {
             anchor: "case let .minimax(details):",
             expectedProviderIDs: ["minimax"],
             expectedReferenceCount: 1,
-            reason: "This exact shared provider integration dispatches a capability owned by the provider descriptor or adapter."),
+            reason: "This exact Codable branch writes the stable MiniMax diagnostic-detail wire discriminator."),
         AllowedProviderConstruct(
             path: "Sources/CodexBarCore/Providers/ProviderDiagnosticExport.swift",
             line: 560,
@@ -2009,13 +2026,6 @@ struct ProviderArchitectureGatekeeperTests {
             line: 194,
             anchor: "if provider == .kiro {",
             expectedProviderIDs: ["kiro"],
-            expectedReferenceCount: 1,
-            reason: "This exact shared provider integration dispatches a capability owned by the provider descriptor or adapter."),
-        AllowedProviderConstruct(
-            path: "Sources/CodexBarCore/Providers/Shared/AliyunOneConsole/OneConsoleSECTokenResolver.swift",
-            line: 191,
-            anchor: "components.host = dashboardURL.host ?? \"home.qwencloud.com\"",
-            expectedProviderIDs: ["qwencloud"],
             expectedReferenceCount: 1,
             reason: "This exact shared provider integration dispatches a capability owned by the provider descriptor or adapter."),
         AllowedProviderConstruct(

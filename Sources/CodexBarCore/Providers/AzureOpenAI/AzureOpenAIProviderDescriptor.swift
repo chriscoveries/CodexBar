@@ -4,6 +4,7 @@ public enum AzureOpenAIProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
     private static let credentials = ProviderCredentialAdapter.apiKey(
         environmentKey: AzureOpenAISettingsReader.apiKeyEnvironmentKey,
+        apiKeyDebugLabel: AzureOpenAISettingsReader.apiKeyEnvironmentKey,
         additionalProjections: [
             .enterpriseHost(AzureOpenAISettingsReader.endpointEnvironmentKey),
             .workspaceID(AzureOpenAISettingsReader.deploymentNameEnvironmentKey),
@@ -97,7 +98,7 @@ struct AzureOpenAIAPIFetchStrategy: ProviderFetchStrategy {
     }
 
     private static func resolveAPIKey(environment: [String: String]) -> String? {
-        ProviderTokenResolver.azureOpenAIToken(environment: environment)
+        ProviderTokenResolver.token(for: .azureopenai, environment: environment)
     }
 
     private static func resolveEndpoint(environment: [String: String]) -> URL? {

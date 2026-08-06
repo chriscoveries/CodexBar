@@ -129,6 +129,7 @@ public enum ClaudeProviderDescriptor {
                 noDataMessage: self.noDataMessage,
                 menuHintLines: [.estimate],
                 supportsTokenSnapshot: true,
+                settingsStatusOrder: 0,
                 estimateDisclaimer: "Estimated from local Claude logs at API rates; token totals include cache " +
                     "read/write tokens and may differ from Claude Code /status."),
             pace: ProviderPaceCapability(
@@ -196,6 +197,7 @@ public enum ClaudeProviderDescriptor {
                     ClaudeUsageFetcher(browserDetection: browserDetection).detectVersion()
                 },
                 supportsCostCommand: true,
+                prefersBinaryLocatorForWhich: true,
                 browserSupportExemption: { sourceMode, _, _ in sourceMode == .auto }))
     }
 
@@ -509,7 +511,7 @@ struct ClaudeAdminAPIFetchStrategy: ProviderFetchStrategy {
     }
 
     private static func resolveToken(environment: [String: String]) -> String? {
-        ProviderTokenResolver.claudeAdminAPIToken(environment: environment)
+        ProviderTokenResolver.token(for: .claude, environment: environment)
     }
 }
 
