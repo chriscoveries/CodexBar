@@ -342,6 +342,19 @@ struct ProviderArchitectureGatekeeperTests {
     }
 
     @Test
+    func `provider reference scanner includes every multiline statement line in policy context`() {
+        let source = #"""
+        let aliases = [
+            "provider":
+                "claude",
+        ]
+        """#
+        let references = Self.providerReferences(in: source, providerIDs: ["claude"])
+
+        #expect(references.map(\.providerIDs) == [["claude"]])
+    }
+
+    @Test
     func `provider reference scanner ignores generic URLs and log categories`() {
         let source = #"""
         let url = "https://example.com/claude/status"
@@ -368,6 +381,24 @@ struct ProviderArchitectureGatekeeperTests {
         let references = Self.providerReferences(in: source, providerIDs: ["claude", "codex"])
 
         #expect(references.map(\.providerIDs) == [["codex"], ["codex"]])
+    }
+
+    @Test
+    func `suppression tokens require identifier boundaries`() {
+        let source = #"""
+        catalog.provider(
+            named: "claude")
+        catalogger.provider(
+            named: "codex")
+        render(
+            subcategory:
+                provider(named: "cursor"))
+        """#
+        let references = Self.providerReferences(
+            in: source,
+            providerIDs: ["claude", "codex", "cursor"])
+
+        #expect(references.map(\.providerIDs) == [["claude"], ["codex"], ["cursor"]])
     }
 
     @Test
@@ -1975,6 +2006,14 @@ struct ProviderArchitectureGatekeeperTests {
             expectedReferenceCount: 1,
             expectedReferenceFingerprint: ["deepseek@0"],
             reason: "This exact shared provider integration dispatches a capability owned by the provider descriptor or adapter."),
+        AllowedProviderConstruct(
+            path: "Sources/CodexBar/ShareStatsPayload.swift",
+            line: 163,
+            anchor: "([\"codestral-\", \"devstral-\", \"magistral-\", \"mistral-\", \"mistral \", \"mistral.\", \"mixtral-\"], \"Mistral\"),",
+            expectedProviderIDs: ["mistral"],
+            expectedReferenceCount: 1,
+            expectedReferenceFingerprint: ["mistral@0"],
+            reason: "This public model-family sanitizer is independent of the provider registry; Mistral is also a provider ID."),
         AllowedProviderConstruct(
             path: "Sources/CodexBar/SessionQuotaNotifications.swift",
             line: 198,
@@ -3795,7 +3834,9 @@ struct ProviderArchitectureGatekeeperTests {
         let lowercasedLiteral = literal.lowercased()
         guard self.containsWord(providerID, in: lowercasedLiteral) else { return false }
         let lowercasedStatement = statement.lowercased()
-        if lowercasedLiteral.contains("http://") || lowercasedLiteral.contains("https://") {
+        if self.containsSuppressionToken("http://", in: lowercasedLiteral) ||
+            self.containsSuppressionToken("https://", in: lowercasedLiteral)
+        {
             return false
         }
         if self.isLogLiteral(range: range, in: line) ||
@@ -3820,13 +3861,17 @@ struct ProviderArchitectureGatekeeperTests {
     private static func isLogLiteral(range: Range<String.Index>, in line: String) -> Bool {
         let prefix = line[..<range.lowerBound].lowercased()
         let statement = prefix.split(separator: ";", omittingEmptySubsequences: false).last ?? prefix[...]
-        return statement.contains("logger.") || statement.contains("log.") ||
-            statement.trimmingCharacters(in: .whitespaces).hasSuffix("category:")
+        let trimmed = statement.trimmingCharacters(in: .whitespaces)
+        return self.containsSuppressionToken("logger.", in: statement) ||
+            self.containsSuppressionToken("log.", in: statement) ||
+            trimmed.hasSuffix("category:") && self.containsSuppressionToken("category:", in: trimmed)
     }
 
     private static func isLogStatement(_ lowercasedStatement: String) -> Bool {
         let trimmed = lowercasedStatement.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.contains("logger.") || trimmed.contains("log.") || trimmed.contains("category:")
+        return self.containsSuppressionToken("logger.", in: trimmed) ||
+            self.containsSuppressionToken("log.", in: trimmed) ||
+            self.containsSuppressionToken("category:", in: trimmed)
     }
 
     private static func statementContexts(for lines: [String]) -> [String] {
@@ -3836,9 +3881,10 @@ struct ProviderArchitectureGatekeeperTests {
         var delimiterDepth = 0
 
         func finishStatement() {
-            guard let header = fragments.first else { return }
-            for (offset, line) in statementLines.enumerated() {
-                contexts[line] = offset == 0 ? header : "\(header)\n\(fragments[offset])"
+            guard !fragments.isEmpty else { return }
+            let statement = fragments.joined(separator: "\n")
+            for line in statementLines {
+                contexts[line] = statement
             }
             statementLines.removeAll(keepingCapacity: true)
             fragments.removeAll(keepingCapacity: true)
@@ -3916,6 +3962,22 @@ struct ProviderArchitectureGatekeeperTests {
             let hasLeftBoundary = range.lowerBound == text.startIndex ||
                 !self.isIdentifierCharacter(text[text.index(before: range.lowerBound)])
             let hasRightBoundary = range.upperBound == text.endIndex ||
+                !self.isIdentifierCharacter(text[range.upperBound])
+            if hasLeftBoundary, hasRightBoundary {
+                return true
+            }
+            searchStart = range.upperBound
+        }
+        return false
+    }
+
+    private static func containsSuppressionToken(_ token: String, in text: some StringProtocol) -> Bool {
+        guard let first = token.first, let last = token.last else { return false }
+        var searchStart = text.startIndex
+        while let range = text.range(of: token, range: searchStart..<text.endIndex) {
+            let hasLeftBoundary = !self.isIdentifierCharacter(first) || range.lowerBound == text.startIndex ||
+                !self.isIdentifierCharacter(text[text.index(before: range.lowerBound)])
+            let hasRightBoundary = !self.isIdentifierCharacter(last) || range.upperBound == text.endIndex ||
                 !self.isIdentifierCharacter(text[range.upperBound])
             if hasLeftBoundary, hasRightBoundary {
                 return true
