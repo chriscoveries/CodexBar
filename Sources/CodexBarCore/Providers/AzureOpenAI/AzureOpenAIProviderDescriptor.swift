@@ -37,6 +37,7 @@ public enum AzureOpenAIProviderDescriptor {
                 statusPageURL: nil,
                 statusLinkURL: "https://azure.status.microsoft/en-us/status"),
             branding: ProviderBranding(
+                // Provider-specific by design: Azure OpenAI deliberately shares OpenAI's icon rendering style.
                 iconStyle: .init(provider: .openai),
                 iconResourceName: "ProviderIcon-codex",
                 color: ProviderColor(red: 0, green: 120 / 255, blue: 212 / 255),
