@@ -59,15 +59,15 @@ contribution, so the app, CLI, and plugin cookie broker consume the same provide
 
 `ProviderArchitectureGatekeeperTests` is a drift tripwire against honest architecture mistakes by future contributors
 and AI agents. Its scope is deliberately narrower than a Swift parser's: the lexical scanner detects dotted provider
-case literals, including qualified, labeled, and multiline statements, and raw provider-ID string literals in
-single-statement policy positions (assignments, comparisons, switches, dictionary entries, and function arguments).
-It scans shipped Swift under `Sources/**` and `WidgetExtension/**`, with suppressions applied to exact provider tokens
-rather than whole statements.
+case literals, including qualified, labeled, and multiline statements, and lowercase raw provider-ID string literals
+in every single-statement position (including assignments, bare function arguments, dictionary keys and values, array
+elements, and returns). It scans shipped Swift under `Sources/**` and `WidgetExtension/**`, with suppressions applied to
+exact provider tokens rather than whole statements.
 
 The following are out of scope by design:
 
-- Expression positions that require real parsing, including implicit closure returns and closure-body dataflow. A
-  line-and-statement lexical scan cannot model those positions honestly.
+- Dotted provider cases whose role requires real expression parsing, including implicit closure returns and
+  closure-body dataflow. A line-and-statement lexical scan cannot model those positions honestly.
 - String concatenation, reflection, and dynamic lookup. Their runtime values are not recoverable from literal-token
   matching.
 - `Tests/**`, where fixtures legitimately name providers, and non-Swift files, because this tripwire is scoped to
