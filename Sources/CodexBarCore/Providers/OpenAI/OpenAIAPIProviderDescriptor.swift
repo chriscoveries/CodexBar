@@ -50,7 +50,8 @@ public enum OpenAIAPIProviderDescriptor {
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: true,
                 noDataMessage: { "OpenAI usage needs an Admin API key for organization usage." },
-                menuHintLines: [.literal("Reported by OpenAI Admin API organization usage.")]),
+                menuHintLines: [.literal("Reported by OpenAI Admin API organization usage.")],
+                showsCostMenuSection: false),
             presentation: ProviderUsagePresentation(menuCard: ProviderMenuCardPresentation(
                 usageNotesResolver: { context in
                     context.snapshot?.openAIAPIUsage.map(ProviderUsageNotesResolution.openAIAPI) ?? .unhandled

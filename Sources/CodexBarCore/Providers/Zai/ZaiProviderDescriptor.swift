@@ -11,7 +11,8 @@ public enum ZaiProviderDescriptor {
             placeholder: "Paste token…",
             injection: .environment(key: ZaiSettingsReader.apiTokenKey),
             requiresManualCookieSource: false,
-            cookieName: nil),
+            cookieName: nil,
+            showsTeamModeControls: true),
         usesRegion: true,
         configValidator: { config in
             var issues = ProviderCredentialAdapter.regionValidator(
