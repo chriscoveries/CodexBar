@@ -10,12 +10,16 @@ import Testing
 
 /// Provider architecture drift tripwire for honest mistakes by future contributors and AI agents.
 ///
-/// This is deliberately not an adversarially complete analyzer. It lexically scans shipped Swift in `Sources/**`
-/// and `WidgetExtension/**` for dotted provider cases, raw-ID literals in policy contexts, and labeled or positional
-/// arguments. String concatenation, reflection, and dynamic lookups are out of scope because they defeat lexical
-/// analysis and adversarial insiders are not the threat. `Tests/**` is out of scope because fixtures legitimately name
-/// providers; `Scripts/**` and non-Swift files are out of scope because this tripwire guards shipped Swift
-/// architecture.
+/// This lexical scanner detects dotted provider cases, including qualified, labeled, and multiline statements, plus
+/// raw provider-ID string literals in single-statement policy positions: assignments, comparisons, switches,
+/// dictionary entries, and function arguments. It scans shipped Swift under `Sources/**` and `WidgetExtension/**` and
+/// applies suppressions to exact provider tokens rather than whole statements.
+///
+/// Expression positions that require real parsing, including implicit closure returns and closure-body dataflow, are
+/// intentionally out of scope. String concatenation, reflection, and dynamic lookup are also out of scope, as are
+/// `Tests/**` and non-Swift files. This test is a lexical drift tripwire for honest mistakes, not an adversarially
+/// complete analyzer. If in-the-wild drift starts slipping past it, the concrete upgrade path is a SwiftSyntax-based
+/// implementation that can model expressions and dataflow instead of extending these lexical heuristics.
 @MainActor
 // swiftlint:disable:next type_body_length
 struct ProviderArchitectureGatekeeperTests {
@@ -381,6 +385,35 @@ struct ProviderArchitectureGatekeeperTests {
         let references = Self.providerReferences(in: source, providerIDs: ["claude", "codex"])
 
         #expect(references.map(\.providerIDs) == [["codex"], ["codex"]])
+    }
+
+    @Test
+    func `log suppression is scoped to the enclosing call argument`() {
+        let source = #"""
+        logger.info(
+            "codex",
+            metadata: ["provider": selectedProvider])
+        selectProvider("claude", logger: logger.shared)
+        selectProvider(
+            "claude",
+            logger: logger.shared)
+        """#
+        let references = Self.providerReferences(in: source, providerIDs: ["claude", "codex"])
+
+        #expect(references.map(\.providerIDs) == [["claude"], ["claude"]])
+    }
+
+    @Test
+    func `category suppression requires a log category constructor`() {
+        let source = #"""
+        let providerLog = OSLog(
+            subsystem: "com.example.fixture",
+            category: "codex")
+        ProviderRule(category: "claude")
+        """#
+        let references = Self.providerReferences(in: source, providerIDs: ["claude", "codex"])
+
+        #expect(references.map(\.providerIDs) == [["claude"]])
     }
 
     @Test
@@ -3824,24 +3857,27 @@ struct ProviderArchitectureGatekeeperTests {
         return suffix.hasPrefix(":") ? .strong : nil
     }
 
+    private struct StatementContext {
+        let text: String
+        let prefixBeforeLine: String
+    }
+
     private static func isProviderIDLiteral(
         _ providerID: String,
         literal: String,
         range: Range<String.Index>,
         line: String,
-        statement: String) -> Bool
+        statement: StatementContext) -> Bool
     {
         let lowercasedLiteral = literal.lowercased()
         guard self.containsWord(providerID, in: lowercasedLiteral) else { return false }
-        let lowercasedStatement = statement.lowercased()
+        let lowercasedStatement = statement.text.lowercased()
         if self.containsSuppressionToken("http://", in: lowercasedLiteral) ||
             self.containsSuppressionToken("https://", in: lowercasedLiteral)
         {
             return false
         }
-        if self.isLogLiteral(range: range, in: line) ||
-            (statement.contains("\n") && self.isLogStatement(lowercasedStatement))
-        {
+        if self.isLogLiteral(range: range, in: line, statement: statement) {
             return false
         }
         if literal != lowercasedLiteral {
@@ -3858,24 +3894,170 @@ struct ProviderArchitectureGatekeeperTests {
             policyKeywords.contains(where: lowercasedStatement.contains)
     }
 
-    private static func isLogLiteral(range: Range<String.Index>, in line: String) -> Bool {
-        let prefix = line[..<range.lowerBound].lowercased()
-        let statement = prefix.split(separator: ";", omittingEmptySubsequences: false).last ?? prefix[...]
-        let trimmed = statement.trimmingCharacters(in: .whitespaces)
-        return self.containsSuppressionToken("logger.", in: statement) ||
-            self.containsSuppressionToken("log.", in: statement) ||
-            trimmed.hasSuffix("category:") && self.containsSuppressionToken("category:", in: trimmed)
+    private static func isLogLiteral(
+        range: Range<String.Index>,
+        in line: String,
+        statement: StatementContext) -> Bool
+    {
+        let prefix = statement.prefixBeforeLine + line[..<range.lowerBound]
+        let activePrefix = prefix.split(separator: ";", omittingEmptySubsequences: false).last
+            .map(String.init) ?? prefix
+        let openingParentheses = self.unmatchedOpeningParentheses(in: activePrefix)
+        if openingParentheses.reversed().contains(where: {
+            self.isLoggingCall(openingParenthesis: $0, in: activePrefix)
+        }) {
+            return true
+        }
+        guard let openingParenthesis = openingParentheses.last,
+              self.currentArgumentLabel(openingParenthesis: openingParenthesis, in: activePrefix) == "category"
+        else {
+            return false
+        }
+        return self.isLogCategoryConstructor(openingParenthesis: openingParenthesis, in: activePrefix)
     }
 
-    private static func isLogStatement(_ lowercasedStatement: String) -> Bool {
-        let trimmed = lowercasedStatement.trimmingCharacters(in: .whitespacesAndNewlines)
-        return self.containsSuppressionToken("logger.", in: trimmed) ||
-            self.containsSuppressionToken("log.", in: trimmed) ||
-            self.containsSuppressionToken("category:", in: trimmed)
+    private static func unmatchedOpeningParentheses(in text: String) -> [String.Index] {
+        var openingParentheses: [String.Index] = []
+        var previous: Character?
+        var isInsideString = false
+        for index in text.indices {
+            let character = text[index]
+            if character == "\"", previous != "\\" {
+                isInsideString.toggle()
+            } else if !isInsideString {
+                if character == "(" {
+                    openingParentheses.append(index)
+                } else if character == ")" {
+                    _ = openingParentheses.popLast()
+                }
+            }
+            previous = character
+        }
+        return openingParentheses
     }
 
-    private static func statementContexts(for lines: [String]) -> [String] {
-        var contexts = Array(repeating: "", count: lines.count)
+    private static func isLoggingCall(openingParenthesis: String.Index, in text: String) -> Bool {
+        let identifiers = self.callIdentifiers(openingParenthesis: openingParenthesis, in: text)
+        guard let callName = identifiers.last else { return false }
+        if callName == "log" || callName == "logger" || callName.hasSuffix("Logger") {
+            return true
+        }
+        let loggingMethods: Set = ["debug", "error", "fault", "info", "log", "notice", "trace", "verbose", "warning"]
+        guard loggingMethods.contains(callName.lowercased()) else { return false }
+        return identifiers.dropLast().contains { identifier in
+            identifier == "log" || identifier == "logger" || identifier == "CodexBarLog" ||
+                identifier.hasSuffix("Logger")
+        }
+    }
+
+    private static func isLogCategoryConstructor(openingParenthesis: String.Index, in text: String) -> Bool {
+        let identifiers = self.callIdentifiers(openingParenthesis: openingParenthesis, in: text)
+        guard let callName = identifiers.last else { return false }
+        return callName == "OSLog" || callName == "Logger" || callName == "logger" ||
+            callName.hasSuffix("LogCategory") || callName.hasSuffix("LogCategories")
+    }
+
+    private static func callIdentifiers(openingParenthesis: String.Index, in text: String) -> [String] {
+        let expression = self.callExpression(openingParenthesis: openingParenthesis, in: text)
+        var identifiers: [String] = []
+        var identifier = ""
+        var depth = 0
+        for character in expression {
+            if character == "(" {
+                depth += 1
+            } else if character == ")" {
+                depth = max(0, depth - 1)
+            } else if depth == 0, self.isIdentifierCharacter(character) {
+                identifier.append(character)
+            } else if depth == 0, !identifier.isEmpty {
+                identifiers.append(identifier)
+                identifier = ""
+            }
+        }
+        if !identifier.isEmpty {
+            identifiers.append(identifier)
+        }
+        return identifiers
+    }
+
+    private static func callExpression(openingParenthesis: String.Index, in text: String) -> Substring {
+        var start = openingParenthesis
+        while start > text.startIndex {
+            let previous = text.index(before: start)
+            let character = text[previous]
+            if character.isWhitespace || self.isIdentifierCharacter(character) || character == "." {
+                start = previous
+            } else if character == ")", let matchingOpening = self.matchingOpeningParenthesis(
+                for: previous,
+                in: text)
+            {
+                start = matchingOpening
+            } else {
+                break
+            }
+        }
+        return text[start..<openingParenthesis]
+    }
+
+    private static func matchingOpeningParenthesis(
+        for closingParenthesis: String.Index,
+        in text: String) -> String.Index?
+    {
+        var openingParentheses: [String.Index] = []
+        var previous: Character?
+        var isInsideString = false
+        for index in text.indices where index <= closingParenthesis {
+            let character = text[index]
+            if character == "\"", previous != "\\" {
+                isInsideString.toggle()
+            } else if !isInsideString {
+                if character == "(" {
+                    openingParentheses.append(index)
+                } else if character == ")" {
+                    guard let opening = openingParentheses.popLast() else { return nil }
+                    if index == closingParenthesis {
+                        return opening
+                    }
+                }
+            }
+            previous = character
+        }
+        return nil
+    }
+
+    private static func currentArgumentLabel(openingParenthesis: String.Index, in text: String) -> String? {
+        let argumentStart = text.index(after: openingParenthesis)
+        var currentStart = argumentStart
+        var delimiterDepth = 0
+        var previous: Character?
+        var isInsideString = false
+        var index = argumentStart
+        while index < text.endIndex {
+            let character = text[index]
+            if character == "\"", previous != "\\" {
+                isInsideString.toggle()
+            } else if !isInsideString {
+                if character == "(" || character == "[" || character == "{" {
+                    delimiterDepth += 1
+                } else if character == ")" || character == "]" || character == "}" {
+                    delimiterDepth -= 1
+                } else if character == ",", delimiterDepth == 0 {
+                    currentStart = text.index(after: index)
+                }
+            }
+            previous = character
+            index = text.index(after: index)
+        }
+        let argumentPrefix = text[currentStart...].trimmingCharacters(in: .whitespacesAndNewlines)
+        guard argumentPrefix.hasSuffix(":") else { return nil }
+        let label = argumentPrefix.dropLast().trimmingCharacters(in: .whitespacesAndNewlines)
+        return label.allSatisfy(self.isIdentifierCharacter) ? label : nil
+    }
+
+    private static func statementContexts(for lines: [String]) -> [StatementContext] {
+        var contexts = Array(
+            repeating: StatementContext(text: "", prefixBeforeLine: ""),
+            count: lines.count)
         var statementLines: [Int] = []
         var fragments: [String] = []
         var delimiterDepth = 0
@@ -3883,8 +4065,10 @@ struct ProviderArchitectureGatekeeperTests {
         func finishStatement() {
             guard !fragments.isEmpty else { return }
             let statement = fragments.joined(separator: "\n")
-            for line in statementLines {
-                contexts[line] = statement
+            var prefix = ""
+            for (offset, line) in statementLines.enumerated() {
+                contexts[line] = StatementContext(text: statement, prefixBeforeLine: prefix)
+                prefix += fragments[offset] + "\n"
             }
             statementLines.removeAll(keepingCapacity: true)
             fragments.removeAll(keepingCapacity: true)
