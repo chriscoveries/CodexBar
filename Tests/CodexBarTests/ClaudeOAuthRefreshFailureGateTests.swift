@@ -9,6 +9,7 @@ struct ClaudeOAuthRefreshFailureGateTests {
     private let legacyFailureCountKey = "claudeOAuthRefreshBackoffFailureCountV1"
     private let legacyFingerprintKey = "claudeOAuthRefreshBackoffFingerprintV2"
     private let terminalBlockedKey = "claudeOAuthRefreshTerminalBlockedV1"
+    private let terminalTokenHashKey = "claudeOAuthRefreshTerminalTokenHashV1"
     private let transientBlockedUntilKey = "claudeOAuthRefreshTransientBlockedUntilV1"
     private let transientFailureCountKey = "claudeOAuthRefreshTransientFailureCountV1"
 
@@ -310,6 +311,79 @@ struct ClaudeOAuthRefreshFailureGateTests {
 
             ClaudeOAuthRefreshFailureGate.recordSuccess()
             #expect(ClaudeOAuthRefreshFailureGate.shouldAttempt(now: start.addingTimeInterval(60)) == true)
+        }
+    }
+
+    @Test
+    func `terminal block is scoped to the failed refresh token lineage`() {
+        ClaudeOAuthRefreshFailureGate.resetForTesting()
+        defer { ClaudeOAuthRefreshFailureGate.resetForTesting() }
+
+        let start = Date(timeIntervalSince1970: 55000)
+        ClaudeOAuthRefreshFailureGate.withFingerprintProviderOverrideForTesting {
+            ClaudeOAuthRefreshFailureGate.AuthFingerprint(keychain: nil, credentialsFile: nil)
+        } operation: {
+            ClaudeOAuthRefreshFailureGate.recordTerminalAuthFailure(
+                now: start,
+                refreshTokenHash: "hash-h1")
+
+            #expect(!ClaudeOAuthRefreshFailureGate.shouldAttempt(
+                now: start.addingTimeInterval(1),
+                refreshTokenHash: "hash-h1"))
+            #expect(ClaudeOAuthRefreshFailureGate.shouldAttempt(
+                now: start.addingTimeInterval(1),
+                refreshTokenHash: "hash-h2"))
+            #expect(!ClaudeOAuthRefreshFailureGate.shouldAttempt(
+                now: start.addingTimeInterval(1),
+                refreshTokenHash: nil))
+        }
+    }
+
+    @Test
+    func `legacy terminal block allows a new lineage then relatches`() {
+        ClaudeOAuthRefreshFailureGate.resetForTesting()
+        defer { ClaudeOAuthRefreshFailureGate.resetForTesting() }
+
+        UserDefaults.standard.set(true, forKey: self.profileKey(self.terminalBlockedKey))
+        UserDefaults.standard.set(1, forKey: self.profileKey(self.legacyFailureCountKey))
+        UserDefaults.standard.removeObject(forKey: self.profileKey(self.terminalTokenHashKey))
+        ClaudeOAuthRefreshFailureGate.resetInMemoryStateForTesting()
+
+        let start = Date(timeIntervalSince1970: 56000)
+        ClaudeOAuthRefreshFailureGate.withFingerprintProviderOverrideForTesting {
+            ClaudeOAuthRefreshFailureGate.AuthFingerprint(keychain: nil, credentialsFile: nil)
+        } operation: {
+            #expect(ClaudeOAuthRefreshFailureGate.shouldAttempt(now: start, refreshTokenHash: "hash-h2"))
+
+            ClaudeOAuthRefreshFailureGate.recordTerminalAuthFailure(
+                now: start,
+                refreshTokenHash: "hash-h2")
+            #expect(!ClaudeOAuthRefreshFailureGate.shouldAttempt(
+                now: start.addingTimeInterval(1),
+                refreshTokenHash: "hash-h2"))
+        }
+    }
+
+    @Test
+    func `terminal refresh token hash survives persistence round trip`() {
+        ClaudeOAuthRefreshFailureGate.resetForTesting()
+        defer { ClaudeOAuthRefreshFailureGate.resetForTesting() }
+
+        let start = Date(timeIntervalSince1970: 57000)
+        ClaudeOAuthRefreshFailureGate.withFingerprintProviderOverrideForTesting {
+            ClaudeOAuthRefreshFailureGate.AuthFingerprint(keychain: nil, credentialsFile: nil)
+        } operation: {
+            ClaudeOAuthRefreshFailureGate.recordTerminalAuthFailure(
+                now: start,
+                refreshTokenHash: "persisted-hash")
+            ClaudeOAuthRefreshFailureGate.resetInMemoryStateForTesting()
+
+            #expect(!ClaudeOAuthRefreshFailureGate.shouldAttempt(
+                now: start.addingTimeInterval(1),
+                refreshTokenHash: "persisted-hash"))
+            #expect(ClaudeOAuthRefreshFailureGate.shouldAttempt(
+                now: start.addingTimeInterval(1),
+                refreshTokenHash: "replacement-hash"))
         }
     }
 
