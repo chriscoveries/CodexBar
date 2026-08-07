@@ -5,7 +5,7 @@ import Testing
 
 struct ZaiMenuCardTests {
     @Test
-    func `zai metrics titles are Tokens MCP and 5-hour when session token limit present`() throws {
+    func `zai metrics titles are 5-hour weekly and MCP when session token limit present`() throws {
         let now = Date()
         let zai = ZaiUsageSnapshot(
             tokenLimit: ZaiLimitEntry(
@@ -63,8 +63,13 @@ struct ZaiMenuCardTests {
             hidePersonalInfo: false,
             now: now))
 
-        #expect(model.metrics.map(\.title) == ["Tokens", "MCP", "5-hour"])
-        let tertiary = try #require(model.metrics.first(where: { $0.title == "5-hour" }))
-        #expect(tertiary.detailText == "750 / 1K (250 remaining)")
+        #expect(model.metrics.map(\.title) == ["5-hour", "Weekly", "MCP"])
+        let rows = try #require(model.providerDetails.first?.rows)
+        let session = try #require(rows.first(where: { $0.label == "Session token quota" }))
+        #expect(session.value == "75% used")
+        #expect(session.secondaryValue == "1000 limit · 250 remaining")
+        let mcp = try #require(rows.first(where: { $0.label == "MCP quota" }))
+        #expect(mcp.value == "50% used")
+        #expect(mcp.secondaryValue == "100 limit · 50 remaining")
     }
 }

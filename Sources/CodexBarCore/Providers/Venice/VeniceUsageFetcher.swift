@@ -1,3 +1,5 @@
+// Linux compatibility only. JavaScriptCore platforms use the bundled Venice plugin.
+#if !canImport(JavaScriptCore)
 import Foundation
 #if canImport(FoundationNetworking)
 import FoundationNetworking
@@ -157,11 +159,14 @@ public enum VeniceUsageError: LocalizedError, Sendable {
 // MARK: - Fetcher
 
 public struct VeniceUsageFetcher: Sendable {
-    private static let log = CodexBarLog.logger(LogCategories.veniceUsage)
+    private static let log = CodexBarLog.logger(LogCategories.provider(.venice, scope: "usage"))
     private static let balanceURL = URL(string: "https://api.venice.ai/api/v1/billing/balance")!
     private static let timeoutSeconds: TimeInterval = 15
 
-    public static func fetchUsage(apiKey: String) async throws -> VeniceUsageSnapshot {
+    public static func fetchUsage(
+        apiKey: String,
+        transport: any ProviderHTTPTransport = ProviderHTTPClient.shared) async throws -> VeniceUsageSnapshot
+    {
         guard !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw VeniceUsageError.missingCredentials
         }
@@ -172,7 +177,7 @@ public struct VeniceUsageFetcher: Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.timeoutInterval = Self.timeoutSeconds
 
-        let response = try await ProviderHTTPClient.shared.response(for: request)
+        let response = try await transport.response(for: request)
         guard response.statusCode == 200 else {
             Self.log.error("Venice API returned \(response.statusCode)")
             throw VeniceUsageError.apiError("HTTP \(response.statusCode)")
@@ -234,3 +239,4 @@ extension KeyedDecodingContainer {
             debugDescription: "Expected a number or numeric string for \(key.stringValue)")
     }
 }
+#endif

@@ -190,7 +190,7 @@ struct MenuBarLayoutEditor: View {
     }
 
     private var providers: [UsageProvider] {
-        self.store.enabledProvidersForDisplay()
+        self.store.enabledFirstPartyProvidersForDisplay()
     }
 
     private var scopedProvider: UsageProvider? {
@@ -244,6 +244,7 @@ struct MenuBarLayoutEditor: View {
                 tokens: [
                     .percent(window: .session),
                     .percent(window: .weekly),
+                    .percent(window: .scopedWeekly),
                     .percent(window: .automatic),
                     .usageBar,
                     .pace(window: .session),
@@ -626,7 +627,7 @@ private struct MenuBarLayoutPreview: View {
 
     var body: some View {
         let provider = self.provider ?? .codex
-        let snapshot = self.store.snapshot(for: provider)
+        let snapshot = self.store.snapshot(for: provider.instanceID)
         let data = snapshot.map { self.liveData(provider: provider, snapshot: $0) }
             ?? self.representativeData(provider: provider)
         let icon = ProviderBrandIcon.image(for: provider)
@@ -659,9 +660,7 @@ private struct MenuBarLayoutPreview: View {
         {
             session = projection.menuBarSelectableRateWindow(for: .session)
             weekly = projection.menuBarSelectableRateWindow(for: .weekly)
-            automatic = projection.visibleRateLanes.lazy
-                .compactMap { projection.menuBarSelectableRateWindow(for: $0) }
-                .first
+            automatic = projection.automaticMenuBarWindow()
         } else {
             let semanticWindows = MenuBarLayoutSemanticWindowResolver.windows(
                 provider: provider,
@@ -676,6 +675,7 @@ private struct MenuBarLayoutPreview: View {
                 antigravityPrioritizeExhaustedQuotas: self.settings.antigravityPrioritizeExhaustedQuotas,
                 now: now)
         }
+        let scopedNamed = MenuBarLayoutSemanticWindowResolver.scopedWeeklyNamedWindow(snapshot: snapshot)
         let paceWindow = weekly ?? automatic
         let runsOut = paceWindow
             .flatMap { self.store.weeklyPace(provider: provider, window: $0, now: now) }
@@ -688,6 +688,8 @@ private struct MenuBarLayoutPreview: View {
             accountLabel: self.settings.hidePersonalInfo ? nil : snapshot.accountEmail(for: provider),
             session: MenuBarLayoutRenderWindow(session),
             weekly: MenuBarLayoutRenderWindow(weekly),
+            scopedWeekly: MenuBarLayoutRenderWindow(scopedNamed?.window),
+            scopedWeeklyTitle: scopedNamed?.title,
             automatic: MenuBarLayoutRenderWindow(automatic),
             sessionPace: self.store.menuBarLayoutPaceText(provider: provider, window: session, now: now),
             weeklyPace: self.store.menuBarLayoutPaceText(provider: provider, window: weekly, now: now),
@@ -713,6 +715,11 @@ private struct MenuBarLayoutPreview: View {
             windowMinutes: 10080,
             resetsAt: now.addingTimeInterval(3 * 24 * 60 * 60),
             resetDescription: nil)
+        let scopedWeekly = RateWindow(
+            usedPercent: 45,
+            windowMinutes: 10080,
+            resetsAt: now.addingTimeInterval(4 * 24 * 60 * 60),
+            resetDescription: nil)
         // Sample pace comes straight from the pure calculation rather than the store, so the palette
         // preview stays deterministic before any snapshot has been fetched.
         let samplePace = { (window: RateWindow) -> String? in
@@ -724,6 +731,8 @@ private struct MenuBarLayoutPreview: View {
             accountLabel: self.settings.hidePersonalInfo ? nil : L("menu_bar_layout_sample_account"),
             session: MenuBarLayoutRenderWindow(session),
             weekly: MenuBarLayoutRenderWindow(weekly),
+            scopedWeekly: MenuBarLayoutRenderWindow(scopedWeekly),
+            scopedWeeklyTitle: "Fable only",
             automatic: MenuBarLayoutRenderWindow(session),
             sessionPace: samplePace(session),
             weeklyPace: samplePace(weekly),
@@ -791,9 +800,11 @@ extension MenuBarLayoutToken {
         case .accountLabel: L("menu_bar_layout_token_account")
         case .percent(window: .session): L("menu_bar_layout_token_session")
         case .percent(window: .weekly): L("menu_bar_layout_token_weekly")
+        case .percent(window: .scopedWeekly): L("menu_bar_layout_token_scoped_weekly")
         case .percent(window: .automatic): L("menu_bar_layout_token_auto")
         case .pace(window: .session): L("menu_bar_layout_token_session_pace")
         case .pace(window: .weekly): L("menu_bar_layout_token_weekly_pace")
+        case .pace(window: .scopedWeekly): L("menu_bar_layout_token_weekly_pace")
         case .pace(window: .automatic): L("menu_bar_layout_token_auto_pace")
         case .usageBar: L("menu_bar_layout_token_bar")
         case .resetCountdown: L("menu_bar_layout_token_resets_in")

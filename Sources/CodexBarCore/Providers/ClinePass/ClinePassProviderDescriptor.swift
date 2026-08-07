@@ -2,10 +2,14 @@ import Foundation
 
 public enum ClinePassProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+    private static let credentials = ProviderCredentialAdapter.apiKey(
+        environmentKey: ClinePassSettingsReader.apiKeyEnvironmentKey,
+        resolve: ClinePassSettingsReader.apiKey)
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .clinepass,
+            credentials: self.credentials,
             metadata: ProviderMetadata(
                 id: .clinepass,
                 displayName: "ClinePass",
@@ -21,6 +25,7 @@ public enum ClinePassProviderDescriptor {
                 widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                debugLogUnavailableMessage: "ClinePass debug log not yet implemented",
                 browserCookieOrder: nil,
                 dashboardURL: "https://app.cline.bot/dashboard/subscription?personal=true",
                 statusPageURL: nil,
@@ -39,7 +44,7 @@ public enum ClinePassProviderDescriptor {
                 noDataMessage: { "ClinePass cost history is not available via the usage-limits API." }),
             fetchPlan: .apiToken(
                 strategyID: "clinepass.api",
-                resolveToken: { ProviderTokenResolver.clinePassToken(environment: $0) },
+                resolveToken: { ProviderTokenResolver.token(for: .clinepass, environment: $0) },
                 missingCredentialsError: { ClinePassUsageError.missingCredentials },
                 loadUsage: { apiKey, _ in
                     try await ClinePassUsageFetcher.fetchUsage(apiKey: apiKey).toUsageSnapshot()

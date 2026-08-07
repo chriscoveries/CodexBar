@@ -18,7 +18,8 @@ private struct KimiStubClaudeFetcher: ClaudeUsageFetching {
 
 private func makeKimiFetchContext(
     sourceMode: ProviderSourceMode,
-    environment: [String: String] = [:]) -> ProviderFetchContext
+    environment: [String: String] = [:],
+    settings: ProviderSettingsSnapshot? = nil) -> ProviderFetchContext
 {
     let env = environment
     return ProviderFetchContext(
@@ -29,7 +30,7 @@ private func makeKimiFetchContext(
         webDebugDumpHTML: false,
         verbose: false,
         env: env,
-        settings: nil,
+        settings: settings,
         fetcher: UsageFetcher(environment: env),
         claudeFetcher: KimiStubClaudeFetcher(),
         browserDetection: BrowserDetection(cacheTTL: 0))
@@ -186,7 +187,7 @@ struct KimiSettingsReaderTests {
             accessToken: "oauth",
             expiresAt: Date().addingTimeInterval(3600).timeIntervalSince1970)
 
-        let explicit = ProviderTokenResolver.kimiAPIResolution(environment: [
+        let explicit = ProviderTokenResolver.resolution(for: .kimi, kind: .secondary, environment: [
             "KIMI_CODE_API_KEY": "explicit",
             "KIMI_CODE_HOME": home.path,
         ])
@@ -203,7 +204,7 @@ struct KimiSettingsReaderTests {
                 key: "https://proxy.example.com",
             ]
             #expect(KimiSettingsReader.hasKimiCodeCredential(environment: environment) == false)
-            #expect(ProviderTokenResolver.kimiAPIResolution(environment: environment) == nil)
+            #expect(ProviderTokenResolver.resolution(for: .kimi, kind: .secondary, environment: environment) == nil)
         }
     }
 
@@ -283,6 +284,87 @@ struct KimiSettingsReaderTests {
 }
 
 struct KimiAPIFetchStrategyTests {
+    @Test
+    func `cookie source off disables every browser import path`() {
+        let offContext = makeKimiFetchContext(
+            sourceMode: .auto,
+            settings: .make(kimi: .init(cookieSource: .off, manualCookieHeader: nil)))
+        let autoContext = makeKimiFetchContext(
+            sourceMode: .auto,
+            settings: .make(kimi: .init(cookieSource: .auto, manualCookieHeader: nil)))
+
+        #expect(KimiBrowserImportPolicy.allowsImport(offContext) == false)
+        #expect(KimiBrowserImportPolicy.allowsImport(autoContext))
+        #expect(ProviderTokenResolver.resolution(for: .kimi, environment: [:]) == nil)
+    }
+
+    @Test
+    func `cookie source off skips monthly enrichment resolution`() async throws {
+        let transport = ProviderHTTPTransportStub { request in
+            let url = try #require(request.url)
+            #expect(url.path == "/coding/v1/usages")
+            let response = try #require(HTTPURLResponse(
+                url: url,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]))
+            let data = Data(#"{"usage":{"limit":"100","used":"25","remaining":"75"},"limits":[]}"#.utf8)
+            return (data, response)
+        }
+        let strategy = KimiAPIFetchStrategy(
+            transport: transport,
+            resolveWebAuthToken: { _ in
+                Issue.record("Cookie source Off must not resolve desktop or browser sessions")
+                return "unexpected-web-token"
+            })
+        let context = makeKimiFetchContext(
+            sourceMode: .api,
+            environment: ["KIMI_CODE_API_KEY": "api-token"],
+            settings: .make(kimi: .init(cookieSource: .off, manualCookieHeader: nil)))
+
+        let result = try await strategy.fetch(context)
+
+        #expect(result.usage.primary?.usedPercent == 25)
+        #expect(result.usage.extraRateWindows == nil)
+        #expect(await transport.requests().count == 1)
+    }
+
+    @Test
+    func `code API usage enriches monthly pool from explicit web session`() async throws {
+        let transport = ProviderHTTPTransportStub { request in
+            let url = try #require(request.url)
+            let response = try #require(HTTPURLResponse(
+                url: url,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]))
+            if url.path == "/coding/v1/usages" {
+                return (
+                    Data(#"{"usage":{"limit":"100","used":"25","remaining":"75"},"limits":[]}"#.utf8),
+                    response)
+            }
+            #expect(url.path.hasSuffix("/GetSubscriptionStats"))
+            #expect(request.value(forHTTPHeaderField: "Cookie") == "kimi-auth=desktop-token")
+            return (
+                Data(#"{"subscriptionBalance":{"feature":"FEATURE_OMNI","type":"SUBSCRIPTION","amountUsedRatio":0.42}}"#
+                    .utf8),
+                response)
+        }
+        let strategy = KimiAPIFetchStrategy(
+            transport: transport,
+            resolveWebAuthToken: { _ in "desktop-token" })
+        let context = makeKimiFetchContext(
+            sourceMode: .api,
+            environment: ["KIMI_CODE_API_KEY": "api-token"],
+            settings: .make(kimi: .init(cookieSource: .auto, manualCookieHeader: nil)))
+
+        let result = try await strategy.fetch(context)
+        let monthly = result.usage.extraRateWindows?.first { $0.id == "kimi-monthly" }
+
+        #expect(monthly?.window.usedPercent == 42)
+        #expect(await transport.requests().count == 2)
+    }
+
     @Test
     func `auto mode accepts CLI credential and reports expired remediation`() async throws {
         let home = try makeTemporaryKimiCodeHome()
@@ -769,6 +851,8 @@ struct KimiUsageResponseParsingTests {
           ]
         }
         """
+        // Keep the cancellation-ignoring request slower than the scaled wall-clock guard.
+        let subscriptionDelaySeconds = 0.5 * TestTimingBudget.slowdownFactor
         let transport = ProviderHTTPTransportHandler { request in
             let url = try #require(request.url)
             let response = try #require(HTTPURLResponse(
@@ -785,7 +869,7 @@ struct KimiUsageResponseParsingTests {
             }
 
             return await withCheckedContinuation { continuation in
-                DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
+                DispatchQueue.global().asyncAfter(deadline: .now() + subscriptionDelaySeconds) {
                     continuation.resume(returning: (Data("{}".utf8), response))
                 }
             }
@@ -803,10 +887,12 @@ struct KimiUsageResponseParsingTests {
         #expect(usage.primary?.windowMinutes == KimiProviderDescriptor.weeklyWindowMinutes)
         #expect(usage.secondary?.usedPercent == 25)
         #expect(usage.extraRateWindows == nil)
-        #expect(elapsed < .milliseconds(250), "Subscription enrichment outlived its total budget: \(elapsed)")
+        #expect(
+            elapsed < TestTimingBudget.scaled(.milliseconds(250)),
+            "Subscription enrichment outlived its total budget: \(elapsed)")
 
         // Drain the deliberately cancellation-ignoring test request before the test exits.
-        try await Task.sleep(for: .milliseconds(550))
+        try await Task.sleep(for: TestTimingBudget.scaled(.milliseconds(550)))
     }
 
     @Test
@@ -1289,7 +1375,7 @@ struct KimiTokenResolverTests {
     func `resolves token from environment`() {
         KeychainAccessGate.withTaskOverrideForTesting(true) {
             let env = ["KIMI_AUTH_TOKEN": "test.jwt.token"]
-            let token = ProviderTokenResolver.kimiAuthToken(environment: env)
+            let token = ProviderTokenResolver.token(for: .kimi, environment: env)
             #expect(token == "test.jwt.token")
         }
     }
@@ -1299,7 +1385,7 @@ struct KimiTokenResolverTests {
         // This test would require mocking the keychain.
         KeychainAccessGate.withTaskOverrideForTesting(true) {
             let env = ["KIMI_AUTH_TOKEN": "test.env.token"]
-            let token = ProviderTokenResolver.kimiAuthToken(environment: env)
+            let token = ProviderTokenResolver.token(for: .kimi, environment: env)
             #expect(token == "test.env.token")
         }
     }
@@ -1308,7 +1394,7 @@ struct KimiTokenResolverTests {
     func `resolution includes source`() {
         KeychainAccessGate.withTaskOverrideForTesting(true) {
             let env = ["KIMI_AUTH_TOKEN": "test.jwt.token"]
-            let resolution = ProviderTokenResolver.kimiAuthResolution(environment: env)
+            let resolution = ProviderTokenResolver.resolution(for: .kimi, environment: env)
 
             #expect(resolution?.token == "test.jwt.token")
             #expect(resolution?.source == .environment)

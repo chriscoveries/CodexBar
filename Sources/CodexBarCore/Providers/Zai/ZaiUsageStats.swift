@@ -202,15 +202,18 @@ public struct ZaiUsageSnapshot: Sendable {
 
 extension ZaiUsageSnapshot {
     public func toUsageSnapshot() -> UsageSnapshot {
-        let primaryLimit = self.tokenLimit ?? self.timeLimit
-        let secondaryLimit = (self.tokenLimit != nil && self.timeLimit != nil) ? self.timeLimit : nil
+        let primaryLimit = self.sessionTokenLimit ?? self.tokenLimit ?? self.timeLimit
+        let secondaryLimit = self.sessionTokenLimit == nil ? nil : self.tokenLimit
         let primary = primaryLimit.map { Self.rateWindow(for: $0) } ?? RateWindow(
             usedPercent: 0,
             windowMinutes: nil,
             resetsAt: nil,
             resetDescription: nil)
         let secondary = secondaryLimit.map { Self.rateWindow(for: $0) }
-        let tertiary = self.sessionTokenLimit.map { Self.rateWindow(for: $0) }
+        let hasCodingLimit = self.tokenLimit != nil || self.sessionTokenLimit != nil
+        let extraRateWindows = hasCodingLimit ? self.timeLimit.map {
+            [NamedRateWindow(id: "zai-mcp", title: "MCP", window: Self.rateWindow(for: $0))]
+        } : nil
 
         let planName = self.planName?.trimmingCharacters(in: .whitespacesAndNewlines)
         let loginMethod = (planName?.isEmpty ?? true) ? nil : planName
@@ -219,42 +222,101 @@ extension ZaiUsageSnapshot {
             accountEmail: nil,
             accountOrganization: nil,
             loginMethod: loginMethod)
+        var quotaRows: [ProviderDetailSection.Row] = []
+        if let tokenLimit = self.tokenLimit {
+            quotaRows.append(Self.detailRow(label: "Token quota", limit: tokenLimit))
+        }
+        if let sessionTokenLimit = self.sessionTokenLimit {
+            quotaRows.append(Self.detailRow(label: "Session token quota", limit: sessionTokenLimit))
+        }
+        if let timeLimit = self.timeLimit {
+            quotaRows.append(Self.detailRow(label: "MCP quota", limit: timeLimit))
+            quotaRows.append(contentsOf: timeLimit.usageDetails.prefix(20).map {
+                .makeRow(label: $0.modelCode, value: "\($0.usage)")
+            })
+        }
+        var details: [ProviderDetailSection] = [
+            .makeSection(title: "Quota details", rows: quotaRows),
+        ]
+        if let modelUsage = self.modelUsage {
+            details.append(Self.modelUsageSection(title: "Hourly tokens", data: modelUsage))
+        }
+        if let dailyModelUsage = self.dailyModelUsage {
+            details.append(Self.modelUsageSection(title: "Daily tokens", data: dailyModelUsage))
+        }
         return UsageSnapshot(
             primary: primary,
             secondary: secondary,
-            tertiary: tertiary,
+            tertiary: nil,
+            extraRateWindows: extraRateWindows,
             providerCost: nil,
-            zaiUsage: self,
+            details: details,
             updatedAt: self.updatedAt,
             identity: identity)
     }
 
-    private static func rateWindow(for limit: ZaiLimitEntry) -> RateWindow {
-        let windowMinutes: Int? = if limit.isMCPMonthlyMarker {
-            ProviderPaceCapability.monthlyWindowSentinelMinutes
-        } else if limit.type == .timeLimit, let minutes = limit.windowMinutes {
-            minutes
-        } else if limit.type == .timeLimit {
-            ProviderPaceCapability.monthlyWindowSentinelMinutes
-        } else {
-            limit.windowMinutes
+    private static func detailRow(label: String, limit: ZaiLimitEntry) -> ProviderDetailSection.Row {
+        let secondary = [
+            limit.usage.map { "\($0) limit" },
+            limit.remaining.map { "\($0) remaining" },
+        ].compactMap(\.self).joined(separator: " · ")
+        return .makeRow(
+            label: label,
+            value: Self.percentString(limit.usedPercent),
+            secondaryValue: secondary.isEmpty ? nil : secondary)
+    }
+
+    private static func modelUsageSection(title: String, data: ZaiModelUsageData) -> ProviderDetailSection {
+        var totals: [(name: String, tokens: Int)] = []
+        for item in data.modelDataList {
+            let tokens = item.tokensUsage.compactMap(\.self).filter { $0 > 0 }.reduce(0, +)
+            if tokens > 0 {
+                totals.append((item.modelName ?? "Unknown", tokens))
+            }
         }
-        return RateWindow(
+        totals.sort {
+            $0.tokens == $1.tokens ? $0.name < $1.name : $0.tokens > $1.tokens
+        }
+        let points = data.xTime.enumerated().compactMap { index, label -> (String, Double)? in
+            let total = data.modelDataList.reduce(0) { partial, item in
+                guard index < item.tokensUsage.count, let value = item.tokensUsage[index], value > 0 else {
+                    return partial
+                }
+                return partial + value
+            }
+            return total > 0 ? (label, Double(total)) : nil
+        }
+        return .makeSection(
+            title: title,
+            rows: totals.prefix(20).map {
+                ProviderDetailSection.Row.makeRow(label: $0.name, value: "\($0.tokens)")
+            },
+            chart: .makeChart(title: title, unit: "tokens", points: points))
+    }
+
+    private static func percentString(_ value: Double) -> String {
+        value == value.rounded()
+            ? String(format: "%.0f%% used", value)
+            : String(format: "%.1f%% used", value)
+    }
+
+    private static func rateWindow(for limit: ZaiLimitEntry) -> RateWindow {
+        RateWindow(
             usedPercent: limit.usedPercent,
-            windowMinutes: windowMinutes,
+            windowMinutes: limit.type == .tokensLimit ? limit.windowMinutes : nil,
             resetsAt: limit.nextResetTime,
             resetDescription: self.resetDescription(for: limit))
     }
 
     private static func resetDescription(for limit: ZaiLimitEntry) -> String? {
-        if limit.isMCPMonthlyMarker {
-            return "Monthly"
+        if limit.type == .timeLimit {
+            return "MCP"
+        }
+        if limit.type == .tokensLimit, limit.windowMinutes == 5 * 60 {
+            return "5-hour"
         }
         if let label = limit.windowLabel {
             return label
-        }
-        if limit.type == .timeLimit {
-            return "Monthly"
         }
         return nil
     }
@@ -292,6 +354,7 @@ private struct ZaiQuotaLimitData: Decodable {
             container.decodeIfPresent(String.self, forKey: .plan),
             container.decodeIfPresent(String.self, forKey: .planType),
             container.decodeIfPresent(String.self, forKey: .packageName),
+            container.decodeIfPresent(String.self, forKey: .level),
         ].compactMap(\.self).first
         let trimmed = rawPlan?.trimmingCharacters(in: .whitespacesAndNewlines)
         self.planName = (trimmed?.isEmpty ?? true) ? nil : trimmed
@@ -303,6 +366,7 @@ private struct ZaiQuotaLimitData: Decodable {
         case plan
         case planType = "plan_type"
         case packageName
+        case level
     }
 }
 
@@ -336,7 +400,7 @@ private struct ZaiLimitRaw: Codable {
 
 /// Fetches usage stats from the z.ai API
 public struct ZaiUsageFetcher: Sendable {
-    private static let log = CodexBarLog.logger(LogCategories.zaiUsage)
+    private static let log = CodexBarLog.logger(LogCategories.provider(.zai, scope: "usage"))
 
     /// Path for z.ai quota API
     private static let quotaAPIPath = "api/monitor/usage/quota/limit"
@@ -388,7 +452,7 @@ public struct ZaiUsageFetcher: Sendable {
         guard !apiKey.isEmpty else {
             throw ZaiUsageError.invalidCredentials
         }
-        try ZaiSettingsReader.validateQuotaEndpointOverride(environment: environment)
+        try ZaiSettingsReader.validateQuotaEndpointOverride(region: region, environment: environment)
 
         let resolvedScope = usageScope ?? .personal
         let quotaURL = try self.requestURL(
@@ -720,7 +784,7 @@ extension ZaiUsageFetcher {
         guard !apiKey.isEmpty else {
             throw ZaiUsageError.invalidCredentials
         }
-        try ZaiSettingsReader.validateAPIHostEndpointOverride(environment: environment)
+        try ZaiSettingsReader.validateAPIHostEndpointOverride(region: region, environment: environment)
 
         let resolvedScope = usageScope ?? .personal
         let resolvedTeamContext = try self.resolvedTeamContext(
@@ -824,7 +888,7 @@ extension ZaiUsageFetcher {
         environment: [String: String] = ProcessInfo.processInfo.environment,
         transport: any ProviderHTTPTransport = ProviderHTTPClient.shared) async throws -> ZaiUsageSnapshot
     {
-        try ZaiSettingsReader.validateEndpointOverrides(environment: environment)
+        try ZaiSettingsReader.validateEndpointOverrides(region: region, environment: environment)
         let snapshot = try await Self.fetchUsage(
             apiKey: apiKey,
             region: region,

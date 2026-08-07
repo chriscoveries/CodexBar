@@ -349,9 +349,7 @@ struct CLISnapshotTests {
     @Test
     func `renders crof dollar balance as detail not reset`() {
         let meta = ProviderDescriptorRegistry.descriptor(for: .crof).metadata
-        let snap = CrofUsageSnapshot(
-            credits: 9.9999,
-            updatedAt: Date(timeIntervalSince1970: 0)).toUsageSnapshot()
+        let snap = CrofTestSnapshots.credits(9.9999, updatedAt: Date(timeIntervalSince1970: 0))
 
         let output = CLIRenderer.renderText(
             provider: .crof,
@@ -371,11 +369,11 @@ struct CLISnapshotTests {
 
     @Test
     func `renders crof request quota when returned`() {
-        let snap = CrofUsageSnapshot(
+        let snap = CrofTestSnapshots.requestQuota(
             credits: 9.9999,
-            requestsPlan: 1000,
-            usableRequests: 998,
-            updatedAt: Date(timeIntervalSince1970: 0)).toUsageSnapshot()
+            plan: 1000,
+            remaining: 998,
+            updatedAt: Date(timeIntervalSince1970: 0))
 
         let output = CLIRenderer.renderText(
             provider: .crof,
@@ -1356,11 +1354,17 @@ struct CLISnapshotTests {
     }
 
     @Test
-    func `renders 5-hour tertiary row for zai`() {
+    func `renders GLM coding windows with MCP separate`() {
         let snap = UsageSnapshot(
-            primary: .init(usedPercent: 9, windowMinutes: 10080, resetsAt: nil, resetDescription: nil),
-            secondary: .init(usedPercent: 50, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
-            tertiary: .init(usedPercent: 25, windowMinutes: 300, resetsAt: nil, resetDescription: nil),
+            primary: .init(usedPercent: 25, windowMinutes: 300, resetsAt: nil, resetDescription: "5-hour"),
+            secondary: .init(usedPercent: 9, windowMinutes: 10080, resetsAt: nil, resetDescription: "1 week window"),
+            tertiary: nil,
+            extraRateWindows: [
+                NamedRateWindow(
+                    id: "zai-mcp",
+                    title: "MCP",
+                    window: .init(usedPercent: 50, windowMinutes: nil, resetsAt: nil, resetDescription: "MCP")),
+            ],
             updatedAt: Date(timeIntervalSince1970: 0))
 
         let output = CLIRenderer.renderText(
@@ -1374,7 +1378,7 @@ struct CLISnapshotTests {
                 resetStyle: .absolute))
 
         #expect(output.contains("5-hour:"))
-        #expect(output.contains("Tokens:"))
+        #expect(output.contains("Weekly:"))
         #expect(output.contains("MCP:"))
     }
 
