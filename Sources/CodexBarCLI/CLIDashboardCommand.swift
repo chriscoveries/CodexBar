@@ -29,12 +29,14 @@ struct DashboardOptions: CommanderParsable {
 
     @Option(
         name: .long("identity"),
-        help: "Account identity detail: redacted (default) or full. The HTTP serve transport is always redacted; full is for one-shot snapshots consumed on trusted, private surfaces.")
+        help: "Account identity detail: redacted (default) or full. The HTTP serve transport is always " +
+            "redacted; full is for one-shot snapshots consumed on trusted, private surfaces.")
     var identity: String?
 
     @Option(
         name: .long("output"),
-        help: "Write the snapshot atomically to this file (0644) instead of stdout. The parent directory must already exist; it is not created.")
+        help: "Write the snapshot atomically to this file (0644) instead of stdout. " +
+            "The parent directory must already exist; it is not created.")
     var output: String?
 }
 

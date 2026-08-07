@@ -5,7 +5,7 @@ import Testing
 
 struct CLIServeWebUITests {
     private var html: String {
-        String(decoding: CLIServeWebUI.response().body, as: UTF8.self)
+        String(bytes: CLIServeWebUI.response().body, encoding: .utf8) ?? ""
     }
 
     @Test

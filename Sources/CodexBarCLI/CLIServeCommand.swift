@@ -38,7 +38,8 @@ struct ServeOptions: CommanderParsable {
 
     @Option(
         name: .long("identity"),
-        help: "Dashboard snapshot identity detail: redacted (default) or full. Full exposes real account emails to every authorized dashboard client; use it only on trusted, private networks.")
+        help: "Dashboard snapshot identity detail: redacted (default) or full. Full exposes real account " +
+            "emails to every authorized dashboard client; use it only on trusted, private networks.")
     var identity: String?
 }
 
