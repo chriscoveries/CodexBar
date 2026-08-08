@@ -26,8 +26,8 @@ that remain cheap to convert. Remaining buckets name the next blocker after this
 
 | Status | Count |
 |---|---:|
-| `cut-over` | 7 |
-| `converted` | 8 |
+| `cut-over` | 8 |
+| `converted` | 7 |
 | `convertible-now` | 8 |
 | `needs-cookie-import` | 19 |
 | `needs-files/subprocess/oauth-broker` | 15 |
@@ -93,7 +93,7 @@ that remain cheap to convert. Remaining buckets name the next blocker after this
 | llmproxy | `needs-pty/webview/native` | No | Its origin is user-selected and may be private HTTP, conflicting with the manifest's fixed HTTPS origins. |
 | litellm | `needs-pty/webview/native` | No | Its required user-selected proxy origin and optional private HTTP cannot be declared by a bundled static manifest. |
 | deepgram | `cut-over` | Yes | Cut over on JavaScriptCore: project discovery, aggregation, configured origins, numeric validation, and classified auth/permission/rate/network/API/parse failures match native behavior; the native fetch core is Linux-only. |
-| poe | `converted` | Yes | Converted: fixed-origin bearer GET balance/history pagination with daily points and model/type summaries. |
+| poe | `cut-over` | Yes | Cut over on both engines: fixed-origin bearer GET balance/history pagination with daily points and model/type summaries; the native fetch twins are deleted. |
 | chutes | `convertible-now` | No | Verified bearer GET fan-out on the canonical origin; dynamic quota lanes map to named windows. |
 | neuralwatt | `convertible-now` | No | Verified canonical bearer GET; quota lanes and prepaid cost/energy project generically. |
 | clawrouter | `cut-over` | Yes | Cut over on JavaScriptCore: validated configured origins, classified failures, exact confidence, budget/ledger details, and provider charts match native behavior; the native fetch core is Linux-only. |

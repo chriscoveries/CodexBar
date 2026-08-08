@@ -11,7 +11,6 @@ struct ProviderPluginDetailsParityTests {
         let fixtures: [(UsageProvider, [String], [String])] = [
             (.openai, ["openai.api.balance"], ["openai.js", "openai.api.balance"]),
             (.zai, ["zai.api"], ["zai.js", "zai.api"]),
-            (.poe, ["poe.api"], ["poe.js", "poe.api"]),
         ]
 
         for (provider, defaultIDs, enabledIDs) in fixtures {
@@ -202,7 +201,7 @@ struct ProviderPluginDetailsParityTests {
     }
 
     @Test
-    func `Poe fixture has Swift core parity and stable details`() async throws {
+    func `Poe fixture matches the cut-over golden`() async throws {
         let transport = Self.transport { request in
             switch request.url?.path {
             case "/usage/current_balance": Self.poeBalance
@@ -211,12 +210,15 @@ struct ProviderPluginDetailsParityTests {
             }
         }
         let now = Date(timeIntervalSince1970: 1_785_816_000)
-        let swift = try await PoeUsageFetcher._fetchUsage(apiKey: "fixture-key", transport: transport).toUsageSnapshot()
         let script = try await ProviderPluginRuntime(bundledPlugin: "poe", transport: transport)
             .fetchUsage(secrets: ["POE_API_KEY": "fixture-key"], now: now)
 
-        Self.expectCoreParity(swift, script)
-        #expect(swift.details == script.details)
+        #expect(script.primary == nil)
+        #expect(script.secondary == nil)
+        #expect(script.tertiary == nil)
+        #expect(script.providerCost == nil)
+        #expect(script.identity?.providerID == .poe)
+        #expect(script.identity?.loginMethod == "Balance: 2,500 points")
         #expect(try script.details == [Self.section(
             "Points",
             rows: [
