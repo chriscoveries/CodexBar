@@ -3,6 +3,7 @@
 ## 0.48.2 — Unreleased
 
 ### Fixed
+- Claude: the menu-bar indicator now renders the active claude-swap account's usage when the adapter owns account presentation (2+ accounts), instead of drawing empty bars from an ambient snapshot without usable windows (#2731). Thanks @Meldiron for the report!
 - z.ai/GLM: parse `CREDIT_LIMIT` quota entries from credit-based Coding Plans (lite/standard/pro) so usage no longer sticks at 100% remaining / 0% used and the 5-hour credit window drives the primary percentage and reset time (#2724, #2712). Thanks @stuible!
 
 ### Changed
