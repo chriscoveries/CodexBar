@@ -1014,22 +1014,37 @@ private final class QuickJSSerialWorker: @unchecked Sendable {
             }
             self.condition.unlock()
         }
+
+        func run() {
+            defer { self.markStopped() }
+            while let job = self.next() {
+                job()
+            }
+        }
+    }
+
+    private final class WorkerThread: Thread {
+        private let state: State
+
+        init(state: State, name: String, stackSizeBytes: Int) {
+            self.state = state
+            super.init()
+            self.name = name
+            self.stackSize = stackSizeBytes
+        }
+
+        override func main() {
+            self.state.run()
+        }
     }
 
     private let state: State
-    private let thread: Thread
+    private let thread: WorkerThread
 
     init(name: String, stackSizeBytes: Int) {
         let state = State()
         self.state = state
-        self.thread = Thread {
-            defer { state.markStopped() }
-            while let job = state.next() {
-                job()
-            }
-        }
-        self.thread.name = name
-        self.thread.stackSize = stackSizeBytes
+        self.thread = WorkerThread(state: state, name: name, stackSizeBytes: stackSizeBytes)
         self.thread.start()
     }
 

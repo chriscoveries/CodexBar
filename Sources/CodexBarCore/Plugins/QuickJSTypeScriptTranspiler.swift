@@ -2,16 +2,33 @@ import CQuickJS
 import Foundation
 
 enum QuickJSTypeScriptTranspiler {
-    static func transpile(source: String, sucraseSource: String) throws -> String {
-        let box = QuickJSBlockingResult<String>()
-        let thread = Thread {
-            box.finish(Result {
-                try self.transpileOnCurrentThread(source: source, sucraseSource: sucraseSource)
+    private final class TranspilerThread: Thread {
+        private let source: String
+        private let sucraseSource: String
+        private let box: QuickJSBlockingResult<String>
+
+        init(source: String, sucraseSource: String, box: QuickJSBlockingResult<String>) {
+            self.source = source
+            self.sucraseSource = sucraseSource
+            self.box = box
+            super.init()
+            // Dispatch/Swift cooperative workers can have less native stack than QuickJS's 2 MiB limit.
+            self.stackSize = QuickJSRuntimeLimits.nativeStackSizeBytes
+            self.name = "CodexBar QuickJS TypeScript transpiler"
+        }
+
+        override func main() {
+            self.box.finish(Result {
+                try QuickJSTypeScriptTranspiler.transpileOnCurrentThread(
+                    source: self.source,
+                    sucraseSource: self.sucraseSource)
             })
         }
-        // Dispatch/Swift cooperative workers can have less native stack than QuickJS's 2 MiB limit.
-        thread.stackSize = QuickJSRuntimeLimits.nativeStackSizeBytes
-        thread.name = "CodexBar QuickJS TypeScript transpiler"
+    }
+
+    static func transpile(source: String, sucraseSource: String) throws -> String {
+        let box = QuickJSBlockingResult<String>()
+        let thread = TranspilerThread(source: source, sucraseSource: sucraseSource, box: box)
         thread.start()
 
         let deadline = Date().addingTimeInterval(ProviderPluginRuntime.defaultTimeout + 1)
