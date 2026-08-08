@@ -1532,6 +1532,12 @@ public enum ClaudeOAuthCredentialsStore {
             credentials: credentials,
             environment: environment)
     }
+
+    static func claudeKeychainCredentialMatchForTesting(
+        credentials: ClaudeOAuthCredentials) -> ClaudeKeychainCredentialMatch
+    {
+        self.claudeKeychainCredentialMatchWithoutPrompt(for: credentials)
+    }
     #endif
 
     /// Async version of load that handles expired tokens based on credential ownership.
@@ -1861,6 +1867,7 @@ public enum ClaudeOAuthCredentialsStore {
     private static func newestClaudeKeychainCredentialEvidenceWithoutPrompt()
         -> ClaudeKeychainProbe<ClaudeKeychainCredentialEvidence?>
     {
+        guard self.keychainAccessAllowed else { return .unavailable }
         #if DEBUG
         if let store = self.taskClaudeKeychainOverrideStore {
             guard store.data != nil || store.fingerprint != nil else { return .value(nil) }
@@ -2900,6 +2907,9 @@ public enum ClaudeOAuthCredentialsStore {
         }
         if KeychainAccessGate.currentOverrideForTesting == true {
             return false
+        }
+        if let consentOverride = ClaudeOAuthDirectKeychainReadConsent.taskOverrideForTesting {
+            return consentOverride
         }
         if self.hasTaskKeychainTestingOverride {
             return true

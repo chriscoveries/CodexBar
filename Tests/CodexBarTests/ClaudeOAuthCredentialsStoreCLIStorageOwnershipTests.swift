@@ -192,15 +192,19 @@ struct ClaudeOAuthCredentialsStoreCLIStorageOwnershipTests {
                                 persistentRefHash: "matching-keychain-item")
 
                             let recordAfterCLIStorageAppears = try ClaudeOAuthCredentialsStore
-                                .withClaudeKeychainOverridesForTesting(
-                                    data: keychainData,
-                                    fingerprint: keychainFingerprint)
-                                {
-                                    try ClaudeOAuthCredentialsStore.loadRecord(
-                                        environment: environment,
-                                        allowKeychainPrompt: false,
-                                        respectKeychainPromptCooldown: true,
-                                        allowClaudeKeychainRepairWithoutPrompt: false)
+                                .withKeychainAccessOverrideForTesting(false) {
+                                    try ClaudeOAuthDirectKeychainReadConsent.withTaskOverrideForTesting(true) {
+                                        try ClaudeOAuthCredentialsStore.withClaudeKeychainOverridesForTesting(
+                                            data: keychainData,
+                                            fingerprint: keychainFingerprint)
+                                        {
+                                            try ClaudeOAuthCredentialsStore.loadRecord(
+                                                environment: environment,
+                                                allowKeychainPrompt: false,
+                                                respectKeychainPromptCooldown: true,
+                                                allowClaudeKeychainRepairWithoutPrompt: false)
+                                        }
+                                    }
                                 }
 
                             #expect(recordAfterCLIStorageAppears.credentials.accessToken == "fresh-codexbar-token")

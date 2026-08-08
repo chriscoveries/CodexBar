@@ -18,6 +18,10 @@ public enum ClaudeOAuthDirectKeychainReadConsent {
 
     #if DEBUG
     @TaskLocal private static var taskOverride: Bool?
+
+    static var taskOverrideForTesting: Bool? {
+        self.taskOverride
+    }
     #endif
 
     public static func isGranted(userDefaults: UserDefaults? = nil) -> Bool {

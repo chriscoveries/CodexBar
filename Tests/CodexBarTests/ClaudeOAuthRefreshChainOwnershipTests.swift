@@ -138,6 +138,60 @@ struct ClaudeOAuthRefreshChainOwnershipTests {
     }
 
     @Test
+    func `consent off keeps a keychain only signed in profile CLI owned`() throws {
+        let profile = try self.makeProfile(accountUuid: "keychain-only-profile")
+        defer { try? FileManager.default.removeItem(at: profile.directory) }
+        let keychain = ClaudeOAuthCredentialsStore.ClaudeKeychainOverrideStore()
+
+        let owner = KeychainAccessGate.withTaskOverrideForTesting(false) {
+            ClaudeOAuthDirectKeychainReadConsent.withTaskOverrideForTesting(false) {
+                ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.onlyOnUserAction) {
+                    ClaudeOAuthCredentialsStore.withMutableClaudeKeychainOverrideStoreForTesting(keychain) {
+                        #expect(!ClaudeOAuthCredentialsStore.keychainAccessAllowed)
+                        #expect(ClaudeAccountProfile.configOwnershipEvidence(environment: profile.environment)
+                            == .signedIn(accountUuid: "keychain-only-profile"))
+                        #expect(ClaudeOAuthCredentialsStore.claudeKeychainCredentialMatchForTesting(
+                            credentials: self.makeCredentials()) == .unavailable)
+                        return ClaudeOAuthCredentialsStore.resolvedCacheOwnerForTesting(
+                            .codexbar,
+                            credentials: self.makeCredentials(),
+                            environment: profile.environment)
+                    }
+                }
+            }
+        }
+
+        #expect(owner == .claudeCLI)
+    }
+
+    @Test
+    func `consent on restores verified keychain absence for a signed in profile`() throws {
+        let profile = try self.makeProfile(accountUuid: "consented-profile")
+        defer { try? FileManager.default.removeItem(at: profile.directory) }
+        let keychain = ClaudeOAuthCredentialsStore.ClaudeKeychainOverrideStore()
+
+        let owner = KeychainAccessGate.withTaskOverrideForTesting(false) {
+            ClaudeOAuthDirectKeychainReadConsent.withTaskOverrideForTesting(true) {
+                ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.onlyOnUserAction) {
+                    ClaudeOAuthCredentialsStore.withMutableClaudeKeychainOverrideStoreForTesting(keychain) {
+                        #expect(ClaudeOAuthCredentialsStore.keychainAccessAllowed)
+                        #expect(ClaudeAccountProfile.configOwnershipEvidence(environment: profile.environment)
+                            == .signedIn(accountUuid: "consented-profile"))
+                        #expect(ClaudeOAuthCredentialsStore.claudeKeychainCredentialMatchForTesting(
+                            credentials: self.makeCredentials()) == .absent)
+                        return ClaudeOAuthCredentialsStore.resolvedCacheOwnerForTesting(
+                            .codexbar,
+                            credentials: self.makeCredentials(),
+                            environment: profile.environment)
+                    }
+                }
+            }
+        }
+
+        #expect(owner == .codexbar)
+    }
+
+    @Test
     func `unavailable probe without logged in config keeps codexbar ownership`() throws {
         let profile = try self.makeProfile(accountUuid: nil)
         defer { try? FileManager.default.removeItem(at: profile.directory) }
@@ -158,9 +212,10 @@ struct ClaudeOAuthRefreshChainOwnershipTests {
     func `absent keychain item keeps codexbar ownership`() throws {
         let profile = try self.makeProfile(accountUuid: nil)
         defer { try? FileManager.default.removeItem(at: profile.directory) }
+        let keychain = ClaudeOAuthCredentialsStore.ClaudeKeychainOverrideStore()
 
         let owner = ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.onlyOnUserAction) {
-            ClaudeOAuthCredentialsStore.withClaudeKeychainOverridesForTesting(data: nil, fingerprint: nil) {
+            ClaudeOAuthCredentialsStore.withMutableClaudeKeychainOverrideStoreForTesting(keychain) {
                 ClaudeOAuthCredentialsStore.resolvedCacheOwnerForTesting(
                     .codexbar,
                     credentials: self.makeCredentials(),
