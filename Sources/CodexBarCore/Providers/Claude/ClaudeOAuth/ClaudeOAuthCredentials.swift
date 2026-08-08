@@ -754,7 +754,16 @@ public enum ClaudeOAuthCredentialsStore {
             case .absent:
                 return false
             case .unavailable, .notApplicable:
-                return ClaudeAccountProfile.accountUuid(environment: environment) != nil
+                // The keychain cannot tell us anything, so Claude's plaintext config decides —
+                // and only positive proof of a signed-out CLI releases the chain to CodexBar.
+                // Indeterminate evidence (unreadable/malformed config) stays CLI-owned: never
+                // rotate a chain we cannot prove we own.
+                switch ClaudeAccountProfile.configOwnershipEvidence(environment: environment) {
+                case .signedIn, .indeterminate:
+                    return true
+                case .signedOut:
+                    return false
+                }
             }
         }
 
@@ -1461,7 +1470,9 @@ public enum ClaudeOAuthCredentialsStore {
                         throw ClaudeOAuthCredentialsError.refreshFailed(
                             message)
                     case .transientBackoff:
-                        ClaudeOAuthRefreshFailureGate.recordTransientFailure(environment: self.environment)
+                        ClaudeOAuthRefreshFailureGate.recordTransientFailure(
+                            environment: self.environment,
+                            refreshTokenHash: refreshTokenHash)
                         let suffix = oauthError.map { " (\($0))" } ?? ""
                         throw ClaudeOAuthCredentialsError.refreshFailed("HTTP \(response.statusCode)\(suffix)")
                     }

@@ -476,5 +476,99 @@ struct ClaudeOAuthRefreshFailureGateTests {
             #expect(ClaudeOAuthRefreshFailureGate.shouldAttempt(now: start.addingTimeInterval(40)) == true)
         }
     }
+
+    @Test
+    func `legacy terminal block transitions into transient backoff on new lineage transient failure`() {
+        ClaudeOAuthRefreshFailureGate.resetForTesting()
+        defer { ClaudeOAuthRefreshFailureGate.resetForTesting() }
+
+        let start = Date(timeIntervalSince1970: 90000)
+        ClaudeOAuthRefreshFailureGate.withFingerprintProviderOverrideForTesting {
+            ClaudeOAuthRefreshFailureGate.AuthFingerprint(keychain: nil, credentialsFile: nil)
+        } operation: {
+            ClaudeOAuthRefreshFailureGate.recordTerminalAuthFailure(now: start)
+
+            ClaudeOAuthRefreshFailureGate.recordTransientFailure(
+                now: start.addingTimeInterval(1),
+                refreshTokenHash: "hash-new-lineage")
+
+            // The dead lineage's terminal block yields to transient backoff for the new lineage
+            // instead of dropping the failure and allowing an immediate retry loop.
+            guard case .transient = ClaudeOAuthRefreshFailureGate.currentBlockStatus(
+                now: start.addingTimeInterval(2))
+            else {
+                Issue.record("Expected transient backoff after new-lineage transient failure")
+                return
+            }
+            #expect(!ClaudeOAuthRefreshFailureGate.shouldAttempt(
+                now: start.addingTimeInterval(2),
+                refreshTokenHash: "hash-new-lineage"))
+            #expect(ClaudeOAuthRefreshFailureGate.shouldAttempt(
+                now: start.addingTimeInterval(1 + 60 * 5 + 1),
+                refreshTokenHash: "hash-new-lineage"))
+        }
+    }
+
+    @Test
+    func `terminal block for old lineage yields to new lineage transient backoff`() {
+        ClaudeOAuthRefreshFailureGate.resetForTesting()
+        defer { ClaudeOAuthRefreshFailureGate.resetForTesting() }
+
+        let start = Date(timeIntervalSince1970: 91000)
+        ClaudeOAuthRefreshFailureGate.withFingerprintProviderOverrideForTesting {
+            ClaudeOAuthRefreshFailureGate.AuthFingerprint(keychain: nil, credentialsFile: nil)
+        } operation: {
+            ClaudeOAuthRefreshFailureGate.recordTerminalAuthFailure(
+                now: start,
+                refreshTokenHash: "hash-old-lineage")
+
+            ClaudeOAuthRefreshFailureGate.recordTransientFailure(
+                now: start.addingTimeInterval(1),
+                refreshTokenHash: "hash-new-lineage")
+
+            guard case .transient = ClaudeOAuthRefreshFailureGate.currentBlockStatus(
+                now: start.addingTimeInterval(2))
+            else {
+                Issue.record("Expected transient backoff after new-lineage transient failure")
+                return
+            }
+            #expect(!ClaudeOAuthRefreshFailureGate.shouldAttempt(
+                now: start.addingTimeInterval(2),
+                refreshTokenHash: "hash-new-lineage"))
+        }
+    }
+
+    @Test
+    func `same lineage transient failure keeps the terminal block`() {
+        ClaudeOAuthRefreshFailureGate.resetForTesting()
+        defer { ClaudeOAuthRefreshFailureGate.resetForTesting() }
+
+        let start = Date(timeIntervalSince1970: 92000)
+        ClaudeOAuthRefreshFailureGate.withFingerprintProviderOverrideForTesting {
+            ClaudeOAuthRefreshFailureGate.AuthFingerprint(keychain: nil, credentialsFile: nil)
+        } operation: {
+            ClaudeOAuthRefreshFailureGate.recordTerminalAuthFailure(
+                now: start,
+                refreshTokenHash: "hash-same-lineage")
+
+            ClaudeOAuthRefreshFailureGate.recordTransientFailure(
+                now: start.addingTimeInterval(1),
+                refreshTokenHash: "hash-same-lineage")
+            ClaudeOAuthRefreshFailureGate.recordTransientFailure(
+                now: start.addingTimeInterval(2))
+
+            guard case .terminal = ClaudeOAuthRefreshFailureGate.currentBlockStatus(
+                now: start.addingTimeInterval(3))
+            else {
+                Issue.record("Expected the terminal block to stay monotonic for the same lineage")
+                return
+            }
+            #expect(!ClaudeOAuthRefreshFailureGate.shouldAttempt(
+                now: start.addingTimeInterval(3),
+                refreshTokenHash: "hash-same-lineage"))
+            #expect(!ClaudeOAuthRefreshFailureGate.shouldAttempt(
+                now: start.addingTimeInterval(3)))
+        }
+    }
 }
 #endif

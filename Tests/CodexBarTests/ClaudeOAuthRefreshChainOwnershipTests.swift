@@ -55,6 +55,16 @@ struct ClaudeOAuthRefreshChainOwnershipTests {
         return (directory, [ClaudeConfigPaths.configDirectoryEnvironmentKey: directory.path])
     }
 
+    private func makeProfileWithRawConfig(_ rawConfig: Data) throws
+        -> (directory: URL, environment: [String: String])
+    {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try rawConfig.write(to: directory.appendingPathComponent(".claude.json"))
+        return (directory, [ClaudeConfigPaths.configDirectoryEnvironmentKey: directory.path])
+    }
+
     @Test
     func `unavailable probe with logged in config delegates expired codexbar mirror`() async throws {
         let profile = try self.makeProfile(accountUuid: "logged-in-profile")
@@ -216,5 +226,66 @@ struct ClaudeOAuthRefreshChainOwnershipTests {
         }
 
         #expect(owner == .claudeCLI)
+    }
+
+    @Test
+    func `malformed config keeps the mirror CLI owned`() throws {
+        let profile = try self.makeProfileWithRawConfig(Data("not json {".utf8))
+        defer { try? FileManager.default.removeItem(at: profile.directory) }
+
+        let owner = ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.onlyOnUserAction) {
+            ClaudeOAuthCredentialsStore.withSecurityCLIReadOverrideForTesting(.data(nil)) {
+                ClaudeOAuthCredentialsStore.resolvedCacheOwnerForTesting(
+                    .codexbar,
+                    credentials: self.makeCredentials(),
+                    environment: profile.environment)
+            }
+        }
+
+        #expect(owner == .claudeCLI)
+    }
+
+    @Test
+    func `oauth account without identity keeps the mirror CLI owned`() throws {
+        let profile = try self.makeProfileWithRawConfig(Data("""
+        {
+          "oauthAccount": {
+            "accountUuid": "   "
+          }
+        }
+        """.utf8))
+        defer { try? FileManager.default.removeItem(at: profile.directory) }
+
+        let owner = ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.onlyOnUserAction) {
+            ClaudeOAuthCredentialsStore.withSecurityCLIReadOverrideForTesting(.data(nil)) {
+                ClaudeOAuthCredentialsStore.resolvedCacheOwnerForTesting(
+                    .codexbar,
+                    credentials: self.makeCredentials(),
+                    environment: profile.environment)
+            }
+        }
+
+        #expect(owner == .claudeCLI)
+    }
+
+    @Test
+    func `cleanly signed out config releases the mirror to codexbar`() throws {
+        let profile = try self.makeProfileWithRawConfig(Data("""
+        {
+          "installMethod": "brew"
+        }
+        """.utf8))
+        defer { try? FileManager.default.removeItem(at: profile.directory) }
+
+        let owner = ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.onlyOnUserAction) {
+            ClaudeOAuthCredentialsStore.withSecurityCLIReadOverrideForTesting(.data(nil)) {
+                ClaudeOAuthCredentialsStore.resolvedCacheOwnerForTesting(
+                    .codexbar,
+                    credentials: self.makeCredentials(),
+                    environment: profile.environment)
+            }
+        }
+
+        #expect(owner == .codexbar)
     }
 }

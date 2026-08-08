@@ -162,6 +162,11 @@ public enum ClaudeOAuthRefreshFailureGate {
 
             if state.isTerminalBlocked {
                 if let refreshTokenHash, refreshTokenHash != state.failedRefreshTokenHash {
+                    // The terminal block belongs to a superseded lineage, but an active transient
+                    // backoff recorded for the new lineage still applies.
+                    if let blockedUntil = state.transientBlockedUntil, blockedUntil > now {
+                        return false
+                    }
                     return true
                 }
                 guard self.shouldRecheckCredentials(now: now, state: state) else { return false }
@@ -262,7 +267,8 @@ public enum ClaudeOAuthRefreshFailureGate {
 
     public static func recordTransientFailure(
         environment: [String: String] = ProcessInfo.processInfo.environment,
-        now: Date = Date())
+        now: Date = Date(),
+        refreshTokenHash: String? = nil)
     {
         self.withState(environment: environment) { state, profileIdentifier in
             _ = self.loadIfNeeded(
@@ -271,9 +277,14 @@ public enum ClaudeOAuthRefreshFailureGate {
                 environment: environment,
                 now: now)
 
-            // Keep terminal blocking monotonic: once we know auth is rejected (e.g. invalid_grant),
-            // do not downgrade it to time-based backoff unless auth changes (fingerprint) or we record success.
-            guard !state.isTerminalBlocked else { return }
+            // Keep terminal blocking monotonic for the lineage that failed: once we know auth is
+            // rejected (e.g. invalid_grant), do not downgrade it to time-based backoff unless auth
+            // changes (fingerprint) or we record success. A transient failure on a different token
+            // lineage supersedes the dead lineage's terminal block instead of being dropped, so the
+            // new lineage transitions into transient backoff rather than retrying immediately.
+            if state.isTerminalBlocked {
+                guard let refreshTokenHash, refreshTokenHash != state.failedRefreshTokenHash else { return }
+            }
 
             self.clearTerminalState(&state)
 
@@ -549,7 +560,8 @@ public enum ClaudeOAuthRefreshFailureGate {
 
     public static func recordTransientFailure(
         environment _: [String: String] = ProcessInfo.processInfo.environment,
-        now _: Date = Date()) {}
+        now _: Date = Date(),
+        refreshTokenHash _: String? = nil) {}
 
     public static func recordAuthFailure(
         environment _: [String: String] = ProcessInfo.processInfo.environment,
