@@ -26,9 +26,9 @@ that remain cheap to convert. Remaining buckets name the next blocker after this
 
 | Status | Count |
 |---|---:|
-| `cut-over` | 10 |
+| `cut-over` | 11 |
 | `converted` | 5 |
-| `convertible-now` | 8 |
+| `convertible-now` | 7 |
 | `needs-cookie-import` | 19 |
 | `needs-files/subprocess/oauth-broker` | 15 |
 | `needs-pty/webview/native` | 10 |
@@ -42,7 +42,7 @@ that remain cheap to convert. Remaining buckets name the next blocker after this
 | openai | `converted` | Yes | Converted: fixed-origin bearer GET pagination with daily spend, model, line-item, and token details. |
 | azureopenai | `needs-pty/webview/native` | No | The current quota probe is a POST chat completion against a user-configured deployment origin. |
 | claude | `needs-files/subprocess/oauth-broker` | No | Full parity needs credential files/Keychain, OAuth refresh, CLI/PTY, cookies, local logs, and admin details. |
-| clinepass | `convertible-now` | No | Verified fixed-origin bearer GET; limits and identity map to generic windows. |
+| clinepass | `cut-over` | Yes | Cut over on both engines: fixed-origin bearer GET, typed quota lanes, credential aliases, and classified failures match native behavior; the Swift fetcher and Linux fixtures are deleted. |
 | cursor | `needs-cookie-import` | No | Browser cookies/app database provide auth, and integer request history also has bespoke detail. |
 | opencode | `needs-cookie-import` | No | Skipped: React server-function response parsing needs a protocol-specific text decoder beyond `matchFirst`. |
 | opencodego | `needs-files/subprocess/oauth-broker` | No | Local auth/SQLite state and browser sessions are required, with an additional bespoke usage model. |
