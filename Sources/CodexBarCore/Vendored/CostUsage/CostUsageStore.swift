@@ -60,10 +60,13 @@ actor CostUsageStore {
         parserHash: CodexParserHash.value)
     static let cacheGeneration = "sqlite:\(CostUsageStore.schemaVersion)"
 
-    private nonisolated let executor = StoreSerialExecutor(
+    /// Process-wide serialization keeps every writable store connection on the same queue.
+    /// This matches the scan pipeline's single-writer contract without multiplying executor
+    /// threads when tests or short-lived readers create several store actors.
+    private nonisolated static let sharedExecutor = StoreSerialExecutor(
         label: "com.steipete.codexbar.cost-usage-store")
     nonisolated var unownedExecutor: UnownedSerialExecutor {
-        self.executor.asUnownedSerialExecutor()
+        Self.sharedExecutor.asUnownedSerialExecutor()
     }
 
     nonisolated let databaseURL: URL
@@ -99,7 +102,7 @@ actor CostUsageStore {
 
 extension CostUsageStore {
     nonisolated func syncLoadCodexCache(calendar: Calendar) -> CostUsageCache {
-        self.executor.sync {
+        Self.sharedExecutor.sync {
             self.assumeIsolated { store in
                 store.loadCodexCache(calendar: calendar)
             }
@@ -112,7 +115,7 @@ extension CostUsageStore {
         requestedScanWindow: (sinceKey: String, untilKey: String),
         reportWindow: (sinceKey: String, untilKey: String)? = nil) -> CostUsageStoreBudgetResult
     {
-        self.executor.sync {
+        Self.sharedExecutor.sync {
             self.assumeIsolated { store in
                 store.saveCodexCache(
                     cache,
