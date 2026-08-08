@@ -93,7 +93,7 @@ struct ZaiProviderTests {
         #expect(quotaRequest.url?.query?.contains("type=9") == false)
         #expect(quotaRequest.value(forHTTPHeaderField: "Bigmodel-Organization") == "org-fixture")
         #expect(quotaRequest.value(forHTTPHeaderField: "Bigmodel-Project") == "project-fixture")
-        #expect(recorded.filter { $0.url?.path == "/custom-model" }.count == 2)
+        #expect(recorded.count { $0.url?.path == "/custom-model" } == 2)
         #expect(strategy.id == "zai.js")
     }
 
