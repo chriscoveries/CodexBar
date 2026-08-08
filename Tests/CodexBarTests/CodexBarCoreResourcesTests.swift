@@ -33,15 +33,15 @@ struct CodexBarCoreResourcesTests {
         #expect(resolved.url(forResource: "provider-plugin-prelude", withExtension: "js") != nil)
     }
 
-    @Test
-    func `resolver finds an executable adjacent resource bundle`() throws {
+    @Test(arguments: ["bundle", "resources"])
+    func `resolver finds an executable adjacent resource bundle`(pathExtension: String) throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("CodexBarCoreResourcesCLITests-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
 
         let sourceBundle = try #require(CodexBarCoreResources.bundle)
-        let target = root.appendingPathComponent("CodexBar_CodexBarCore.bundle")
+        let target = root.appendingPathComponent("CodexBar_CodexBarCore.\(pathExtension)")
         try FileManager.default.copyItem(at: sourceBundle.bundleURL.resolvingSymlinksInPath(), to: target)
 
         let resolved = try #require(CodexBarCoreResources.resolve(

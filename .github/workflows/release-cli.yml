@@ -385,12 +385,20 @@ jobs:
           ln -s "CodexBarCLI" "$OUT_DIR/codexbar"
           printf '%s\n' "${SAFE_REF_NAME#v}" > "$OUT_DIR/VERSION"
 
-          CORE_RESOURCE_BUNDLE="$BIN_DIR/CodexBar_CodexBarCore.bundle"
-          if [[ ! -d "$CORE_RESOURCE_BUNDLE" ]]; then
-            echo "Missing CodexBarCore resource bundle: $CORE_RESOURCE_BUNDLE" >&2
+          CORE_RESOURCE_SOURCE=""
+          for candidate in \
+            "$BIN_DIR/CodexBar_CodexBarCore.bundle" \
+            "$BIN_DIR/CodexBar_CodexBarCore.resources"; do
+            if [[ -d "$candidate" ]]; then
+              CORE_RESOURCE_SOURCE="$candidate"
+              break
+            fi
+          done
+          if [[ -z "$CORE_RESOURCE_SOURCE" ]]; then
+            echo "Missing CodexBarCore resource bundle in $BIN_DIR" >&2
             exit 1
           fi
-          cp -R "$CORE_RESOURCE_BUNDLE" "$OUT_DIR/"
+          cp -R "$CORE_RESOURCE_SOURCE" "$OUT_DIR/CodexBar_CodexBarCore.bundle"
           RESOURCE_SMOKE_OUTPUT="$RUNNER_TEMP/codexbar-cli-resource-smoke-${{ matrix.name }}.txt"
           CODEXBAR_RESOURCE_SMOKE=1 "$OUT_DIR/CodexBarCLI" > "$RESOURCE_SMOKE_OUTPUT"
           grep -Fx "CODEXBAR_RESOURCE_SMOKE_OK" "$RESOURCE_SMOKE_OUTPUT"

@@ -22,6 +22,7 @@ public enum CodexBarCoreResources {
     {
         let name = "CodexBar_CodexBarCore"
         let bundleName = "\(name).bundle"
+        let swiftPMBundleNames = [bundleName, "\(name).resources"]
 
         if mainBundle.bundleURL.pathExtension == "app" {
             if let url = mainBundle.url(forResource: name, withExtension: "bundle"),
@@ -39,18 +40,22 @@ public enum CodexBarCoreResources {
             }
         }
 
-        let executableCandidate = (executableBundleURL ?? mainBundle.bundleURL)
-            .appendingPathComponent(bundleName)
-        if let bundle = Bundle(url: executableCandidate) {
-            return bundle
+        let executableDirectory = executableBundleURL ?? mainBundle.bundleURL
+        for swiftPMBundleName in swiftPMBundleNames {
+            let executableCandidate = executableDirectory.appendingPathComponent(swiftPMBundleName)
+            if let bundle = Bundle(url: executableCandidate) {
+                return bundle
+            }
         }
 
         if let swiftPMBuildDirectory {
-            var isDirectory: ObjCBool = false
-            let buildCandidate = swiftPMBuildDirectory.appendingPathComponent(bundleName)
-            if FileManager.default.fileExists(atPath: buildCandidate.path, isDirectory: &isDirectory),
-               isDirectory.boolValue
-            {
+            let buildCandidateExists = swiftPMBundleNames.contains { buildBundleName in
+                var isDirectory: ObjCBool = false
+                let buildCandidate = swiftPMBuildDirectory.appendingPathComponent(buildBundleName)
+                return FileManager.default.fileExists(atPath: buildCandidate.path, isDirectory: &isDirectory)
+                    && isDirectory.boolValue
+            }
+            if buildCandidateExists {
                 return .module
             }
         }
