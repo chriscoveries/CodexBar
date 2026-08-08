@@ -1,3 +1,4 @@
+// oxlint-disable-next-line no-unused-expressions -- IIFE evaluated by the plugin engine for its side effects
 (function applyProviderPluginPrelude(ctx, host) {
   "use strict";
 
@@ -84,7 +85,7 @@
           if (typeof value === "string") return value;
           try {
             return JSON.stringify(value);
-          } catch (_) {
+          } catch {
             return String(value);
           }
         })

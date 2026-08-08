@@ -256,7 +256,7 @@ defineProvider({
             chart: { kind: "bars", title, unit: "tokens", points: usage.points },
           });
         }
-      } catch (_) {}
+      } catch {}
     }
     return result;
   },
