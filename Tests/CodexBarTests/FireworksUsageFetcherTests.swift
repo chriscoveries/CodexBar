@@ -34,13 +34,13 @@ struct FireworksUsageFetcherTests {
 
         let summary = try FireworksUsageFetcher._parseSummaryForTesting(Data(json.utf8))
 
-        #expect((summary.last30DaysSpend ?? -1) == 1.525548296, accuracy: 0.000000001)
+        #expect(abs((summary.last30DaysSpend ?? -1) - 1.525548296) <= 0.000000001)
         #expect(summary.currencyCode == "USD")
 
         let usage = FireworksUsageSnapshot(summary: summary).toUsageSnapshot()
         #expect(usage.primary == nil)
         #expect(usage.secondary == nil)
-        #expect(usage.providerCost?.used == 1.525548296, accuracy: 0.000000001)
+        #expect(abs((usage.providerCost?.used ?? -1) - 1.525548296) <= 0.000000001)
         #expect(usage.providerCost?.currencyCode == "USD")
         #expect(usage.providerCost?.period == "Last 30 days")
         #expect(usage.providerCost?.limit == 0)
@@ -71,7 +71,7 @@ struct FireworksUsageFetcherTests {
         let summary = try FireworksUsageFetcher._parseSummaryForTesting(Data(json.utf8))
 
         #expect(summary.currencyCode == "USD")
-        #expect((summary.last30DaysSpend ?? -1) == 1.35, accuracy: 0.000000001)
+        #expect(abs((summary.last30DaysSpend ?? -1) - 1.35) <= 0.000000001)
     }
 
     @Test
@@ -180,7 +180,7 @@ struct FireworksUsageFetcherTests {
             session: session)
 
         #expect(FireworksStubURLProtocol.requests.count == 1)
-        #expect((snapshot.summary.last30DaysSpend ?? -1) == 0.5, accuracy: 0.000000001)
+        #expect(abs((snapshot.summary.last30DaysSpend ?? -1) - 0.5) <= 0.000000001)
     }
 
     @Test
@@ -216,7 +216,8 @@ struct FireworksUsageFetcherTests {
                     accountSlug: "x0mh0x",
                     session: session)
             } throws: { error in
-                error == expectedError
+                guard let error = error as? FireworksUsageError else { return false }
+                return error == expectedError
             }
         }
     }
@@ -229,7 +230,8 @@ struct FireworksUsageFetcherTests {
                 accountSlug: "x0mh0x",
                 session: URLSession(configuration: .ephemeral))
         } throws: { error in
-            error == FireworksUsageError.missingCredentials
+            guard let error = error as? FireworksUsageError else { return false }
+            return error == FireworksUsageError.missingCredentials
         }
 
         await #expect {
@@ -238,7 +240,8 @@ struct FireworksUsageFetcherTests {
                 accountSlug: "",
                 session: URLSession(configuration: .ephemeral))
         } throws: { error in
-            error == FireworksUsageError.missingAccountSlug
+            guard let error = error as? FireworksUsageError else { return false }
+            return error == FireworksUsageError.missingAccountSlug
         }
     }
 }
