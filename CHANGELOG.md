@@ -8,6 +8,7 @@
 
 ### Changed
 - CLI: dashboard snapshot identity now defaults to full; use `--identity redacted` to restore redacted emails.
+- Provider plugins: run the same bundled JavaScript providers and local plugin CLI on Linux through a sandboxed QuickJS engine, removing the cut-over providers' Linux-only Swift twins.
 
 ### Fixed
 - CLI: claude-swap accounts with expired or missing credentials now keep their email on the serve dashboard instead of showing a bare slot number.
