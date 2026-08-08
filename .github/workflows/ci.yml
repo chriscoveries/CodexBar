@@ -119,6 +119,9 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
+      - name: Runner info
+        run: printf 'macOS %s | %s\n' "$(sw_vers -productVersion)" "$(sysctl -n machdep.cpu.brand_string)"
+
       - name: Select Xcode 26.3 or 26.2
         run: |
           set -euo pipefail
@@ -159,6 +162,8 @@ jobs:
       - name: Swift Test
         # Keep small batches to reduce SwiftPM process overhead without returning to one aggregate run.
         timeout-minutes: 50
+        env:
+          SWIFT_BACKTRACE: enable=yes,format=friendly
         run: |
           CODEXBAR_TEST_GROUP_SIZE=4 \
             CODEXBAR_TEST_SUITE_TIMEOUT=120 \
@@ -169,6 +174,8 @@ jobs:
 
       - name: Provider plugin engine A/B goldens
         if: ${{ matrix.shard-index == 0 }}
+        env:
+          SWIFT_BACKTRACE: enable=yes,format=friendly
         run: ./Scripts/test-plugin-engines.sh
 
       - name: Collect crash reports on failure
@@ -187,6 +194,13 @@ jobs:
             done < <(find "$reports" \( -name '*.ips' -o -name '*.crash' \) -newer .git/HEAD -print 2>/dev/null | head -5)
           fi
           [[ "$found" == 1 ]] || echo "no fresh crash reports under $reports"
+
+      - name: Upload crash reports on failure
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: quickjs-crash-reports-${{ matrix.shard-index }}
+          path: ~/Library/Logs/DiagnosticReports/*.ips
 
       - name: Summarize macOS shard
         if: ${{ always() }}
