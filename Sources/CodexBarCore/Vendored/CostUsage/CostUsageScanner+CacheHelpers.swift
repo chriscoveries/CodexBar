@@ -135,6 +135,11 @@ extension CostUsageScanner {
         var hasModeSplit: Bool {
             self.sawPriorityCost || self.priorityTokens > 0
         }
+
+        func isTrusted(canonicalTotalTokens: Int) -> Bool {
+            let (rowTokenTotal, overflow) = self.standardTokens.addingReportingOverflow(self.priorityTokens)
+            return !overflow && rowTokenTotal <= canonicalTotalTokens
+        }
     }
 
     static func codexRowCostBreakdown(
@@ -1412,19 +1417,24 @@ extension CostUsageScanner {
                     priorityTurns: priorityTurns,
                     modelsDevCatalog: catalogResolver.load(modelsDevCatalogLoader),
                     modelsDevCacheRoot: modelsDevCacheRoot)
+                let rowCostIsTrusted = rowCost?.isTrusted(canonicalTotalTokens: totalTokens) ?? true
                 let authoritativeCost = authoritativeCostNanosByDayModel[day]?[model].map {
                     Double($0) / Self.costScale
                 }
-                let cost = rowCost?.totalCostUSD
-                    ?? authoritativeCost
-                    ?? CostUsagePricing.codexCostUSD(
-                        model: model,
-                        inputTokens: input,
-                        cachedInputTokens: cached,
-                        outputTokens: output,
-                        modelsDevCatalog: catalogResolver.load(modelsDevCatalogLoader),
-                        modelsDevCacheRoot: modelsDevCacheRoot)
-                let hasModeSplit = rowCost?.hasModeSplit == true
+                let canonicalCost = CostUsagePricing.codexCostUSD(
+                    model: model,
+                    inputTokens: input,
+                    cachedInputTokens: cached,
+                    outputTokens: output,
+                    modelsDevCatalog: catalogResolver.load(modelsDevCatalogLoader),
+                    modelsDevCacheRoot: modelsDevCacheRoot)
+                // Physical pricing rows can retain fork-copied usage after canonical ownership
+                // has deduplicated the day/model totals. Reject the whole row-derived price so
+                // Fast uplift from the same unowned rows cannot leak into the fallback cost.
+                let cost = rowCostIsTrusted
+                    ? rowCost?.totalCostUSD ?? authoritativeCost ?? canonicalCost
+                    : canonicalCost
+                let hasModeSplit = rowCostIsTrusted && rowCost?.hasModeSplit == true
                 breakdown.append(
                     CostUsageDailyReport.ModelBreakdown(
                         modelName: model,
