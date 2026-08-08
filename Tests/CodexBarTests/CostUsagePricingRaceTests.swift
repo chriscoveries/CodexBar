@@ -47,6 +47,58 @@ struct CostUsagePricingRaceTests {
     }
 
     @Test
+    func `project usage index reprices persisted tokens from the current catalog`() throws {
+        let fixture = try PricingRaceFixture()
+        defer { fixture.environment.cleanup() }
+        _ = fixture.scan()
+        #expect(ModelsDevCache.save(
+            catalog: fixture.catalog,
+            fetchedAt: fixture.day,
+            cacheRoot: fixture.environment.cacheRoot))
+
+        let snapshot = try CodexLocalProjectUsageIndexer.buildSnapshotFromCostCache(
+            now: fixture.day,
+            historyDays: 1,
+            since: fixture.day,
+            until: fixture.day,
+            options: fixture.options)
+        let expected = (100.0 * 10e-6) + (900.0 * 0.1e-6) + (100.0 * 20e-6)
+
+        #expect(abs((snapshot.projects.first?.estimatedCostUSD ?? 0) - expected) < 1e-12)
+        #expect(snapshot.projects.first?.modelBreakdowns.first?.hasUnknownCost == false)
+    }
+
+    @Test
+    func `project usage snapshot invalidates cached cost when catalog changes`() throws {
+        let fixture = try PricingRaceFixture()
+        defer { fixture.environment.cleanup() }
+        var scannerOptions = fixture.options
+        scannerOptions.forceRescan = false
+        scannerOptions.refreshMinIntervalSeconds = 60
+        let options = CodexLocalProjectUsageIndexer.Options(scannerOptions: scannerOptions)
+
+        let fallback = try CodexLocalProjectUsageIndexer.loadSnapshot(
+            now: fixture.day,
+            historyDays: 1,
+            forceRefresh: true,
+            options: options)
+        #expect(ModelsDevCache.save(
+            catalog: fixture.catalog,
+            fetchedAt: fixture.day,
+            cacheRoot: fixture.environment.cacheRoot))
+
+        let repriced = try CodexLocalProjectUsageIndexer.loadSnapshot(
+            now: fixture.day,
+            historyDays: 1,
+            forceRefresh: false,
+            options: options)
+        let expected = (100.0 * 10e-6) + (900.0 * 0.1e-6) + (100.0 * 20e-6)
+
+        #expect(fallback.projects.first?.estimatedCostUSD != repriced.projects.first?.estimatedCostUSD)
+        #expect(abs((repriced.projects.first?.estimatedCostUSD ?? 0) - expected) < 1e-12)
+    }
+
+    @Test
     func `authoritative source cost is not repriced`() throws {
         let environment = try CostUsageTestEnvironment()
         defer { environment.cleanup() }

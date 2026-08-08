@@ -1941,7 +1941,7 @@ enum CostUsageScanner {
     /// this fingerprint only invalidates downstream presentation caches such as Workspaces snapshots.
     private static let codexCostFormulaVersion = 2
 
-    private static func codexPricingKey(modelsDevArtifact: ModelsDevCacheArtifact?) -> String {
+    static func codexPricingKey(modelsDevArtifact: ModelsDevCacheArtifact?) -> String {
         CostUsagePricingKey.codex(
             modelsDevArtifact: modelsDevArtifact,
             formulaVersion: self.codexCostFormulaVersion)

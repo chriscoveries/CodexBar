@@ -103,16 +103,6 @@ extension CostUsageScanner {
         return out
     }
 
-    private static func codexPriorityPricingModel(
-        for row: CodexUsageRow,
-        priorityMetadata: CodexPriorityTurnMetadata) -> String
-    {
-        guard let model = priorityMetadata.model,
-              CostUsagePricing.codexAPIFastMultiplier(model: model) != nil
-        else { return row.model }
-        return model
-    }
-
     struct CodexRowCostBreakdown {
         var standardCostUSD: Double = 0
         var priorityCostUSD: Double = 0
@@ -163,44 +153,17 @@ extension CostUsageScanner {
             } else {
                 breakdown.standardTokens += tokenCount
             }
-            let pricedModel = priorityMetadata.map { Self.codexPriorityPricingModel(for: row, priorityMetadata: $0) }
-                ?? row.pricingModel
-                ?? row.model
-
-            if let authoritativeCostNanos = row.knownCostNanos {
-                let authoritativeCost = Double(authoritativeCostNanos) / Self.costScale
-                if isPriority {
-                    breakdown.priorityCostUSD += authoritativeCost
-                    breakdown.sawPriorityCost = true
-                } else {
-                    breakdown.standardCostUSD += authoritativeCost
-                    breakdown.sawStandardCost = true
-                }
-                continue
-            }
-
-            let baseCost = CostUsagePricing.codexCostUSD(
-                model: pricedModel,
-                inputTokens: row.input,
-                cachedInputTokens: row.cached,
-                outputTokens: row.output,
+            guard let cost = self.codexResolvedCostUSD(
+                for: row,
+                priorityTurns: priorityTurns,
                 modelsDevCatalog: modelsDevCatalog,
                 modelsDevCacheRoot: modelsDevCacheRoot)
-            if isPriority, let priorityCost = CostUsagePricing.codexPriorityCostUSD(
-                model: pricedModel,
-                inputTokens: row.input,
-                cachedInputTokens: row.cached,
-                outputTokens: row.output,
-                modelsDevCatalog: modelsDevCatalog,
-                modelsDevCacheRoot: modelsDevCacheRoot)
-            {
-                breakdown.priorityCostUSD += max(priorityCost, baseCost ?? priorityCost)
+            else { continue }
+            if isPriority {
+                breakdown.priorityCostUSD += cost
                 breakdown.sawPriorityCost = true
-            } else if isPriority, let baseCost {
-                breakdown.priorityCostUSD += baseCost
-                breakdown.sawPriorityCost = true
-            } else if let baseCost {
-                breakdown.standardCostUSD += baseCost
+            } else {
+                breakdown.standardCostUSD += cost
                 breakdown.sawStandardCost = true
             }
         }
@@ -1412,26 +1375,7 @@ extension CostUsageScanner {
         let authoritativeCostNanosByDayModel = self.codexCostNanosByDayModel(cache: reportCache, range: range)
         var rowsByDayModel: [String: [String: [CodexUsageRow]]] = [:]
         for usage in reportCache.files.values {
-            let rows: [CodexUsageRow] = if let storedRows = usage.codexRows, !storedRows.isEmpty {
-                storedRows
-            } else {
-                usage.days.flatMap { day, models in
-                    models.map { model, packed in
-                        CodexUsageRow(
-                            day: day,
-                            model: model,
-                            turnID: nil,
-                            eventIndex: nil,
-                            input: packed[safe: 0] ?? 0,
-                            cached: packed[safe: 1] ?? 0,
-                            output: packed[safe: 2] ?? 0,
-                            knownCostNanos: usage.codexCostNanos?[day]?[model],
-                            pricingModel: model,
-                            pricingMode: usage.codexPriorityTokens?[day]?[model] == nil ? "standard" : "priority")
-                    }
-                }
-            }
-            for row in rows where CostUsageDayRange.isInRange(
+            for row in self.codexRowsForReadTimePricing(usage) where CostUsageDayRange.isInRange(
                 dayKey: row.day,
                 since: range.sinceKey,
                 until: range.untilKey)
