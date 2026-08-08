@@ -502,7 +502,9 @@ struct ProviderPluginRuntimeTests {
         await #expect(throws: ProviderPluginError.self) {
             _ = try await runtime.fetchUsage(secrets: ["TEST_KEY": "hang"])
         }
-        #expect(Date().timeIntervalSince(start) < 1)
+        // The 0.15s watchdog must fire promptly rather than wait out the hang; allow generous
+        // headroom for loaded CI runners (observed 1.66s on ARM64 under contention).
+        #expect(Date().timeIntervalSince(start) < 5)
 
         let recovered = try await runtime.fetchUsage(secrets: ["TEST_KEY": "ok"])
         #expect(recovered.primary?.usedPercent == 7)
