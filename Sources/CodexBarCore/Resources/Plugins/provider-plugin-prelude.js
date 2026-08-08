@@ -47,10 +47,10 @@
     networkFailure: "network-failure",
     apiFailure: "api-failure",
   });
-  const classifiedFailure = kind => message =>
-    new Error(`__CODEXBAR_FAILURE__:${kind}:${String(message)}`);
-  ctx.fail = Object.freeze(Object.fromEntries(
-    Object.entries(failureKinds).map(([name, kind]) => [name, classifiedFailure(kind)])));
+  const classifiedFailure = (kind) => (message) => new Error(`__CODEXBAR_FAILURE__:${kind}:${String(message)}`);
+  ctx.fail = Object.freeze(
+    Object.fromEntries(Object.entries(failureKinds).map(([name, kind]) => [name, classifiedFailure(kind)])),
+  );
 
   ctx.browser = Object.freeze({
     cookieHeader(domain) {
@@ -77,10 +77,19 @@
     },
   });
 
-  ctx.log = (...args) => host.log(args.map(value => {
-    if (typeof value === "string") return value;
-    try { return JSON.stringify(value); } catch (_) { return String(value); }
-  }).join(" "));
+  ctx.log = (...args) =>
+    host.log(
+      args
+        .map((value) => {
+          if (typeof value === "string") return value;
+          try {
+            return JSON.stringify(value);
+          } catch (_) {
+            return String(value);
+          }
+        })
+        .join(" "),
+    );
 
   ctx.cache = Object.freeze({
     get(key) {
@@ -108,7 +117,9 @@
   }
 
   ctx.format = Object.freeze({
-    number(value, options) { return formatNumber(value, options); },
+    number(value, options) {
+      return formatNumber(value, options);
+    },
     usd(value) {
       const numeric = Number(value);
       const sign = numeric < 0 ? "-$" : "$";
@@ -154,11 +165,21 @@
   const nowMillis = Number(ctx.__codexbarNowMillis);
   delete ctx.__codexbarNowMillis;
   ctx.date = Object.freeze({
-    now() { return parseDate(nowMillis); },
-    nowMillis() { return nowMillis; },
-    iso(value) { return parseDate(String(value)); },
-    unixSeconds(value) { return parseDate(Number(value) * 1000); },
-    unixMillis(value) { return parseDate(Number(value)); },
+    now() {
+      return parseDate(nowMillis);
+    },
+    nowMillis() {
+      return nowMillis;
+    },
+    iso(value) {
+      return parseDate(String(value));
+    },
+    unixSeconds(value) {
+      return parseDate(Number(value) * 1000);
+    },
+    unixMillis(value) {
+      return parseDate(Number(value));
+    },
     nextDailyReset(timeZone, hour) {
       const resetHour = Number(hour);
       if (!Number.isInteger(resetHour) || resetHour < 0 || resetHour > 23) {
@@ -180,4 +201,4 @@
   ctx.amountFromPercent = (percent, limit) => host.amountFromPercent(Number(percent), Number(limit));
 
   return ctx;
-})
+});
