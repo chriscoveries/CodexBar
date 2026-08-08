@@ -162,6 +162,52 @@ final class QuickJSProviderPluginEngine: ProviderPluginEngine, @unchecked Sendab
         let expiresAt: Date
     }
 
+    private final class Teardown: @unchecked Sendable {
+        let runtime: OpaquePointer
+        let context: OpaquePointer
+        let definition: JSValue?
+        let applyPrelude: JSValue?
+        let fetchUsage: JSValue?
+        let watchdog: OpaquePointer?
+
+        init(
+            runtime: OpaquePointer,
+            context: OpaquePointer,
+            definition: JSValue?,
+            applyPrelude: JSValue?,
+            fetchUsage: JSValue?,
+            watchdog: OpaquePointer?)
+        {
+            self.runtime = runtime
+            self.context = context
+            self.definition = definition
+            self.applyPrelude = applyPrelude
+            self.fetchUsage = fetchUsage
+            self.watchdog = watchdog
+        }
+
+        func run() {
+            if let definition {
+                cqjs_free_value(self.context, definition)
+            }
+            if let applyPrelude {
+                cqjs_free_value(self.context, applyPrelude)
+            }
+            if let fetchUsage {
+                cqjs_free_value(self.context, fetchUsage)
+            }
+            if let watchdog {
+                cqjs_watchdog_disarm(watchdog)
+            }
+            // The runtime retains the interrupt-handler opaque pointer until it is freed.
+            JS_FreeContext(self.context)
+            JS_FreeRuntime(self.runtime)
+            if let watchdog {
+                cqjs_watchdog_destroy(watchdog)
+            }
+        }
+    }
+
     // @unchecked Sendable is safe because every mutable engine field and QuickJS API call is confined
     // to this serial worker. requestInterrupt() is the watchdog's explicitly thread-safe escape hatch.
     private let worker: QuickJSSerialWorker
@@ -242,36 +288,17 @@ final class QuickJSProviderPluginEngine: ProviderPluginEngine, @unchecked Sendab
     }
 
     deinit {
-        let runtime = self.runtime
-        let context = self.context
-        let definition = self.definition
-        let applyPrelude = self.applyPrelude
-        let fetchUsage = self.fetchUsage
-        let watchdog = self.watchdog
-        let teardown = {
-            if let definition {
-                cqjs_free_value(context, definition)
-            }
-            if let applyPrelude {
-                cqjs_free_value(context, applyPrelude)
-            }
-            if let fetchUsage {
-                cqjs_free_value(context, fetchUsage)
-            }
-            if let watchdog {
-                cqjs_watchdog_disarm(watchdog)
-            }
-            // The runtime retains the interrupt-handler opaque pointer until it is freed.
-            JS_FreeContext(context)
-            JS_FreeRuntime(runtime)
-            if let watchdog {
-                cqjs_watchdog_destroy(watchdog)
-            }
-        }
+        let teardown = Teardown(
+            runtime: self.runtime,
+            context: self.context,
+            definition: self.definition,
+            applyPrelude: self.applyPrelude,
+            fetchUsage: self.fetchUsage,
+            watchdog: self.watchdog)
         if self.worker.isCurrentThread {
-            teardown()
+            teardown.run()
         } else {
-            try? self.worker.sync(teardown)
+            try? self.worker.sync { teardown.run() }
         }
         self.worker.shutdown()
     }
@@ -938,7 +965,8 @@ final class QuickJSProviderPluginEngine: ProviderPluginEngine, @unchecked Sendab
 }
 
 private final class QuickJSSerialWorker: @unchecked Sendable {
-    typealias Job = () -> Void
+    /// Jobs must not retain the caller's executor isolation when the dedicated thread invokes them.
+    typealias Job = @Sendable () -> Void
 
     private final class State: @unchecked Sendable {
         private let condition = NSCondition()
@@ -1017,7 +1045,7 @@ private final class QuickJSSerialWorker: @unchecked Sendable {
         precondition(self.state.enqueue(operation), "QuickJS worker accepted work after shutdown")
     }
 
-    func sync<Value: Sendable>(_ operation: @escaping () throws -> Value) throws -> Value {
+    func sync<Value: Sendable>(_ operation: @escaping @Sendable () throws -> Value) throws -> Value {
         if self.isCurrentThread {
             return try operation()
         }
