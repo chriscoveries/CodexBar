@@ -2,6 +2,9 @@
 
 ## 0.48.2 — Unreleased
 
+### Fixed
+- z.ai/GLM: parse `CREDIT_LIMIT` quota entries from credit-based Coding Plans (lite/standard/pro) so usage no longer sticks at 100% remaining / 0% used and the 5-hour credit window drives the primary percentage and reset time (#2724, #2712). Thanks @stuible!
+
 ### Changed
 - CLI: dashboard snapshot identity now defaults to full; use `--identity redacted` to restore redacted emails.
 
