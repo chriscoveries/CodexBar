@@ -120,7 +120,9 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Runner info
-        run: printf 'macOS %s | %s\n' "$(sw_vers -productVersion)" "$(sysctl -n machdep.cpu.brand_string)"
+        run: |
+          printf 'macOS %s | %s\n' "$(sw_vers -productVersion)" "$(sysctl -n machdep.cpu.brand_string)"
+          defaults write com.apple.CrashReporter DialogType server
 
       - name: Select Xcode 26.3 or 26.2
         run: |
@@ -162,8 +164,6 @@ jobs:
       - name: Swift Test
         # Keep small batches to reduce SwiftPM process overhead without returning to one aggregate run.
         timeout-minutes: 50
-        env:
-          SWIFT_BACKTRACE: enable=yes,format=friendly
         run: |
           CODEXBAR_TEST_GROUP_SIZE=4 \
             CODEXBAR_TEST_SUITE_TIMEOUT=120 \
@@ -172,11 +172,35 @@ jobs:
             CODEXBAR_TEST_SHARD_COUNT=${{ matrix.shard-count }} \
             ./Scripts/test.sh
 
+      - name: Prepare plugin crash backtraces
+        if: ${{ always() && matrix.shard-index == 0 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test_binary="$(find .build -type f \
+            -path '*/CodexBarPackageTests.xctest/Contents/MacOS/CodexBarPackageTests' \
+            -print -quit)"
+          [[ -n "$test_binary" ]]
+          test_bundle="${test_binary%/Contents/MacOS/CodexBarPackageTests}"
+          entitlements="$RUNNER_TEMP/swift-test-backtrace-entitlements.plist"
+          plutil -create xml1 "$entitlements"
+          plutil -insert com.apple.security.get-task-allow -bool true "$entitlements"
+          codesign --force --sign - --entitlements "$entitlements" "$test_bundle"
+          codesign --display --entitlements :- "$test_bundle"
+
       - name: Provider plugin engine A/B goldens
         if: ${{ matrix.shard-index == 0 }}
         env:
-          SWIFT_BACKTRACE: enable=yes,format=friendly
+          SWIFT_BACKTRACE: enable=yes,preset=friendly,warnings=suppressed
         run: ./Scripts/test-plugin-engines.sh
+
+      - name: Rerun trapped plugin group with backtraces
+        if: ${{ failure() && matrix.shard-index == 0 }}
+        env:
+          SWIFT_BACKTRACE: enable=yes,preset=friendly,warnings=suppressed
+        run: >-
+          swift test --skip-build --no-parallel
+          --filter 'ProviderPluginParityTests|ProviderPluginRuntimeTests|Sub2APIPluginGoldenTests|UserProviderPluginPortableTests'
 
       - name: Collect crash reports on failure
         if: ${{ failure() }}
@@ -185,6 +209,10 @@ jobs:
           set -uo pipefail
           reports="$HOME/Library/Logs/DiagnosticReports"
           found=0
+          for _ in {1..10}; do
+            find "$reports" -name '*.ips' -newer .git/HEAD -print -quit 2>/dev/null | grep -q . && break
+            sleep 1
+          done
           if [[ -d "$reports" ]]; then
             while IFS= read -r file; do
               found=1
