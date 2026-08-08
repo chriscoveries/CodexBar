@@ -1033,6 +1033,31 @@ extension CostUsageStoreTests {
         try reader.execute("COMMIT")
         #expect(try reader.scalarInt("SELECT COUNT(*) FROM files") == 2)
     }
+
+    @Test(.timeLimit(.minutes(1)))
+    func `write lock held by another process skips the write instead of deleting the store`() async throws {
+        let fixture = try StoreFixture()
+        defer { fixture.remove() }
+        let store = CostUsageStore(cacheRoot: fixture.root)
+        #expect(await store.upsertFile(Self.file(path: "/rollouts/one.jsonl", day: "2026-08-01")))
+
+        // The CLI cost command scans through CostUsageFetcher and therefore opens its own
+        // writable store connection. Hold that cross-process lock past the 5s busy timeout.
+        let holder = try SQLiteTestConnection(url: store.databaseURL)
+        try holder.execute("BEGIN IMMEDIATE")
+        try holder.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('holder', '1')")
+
+        let blocked = await store.upsertFile(Self.file(path: "/rollouts/two.jsonl", day: "2026-08-02"))
+        #expect(blocked == false)
+        #expect(await store.rebuildCount == 0)
+        #expect(FileManager.default.fileExists(atPath: store.databaseURL.path))
+
+        try holder.execute("COMMIT")
+        #expect(await store.upsertFile(Self.file(path: "/rollouts/two.jsonl", day: "2026-08-02")))
+        let reader = try SQLiteTestConnection(url: store.databaseURL, readOnly: true)
+        #expect(try reader.scalarInt("SELECT COUNT(*) FROM files") == 2)
+        #expect(await store.rebuildCount == 0)
+    }
 }
 
 // MARK: - Fixtures
