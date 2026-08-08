@@ -16,6 +16,9 @@
 ### Fixed
 - CLI: answer expired serve-cache requests from the last-good response while rebuilding in the background instead of blocking the dashboard for up to a minute.
 
+### Fixed
+- Codex: decode the monthly credit limit from `spend_control.individual_limit` and accept the `reset_at` spelling, so team/enterprise workspaces stop dropping the whole credits payload over OAuth (#2736).
+
 ## 0.48.0 — 2026-08-06
 
 ### Added
