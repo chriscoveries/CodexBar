@@ -25,12 +25,13 @@ public enum CodexBarCoreResourceSmoke {
         var failures: [String] = []
         // Touching the resolver (and, through it, `Bundle.module` outside app
         // contexts) is the load that trapped in 0.48.0.
-        let bundle = CodexBarCoreResources.bundle
+        guard let bundle = CodexBarCoreResources.bundle else {
+            return [CodexBarCoreResources.missingBundleMessage]
+        }
 
         if bundle.url(forResource: "provider-plugin-prelude", withExtension: "js") == nil {
             failures.append("provider-plugin-prelude.js missing from \(bundle.bundleURL.path)")
         }
-        #if canImport(JavaScriptCore)
         let sucrase = "sucrase-\(UserProviderPluginLoader.sucraseVersion).min"
         if bundle.url(forResource: sucrase, withExtension: "js") == nil {
             failures.append("\(sucrase).js missing from \(bundle.bundleURL.path)")
@@ -52,7 +53,6 @@ public enum CodexBarCoreResourceSmoke {
                 failures.append("bundled plugin runtime '\(name)' failed to load: \(error)")
             }
         }
-        #endif
         return failures
     }
 

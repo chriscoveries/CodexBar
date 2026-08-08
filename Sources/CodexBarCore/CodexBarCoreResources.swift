@@ -6,30 +6,67 @@ import Foundation
 /// app does not place `CodexBar_CodexBarCore.bundle` at the locations it probes
 /// (the app root and the compile-time build directory). The packaged app ships
 /// the bundle in `Contents/Resources`, so resolve through the main bundle first
-/// and fall back to `Bundle.module` only outside an app context (SwiftPM dev
-/// builds, the CLI, and tests), mirroring `resolveLocalizationResourceBundle`
-/// and `ProviderBrandIcon.resourceBundle`.
+/// and only touch `Bundle.module` after verifying that its development-build
+/// candidate exists. Shipped command-line tools resolve the bundle beside the
+/// executable; a missing bundle is reported by callers instead of trapping.
 public enum CodexBarCoreResources {
-    public static let bundle: Bundle = resolve(mainBundle: .main)
+    static let missingBundleMessage =
+        "CodexBarCore resource bundle is missing next to the executable; reinstall or update CodexBar"
 
-    static func resolve(mainBundle: Bundle) -> Bundle {
-        guard mainBundle.bundleURL.pathExtension == "app" else {
-            return .module
-        }
+    public static let bundle: Bundle? = resolve(mainBundle: .main)
+
+    static func resolve(
+        mainBundle: Bundle,
+        executableBundleURL: URL? = nil,
+        swiftPMBuildDirectory: URL? = Self.defaultSwiftPMBuildDirectory) -> Bundle?
+    {
         let name = "CodexBar_CodexBarCore"
-        if let url = mainBundle.url(forResource: name, withExtension: "bundle"),
-           let bundle = Bundle(url: url)
-        {
+        let bundleName = "\(name).bundle"
+
+        if mainBundle.bundleURL.pathExtension == "app" {
+            if let url = mainBundle.url(forResource: name, withExtension: "bundle"),
+               let bundle = Bundle(url: url)
+            {
+                return bundle
+            }
+            if let resourceURL = mainBundle.resourceURL,
+               let bundle = Bundle(url: resourceURL.appendingPathComponent(bundleName))
+            {
+                return bundle
+            }
+            if let bundle = Bundle(url: mainBundle.bundleURL.appendingPathComponent(bundleName)) {
+                return bundle
+            }
+        }
+
+        let executableCandidate = (executableBundleURL ?? mainBundle.bundleURL)
+            .appendingPathComponent(bundleName)
+        if let bundle = Bundle(url: executableCandidate) {
             return bundle
         }
-        if let resourceURL = mainBundle.resourceURL,
-           let bundle = Bundle(url: resourceURL.appendingPathComponent("\(name).bundle"))
-        {
-            return bundle
+
+        if let swiftPMBuildDirectory {
+            var isDirectory: ObjCBool = false
+            let buildCandidate = swiftPMBuildDirectory.appendingPathComponent(bundleName)
+            if FileManager.default.fileExists(atPath: buildCandidate.path, isDirectory: &isDirectory),
+               isDirectory.boolValue
+            {
+                return .module
+            }
         }
-        if let bundle = Bundle(url: mainBundle.bundleURL.appendingPathComponent("\(name).bundle")) {
-            return bundle
-        }
-        return .module
+        return nil
     }
+
+    private static let defaultSwiftPMBuildDirectory: URL = {
+        let packageRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent() // CodexBarCore
+            .deletingLastPathComponent() // Sources
+            .deletingLastPathComponent() // package root
+        #if DEBUG
+        let configuration = "debug"
+        #else
+        let configuration = "release"
+        #endif
+        return packageRoot.appendingPathComponent(".build/\(configuration)", isDirectory: true)
+    }()
 }
