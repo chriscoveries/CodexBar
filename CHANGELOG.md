@@ -32,6 +32,9 @@
 ### Fixed
 - Kimi: hide the Code 7-day window when it reports the same percentage and reset time as the primary weekly quota, so the menu no longer shows one allowance twice.
 
+### Fixed
+- Menu bar: keep custom reset countdowns aligned with the opened menu instead of rounding their clock back to the start of the wall minute.
+
 ## 0.48.0 — 2026-08-06
 
 ### Added
