@@ -1365,12 +1365,6 @@ struct ProviderArchitectureGatekeeperTests {
             reason: "This provider-specific core branch passes its already-selected identity to a shared helper."),
         SuppressedProviderReference(
             path: "Sources/CodexBarCore/CostUsageFetcher.swift",
-            line: 556,
-            anchor: "CostUsageCacheIO.load(provider: .codex, cacheRoot: options.scanOptions.cacheRoot),",
-            expectedProviderIDs: ["codex"],
-            reason: "This provider-specific core branch passes its already-selected identity to a shared helper."),
-        SuppressedProviderReference(
-            path: "Sources/CodexBarCore/CostUsageFetcher.swift",
             line: 727,
             anchor: "provider: .codex,",
             expectedProviderIDs: ["codex"],
