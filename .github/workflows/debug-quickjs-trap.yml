@@ -49,9 +49,15 @@ jobs:
             lldb -c "$c" --batch -o "thread backtrace all" -o quit || true
           done
 
+      - name: Retry with executor checks logged (not fatal)
+        run: |
+          set -x
+          SWIFT_UNEXPECTED_EXECUTOR_LOG_LEVEL=1 SWIFT_IS_CURRENT_EXECUTOR_LEGACY_MODE_OVERRIDE=legacy \
+            swift test --skip-build --no-parallel --filter '(^CodexBarPluginTests\.ProviderPluginParityTests/)' || true
+
       - name: Dump crash reports (patient)
         run: |
-          sleep 45
+          sleep 90
           reports="$HOME/Library/Logs/DiagnosticReports"
           ls -la "$reports" || true
           for f in "$reports"/*; do
