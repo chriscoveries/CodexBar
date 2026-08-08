@@ -38,6 +38,11 @@ and the config validator flags a missing slug when a key is configured.
 - There is no balance display; the Fireworks web console (app.fireworks.ai → Settings/Billing) is the
   authoritative balance source.
 
+## Plugin conversion status
+
+The native fetcher remains authoritative. A valid response with no rated line items intentionally produces a
+successful snapshot with no rate window, cost, or detail; the current plugin snapshot contract rejects that shape.
+
 ## Key files
 
 - `Sources/CodexBarCore/Providers/Fireworks/FireworksProviderDescriptor.swift` (descriptor + fetch strategy)
