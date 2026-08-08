@@ -106,7 +106,7 @@ struct FireworksUsageFetcherTests {
         let url = try FireworksUsageFetcher.resolveSummaryURL(
             accountSlug: "x0mh0x",
             startTime: Date(timeIntervalSince1970: 0),
-            endTime: Date(timeIntervalSince1970: 86_400))
+            endTime: Date(timeIntervalSince1970: 86400))
 
         #expect(url.absoluteString.hasPrefix("https://api.fireworks.ai/v1/accounts/x0mh0x/billing/summary?"))
         #expect(url.absoluteString.contains("startTime=1970-01-01T00:00:00Z"))
