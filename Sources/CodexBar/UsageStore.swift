@@ -598,6 +598,7 @@ final class UsageStore {
     /// whenever the adapter is disabled, below its presentation threshold, or the
     /// active account has no usable usage windows.
     func menuBarSnapshot(for instanceID: ProviderInstanceID) -> UsageSnapshot? {
+        // Provider-specific by design: claude-swap adapter owns Claude menu-bar presentation; see #2731.
         self.claudeSwapMenuBarSnapshotOverride(for: instanceID) ?? self.snapshot(for: instanceID)
     }
 
