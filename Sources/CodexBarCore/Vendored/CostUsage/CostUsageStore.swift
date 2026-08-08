@@ -113,7 +113,9 @@ extension CostUsageStore {
         _ cache: CostUsageCache,
         calendar: Calendar,
         requestedScanWindow: (sinceKey: String, untilKey: String),
-        reportWindow: (sinceKey: String, untilKey: String)? = nil) -> CostUsageStoreBudgetResult
+        reportWindow: (sinceKey: String, untilKey: String)? = nil,
+        rowBudget: Int = CostUsageStore.defaultRowBudget,
+        fileBudgetBytes: Int64 = CostUsageStore.defaultFileBudgetBytes) -> CostUsageStoreBudgetResult
     {
         Self.sharedExecutor.sync {
             self.assumeIsolated { store in
@@ -121,7 +123,9 @@ extension CostUsageStore {
                     cache,
                     calendar: calendar,
                     requestedScanWindow: requestedScanWindow,
-                    reportWindow: reportWindow)
+                    reportWindow: reportWindow,
+                    rowBudget: rowBudget,
+                    fileBudgetBytes: fileBudgetBytes)
             }
         }
     }

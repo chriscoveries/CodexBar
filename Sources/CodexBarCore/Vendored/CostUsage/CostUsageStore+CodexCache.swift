@@ -18,7 +18,9 @@ extension CostUsageStore {
         _ cache: CostUsageCache,
         calendar: Calendar,
         requestedScanWindow: (sinceKey: String, untilKey: String),
-        reportWindow: (sinceKey: String, untilKey: String)? = nil) -> CostUsageStoreBudgetResult
+        reportWindow: (sinceKey: String, untilKey: String)? = nil,
+        rowBudget: Int = CostUsageStore.defaultRowBudget,
+        fileBudgetBytes: Int64 = CostUsageStore.defaultFileBudgetBytes) -> CostUsageStoreBudgetResult
     {
         let previous = self.readSnapshot()
         let canReuseStoredRows = previous.metadata.timeZoneIdentifier == calendar.timeZone.identifier
@@ -42,8 +44,8 @@ extension CostUsageStore {
         _ = self.setDiscoveryState(Self.discoveryState(cache.codexSessionDiscovery))
         _ = self.setLookbackState(Self.lookbackState(cache.codexActiveLookbackState))
         let result = self.enforceBudgets(
-            maxRows: Self.defaultRowBudget,
-            maxFileBytes: Self.defaultFileBudgetBytes,
+            maxRows: rowBudget,
+            maxFileBytes: fileBudgetBytes,
             requestedSinceDay: requestedScanWindow.sinceKey,
             requestedUntilDay: requestedScanWindow.untilKey,
             calendar: calendar)
