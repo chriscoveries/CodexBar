@@ -8,6 +8,9 @@ enum CostUsageClaudeCacheIO {
         return root.appendingPathComponent("CodexBar", isDirectory: true)
     }
 
+    // Provider-specific by design: Claude/Vertex cost caching still uses the legacy JSON artifact pending its own
+    // migration (see #2760).
+
     static func cacheFileURL(provider: UsageProvider, cacheRoot: URL? = nil) -> URL {
         precondition(provider == .claude || provider == .vertexai)
         let root = cacheRoot ?? self.defaultCacheRoot()
