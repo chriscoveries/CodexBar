@@ -114,15 +114,12 @@ struct FireworksUsageFetcherTests {
     }
 
     @Test
-    func `malformed account slugs fail with a config error instead of misrouting`() async {
+    func `malformed account slugs fail with a config error instead of misrouting`() {
         // A slug with reserved/invalid URL characters must surface as a config error
         // (never widen the path, inject a query, or crash on URL construction).
         for badSlug in ["sp ace", "has/slash", "has?query", "has#fragment", "percent%2F", "col\u{00e9}on"] {
-            await #expect {
+            #expect(throws: FireworksUsageError.invalidAccountSlug(badSlug)) {
                 _ = try FireworksUsageFetcher.resolveSummaryURL(accountSlug: badSlug)
-            } throws: { error in
-                guard case FireworksUsageError.invalidAccountSlug = error else { return false }
-                return true
             }
         }
 
@@ -224,24 +221,18 @@ struct FireworksUsageFetcherTests {
 
     @Test
     func `fetch usage requires key and slug`() async {
-        await #expect {
+        await #expect(throws: FireworksUsageError.missingCredentials) {
             _ = try await FireworksUsageFetcher.fetchUsage(
                 apiKey: "  ",
                 accountSlug: "x0mh0x",
                 session: URLSession(configuration: .ephemeral))
-        } throws: { error in
-            guard let error = error as? FireworksUsageError else { return false }
-            return error == FireworksUsageError.missingCredentials
         }
 
-        await #expect {
+        await #expect(throws: FireworksUsageError.missingAccountSlug) {
             _ = try await FireworksUsageFetcher.fetchUsage(
                 apiKey: "fw-test-key",
                 accountSlug: "",
                 session: URLSession(configuration: .ephemeral))
-        } throws: { error in
-            guard let error = error as? FireworksUsageError else { return false }
-            return error == FireworksUsageError.missingAccountSlug
         }
     }
 }
