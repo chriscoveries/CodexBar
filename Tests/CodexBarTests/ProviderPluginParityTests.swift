@@ -17,11 +17,15 @@ struct ProviderPluginParityTests {
             (.poe, "POE_API_KEY"),
             (.sub2api, "SUB2API_API_KEY"),
             (.synthetic, "SYNTHETIC_API_KEY"),
+            (.xai, "XAI_MANAGEMENT_API_KEY"),
         ] {
             let descriptor = ProviderDescriptorRegistry.descriptor(for: provider)
             var environment = [key: "fixture-key"]
             if provider == .sub2api {
                 environment[Sub2APISettingsReader.baseURLEnvironmentKey] = "https://api.example.com"
+            }
+            if provider == .xai {
+                environment[XAISettingsReader.teamIDEnvironmentKey] = "team-1234"
             }
             let context = Self.context(environment: environment)
             let strategies = await descriptor.fetchPlan.pipeline.resolveStrategies(context)
