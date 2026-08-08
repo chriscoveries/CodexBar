@@ -61,11 +61,6 @@ let package = Package(
                 publicHeadersPath: "include",
                 cSettings: [
                     .define("_GNU_SOURCE"),
-                    .unsafeFlags([
-                        "-Wno-sign-compare",
-                        "-Wno-unused-parameter",
-                        "-Wno-unused-result",
-                    ]),
                 ],
                 linkerSettings: [
                     .linkedLibrary("m", .when(platforms: [.linux])),
@@ -150,6 +145,14 @@ let package = Package(
                     .enableExperimentalFeature("SwiftTesting"),
                 ]),
             .testTarget(
+                name: "CodexBarPluginTests",
+                dependencies: ["CodexBarCore"],
+                path: "TestsPlugin",
+                swiftSettings: [
+                    .enableUpcomingFeature("StrictConcurrency"),
+                    .enableExperimentalFeature("SwiftTesting"),
+                ]),
+            .testTarget(
                 name: "CodexBarLinuxTests",
                 dependencies: [
                     "CodexBarCore",
@@ -210,7 +213,15 @@ let package = Package(
             name: "CodexBarTests",
             dependencies: ["CodexBar", "CodexBarCore", "CodexBarCLI", "CodexBarWidget"],
             path: "Tests",
-            exclude: ["AdaptiveReplayCLITests", "AdaptiveReplayKitTests"],
+            exclude: [
+                "AdaptiveReplayCLITests",
+                "AdaptiveReplayKitTests",
+                "CodexBarTests/ProviderPluginDetailsParityTests.swift",
+                "CodexBarTests/ProviderPluginExtensionParityTests.swift",
+                "CodexBarTests/ProviderPluginParityTests.swift",
+                "CodexBarTests/ProviderPluginRuntimeTests.swift",
+                "CodexBarTests/Sub2APIPluginGoldenTests.swift",
+            ],
             resources: [
                 .copy("CodexBarTests/Fixtures"),
             ],

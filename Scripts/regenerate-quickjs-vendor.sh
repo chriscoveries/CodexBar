@@ -77,7 +77,6 @@ case "$MODE" in
             "${TARGET_DIR}/libregexp.c" \
             "${TARGET_DIR}/libunicode.c" \
             "${TARGET_DIR}/LICENSE"
-        rm -rf "${TARGET_DIR}/include"
         mkdir -p "${TARGET_DIR}/include"
         cp "$STAGE_DIR"/*.c "$TARGET_DIR/"
         cp "$STAGE_DIR"/LICENSE "$TARGET_DIR/"

@@ -1,7 +1,10 @@
-#if canImport(JavaScriptCore)
 import CodexBarCore
 import Commander
+#if canImport(Darwin)
 import Darwin
+#else
+import Glibc
+#endif
 import Foundation
 
 struct PluginFetchOptions: CommanderParsable {
@@ -132,4 +135,3 @@ extension CodexBarCLI {
         }
     }
 }
-#endif

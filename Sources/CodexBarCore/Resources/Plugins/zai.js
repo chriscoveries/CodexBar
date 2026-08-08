@@ -54,7 +54,7 @@ defineProvider({
         let used = null;
         if (remaining !== null) used = Math.max(usage - remaining, current === null ? usage - remaining : current);
         else if (current !== null) used = current;
-        if (used !== null) percent = Math.max(0, Math.min(usage, used)) / usage * 100;
+        if (used !== null) percent = ctx.pct(Math.max(0, Math.min(usage, used)), usage);
       }
       percent = Math.max(0, Math.min(100, percent));
       const multipliers = { 1: 1440, 3: 60, 5: 1, 6: 10080 };
