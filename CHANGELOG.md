@@ -3,6 +3,7 @@
 ## 0.48.2 — Unreleased
 
 ### Fixed
+- Codex: restore JSON-cache retention semantics lost in the SQLite cutover — discovery pruning now reaches the scanner's round-tripped payload so deleted files stop resurfacing, the row budget never sacrifices in-window or recently active sessions, and fork-parent protection again drops stale lineage-only parents (refs #2760).
 - Menu: let long metric reset and pace details wrap to two lines instead of truncating, without clipping cached card heights (#2742). Thanks @Yuxin-Qiao!
 - Menu: let compact metric detail and reset rows wrap to a second line instead of truncating, so non-English locales keep the full pace and reset information (refs #2182). Thanks @Yuxin-Qiao!
 - Kimi: use official usage lane names and hide the Code 7-day row only when it duplicates the primary seven-day quota (matching percentage and reset) (#2741). Thanks @Yuxin-Qiao!
