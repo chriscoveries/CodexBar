@@ -26,8 +26,8 @@ that remain cheap to convert. Remaining buckets name the next blocker after this
 
 | Status | Count |
 |---|---:|
-| `cut-over` | 9 |
-| `converted` | 6 |
+| `cut-over` | 10 |
+| `converted` | 5 |
 | `convertible-now` | 8 |
 | `needs-cookie-import` | 19 |
 | `needs-files/subprocess/oauth-broker` | 15 |
@@ -54,7 +54,7 @@ that remain cheap to convert. Remaining buckets name the next blocker after this
 | antigravity | `needs-pty/webview/native` | No | Process/port discovery, localhost IDE RPC, OAuth files, and a persistent PTY make this a native integration. |
 | copilot | `needs-cookie-import` | No | API-token usage fits, but billing budgets require GitHub cookies/nonces and the device flow needs POST. |
 | devin | `needs-files/subprocess/oauth-broker` | No | Full auth discovery reads Chromium localStorage and organization state; manual bearer alone is partial. |
-| zai | `converted` | Yes | Converted: both fixed regional origins, personal/team settings, quota lanes, model totals, and hourly/daily token charts. |
+| zai | `cut-over` | Yes | Cut over on both engines: regional and validated override endpoints, personal/team settings, quota lanes, model totals, and hourly/daily token charts; dashboard routing remains native and the fetch twin is deleted. |
 | minimax | `needs-cookie-import` | No | Browser cookies/storage and group discovery feed a large service/billing/history-specific payload. |
 | manus | `converted` | Yes | Converted: declared-domain cookie import, session-token extraction, JSON POST, and generic credit windows. |
 | kimi | `needs-cookie-import` | No | Browser cookies plus Kimi credential/device files and regional identity headers exceed the current broker. |
