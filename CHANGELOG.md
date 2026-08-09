@@ -2,6 +2,9 @@
 
 ## 0.49.1 — Unreleased
 
+### Fixed
+- Settings: show CodexBar in the Dock while Settings or an update dialog is open, so Check for Updates and new-version prompts reliably appear in front.
+
 ## 0.49.0 — 2026-08-09
 
 ### Added
