@@ -99,7 +99,11 @@ def run_command(command: list[str], timeout: int | None = None) -> int:
 def swift_test_list(swift_command: list[str]) -> list[TestSelection]:
     command = [*swift_command, "test", "list"]
     try:
-        result = subprocess.run(command, check=True, capture_output=True, text=True)
+        # SWIFT_BACKTRACE (used for crash diagnosis during execution) makes the toolchain print a
+        # banner into this output, which the parser below rejects. Discovery never needs it.
+        discovery_environment = {key: value for key, value in os.environ.items() if key != "SWIFT_BACKTRACE"}
+        result = subprocess.run(
+            command, check=True, capture_output=True, text=True, env=discovery_environment)
     except subprocess.CalledProcessError as error:
         print(f"+ {swift_command[0]} test list", flush=True)
         if error.stdout:
