@@ -159,13 +159,14 @@ struct ClaudeCLIBackgroundAvailabilityTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let context = self.makeContext(environment: ["CLAUDE_CONFIG_DIR": root.path])
 
-        // Keychain enabled, prompt policy not `.always`, no established marker: `allowsBackgroundAutoUsageFetch`
-        // would deny on its own. The deadlock-breaker only exists to unblock a profile CodexBar can identify
-        // but has never seen a successful foreground fetch for — it must not fire for a profile with no
-        // identity at all, since a failed attempt here could never be recorded as a revocation.
+        // `.always` isolates this test to the unidentified-profile gate specifically, rather than
+        // incidentally passing because of the separate explicit-opt-in requirement. The deadlock-breaker
+        // only exists to unblock a profile CodexBar can identify but has never seen a successful
+        // foreground fetch for — it must not fire for a profile with no identity at all, since a failed
+        // attempt here could never be recorded as a revocation.
         await self.withBackgroundGates(
             keychainDisabled: false,
-            promptMode: .onlyOnUserAction,
+            promptMode: .always,
             oauthCredentialsMissing: true)
         {
             #expect(await !strategy.isAvailable(context))
@@ -211,7 +212,7 @@ struct ClaudeCLIBackgroundAvailabilityTests {
     }
 
     @Test
-    func `background Auto CLI falls back without an established marker when OAuth credentials are absent`()
+    func `background Auto CLI falls back without an established marker when OAuth absence prompts are allowed`()
         async throws
     {
         let strategy = self.makeStrategy()
@@ -219,15 +220,35 @@ struct ClaudeCLIBackgroundAvailabilityTests {
         defer { try? FileManager.default.removeItem(at: profile.root) }
         let context = self.makeContext(environment: profile.environment)
 
-        // Keychain access enabled and prompt policy not `.always`: `allowsBackgroundAutoUsageFetch` denies
-        // on its own (no established marker), so a `true` result here can only come from the
-        // deadlock-breaker below, not from the pre-existing cold-profile opt-in path.
+        // A confirmed absence of CodexBar-readable credentials does not by itself prove the interactive
+        // CLI is safe to launch unattended, so the deadlock-breaker still requires the same explicit
+        // background opt-in (`.always`) that the pre-existing opaque-child gate requires.
+        await self.withBackgroundGates(
+            keychainDisabled: false,
+            promptMode: .always,
+            oauthCredentialsMissing: true)
+        {
+            #expect(await strategy.isAvailable(context))
+        }
+    }
+
+    @Test
+    func `background Auto CLI stays blocked without an established marker when OAuth absence prompts are not allowed`()
+        async throws
+    {
+        let strategy = self.makeStrategy()
+        let profile = try self.makeProfile(accountID: "account-a")
+        defer { try? FileManager.default.removeItem(at: profile.root) }
+        let context = self.makeContext(environment: profile.environment)
+
+        // Even a durable, confirmed absence of OAuth credentials must not launch the interactive CLI
+        // unattended without the user's explicit background opt-in.
         await self.withBackgroundGates(
             keychainDisabled: false,
             promptMode: .onlyOnUserAction,
             oauthCredentialsMissing: true)
         {
-            #expect(await strategy.isAvailable(context))
+            #expect(await !strategy.isAvailable(context))
         }
     }
 

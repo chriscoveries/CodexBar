@@ -352,16 +352,18 @@ struct ClaudeBaselineCharacterizationTests {
                         sourceMode: .auto,
                         env: env,
                         settings: settings)
-                    // OAuth credentials are confirmed absent here (`withNoOAuthCredentials`), so the
-                    // deadlock-breaker starts CLI even without a prior foreground-established marker.
-                    // The stub is logged in and returns valid usage, so the pipeline never reaches web.
-                    #expect(outcome.attempts.map(\.strategyID) == ["claude.oauth", "claude.cli"])
-                    #expect(outcome.attempts.map(\.wasAvailable) == [true, true])
+                    // OAuth credentials are confirmed absent here (`withNoOAuthCredentials`), but the
+                    // deadlock-breaker still requires the user's explicit background opt-in (`.always`)
+                    // before launching the interactive CLI unattended — a confirmed absence of
+                    // CodexBar-readable credentials does not by itself prove the CLI is safe to launch.
+                    // With the stored policy left at `.onlyOnUserAction`, the pipeline stops at web.
+                    #expect(outcome.attempts.map(\.strategyID) == ["claude.oauth", "claude.cli", "claude.web"])
+                    #expect(outcome.attempts.map(\.wasAvailable) == [true, false, false])
                 }
             }
         }
 
-        #expect(FileManager.default.fileExists(atPath: invocationLog.path))
+        #expect(!FileManager.default.fileExists(atPath: invocationLog.path))
     }
 
     @Test

@@ -1138,7 +1138,11 @@ enum ClaudeCLIBackgroundAvailability {
             // The marker gate above never gets a chance to be set when the OAuth step ahead of this one
             // is durably dead: it is only recorded by a prior *successful* user-initiated CLI fetch, and a
             // scheduled refresh never reaches user-initiated status. Breaking that deadlock here mirrors
-            // explicit OAuth mode's own absence check (`ClaudeOAuthPlanningAvailability`).
+            // explicit OAuth mode's own absence check (`ClaudeOAuthPlanningAvailability`). A confirmed
+            // absence of CodexBar-readable credentials does not by itself prove the interactive CLI is
+            // safe to launch unattended, so this exception still requires the same explicit background
+            // opt-in (`.always` prompt policy) that `allowsOpaqueChildExecution` requires above.
+            guard ClaudeOAuthKeychainPromptPreference.storedMode() == .always else { return false }
             return oauthCredentialsConfirmedAbsent()
         }
         // Disable Keychain explicitly permits one owner-CLI usage attempt on a cold profile. A failed attempt
