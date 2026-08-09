@@ -262,7 +262,9 @@ struct ClaudeBaselineCharacterizationTests {
     }
 
     @Test
-    func `app background auto does not start Claude CLI before foreground availability`() async throws {
+    func `app background auto does not start Claude CLI while OAuth credentials may still be readable`()
+        async throws
+    {
         let settings = ProviderSettingsSnapshot.make(claude: .init(
             usageDataSource: .auto,
             webExtrasEnabled: false,
@@ -273,6 +275,44 @@ struct ClaudeBaselineCharacterizationTests {
         let stubCLIPath = try self.makeStubClaudeCLI(loggedIn: false, invocationLog: invocationLog)
         let env = ["CLAUDE_CLI_PATH": stubCLIPath]
 
+        // Without a durable "OAuth is dead" signal, background Auto never starts CLI here: no established
+        // marker exists (cold launch) and there is no confirmed credential absence yet.
+        await ClaudeCLIBackgroundAvailability.withIsolatedStoreForTesting {
+            await self.withBackgroundKeychainAccess {
+                await ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.always) {
+                    await ClaudeOAuthFetchStrategy.$directCredentialIsMissingOverride.withValue(false) {
+                        let outcome = await self.fetchOutcome(
+                            runtime: .app,
+                            sourceMode: .auto,
+                            env: env,
+                            settings: settings)
+
+                        #expect(outcome.attempts.map(\.strategyID) == ["claude.oauth", "claude.cli", "claude.web"])
+                        #expect(outcome.attempts.map(\.wasAvailable) == [true, false, false])
+                        #expect(!FileManager.default.fileExists(atPath: invocationLog.path))
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    func `app background auto starts Claude CLI once OAuth credentials are confirmed absent`() async throws {
+        let settings = ProviderSettingsSnapshot.make(claude: .init(
+            usageDataSource: .auto,
+            webExtrasEnabled: false,
+            cookieSource: .off,
+            manualCookieHeader: nil))
+        let invocationLog = FileManager.default.temporaryDirectory
+            .appendingPathComponent("claude-invocations-\(UUID().uuidString).log")
+        let stubCLIPath = try self.makeStubClaudeCLI(loggedIn: false, invocationLog: invocationLog)
+        let env = ["CLAUDE_CLI_PATH": stubCLIPath]
+
+        // A direct, non-interactive read confirming OAuth credentials are absent (not merely
+        // unreadable/denied) breaks the deadlock: this is the one background-Auto case where CLI must
+        // start even without a prior foreground-established marker, because there is otherwise no path
+        // out of a durably dead OAuth step. The stub here reports logged-out, so `loadViaAutoCLI` fails
+        // fast on the auth-status check — but it was tried, which is the point of this fallback.
         await ClaudeCLIBackgroundAvailability.withIsolatedStoreForTesting {
             await self.withBackgroundKeychainAccess {
                 await ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.always) {
@@ -283,14 +323,13 @@ struct ClaudeBaselineCharacterizationTests {
                             env: env,
                             settings: settings)
 
-                        #expect(outcome.attempts.map(\.strategyID) == ["claude.oauth", "claude.cli", "claude.web"])
-                        #expect(outcome.attempts.map(\.wasAvailable) == [true, false, false])
+                        #expect(outcome.attempts.map(\.strategyID) == ["claude.oauth", "claude.cli"])
+                        #expect(outcome.attempts.map(\.wasAvailable) == [true, true])
+                        #expect(FileManager.default.fileExists(atPath: invocationLog.path))
                     }
                 }
             }
         }
-
-        #expect(!FileManager.default.fileExists(atPath: invocationLog.path))
     }
 
     @Test
@@ -313,17 +352,20 @@ struct ClaudeBaselineCharacterizationTests {
                         sourceMode: .auto,
                         env: env,
                         settings: settings)
-                    #expect(outcome.attempts.map(\.strategyID) == ["claude.oauth", "claude.cli", "claude.web"])
-                    #expect(outcome.attempts.map(\.wasAvailable) == [true, false, false])
+                    // OAuth credentials are confirmed absent here (`withNoOAuthCredentials`), so the
+                    // deadlock-breaker starts CLI even without a prior foreground-established marker.
+                    // The stub is logged in and returns valid usage, so the pipeline never reaches web.
+                    #expect(outcome.attempts.map(\.strategyID) == ["claude.oauth", "claude.cli"])
+                    #expect(outcome.attempts.map(\.wasAvailable) == [true, true])
                 }
             }
         }
 
-        #expect(!FileManager.default.fileExists(atPath: invocationLog.path))
+        #expect(FileManager.default.fileExists(atPath: invocationLog.path))
     }
 
     @Test
-    func `app background auto falls back to web without probing Claude CLI`() async throws {
+    func `app background auto starts Claude CLI over web once OAuth credentials are confirmed absent`() async throws {
         let settings = ProviderSettingsSnapshot.make(claude: .init(
             usageDataSource: .auto,
             webExtrasEnabled: false,
@@ -362,10 +404,13 @@ struct ClaudeBaselineCharacterizationTests {
         }
         let result = try outcome.result.get()
 
-        #expect(outcome.attempts.map(\.strategyID) == ["claude.oauth", "claude.cli", "claude.web"])
-        #expect(outcome.attempts.map(\.wasAvailable) == [true, false, true])
-        #expect(result.strategyID == "claude.web")
-        #expect(!FileManager.default.fileExists(atPath: invocationLog.path))
+        // OAuth credentials are confirmed absent (`withNoOAuthCredentials`), so the deadlock-breaker
+        // starts CLI even without a prior foreground-established marker. The stub is logged in and
+        // returns valid usage, so the manual web cookie is never needed.
+        #expect(outcome.attempts.map(\.strategyID) == ["claude.oauth", "claude.cli"])
+        #expect(outcome.attempts.map(\.wasAvailable) == [true, true])
+        #expect(result.strategyID == "claude.cli")
+        #expect(FileManager.default.fileExists(atPath: invocationLog.path))
     }
 
     @Test
@@ -389,7 +434,11 @@ struct ClaudeBaselineCharacterizationTests {
                 .securityCLIExperimental)
             {
                 await ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.onlyOnUserAction) {
-                    await cli.isAvailable(context)
+                    // Present-but-denied by policy here, not a durable OAuth absence, so the
+                    // no-established-marker deadlock-breaker must not fire for this stored policy check.
+                    await ClaudeOAuthFetchStrategy.$directCredentialIsMissingOverride.withValue(false) {
+                        await cli.isAvailable(context)
+                    }
                 }
             }
         }
