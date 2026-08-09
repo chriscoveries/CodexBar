@@ -87,6 +87,12 @@ public enum ClaudeOAuthCredentialsStore {
     private static let claudeKeychainFingerprintLegacyKey = "ClaudeOAuthClaudeKeychainFingerprintV1"
     private static let pendingCodexBarOAuthKeychainCacheClearKey =
         "ClaudeOAuthPendingCodexBarOAuthKeychainCacheClearV1"
+    private static let directKeychainReadConsentRevocationMarkerKey =
+        "ClaudeOAuthDirectKeychainReadConsentRevocationMarkerV1"
+    private static var sharedDefaults: UserDefaults {
+        UserDefaults(suiteName: "com.steipete.codexbar") ?? .standard
+    }
+
     private static let pendingCodexBarOAuthKeychainCacheClearStore: ClaudeOAuthPendingCacheClearStore =
         ClaudeOAuthPendingCacheClearUserDefaultsStore(
             // The cache service is shared by release/debug apps and their CLIs, so its tombstone is shared too.
@@ -144,6 +150,8 @@ public enum ClaudeOAuthCredentialsStore {
         /// One-way ownership evidence for the Claude profile whose credentials path produced this cache.
         /// A missing value is a legacy entry. It can be migrated only to the historical default profile.
         let profileIdentifier: String?
+        /// Global consent epoch at creation time. A legacy missing value is generation zero.
+        let directKeychainReadConsentRevocationMarker: String?
 
         init(
             data: Data,
@@ -151,7 +159,9 @@ public enum ClaudeOAuthCredentialsStore {
             owner: ClaudeOAuthCredentialOwner? = nil,
             historyOwnerIdentifier: String? = nil,
             profileIdentifier: String? = ClaudeOAuthCredentialsStore.credentialsProfileIdentifier(
-                environment: ProcessInfo.processInfo.environment))
+                environment: ProcessInfo.processInfo.environment),
+            directKeychainReadConsentRevocationMarker: String? = ClaudeOAuthCredentialsStore
+                .currentDirectKeychainReadConsentRevocationMarker)
         {
             self.data = data
             self.storedAt = storedAt
@@ -159,6 +169,7 @@ public enum ClaudeOAuthCredentialsStore {
             self.historyOwnerIdentifier = ClaudeOAuthCredentials.normalizedHistoryOwnerIdentifier(
                 historyOwnerIdentifier)
             self.profileIdentifier = profileIdentifier
+            self.directKeychainReadConsentRevocationMarker = directKeychainReadConsentRevocationMarker
         }
     }
 
@@ -1532,6 +1543,12 @@ public enum ClaudeOAuthCredentialsStore {
             credentials: credentials,
             environment: environment)
     }
+
+    static func claudeKeychainCredentialMatchForTesting(
+        credentials: ClaudeOAuthCredentials) -> ClaudeKeychainCredentialMatch
+    {
+        self.claudeKeychainCredentialMatchWithoutPrompt(for: credentials)
+    }
     #endif
 
     /// Async version of load that handles expired tokens based on credential ownership.
@@ -1861,6 +1878,7 @@ public enum ClaudeOAuthCredentialsStore {
     private static func newestClaudeKeychainCredentialEvidenceWithoutPrompt()
         -> ClaudeKeychainProbe<ClaudeKeychainCredentialEvidence?>
     {
+        guard self.keychainAccessAllowed else { return .unavailable }
         #if DEBUG
         if let store = self.taskClaudeKeychainOverrideStore {
             guard store.data != nil || store.fingerprint != nil else { return .value(nil) }
@@ -1965,6 +1983,15 @@ public enum ClaudeOAuthCredentialsStore {
         environment: [String: String] = ProcessInfo.processInfo.environment)
     {
         Repository(context: self.currentCollaboratorContext()).invalidateCache(environment: environment)
+    }
+
+    /// Retires every Claude CLI-owned cache written before consent was revoked. Profile cache keys are one-way
+    /// hashes, so an epoch guard is the only bounded way to cover previously used `CLAUDE_CONFIG_DIR` values.
+    public static func revokeDirectKeychainReadConsent(
+        environment: [String: String] = ProcessInfo.processInfo.environment)
+    {
+        self.advanceDirectKeychainReadConsentRevocationMarker()
+        self.invalidateCache(environment: environment)
     }
 
     /// Check if CodexBar has cached credentials (in memory or keychain cache)
@@ -2730,7 +2757,13 @@ public enum ClaudeOAuthCredentialsStore {
                 let profileCacheKey = self.cacheKey(profileIdentifier: profileIdentifier)
                 let loaded = KeychainCacheStore.load(key: profileCacheKey, as: CacheEntry.self)
                 switch loaded {
-                case .found, .missing:
+                case let .found(entry) where self.cacheEntrySurvivesDirectKeychainReadConsentRevocation(entry):
+                    break
+                case .found:
+                    profilePending = !self.clearProfileCacheKeychain(profileIdentifier: profileIdentifier)
+                    result = .missing
+                    return
+                case .missing:
                     break
                 case .invalid, .temporarilyUnavailable:
                     result = loaded
@@ -2778,13 +2811,19 @@ public enum ClaudeOAuthCredentialsStore {
                     result = legacyLoaded
                     return
                 }
+                guard self.cacheEntrySurvivesDirectKeychainReadConsentRevocation(entry) else {
+                    legacyCleanupPending = !self.clearLegacyCacheKeychain()
+                    result = .missing
+                    return
+                }
                 if self.legacyCacheEntry(entry, isAttributableTo: profileIdentifier) {
                     let migrated = CacheEntry(
                         data: entry.data,
                         storedAt: entry.storedAt,
                         owner: entry.owner,
                         historyOwnerIdentifier: entry.historyOwnerIdentifier,
-                        profileIdentifier: profileIdentifier)
+                        profileIdentifier: profileIdentifier,
+                        directKeychainReadConsentRevocationMarker: entry.directKeychainReadConsentRevocationMarker)
                     guard KeychainCacheStore.storeResult(key: profileCacheKey, entry: migrated) else {
                         self.log.warning("Claude OAuth legacy cache profile migration could not be persisted")
                         result = .temporarilyUnavailable
@@ -2797,6 +2836,36 @@ public enum ClaudeOAuthCredentialsStore {
                 result = .missing
             })
         return result
+    }
+
+    private static func cacheEntrySurvivesDirectKeychainReadConsentRevocation(_ entry: CacheEntry) -> Bool {
+        guard entry.owner == nil || entry.owner == .claudeCLI else { return true }
+        guard let marker = self.currentDirectKeychainReadConsentRevocationMarker else { return true }
+        return entry.directKeychainReadConsentRevocationMarker == marker
+    }
+
+    private static var currentDirectKeychainReadConsentRevocationMarker: String? {
+        #if DEBUG
+        if let store = self.taskDirectKeychainReadConsentRevocationMarkerStoreOverride {
+            return store.marker
+        }
+        if KeychainTestSafety.shouldIsolateUserStateUnderTests() {
+            return nil
+        }
+        #endif
+        self.sharedDefaults.synchronize()
+        return self.sharedDefaults.string(forKey: self.directKeychainReadConsentRevocationMarkerKey)
+    }
+
+    private static func advanceDirectKeychainReadConsentRevocationMarker() {
+        #if DEBUG
+        if let store = self.taskDirectKeychainReadConsentRevocationMarkerStoreOverride {
+            store.advance()
+            return
+        }
+        #endif
+        self.sharedDefaults.set(UUID().uuidString, forKey: self.directKeychainReadConsentRevocationMarkerKey)
+        self.sharedDefaults.synchronize()
     }
 
     private static func cacheKey(profileIdentifier: String) -> KeychainCacheStore.Key {
@@ -2901,14 +2970,20 @@ public enum ClaudeOAuthCredentialsStore {
         if KeychainAccessGate.currentOverrideForTesting == true {
             return false
         }
+        if let consentOverride = ClaudeOAuthDirectKeychainReadConsent.taskOverrideForTesting {
+            return consentOverride
+        }
         if self.hasTaskKeychainTestingOverride {
             return true
         }
         #endif
         // Claude Code owns `Claude Code-credentials` and rewrites the item during token refreshes. That rewrite
-        // replaces its ACL, so any permission granted to CodexBar is inherently temporary and causes recurring
-        // macOS password dialogs. Production CodexBar therefore never reads the foreign item, with or without UI.
-        return false
+        // replaces its ACL, so any permission granted to CodexBar is inherently temporary and can cause recurring
+        // macOS password dialogs. Production CodexBar therefore reads the foreign item only after the user
+        // explicitly opted in (#2634); without consent every direct-read path stays closed, including the
+        // freshness sync and delegated-refresh verification that route through this same gate.
+        guard !KeychainAccessGate.isDisabled else { return false }
+        return ClaudeOAuthDirectKeychainReadConsent.isGranted()
     }
 
     #if DEBUG
