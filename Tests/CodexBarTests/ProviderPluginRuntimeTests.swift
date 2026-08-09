@@ -553,12 +553,10 @@ struct ProviderPluginRuntimeTests {
 
     @Test
     func `QuickJS engine reports recursion beyond its JavaScript stack limit`() async throws {
-        // Production geometry only: QuickJS's overflow guard is unreliable when the native
-        // margin above the JS limit is thin (macOS crashes instead of throwing — see the
-        // quickjs-ng/zipline reports), so a deliberately starved worker stack turns this
-        // test into a layout-lottery process crash on CI runners. The default 4 MiB worker
-        // with the 1 MiB JS limit leaves 3 MiB of margin for the guard and throw path while
-        // still proving the semantics: over-limit recursion yields a clean script error.
+        // Deliberately starved worker geometry: with a fixed JS stack limit this crashed the process
+        // (guard fires with too little native left to build the RangeError — the quickjs-ng/zipline#1130
+        // class). The derived limit (a quarter of the worker stack) makes the invariant hold at any size,
+        // so even a 512 KiB thread throws a clean script error instead of overrunning the guard page.
         let engine = try Self.quickJSEngine(
             source: Self.plugin(fetchBody: """
             function recurse(depth) {
@@ -566,7 +564,7 @@ struct ProviderPluginRuntimeTests {
             }
             return { primary: { usedPercent: recurse(100000) } };
             """),
-            workerStackSizeBytes: QuickJSRuntimeLimits.nativeStackSizeBytes)
+            workerStackSizeBytes: 512 * 1024)
 
         do {
             _ = try await Self.fetchUsage(engine: engine)

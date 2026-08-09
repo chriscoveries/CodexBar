@@ -40,6 +40,19 @@ struct ClaudeOAuthDirectKeychainReadConsentTests {
             browserDetection: BrowserDetection(cacheTTL: 0))
     }
 
+    private func makeCredentialsData(accessToken: String) -> Data {
+        let expiresAt = Int(Date(timeIntervalSinceNow: 3600).timeIntervalSince1970 * 1000)
+        return Data("""
+        {
+          "claudeAiOauth": {
+            "accessToken": "\(accessToken)",
+            "expiresAt": \(expiresAt),
+            "scopes": ["user:profile"]
+          }
+        }
+        """.utf8)
+    }
+
     // MARK: - Consent choke point
 
     @Test
@@ -151,6 +164,26 @@ struct ClaudeOAuthDirectKeychainReadConsentTests {
             rawText: nil)
         let degraded = ClaudeOAuthFetchStrategy._snapshotForTesting(from: usage, dataConfidence: .percentOnly)
         #expect(degraded.dataConfidence == .percentOnly)
+        let card = UsageMenuCardView.Model.make(UsageMenuCardView.Model.Input(
+            provider: .claude,
+            metadata: ProviderDescriptorRegistry.descriptor(for: .claude).metadata,
+            snapshot: degraded,
+            credits: nil,
+            creditsError: nil,
+            dashboard: nil,
+            dashboardError: nil,
+            tokenSnapshot: nil,
+            tokenError: nil,
+            account: AccountInfo(email: nil, plan: nil),
+            isRefreshing: false,
+            lastError: nil,
+            usageBarsShowUsed: true,
+            resetTimeDisplayStyle: .countdown,
+            tokenCostUsageEnabled: false,
+            showOptionalCreditsAndExtraUsage: true,
+            hidePersonalInfo: false,
+            now: Date()))
+        #expect(card.usageNotes == [L("Usage via Claude CLI (limited detail)")])
         let oauth = ClaudeOAuthFetchStrategy._snapshotForTesting(from: usage)
         #expect(oauth.dataConfidence == .unknown)
     }
@@ -170,7 +203,7 @@ struct ClaudeOAuthDirectKeychainReadConsentTests {
             syntheticTokenStore: NoopSyntheticTokenStore())
 
         let memory = ClaudeOAuthCredentialsStore.MemoryCacheStore()
-        try ClaudeOAuthCredentialsStore.$taskMemoryCacheStoreOverride.withValue(memory) {
+        ClaudeOAuthCredentialsStore.$taskMemoryCacheStoreOverride.withValue(memory) {
             // Consent on: a credential read from Claude Code's Keychain lands in CodexBar's caches.
             settings.claudeOAuthDirectKeychainReadAllowed = true
             memory.record = ClaudeOAuthCredentialRecord(
@@ -200,6 +233,84 @@ struct ClaudeOAuthDirectKeychainReadConsentTests {
             #expect(ClaudeOAuthFetchStrategy().shouldFallback(
                 on: ClaudeOAuthCredentialsError.notFound,
                 context: self.makeContext(runtime: .app, sourceMode: .oauth)))
+        }
+    }
+
+    @Test
+    @MainActor
+    func `revoking consent retires cached credentials for every claude config profile`() throws {
+        let suite = "codexbar-consent-multi-profile-revocation-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let settings = SettingsStore(
+            userDefaults: defaults,
+            configStore: testConfigStore(suiteName: suite),
+            zaiTokenStore: NoopZaiTokenStore(),
+            syntheticTokenStore: NoopSyntheticTokenStore())
+        let service = "com.steipete.codexbar.cache.consent-tests.\(UUID().uuidString)"
+        let pendingStore = ClaudeOAuthCredentialsStore.PendingCacheClearMemoryStore()
+        let revocationStore = ClaudeOAuthCredentialsStore.DirectKeychainReadConsentRevocationMarkerStore()
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codexbar-consent-profiles-\(UUID().uuidString)", isDirectory: true)
+        let environmentA = ["CLAUDE_CONFIG_DIR": root.appendingPathComponent("a").path]
+        let environmentB = ["CLAUDE_CONFIG_DIR": root.appendingPathComponent("b").path]
+
+        KeychainCacheStore.withServiceOverrideForTesting(service) {
+            KeychainCacheStore.setTestStoreForTesting(true)
+            defer { KeychainCacheStore.setTestStoreForTesting(false) }
+            ClaudeOAuthCredentialsStore.withPendingCacheClearStoreOverrideForTesting(pendingStore) {
+                ClaudeOAuthCredentialsStore
+                    .withDirectKeychainReadConsentRevocationMarkerStoreForTesting(revocationStore) {
+                        ClaudeOAuthCredentialsStore.withEnvironmentCredentialsURLForTesting {
+                            ClaudeOAuthCredentialsStore.withIsolatedMemoryCacheForTesting {
+                                settings.claudeOAuthDirectKeychainReadAllowed = true
+                                let profileA = ClaudeOAuthCredentialsStore.credentialsProfileIdentifier(
+                                    environment: environmentA)
+                                let profileB = ClaudeOAuthCredentialsStore.credentialsProfileIdentifier(
+                                    environment: environmentB)
+                                let keyA = ClaudeOAuthCredentialsStore.cacheKeyForTesting(
+                                    profileIdentifier: profileA)
+                                let keyB = ClaudeOAuthCredentialsStore.cacheKeyForTesting(
+                                    profileIdentifier: profileB)
+                                KeychainCacheStore.store(
+                                    key: keyA,
+                                    entry: ClaudeOAuthCredentialsStore.CacheEntry(
+                                        data: self.makeCredentialsData(accessToken: "profile-a-token"),
+                                        storedAt: Date(),
+                                        owner: .claudeCLI,
+                                        profileIdentifier: profileA))
+                                KeychainCacheStore.store(
+                                    key: keyB,
+                                    entry: ClaudeOAuthCredentialsStore.CacheEntry(
+                                        data: self.makeCredentialsData(accessToken: "profile-b-token"),
+                                        storedAt: Date(),
+                                        owner: .claudeCLI,
+                                        profileIdentifier: profileB))
+                                #expect(ClaudeOAuthCredentialsStore.hasCachedCredentials(environment: environmentA))
+                                #expect(ClaudeOAuthCredentialsStore.hasCachedCredentials(environment: environmentB))
+
+                                settings.claudeOAuthDirectKeychainReadAllowed = false
+
+                                #expect(!ClaudeOAuthCredentialsStore.hasCachedCredentials(environment: environmentA))
+                                #expect(!ClaudeOAuthCredentialsStore.hasCachedCredentials(environment: environmentB))
+                                guard case .missing = KeychainCacheStore.load(
+                                    key: keyA,
+                                    as: ClaudeOAuthCredentialsStore.CacheEntry.self)
+                                else {
+                                    Issue.record("Expected profile A's pre-revocation cache to be retired")
+                                    return
+                                }
+                                guard case .missing = KeychainCacheStore.load(
+                                    key: keyB,
+                                    as: ClaudeOAuthCredentialsStore.CacheEntry.self)
+                                else {
+                                    Issue.record("Expected profile B's pre-revocation cache to be retired")
+                                    return
+                                }
+                            }
+                        }
+                    }
+            }
         }
     }
 }

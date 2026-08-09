@@ -48,7 +48,10 @@ enum QuickJSTypeScriptTranspiler {
             throw ProviderPluginError.load("QuickJS could not create a TypeScript transpiler runtime")
         }
         JS_SetMemoryLimit(runtime, QuickJSProviderPluginEngine.memoryLimitBytes)
-        JS_SetMaxStackSize(runtime, QuickJSProviderPluginEngine.stackLimitBytes)
+        JS_SetMaxStackSize(
+            runtime,
+            QuickJSRuntimeLimits.javaScriptStackLimitBytes(
+                workerStackSizeBytes: QuickJSRuntimeLimits.nativeStackSizeBytes))
         guard let context = JS_NewContext(runtime) else {
             JS_FreeRuntime(runtime)
             throw ProviderPluginError.load("QuickJS could not create a TypeScript transpiler context")

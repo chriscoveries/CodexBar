@@ -628,10 +628,10 @@ extension SettingsStore {
             if wasAllowed, !newValue {
                 // Revoking consent must also revoke what consent obtained: credentials copied from Claude
                 // Code's Keychain while consent was on live in CodexBar's memory and Keychain caches, and
-                // those caches are consulted before the direct-read gate. Drop them (CodexBar-owned state
-                // only — Claude Code's item is untouched) so the next load takes the consent-gated path and
-                // routes to the Claude CLI fallback.
-                ClaudeOAuthCredentialsStore.invalidateCache()
+                // those caches are consulted before the direct-read gate. Advance the global revocation epoch
+                // before dropping the active cache so previously used profile caches also fail closed on lookup
+                // (CodexBar-owned state only — Claude Code's item is untouched).
+                ClaudeOAuthCredentialsStore.revokeDirectKeychainReadConsent()
             }
             self.noteBackgroundWorkSettingsChanged()
         }

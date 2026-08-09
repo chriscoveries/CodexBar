@@ -154,8 +154,8 @@ struct ProviderArchitectureGatekeeperTests {
             Self.hash(descriptor.branding.burnDownWidgetColor, into: &burnDownFingerprint)
         }
 
-        #expect(widgetFingerprint == 14_107_788_210_679_862_955)
-        #expect(burnDownFingerprint == 10_228_205_203_406_434_725)
+        #expect(widgetFingerprint == 16_873_014_858_015_536_126)
+        #expect(burnDownFingerprint == 8_686_456_525_451_224_704)
     }
 
     @Test
@@ -800,14 +800,14 @@ struct ProviderArchitectureGatekeeperTests {
             reason: "This provider-owned adapter passes its fixed identity to shared logging or cache infrastructure."),
         SuppressedProviderReference(
             path: "Sources/CodexBar/CursorLoginRunner.swift",
-            line: 126,
+            line: 127,
             anchor: "private let logger = CodexBarLog.logger(LogCategories.provider(.cursor, scope: \"login\"))",
             expectedProviderIDs: ["cursor"],
             reason: "This provider-owned adapter passes its fixed identity to shared logging or cache infrastructure."),
         SuppressedProviderReference(
             path: "Sources/CodexBar/CursorLoginRunner.swift",
-            line: 213,
-            anchor: "let cacheMutationGate = CookieHeaderCache.beginConditionalMutationGate(provider: .cursor)",
+            line: 219,
+            anchor: "provider: .cursor,",
             expectedProviderIDs: ["cursor"],
             reason: "This provider-owned adapter passes its fixed identity to shared logging or cache infrastructure."),
         SuppressedProviderReference(
@@ -2475,7 +2475,7 @@ struct ProviderArchitectureGatekeeperTests {
             reason: "This exact app-runtime bridge coordinates provider-owned state through the shared controller."),
         AllowedProviderConstruct(
             path: "Sources/CodexBar/StatusItemController+MenuBarLayout.swift",
-            line: 125,
+            line: 126,
             anchor: "if provider == .codex,",
             expectedProviderIDs: ["codex"],
             expectedReferenceCount: 1,
