@@ -159,6 +159,10 @@ jobs:
       - name: Swift Test
         # Keep small batches to reduce SwiftPM process overhead without returning to one aggregate run.
         timeout-minutes: 50
+        env:
+          # Force in-process backtraces so a signal-5 crash prints its frames inline (the OS crash
+          # reporter leaves no .ips once Swift's handler engages). Temporary diagnostic.
+          SWIFT_BACKTRACE: enable=yes,interactive=no,threads=all
         run: |
           CODEXBAR_TEST_GROUP_SIZE=4 \
             CODEXBAR_TEST_SUITE_TIMEOUT=120 \
