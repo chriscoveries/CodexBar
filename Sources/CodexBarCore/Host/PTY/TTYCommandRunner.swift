@@ -266,6 +266,7 @@ enum TTYProcessTreeTerminator {
 
 private enum TTYCommandRunnerTestingOverrides {
     @TaskLocal static var postDeadlineDrainDuration: TimeInterval?
+    @TaskLocal static var outputLimitBytes: Int?
 }
 
 /// Executes an interactive CLI inside a pseudo-terminal and returns all captured text.
@@ -749,7 +750,8 @@ public struct TTYCommandRunner {
         let isCodex = ttyStatusCommand != nil || options.forceCodexStatusMode
         let isCodexStatus = isCodex && trimmed == (ttyStatusCommand ?? "/status")
 
-        var buffer = BoundedOutputBuffer()
+        let outputLimitBytes = TTYCommandRunnerTestingOverrides.outputLimitBytes ?? BoundedOutputBuffer.defaultMaxBytes
+        var buffer = BoundedOutputBuffer(maxBytes: outputLimitBytes)
 
         func checkOutputLimit() throws {
             if didExceedOutputLimit {
@@ -1183,6 +1185,13 @@ extension TTYCommandRunner {
         operation: () throws -> T) rethrows -> T
     {
         try TTYCommandRunnerTestingOverrides.$postDeadlineDrainDuration.withValue(duration, operation: operation)
+    }
+
+    static func withOutputLimitOverrideForTesting<T>(
+        _ maxBytes: Int,
+        operation: () throws -> T) rethrows -> T
+    {
+        try TTYCommandRunnerTestingOverrides.$outputLimitBytes.withValue(maxBytes, operation: operation)
     }
 
     public static func which(_ tool: String) -> String? {
