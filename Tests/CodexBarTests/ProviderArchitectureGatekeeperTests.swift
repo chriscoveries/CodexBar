@@ -800,14 +800,14 @@ struct ProviderArchitectureGatekeeperTests {
             reason: "This provider-owned adapter passes its fixed identity to shared logging or cache infrastructure."),
         SuppressedProviderReference(
             path: "Sources/CodexBar/CursorLoginRunner.swift",
-            line: 126,
+            line: 127,
             anchor: "private let logger = CodexBarLog.logger(LogCategories.provider(.cursor, scope: \"login\"))",
             expectedProviderIDs: ["cursor"],
             reason: "This provider-owned adapter passes its fixed identity to shared logging or cache infrastructure."),
         SuppressedProviderReference(
             path: "Sources/CodexBar/CursorLoginRunner.swift",
-            line: 213,
-            anchor: "let cacheMutationGate = CookieHeaderCache.beginConditionalMutationGate(provider: .cursor)",
+            line: 219,
+            anchor: "provider: .cursor,",
             expectedProviderIDs: ["cursor"],
             reason: "This provider-owned adapter passes its fixed identity to shared logging or cache infrastructure."),
         SuppressedProviderReference(
