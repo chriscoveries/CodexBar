@@ -244,6 +244,96 @@ struct OllamaUsageFetcherRetryMappingTests {
     }
 
     @Test
+    func `actionable browser access error classification covers every browser diagnosis case`() {
+        #expect(OllamaStatusFetchStrategy.isActionableBrowserAccessError(
+            OllamaUsageError.safariCookieAccessDenied))
+        #expect(OllamaStatusFetchStrategy.isActionableBrowserAccessError(
+            OllamaUsageError.browserCookieDecryptionDenied("Chrome")))
+        #expect(OllamaStatusFetchStrategy.isActionableBrowserAccessError(
+            OllamaUsageError.browserCookieDecryptionDisabled("Chrome")))
+        #expect(!OllamaStatusFetchStrategy.isActionableBrowserAccessError(
+            OllamaUsageError.noSessionCookie))
+        #expect(!OllamaStatusFetchStrategy.isActionableBrowserAccessError(
+            OllamaUsageError.invalidCredentials))
+    }
+
+    @Test
+    func `automatic web fetch surfaces an actionable browser access error on a user initiated refresh`() async {
+        // A user-initiated refresh is the explicit-retry path: if the browser recovery attempt fails with a
+        // specific, actionable diagnosis (e.g. Safari needs Full Disk Access, or a Chromium Keychain prompt was
+        // declined), that guidance must reach the user — swapping it for the generic expired-cached-cookie error
+        // would send them chasing a stale "please sign in again" instead of the real, fixable cause.
+        let cached = CookieHeaderCache.Entry(
+            cookieHeader: "session=expired",
+            storedAt: Date(timeIntervalSince1970: 100),
+            sourceLabel: "Chrome")
+        var events: [String] = []
+
+        await ProviderInteractionContext.$current.withValue(.userInitiated) {
+            do {
+                _ = try await OllamaStatusFetchStrategy.fetchAutomatic(
+                    cached: cached,
+                    fetchCached: { _ in
+                        events.append("cache")
+                        throw OllamaUsageError.invalidCredentials
+                    },
+                    fetchBrowser: {
+                        events.append("browser")
+                        throw OllamaUsageError.safariCookieAccessDenied
+                    },
+                    clearCached: { entry in events.append("clear:\(entry.sourceLabel)") },
+                    storeResolved: { _ in events.append("store") })
+                Issue.record("Expected the actionable browser access error to be re-thrown")
+            } catch OllamaUsageError.safariCookieAccessDenied {
+                // expected — the specific, actionable diagnosis, not the generic cached auth error
+            } catch {
+                Issue.record("Expected safariCookieAccessDenied, got \(error)")
+            }
+        }
+
+        #expect(events == ["cache", "clear:Chrome", "browser"])
+    }
+
+    @Test
+    func `automatic web fetch still recovers the original auth error for a non actionable background failure`()
+        async
+    {
+        // A background refresh's own failed recovery attempt only ever reports the generic "no session cookie"
+        // shape (BrowserCookieAccessGate denies before an actionable browser-access error could even occur),
+        // so it should keep surfacing the original, accurate cached-cookie auth error rather than that generic
+        // one — the existing behavior for the common case must not regress.
+        let cached = CookieHeaderCache.Entry(
+            cookieHeader: "session=expired",
+            storedAt: Date(timeIntervalSince1970: 100),
+            sourceLabel: "Chrome")
+        var events: [String] = []
+
+        await ProviderInteractionContext.$current.withValue(.userInitiated) {
+            do {
+                _ = try await OllamaStatusFetchStrategy.fetchAutomatic(
+                    cached: cached,
+                    fetchCached: { _ in
+                        events.append("cache")
+                        throw OllamaUsageError.invalidCredentials
+                    },
+                    fetchBrowser: {
+                        events.append("browser")
+                        throw OllamaUsageError.noSessionCookie
+                    },
+                    clearCached: { entry in events.append("clear:\(entry.sourceLabel)") },
+                    storeResolved: { _ in events.append("store") })
+                Issue.record("Expected the original auth failure to be re-thrown")
+            } catch OllamaUsageError.invalidCredentials {
+                // expected
+            } catch {
+                Issue.record("Expected invalidCredentials, got \(error)")
+            }
+        }
+
+        #expect(events == ["cache", "clear:Chrome", "browser"])
+    }
+
+    @Test
     func `cached cookie invalidation excludes network and parse errors`() {
         #expect(OllamaStatusFetchStrategy.shouldInvalidateCachedCookie(
             after: OllamaUsageError.invalidCredentials))

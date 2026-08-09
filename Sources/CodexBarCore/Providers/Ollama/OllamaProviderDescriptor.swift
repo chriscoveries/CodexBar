@@ -200,9 +200,10 @@ struct OllamaStatusFetchStrategy: ProviderFetchStrategy {
     }
 
     /// Attempts browser-cookie recovery after a cached-cookie failure, surfacing the original failure — not
-    /// whatever `fetchBrowser` itself throws — if that attempt also fails. A failed recovery attempt (e.g. no
-    /// browser candidates, or a denied Keychain prompt) is rarely as informative as the failure that triggered
-    /// the recovery in the first place.
+    /// whatever `fetchBrowser` itself throws — if that attempt also fails with a generic, non-actionable error
+    /// (e.g. no browser candidates found). A specific, actionable browser-access diagnosis (Safari needs Full
+    /// Disk Access, a Chromium Keychain prompt was declined, etc.) is always more useful than the stale cached
+    /// auth error it would otherwise be swapped for, so it is re-thrown as-is instead.
     private static func fetchBrowserOrRethrow(
         originalError: Error,
         fetchBrowser: () async throws -> OllamaUsageFetcher.ResolvedCookieFetch,
@@ -212,8 +213,21 @@ struct OllamaStatusFetchStrategy: ProviderFetchStrategy {
             let resolved = try await fetchBrowser()
             storeResolved(resolved)
             return resolved.snapshot
+        } catch let browserError where self.isActionableBrowserAccessError(browserError) {
+            throw browserError
         } catch {
             throw originalError
+        }
+    }
+
+    static func isActionableBrowserAccessError(_ error: Error) -> Bool {
+        switch error {
+        case OllamaUsageError.safariCookieAccessDenied,
+             OllamaUsageError.browserCookieDecryptionDenied,
+             OllamaUsageError.browserCookieDecryptionDisabled:
+            true
+        default:
+            false
         }
     }
 
