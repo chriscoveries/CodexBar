@@ -9,6 +9,48 @@ import CSQLite3
 #endif
 
 struct CostUsageStoreTests {
+    /// The store actor runs on a custom DispatchQueue-backed `SerialExecutor`, and its
+    /// `sync*` bridges call `assumeIsolated` from inside `queue.sync`. macOS 26+ runtimes
+    /// verify that through `SerialExecutor.isIsolatingCurrentContext()`, whose default
+    /// implementation cannot see through `DispatchQueue.sync` — without an explicit
+    /// implementation the bridge traps ("Incorrect actor executor assumption") and the app
+    /// dies on launch.
+    ///
+    /// This covers the bridges from a non-actor thread. Note it does not by itself
+    /// reproduce the trap: whether `assumeIsolated` traps depends on the calling context's
+    /// current executor, and no test-harness context reproduced it (plain thread, Task, and
+    /// MainActor were all tried). The regression was verified against the app itself —
+    /// it died on launch with "Incorrect actor executor assumption" and starts cleanly now.
+    @Test
+    func `sync bridges are callable from a plain thread`() throws {
+        let fixture = try StoreFixture()
+        defer { fixture.remove() }
+        let store = CostUsageStore(cacheRoot: fixture.root)
+
+        final class Outcome: @unchecked Sendable {
+            var loadedScanStamp: Int64?
+            var savedRowCount: Int?
+        }
+        let outcome = Outcome()
+        let finished = DispatchSemaphore(value: 0)
+
+        let thread = Thread {
+            let loaded = store.syncLoadCodexCache(calendar: .current)
+            outcome.loadedScanStamp = loaded.lastScanUnixMs
+            let saved = store.syncSaveCodexCache(
+                loaded,
+                calendar: .current,
+                requestedScanWindow: (sinceKey: "2026-08-01", untilKey: "2026-08-03"))
+            outcome.savedRowCount = saved.rowCount
+            finished.signal()
+        }
+        thread.start()
+
+        #expect(finished.wait(timeout: .now() + 10) == .success)
+        #expect(outcome.loadedScanStamp == 0)
+        #expect((outcome.savedRowCount ?? -1) >= 0)
+    }
+
     @Test
     func `database lives beside the legacy artifact directory`() throws {
         let fixture = try StoreFixture()
