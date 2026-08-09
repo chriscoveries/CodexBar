@@ -154,13 +154,19 @@ struct ProviderPluginRuntimeTests {
 
     @Test
     func `HTTP request deadline cancels a transport that exceeds it`() async throws {
+        let cancellation = TransportCancellationProbe()
         let runtime = try ProviderPluginRuntime(
             source: Self.plugin(fetchBody: """
             await ctx.http.getJSON("https://api.example.test/slow", { timeoutSeconds: 1 });
             return { primary: { usedPercent: 1 } };
             """),
             transport: ProviderHTTPTransportHandler { request in
-                try await Task.sleep(for: .seconds(5))
+                do {
+                    try await Task.sleep(for: .seconds(5))
+                } catch is CancellationError {
+                    await cancellation.markCancelled()
+                    throw CancellationError()
+                }
                 let response = try #require(HTTPURLResponse(
                     url: request.url!,
                     statusCode: 200,
@@ -168,13 +174,19 @@ struct ProviderPluginRuntimeTests {
                     headerFields: ["Content-Type": "application/json"]))
                 return (Data(#"{"used":1}"#.utf8), response)
             })
-        let startedAt = ContinuousClock.now
 
-        await #expect(throws: ProviderPluginError.self) {
+        do {
             _ = try await runtime.fetchUsage(secrets: ["TEST_KEY": "secret-value"])
+            Issue.record("Expected the request deadline to reject the plugin fetch")
+        } catch let error as ProviderPluginError {
+            guard case .script = error else {
+                Issue.record("Expected a request deadline failure, received \(error)")
+                return
+            }
+            await cancellation.waitUntilCancelled()
+        } catch {
+            Issue.record("Unexpected error: \(error)")
         }
-
-        #expect(ContinuousClock.now - startedAt < .seconds(2))
     }
 
     @Test
@@ -672,6 +684,26 @@ struct ProviderPluginRuntimeTests {
                 httpVersion: nil,
                 headerFields: ["Content-Type": "application/json"]))
             return (Data(body.utf8), response)
+        }
+    }
+}
+
+private actor TransportCancellationProbe {
+    private var cancelled = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func markCancelled() {
+        self.cancelled = true
+        for waiter in self.waiters {
+            waiter.resume()
+        }
+        self.waiters.removeAll()
+    }
+
+    func waitUntilCancelled() async {
+        if self.cancelled { return }
+        await withCheckedContinuation { continuation in
+            self.waiters.append(continuation)
         }
     }
 }
