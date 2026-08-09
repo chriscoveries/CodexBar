@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.48.2 — Unreleased
+## 0.49.0 — 2026-08-09
 
 ### Added
 - Fireworks: track 30-day rated billing spend with an API key and account slug (#2687). Thanks @x0mh0x!
