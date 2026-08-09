@@ -172,22 +172,6 @@ jobs:
             CODEXBAR_TEST_SHARD_COUNT=${{ matrix.shard-count }} \
             ./Scripts/test.sh
 
-      - name: Prepare plugin crash backtraces
-        if: ${{ always() && matrix.shard-index == 0 }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          test_binary="$(find .build -type f \
-            -path '*/CodexBarPackageTests.xctest/Contents/MacOS/CodexBarPackageTests' \
-            -print -quit)"
-          [[ -n "$test_binary" ]]
-          test_bundle="${test_binary%/Contents/MacOS/CodexBarPackageTests}"
-          entitlements="$RUNNER_TEMP/swift-test-backtrace-entitlements.plist"
-          plutil -create xml1 "$entitlements"
-          plutil -insert com.apple.security.get-task-allow -bool true "$entitlements"
-          codesign --force --sign - --entitlements "$entitlements" "$test_bundle"
-          codesign --display --entitlements :- "$test_bundle"
-
       - name: Provider plugin engine A/B goldens
         if: ${{ matrix.shard-index == 0 }}
         env:
