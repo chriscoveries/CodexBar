@@ -171,14 +171,47 @@ struct OllamaUsageFetcherRetryMappingTests {
     }
 
     @Test
-    func `automatic web fetch defers browser recovery to a user initiated refresh after background auth failure`()
+    func `automatic web fetch still recovers via the browser on a background auth failure`() async throws {
+        // The ollama.com session cookie rotates independently of the user's signed-in state, so a background
+        // refresh can see the cached cookie go stale even though the user never signed out.
+        // BrowserCookieAccessGate gates the browser read on its own no-UI preflight — it does not always deny
+        // a background attempt (e.g. Safari never needs Keychain decryption) — so a background auth failure
+        // must still attempt browser recovery rather than assuming it will fail.
+        let cached = CookieHeaderCache.Entry(
+            cookieHeader: "session=expired",
+            storedAt: Date(timeIntervalSince1970: 100),
+            sourceLabel: "Chrome")
+        var events: [String] = []
+
+        let snapshot = try await ProviderInteractionContext.$current.withValue(.background) {
+            try await OllamaStatusFetchStrategy.fetchAutomatic(
+                cached: cached,
+                fetchCached: { _ in
+                    events.append("cache")
+                    throw OllamaUsageError.invalidCredentials
+                },
+                fetchBrowser: {
+                    events.append("browser")
+                    return OllamaUsageFetcher.ResolvedCookieFetch(
+                        snapshot: Self.makeSnapshot(sessionUsedPercent: 34),
+                        cookieHeader: "session=fresh",
+                        sourceLabel: "Safari")
+                },
+                clearCached: { entry in events.append("clear:\(entry.sourceLabel)") },
+                storeResolved: { resolved in events.append("store:\(resolved.sourceLabel)") })
+        }
+
+        #expect(snapshot.sessionUsedPercent == 34)
+        #expect(events == ["cache", "clear:Chrome", "browser", "store:Safari"])
+    }
+
+    @Test
+    func `automatic web fetch surfaces the original auth error when background browser recovery also fails`()
         async
     {
-        // The ollama.com session cookie rotates independently of the user's signed-in state, so a background
-        // refresh can see the cached cookie go stale even though the user never signed out. Falling through to
-        // a browser read here would just hit BrowserCookieAccessGate's background denial and surface a
-        // misleading "no session cookie / please sign in" error — defer recovery to the next user-initiated
-        // refresh, which already has the explicit-retry path.
+        // When BrowserCookieAccessGate does deny the background attempt (e.g. an un-granted Chromium Keychain
+        // item), fetchBrowser fails too — surface the original, accurate auth error rather than a misleading
+        // "no session cookie" one from the failed recovery attempt.
         let cached = CookieHeaderCache.Entry(
             cookieHeader: "session=expired",
             storedAt: Date(timeIntervalSince1970: 100),
@@ -195,22 +228,19 @@ struct OllamaUsageFetcherRetryMappingTests {
                     },
                     fetchBrowser: {
                         events.append("browser")
-                        return OllamaUsageFetcher.ResolvedCookieFetch(
-                            snapshot: Self.makeSnapshot(sessionUsedPercent: 34),
-                            cookieHeader: "session=fresh",
-                            sourceLabel: "Brave")
+                        throw OllamaUsageError.noSessionCookie
                     },
                     clearCached: { entry in events.append("clear:\(entry.sourceLabel)") },
-                    storeResolved: { resolved in events.append("store:\(resolved.sourceLabel)") })
+                    storeResolved: { _ in events.append("store") })
                 Issue.record("Expected the original auth failure to be re-thrown")
             } catch OllamaUsageError.invalidCredentials {
-                // expected
+                // expected — the original cached-cookie auth error, not noSessionCookie from fetchBrowser
             } catch {
                 Issue.record("Expected invalidCredentials, got \(error)")
             }
         }
 
-        #expect(events == ["cache", "clear:Chrome"])
+        #expect(events == ["cache", "clear:Chrome", "browser"])
     }
 
     @Test

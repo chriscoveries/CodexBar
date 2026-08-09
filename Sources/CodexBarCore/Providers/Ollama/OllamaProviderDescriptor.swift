@@ -172,11 +172,21 @@ struct OllamaStatusFetchStrategy: ProviderFetchStrategy {
                     clearCached(cached)
                     // The ollama.com session cookie rotates independently of the user's signed-in state, so a
                     // background refresh can see a cached cookie go stale even when the user never signed out.
-                    // BrowserCookieAccessGate denies a background browser read (no interactive Keychain prompt
-                    // outside a user-initiated action), so falling through to `fetchBrowser` here would only
-                    // trade this accurate auth error for a misleading "no session cookie" one. Defer recovery
-                    // to the next user-initiated refresh, which already has the explicit-retry path.
-                    guard ProviderInteractionContext.current == .userInitiated else { throw error }
+                    // BrowserCookieAccessGate already gates browser reads on its own no-UI preflight — it does
+                    // NOT always deny a background attempt (Safari never needs Keychain decryption, and a
+                    // Chromium browser with a prior "Always Allow" Keychain grant is also read without a
+                    // prompt) — so still attempt `fetchBrowser` here rather than assuming it will fail. Only
+                    // when that attempt itself fails do we surface the original auth error (not a misleading
+                    // "no session cookie" one) instead of finalizing on a user-initiated refresh's explicit
+                    // opt-in, mirroring the `shouldTryBrowserCandidates` recovery below.
+                    let cachedError = error
+                    do {
+                        let resolved = try await fetchBrowser()
+                        storeResolved(resolved)
+                        return resolved.snapshot
+                    } catch {
+                        throw cachedError
+                    }
                 } else if self.shouldTryBrowserCandidates(afterCachedFailure: error) {
                     let cachedError = error
                     do {
