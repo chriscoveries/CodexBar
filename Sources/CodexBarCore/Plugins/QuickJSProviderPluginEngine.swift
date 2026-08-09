@@ -19,8 +19,19 @@ private enum QuickJSHostFunction: Int32 {
 }
 
 enum QuickJSRuntimeLimits {
-    /// Leave ample native-stack headroom for Swift entry frames and QuickJS's stack-overflow error construction.
-    static let nativeStackSizeBytes = 4 * 1024 * 1024
+    /// The dedicated worker thread's native stack. Sized far above the JavaScript budget so even a deep
+    /// Swift async/test baseline at the point JavaScript begins still leaves several MiB of physical stack.
+    static let nativeStackSizeBytes = 8 * 1024 * 1024
+
+    /// The JavaScript stack budget must sit well below the native stack it runs on, or QuickJS's overflow
+    /// guard fires with too little native headroom left to *construct* the RangeError and the throw path
+    /// itself faults (a hard crash observed only on CI runners with deep baseline frames; the guard is
+    /// unreliable at thin margins — quickjs-ng/zipline#1130 class). Deriving the JS limit as a quarter of
+    /// the actual worker stack makes the invariant hold for any stack size, including deliberately small
+    /// ones, so a misconfigured or starved thread throws cleanly instead of crashing.
+    static func javaScriptStackLimitBytes(workerStackSizeBytes: Int) -> Int {
+        max(64 * 1024, workerStackSizeBytes / 4)
+    }
 }
 
 private func quickJSHostCallback(
@@ -142,7 +153,6 @@ private final class QuickJSPluginValue: ProviderPluginValue {
 
 final class QuickJSProviderPluginEngine: ProviderPluginEngine, @unchecked Sendable {
     static let memoryLimitBytes = 64 * 1024 * 1024
-    static let stackLimitBytes = 1 * 1024 * 1024
 
     static func transpileTypeScript(source: String, sucraseSource: String) throws -> String {
         try QuickJSTypeScriptTranspiler.transpile(source: source, sucraseSource: sucraseSource)
@@ -205,7 +215,9 @@ final class QuickJSProviderPluginEngine: ProviderPluginEngine, @unchecked Sendab
                 throw ProviderPluginError.load("QuickJS could not create a runtime")
             }
             JS_SetMemoryLimit(runtime, Self.memoryLimitBytes)
-            JS_SetMaxStackSize(runtime, Self.stackLimitBytes)
+            JS_SetMaxStackSize(
+                runtime,
+                QuickJSRuntimeLimits.javaScriptStackLimitBytes(workerStackSizeBytes: workerStackSizeBytes))
             guard let context = JS_NewContext(runtime) else {
                 JS_FreeRuntime(runtime)
                 throw ProviderPluginError.load("QuickJS could not create a context")
