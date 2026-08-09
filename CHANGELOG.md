@@ -6,6 +6,8 @@
 - Fireworks: track 30-day rated billing spend with an API key and account slug (#2687). Thanks @x0mh0x!
 
 ### Fixed
+- Claude: stop rotating Claude Code's own refresh-token chain on keychain-only installs — ownership evidence is now tri-state with indeterminate treated as CLI-owned, so delegated refreshes can never invalidate credentials CodexBar cannot read (#2745, refs #2634). Thanks @avenoxai!
+- Plugins: run the QuickJS worker and TypeScript transpiler on Thread subclasses instead of Thread(block:) closures — binaries built with the Xcode 26.3 SDK inferred @MainActor on those blocks, and macOS runtimes that enforce dynamic isolation crashed (SIGTRAP) on the first plugin fetch; this was the deterministic macOS CI shard crash since #2775 and could crash shipped builds at runtime.
 - Plugins: the QuickJS HTTP/cookie bridge now starts a request's per-call timeout when the transport actually begins executing instead of when it is scheduled, so short deadlines (like OpenRouter's one-second key fast join) no longer fire spuriously under CPU load (refs #2778).
 - Codex: preserve recently modified cost-cache sessions across complete local calendar-day windows, avoiding needless rediscovery and rescans (#2764). Thanks @Yuxin-Qiao!
 - Codex: price persisted usage from token classes when reports are read, so a cold rebuild racing the models.dev catalog can no longer permanently bake fallback rates into SQLite (#2772).
@@ -16,6 +18,7 @@
 - Codex: SQLite cost saves no longer rescan every stored row and snapshot per file — baseline counts and file lookups are precomputed once, cutting a large-corpus (1,700+ sessions) save pass from minutes of CPU to seconds (refs #2760).
 - Codex: restore JSON-cache retention semantics lost in the SQLite cutover — discovery pruning now reaches the scanner's round-tripped payload so deleted files stop resurfacing, the row budget never sacrifices in-window or recently active sessions, and fork-parent protection again drops stale lineage-only parents (refs #2760).
 - Codex: the SQLite cost store no longer deletes the whole database on transient failures — lock contention from a concurrent CLI/app writer, disk-full, or a constraint violation now preserve history and only genuine corruption or schema drift triggers a rebuild, which is now logged (refs #2760).
+- Claude: stop rotating Claude Code refresh tokens on keychain-only installs, and unblock refresh after the OAuth token lineage changes (#2745, refs #2689, #2634).
 - Menu: let long metric reset and pace details wrap to two lines instead of truncating, without clipping cached card heights (#2742). Thanks @Yuxin-Qiao!
 - Menu: let compact metric detail and reset rows wrap to a second line instead of truncating, so non-English locales keep the full pace and reset information (refs #2182). Thanks @Yuxin-Qiao!
 - Kimi: use official usage lane names and hide the Code 7-day row only when it duplicates the primary seven-day quota (matching percentage and reset) (#2741). Thanks @Yuxin-Qiao!
