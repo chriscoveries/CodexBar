@@ -534,8 +534,7 @@ struct CLIServeRouterTests {
 
     @Test
     func `serve cache prunes expired config token entries`() async {
-        let wallClock = ServeTestWallClock()
-        let cache = CLIServeResponseCache(wallClock: wallClock.now)
+        let (wallClock, cache) = makeServeTestCache()
 
         _ = await CodexBarCLI.cachedServeResponse(
             key: "usage::old-config",
@@ -655,8 +654,7 @@ struct CLIServeRouterTests {
 
     @Test
     func `serve cache serves last good payload when refresh fails`() async {
-        let wallClock = ServeTestWallClock()
-        let cache = CLIServeResponseCache(wallClock: wallClock.now)
+        let (wallClock, cache) = makeServeTestCache()
         let counter = ServeTestCounter()
 
         let first = await CodexBarCLI.cachedServeResponse(
@@ -763,8 +761,7 @@ struct CLIServeRouterTests {
 
     @Test
     func `cost refresh keeps fresh providers while replacing timed out rows`() async throws {
-        let wallClock = ServeTestWallClock()
-        let cache = CLIServeResponseCache(wallClock: wallClock.now)
+        let (wallClock, cache) = makeServeTestCache()
 
         _ = await CodexBarCLI.cachedServeResponse(
             key: "cost:",
@@ -816,8 +813,7 @@ struct CLIServeRouterTests {
 
     @Test
     func `serve cache replaces only failed provider account rows`() async throws {
-        let wallClock = ServeTestWallClock()
-        let cache = CLIServeResponseCache(wallClock: wallClock.now)
+        let (wallClock, cache) = makeServeTestCache()
 
         _ = await CodexBarCLI.cachedServeResponse(
             key: "usage:",
@@ -860,8 +856,7 @@ struct CLIServeRouterTests {
 
     @Test
     func `serve cache retains newer per-row success across all-error refresh`() async throws {
-        let wallClock = ServeTestWallClock()
-        let cache = CLIServeResponseCache(wallClock: wallClock.now)
+        let (wallClock, cache) = makeServeTestCache()
 
         _ = await CodexBarCLI.cachedServeResponse(
             key: "usage:",
@@ -914,8 +909,7 @@ struct CLIServeRouterTests {
 
     @Test
     func `serve cache fails closed on timeout after merged rows`() async {
-        let wallClock = ServeTestWallClock()
-        let cache = CLIServeResponseCache(wallClock: wallClock.now)
+        let (wallClock, cache) = makeServeTestCache()
 
         _ = await CodexBarCLI.cachedServeResponse(
             key: "usage:",
@@ -963,8 +957,7 @@ struct CLIServeRouterTests {
 
     @Test
     func `serve cache fails closed on timeout after a partial refresh`() async {
-        let wallClock = ServeTestWallClock()
-        let cache = CLIServeResponseCache(wallClock: wallClock.now)
+        let (wallClock, cache) = makeServeTestCache()
 
         _ = await CodexBarCLI.cachedServeResponse(
             key: "usage:",
@@ -1051,8 +1044,7 @@ struct CLIServeRouterTests {
 
     @Test
     func `serve cache preserves newer row when another failed row has no fallback`() async throws {
-        let wallClock = ServeTestWallClock()
-        let cache = CLIServeResponseCache(wallClock: wallClock.now)
+        let (wallClock, cache) = makeServeTestCache()
 
         _ = await CodexBarCLI.cachedServeResponse(
             key: "usage:",
@@ -1100,8 +1092,7 @@ struct CLIServeRouterTests {
 
     @Test
     func `serve cache keeps fresh rows when a failed row has no stale match`() async throws {
-        let wallClock = ServeTestWallClock()
-        let cache = CLIServeResponseCache(wallClock: wallClock.now)
+        let (wallClock, cache) = makeServeTestCache()
 
         _ = await CodexBarCLI.cachedServeResponse(
             key: "usage:",
@@ -1135,8 +1126,7 @@ struct CLIServeRouterTests {
 
     @Test
     func `serve cache does not merge duplicate provider account labels`() async throws {
-        let wallClock = ServeTestWallClock()
-        let cache = CLIServeResponseCache(wallClock: wallClock.now)
+        let (wallClock, cache) = makeServeTestCache()
 
         _ = await CodexBarCLI.cachedServeResponse(
             key: "usage:",
@@ -1182,8 +1172,7 @@ struct CLIServeRouterTests {
 
     @Test
     func `serve cache follows stable account identity across label changes`() async throws {
-        let wallClock = ServeTestWallClock()
-        let cache = CLIServeResponseCache(wallClock: wallClock.now)
+        let (wallClock, cache) = makeServeTestCache()
 
         _ = await CodexBarCLI.cachedServeResponse(
             key: "usage:",
@@ -1215,8 +1204,7 @@ struct CLIServeRouterTests {
 
     @Test
     func `serve cache does not reuse a label for a different account identity`() async throws {
-        let wallClock = ServeTestWallClock()
-        let cache = CLIServeResponseCache(wallClock: wallClock.now)
+        let (wallClock, cache) = makeServeTestCache()
 
         _ = await CodexBarCLI.cachedServeResponse(
             key: "usage:",
@@ -1253,8 +1241,7 @@ struct CLIServeRouterTests {
 
     @Test
     func `serve cache does not use whole fallback after an account switch`() async throws {
-        let wallClock = ServeTestWallClock()
-        let cache = CLIServeResponseCache(wallClock: wallClock.now)
+        let (wallClock, cache) = makeServeTestCache()
 
         _ = await CodexBarCLI.cachedServeResponse(
             key: "usage:",
@@ -1301,8 +1288,7 @@ struct CLIServeRouterTests {
 
     @Test
     func `serve cache prunes accounts absent from a successful snapshot`() async throws {
-        let wallClock = ServeTestWallClock()
-        let cache = CLIServeResponseCache(wallClock: wallClock.now)
+        let (wallClock, cache) = makeServeTestCache()
 
         _ = await CodexBarCLI.cachedServeResponse(
             key: "usage:",
@@ -1345,8 +1331,7 @@ struct CLIServeRouterTests {
 
     @Test
     func `serve cache fails closed when all-error rows have ambiguous identities`() async throws {
-        let wallClock = ServeTestWallClock()
-        let cache = CLIServeResponseCache(wallClock: wallClock.now)
+        let (wallClock, cache) = makeServeTestCache()
 
         _ = await CodexBarCLI.cachedServeResponse(
             key: "usage:",
@@ -1401,8 +1386,7 @@ struct CLIServeRouterTests {
 
     @Test
     func `serve cache does not whole-fallback ambiguous usage after timeout`() async {
-        let wallClock = ServeTestWallClock()
-        let cache = CLIServeResponseCache(wallClock: wallClock.now)
+        let (wallClock, cache) = makeServeTestCache()
 
         _ = await CodexBarCLI.cachedServeResponse(
             key: "usage:",
@@ -1435,8 +1419,7 @@ struct CLIServeRouterTests {
 
     @Test
     func `serve cache mixed identities do not enable timeout fallback`() async {
-        let wallClock = ServeTestWallClock()
-        let cache = CLIServeResponseCache(wallClock: wallClock.now)
+        let (wallClock, cache) = makeServeTestCache()
 
         _ = await CodexBarCLI.cachedServeResponse(
             key: "usage:",
@@ -1659,21 +1642,6 @@ private actor ServeTestCounter {
 
     func current() -> Int {
         self.value
-    }
-}
-
-private final class ServeTestWallClock: @unchecked Sendable {
-    private let lock = NSLock()
-    private var date = Date(timeIntervalSince1970: 1000)
-
-    func now() -> Date {
-        self.lock.withLock { self.date }
-    }
-
-    func advance(by interval: TimeInterval) {
-        self.lock.withLock {
-            self.date = self.date.addingTimeInterval(interval)
-        }
     }
 }
 
