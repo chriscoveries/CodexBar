@@ -139,31 +139,78 @@ struct OllamaUsageFetcherRetryMappingTests {
     }
 
     @Test
-    func `automatic web fetch replaces cached cookie only after authentication failure`() async throws {
+    func `automatic web fetch replaces cached cookie only after authentication failure on a user initiated refresh`()
+        async throws
+    {
         let cached = CookieHeaderCache.Entry(
             cookieHeader: "session=expired",
             storedAt: Date(timeIntervalSince1970: 100),
             sourceLabel: "Chrome")
         var events: [String] = []
 
-        let snapshot = try await OllamaStatusFetchStrategy.fetchAutomatic(
-            cached: cached,
-            fetchCached: { _ in
-                events.append("cache")
-                throw OllamaUsageError.invalidCredentials
-            },
-            fetchBrowser: {
-                events.append("browser")
-                return OllamaUsageFetcher.ResolvedCookieFetch(
-                    snapshot: Self.makeSnapshot(sessionUsedPercent: 34),
-                    cookieHeader: "session=fresh",
-                    sourceLabel: "Brave")
-            },
-            clearCached: { entry in events.append("clear:\(entry.sourceLabel)") },
-            storeResolved: { resolved in events.append("store:\(resolved.sourceLabel)") })
+        let snapshot = try await ProviderInteractionContext.$current.withValue(.userInitiated) {
+            try await OllamaStatusFetchStrategy.fetchAutomatic(
+                cached: cached,
+                fetchCached: { _ in
+                    events.append("cache")
+                    throw OllamaUsageError.invalidCredentials
+                },
+                fetchBrowser: {
+                    events.append("browser")
+                    return OllamaUsageFetcher.ResolvedCookieFetch(
+                        snapshot: Self.makeSnapshot(sessionUsedPercent: 34),
+                        cookieHeader: "session=fresh",
+                        sourceLabel: "Brave")
+                },
+                clearCached: { entry in events.append("clear:\(entry.sourceLabel)") },
+                storeResolved: { resolved in events.append("store:\(resolved.sourceLabel)") })
+        }
 
         #expect(snapshot.sessionUsedPercent == 34)
         #expect(events == ["cache", "clear:Chrome", "browser", "store:Brave"])
+    }
+
+    @Test
+    func `automatic web fetch defers browser recovery to a user initiated refresh after background auth failure`()
+        async
+    {
+        // The ollama.com session cookie rotates independently of the user's signed-in state, so a background
+        // refresh can see the cached cookie go stale even though the user never signed out. Falling through to
+        // a browser read here would just hit BrowserCookieAccessGate's background denial and surface a
+        // misleading "no session cookie / please sign in" error — defer recovery to the next user-initiated
+        // refresh, which already has the explicit-retry path.
+        let cached = CookieHeaderCache.Entry(
+            cookieHeader: "session=expired",
+            storedAt: Date(timeIntervalSince1970: 100),
+            sourceLabel: "Chrome")
+        var events: [String] = []
+
+        await ProviderInteractionContext.$current.withValue(.background) {
+            do {
+                _ = try await OllamaStatusFetchStrategy.fetchAutomatic(
+                    cached: cached,
+                    fetchCached: { _ in
+                        events.append("cache")
+                        throw OllamaUsageError.invalidCredentials
+                    },
+                    fetchBrowser: {
+                        events.append("browser")
+                        return OllamaUsageFetcher.ResolvedCookieFetch(
+                            snapshot: Self.makeSnapshot(sessionUsedPercent: 34),
+                            cookieHeader: "session=fresh",
+                            sourceLabel: "Brave")
+                    },
+                    clearCached: { entry in events.append("clear:\(entry.sourceLabel)") },
+                    storeResolved: { resolved in events.append("store:\(resolved.sourceLabel)") })
+                Issue.record("Expected the original auth failure to be re-thrown")
+            } catch OllamaUsageError.invalidCredentials {
+                // expected
+            } catch {
+                Issue.record("Expected invalidCredentials, got \(error)")
+            }
+        }
+
+        #expect(events == ["cache", "clear:Chrome"])
     }
 
     @Test

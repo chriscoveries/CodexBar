@@ -170,6 +170,13 @@ struct OllamaStatusFetchStrategy: ProviderFetchStrategy {
             } catch {
                 if self.shouldInvalidateCachedCookie(after: error) {
                     clearCached(cached)
+                    // The ollama.com session cookie rotates independently of the user's signed-in state, so a
+                    // background refresh can see a cached cookie go stale even when the user never signed out.
+                    // BrowserCookieAccessGate denies a background browser read (no interactive Keychain prompt
+                    // outside a user-initiated action), so falling through to `fetchBrowser` here would only
+                    // trade this accurate auth error for a misleading "no session cookie" one. Defer recovery
+                    // to the next user-initiated refresh, which already has the explicit-retry path.
+                    guard ProviderInteractionContext.current == .userInitiated else { throw error }
                 } else if self.shouldTryBrowserCandidates(afterCachedFailure: error) {
                     let cachedError = error
                     do {
