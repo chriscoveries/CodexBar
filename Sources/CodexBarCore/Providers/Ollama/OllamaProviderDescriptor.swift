@@ -179,23 +179,15 @@ struct OllamaStatusFetchStrategy: ProviderFetchStrategy {
                     // when that attempt itself fails do we surface the original auth error (not a misleading
                     // "no session cookie" one) instead of finalizing on a user-initiated refresh's explicit
                     // opt-in, mirroring the `shouldTryBrowserCandidates` recovery below.
-                    let cachedError = error
-                    do {
-                        let resolved = try await fetchBrowser()
-                        storeResolved(resolved)
-                        return resolved.snapshot
-                    } catch {
-                        throw cachedError
-                    }
+                    return try await self.fetchBrowserOrRethrow(
+                        originalError: error,
+                        fetchBrowser: fetchBrowser,
+                        storeResolved: storeResolved)
                 } else if self.shouldTryBrowserCandidates(afterCachedFailure: error) {
-                    let cachedError = error
-                    do {
-                        let resolved = try await fetchBrowser()
-                        storeResolved(resolved)
-                        return resolved.snapshot
-                    } catch {
-                        throw cachedError
-                    }
+                    return try await self.fetchBrowserOrRethrow(
+                        originalError: error,
+                        fetchBrowser: fetchBrowser,
+                        storeResolved: storeResolved)
                 } else {
                     throw error
                 }
@@ -205,6 +197,24 @@ struct OllamaStatusFetchStrategy: ProviderFetchStrategy {
         let resolved = try await fetchBrowser()
         storeResolved(resolved)
         return resolved.snapshot
+    }
+
+    /// Attempts browser-cookie recovery after a cached-cookie failure, surfacing the original failure — not
+    /// whatever `fetchBrowser` itself throws — if that attempt also fails. A failed recovery attempt (e.g. no
+    /// browser candidates, or a denied Keychain prompt) is rarely as informative as the failure that triggered
+    /// the recovery in the first place.
+    private static func fetchBrowserOrRethrow(
+        originalError: Error,
+        fetchBrowser: () async throws -> OllamaUsageFetcher.ResolvedCookieFetch,
+        storeResolved: (OllamaUsageFetcher.ResolvedCookieFetch) -> Void) async throws -> OllamaUsageSnapshot
+    {
+        do {
+            let resolved = try await fetchBrowser()
+            storeResolved(resolved)
+            return resolved.snapshot
+        } catch {
+            throw originalError
+        }
     }
 
     static func shouldInvalidateCachedCookie(after error: Error) -> Bool {
