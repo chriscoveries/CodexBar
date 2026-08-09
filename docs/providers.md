@@ -485,6 +485,9 @@ provider-specific cookie validation, endpoints, login detection, and error trans
 - Details: `docs/command-code.md`.
 
 ## ClinePass
+
+ClinePass usage is fetched by the bundled TypeScript plugin on macOS and Linux; QuickJS is the default engine and
+JavaScriptCore is the macOS rollback engine. The committed `.js` is generated from `clinepass.ts`.
 - API key from `~/.codexbar/config.json`, `CLINE_API_KEY`, or `CLINEPASS_API_KEY`.
 - Reads 5-hour, weekly, and monthly usage limits from `GET https://api.cline.bot/api/v1/users/me/plan/usage-limits`.
 - ClinePass subscription limits are distinct from Cline pay-as-you-go balance and usage.
