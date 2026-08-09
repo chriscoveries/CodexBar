@@ -266,6 +266,7 @@ enum TTYProcessTreeTerminator {
 
 private enum TTYCommandRunnerTestingOverrides {
     @TaskLocal static var postDeadlineDrainDuration: TimeInterval?
+    @TaskLocal static var outputLimitBytes: Int?
 }
 
 /// Executes an interactive CLI inside a pseudo-terminal and returns all captured text.
@@ -661,13 +662,14 @@ public struct TTYCommandRunner {
 
         var cleanedUp = false
         var launchedProcess: SpawnedProcessGroup?
+        var didExceedOutputLimit = false
         /// Always tear down the PTY child (and its process group) even if we throw early
         /// while bootstrapping the CLI (e.g. when it prompts for login/telemetry).
         func cleanup() {
             guard !cleanedUp else { return }
             cleanedUp = true
 
-            if let launchedProcess, launchedProcess.isRunning {
+            if !didExceedOutputLimit, let launchedProcess, launchedProcess.isRunning {
                 Self.log.debug("PTY stopping", metadata: ["binary": binaryName])
                 let exitData = Data("/exit\n".utf8)
                 try? writeAllToPrimary(exitData)
@@ -679,8 +681,16 @@ public struct TTYCommandRunner {
                 try? primaryHandle.close()
                 return
             }
-            launchedProcess.terminateSynchronously()
-            try? primaryHandle.close()
+            if didExceedOutputLimit {
+                // Once the bounded buffer overflows, do not spend seconds sweeping every process's
+                // descriptors before signaling. Closing the master unblocks a child stuck writing,
+                // and the scoped abort escalates within its fixed grace window.
+                try? primaryHandle.close()
+                launchedProcess.abortSynchronously()
+            } else {
+                launchedProcess.terminateSynchronously()
+                try? primaryHandle.close()
+            }
             TTYCommandRunnerActiveProcessRegistry.unregister(pid: launchedProcess.pid)
         }
 
@@ -740,8 +750,8 @@ public struct TTYCommandRunner {
         let isCodex = ttyStatusCommand != nil || options.forceCodexStatusMode
         let isCodexStatus = isCodex && trimmed == (ttyStatusCommand ?? "/status")
 
-        var buffer = BoundedOutputBuffer()
-        var didExceedOutputLimit = false
+        let outputLimitBytes = TTYCommandRunnerTestingOverrides.outputLimitBytes ?? BoundedOutputBuffer.defaultMaxBytes
+        var buffer = BoundedOutputBuffer(maxBytes: outputLimitBytes)
 
         func checkOutputLimit() throws {
             if didExceedOutputLimit {
@@ -1175,6 +1185,13 @@ extension TTYCommandRunner {
         operation: () throws -> T) rethrows -> T
     {
         try TTYCommandRunnerTestingOverrides.$postDeadlineDrainDuration.withValue(duration, operation: operation)
+    }
+
+    static func withOutputLimitOverrideForTesting<T>(
+        _ maxBytes: Int,
+        operation: () throws -> T) rethrows -> T
+    {
+        try TTYCommandRunnerTestingOverrides.$outputLimitBytes.withValue(maxBytes, operation: operation)
     }
 
     public static func which(_ tool: String) -> String? {
