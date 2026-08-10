@@ -5,6 +5,63 @@ import Testing
 @Suite(.serialized)
 struct CostUsageCatchUpCompletionTests {
     @Test
+    func `completion reconciliation requires the current scan inventory`() async throws {
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+        let day = try env.makeLocalNoon(year: 2026, month: 5, day: 10)
+        let iso = env.isoString(for: day)
+        for sessionID in ["current-window", "retained-wider-window"] {
+            _ = try env.writeCodexSessionFile(
+                day: day,
+                filename: "\(sessionID).jsonl",
+                contents: [
+                    #"{"type":"session_meta","timestamp":"\#(iso)","payload":{"session_id":"\#(sessionID)"}}"#,
+                    #"{"type":"turn_context","timestamp":"\#(iso)","payload":{"model":"openai/gpt-5.2-codex"}}"#,
+                    #"{"type":"event_msg","timestamp":"\#(iso)","payload":{"type":"token_count","info":"#
+                        + #"{"total_token_usage":{"input_tokens":100,"cached_input_tokens":20,"output_tokens":10},"#
+                        + #""model":"openai/gpt-5.2-codex"}}}"#,
+                ].joined(separator: "\n") + "\n")
+        }
+
+        var options = CostUsageScanner.Options(
+            codexSessionsRoot: env.codexSessionsRoot,
+            claudeProjectsRoots: nil,
+            cacheRoot: env.cacheRoot,
+            codexTraceDatabaseURL: env.root.appendingPathComponent("missing.sqlite"),
+            maxCodexSessionFileBytes: 0,
+            maxCodexScanBytesPerRefresh: 0,
+            maxCodexScanDurationPerRefresh: 60)
+        options.refreshMinIntervalSeconds = 0
+        _ = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day,
+            options: options)
+
+        var staleCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
+        #expect(staleCache.files.count == 2)
+        let currentPath = try #require(staleCache.files.keys.first(where: {
+            $0.hasSuffix("current-window.jsonl")
+        }))
+        staleCache.files.removeValue(forKey: currentPath)
+        staleCache.codexScanInventoryPaths = [currentPath]
+        staleCache.codexScanTotalFiles = 1
+        staleCache.codexScanCompletedFiles = 0
+        staleCache.codexScanProcessedBytes = 0
+        staleCache.codexScanCatchUpPending = true
+        staleCache.codexActiveLookbackState = nil
+
+        CostUsageStoreAccess.replace(cacheRoot: env.cacheRoot, cache: staleCache)
+
+        let retainedPendingCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
+        #expect(retainedPendingCache.files.count == 1)
+        #expect(retainedPendingCache.codexScanCatchUpPending == true)
+        #expect(retainedPendingCache.codexScanCompletedFiles == 0)
+        #expect(await CostUsageStore(cacheRoot: env.cacheRoot).fetchMetadata().catchUpPending)
+    }
+
+    @Test
     func `bounded catch-up clears already complete files from a retained lookback queue`() async throws {
         let env = try CostUsageTestEnvironment()
         defer { env.cleanup() }

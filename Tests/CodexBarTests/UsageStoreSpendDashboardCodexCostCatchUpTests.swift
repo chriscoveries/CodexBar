@@ -180,6 +180,20 @@ struct UsageStoreSpendDashboardCodexCostCatchUpTests {
         store.cancelSpendDashboardCodexCostCatchUp()
     }
 
+    @Test
+    func `stopping an active pass clears a queued restart`() throws {
+        let store = try Self.makeStore(suite: "stop-clears-restart")
+        store.spendDashboardCodexCostCatchUpTask = Task {}
+        store.spendDashboardCodexCostCatchUpPassIsRunning = true
+        store.spendDashboardCodexCostCatchUpRestartRequested = true
+
+        store.stopSpendDashboardCodexCostCatchUp()
+
+        #expect(store.spendDashboardCodexCostCatchUpStopRequested)
+        #expect(!store.spendDashboardCodexCostCatchUpRestartRequested)
+        store.cancelSpendDashboardCodexCostCatchUp()
+    }
+
     private static func makeStore(suite: String) throws -> UsageStore {
         let settings = testSettingsStore(
             suiteName: "UsageStoreSpendDashboardCodexCostCatchUpTests-\(suite)")

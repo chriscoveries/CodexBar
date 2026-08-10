@@ -173,6 +173,7 @@ extension CostUsageStore {
         cache.codexScanTotalBytes = metadata.totalBytes
         cache.codexScanCompletedFiles = metadata.completedFiles
         cache.codexScanTotalFiles = metadata.totalFiles
+        cache.codexScanInventoryPaths = metadata.scanInventoryPaths
         cache.roots = metadata.rootMtimes
         cache.codexProjectMetadataVersion = metadata.projectMetadataVersion
         cache.codexPreviousReport = metadata.previousReportPayload.flatMap {
@@ -345,7 +346,6 @@ extension CostUsageStore {
     }
 
     private static func reconcileCompletedCodexCatchUp(cache: inout CostUsageCache) {
-        var didCompleteLookback = false
         if var lookback = cache.codexActiveLookbackState {
             let cachedFilesByIdentity = cache.files.values.reduce(
                 into: [String: CostUsageFileUsage]())
@@ -387,7 +387,6 @@ extension CostUsageStore {
                 && lookback.pendingFilePaths.isEmpty
                 && lookback.legacyRecursivePendingRootPaths.isEmpty
             cache.codexActiveLookbackState = lookbackIsComplete ? nil : lookback
-            didCompleteLookback = lookbackIsComplete
         }
 
         let discoveryHasPendingWork = cache.codexSessionDiscovery.map {
@@ -396,29 +395,67 @@ extension CostUsageStore {
         let filesHavePendingWork = cache.files.values.contains {
             $0.codexScanComplete == false || $0.hasBufferedCodexForkRetryLines
         }
-        var seenIdentities: Set<String> = []
-        var totalBytes: Int64 = 0
-        for (path, usage) in cache.files {
-            let identity = usage.codexScanFileId ?? path
-            guard seenIdentities.insert(identity).inserted else { continue }
-            totalBytes += max(0, usage.size)
-        }
         let expectedTotalFiles = max(0, cache.codexScanTotalFiles ?? 0)
-        let cacheCoversKnownInventory = expectedTotalFiles > 0
-            && seenIdentities.count >= expectedTotalFiles
-        guard didCompleteLookback || cacheCoversKnownInventory,
-              cache.codexScanCatchUpPending == true,
-              cache.codexActiveLookbackState == nil,
-              !discoveryHasPendingWork,
-              !filesHavePendingWork
+        guard let completedInventory = Self.completedCodexScanInventory(
+            cache: cache,
+            expectedTotalFiles: expectedTotalFiles),
+            cache.codexScanCatchUpPending == true,
+            cache.codexActiveLookbackState == nil,
+            !discoveryHasPendingWork,
+            !filesHavePendingWork
         else { return }
 
         cache.codexScanCatchUpPending = false
-        cache.codexScanProcessedBytes = totalBytes
-        cache.codexScanTotalBytes = totalBytes
-        cache.codexScanCompletedFiles = seenIdentities.count
-        cache.codexScanTotalFiles = seenIdentities.count
+        cache.codexScanProcessedBytes = completedInventory.totalBytes
+        cache.codexScanTotalBytes = completedInventory.totalBytes
+        cache.codexScanCompletedFiles = completedInventory.fileCount
+        cache.codexScanTotalFiles = completedInventory.fileCount
         cache.codexPreviousReport = nil
+    }
+
+    private static func completedCodexScanInventory(
+        cache: CostUsageCache,
+        expectedTotalFiles: Int) -> (fileCount: Int, totalBytes: Int64)?
+    {
+        guard expectedTotalFiles > 0,
+              let inventoryPaths = cache.codexScanInventoryPaths,
+              !inventoryPaths.isEmpty
+        else { return nil }
+
+        let cachedFilesByIdentity = cache.files.values.reduce(
+            into: [String: CostUsageFileUsage]())
+        { result, usage in
+            guard let identity = usage.codexScanFileId else { return }
+            result[identity] = usage
+        }
+        let cachedFilesByNormalizedPath = cache.files.reduce(
+            into: [String: CostUsageFileUsage]())
+        { result, entry in
+            result[Self.normalizedCodexPath(entry.key)] = entry.value
+        }
+
+        var seenIdentities: Set<String> = []
+        var totalBytes: Int64 = 0
+        for path in inventoryPaths {
+            let fileURL = URL(fileURLWithPath: path)
+            let metadata = CostUsageScanner.codexFileMetadata(fileURL: fileURL)
+            guard let fileId = metadata.fileId else { return nil }
+            guard seenIdentities.insert(fileId).inserted else { continue }
+            guard let usage = cache.files[path]
+                ?? cachedFilesByNormalizedPath[Self.normalizedCodexPath(path)]
+                ?? cachedFilesByIdentity[fileId],
+                usage.codexScanComplete != false,
+                !usage.hasBufferedCodexForkRetryLines,
+                Self.matchesCompletedCodexFileSnapshot(
+                    usage: usage,
+                    metadata: metadata,
+                    fileURL: fileURL)
+            else { return nil }
+            totalBytes += max(0, metadata.size)
+        }
+
+        guard seenIdentities.count == expectedTotalFiles else { return nil }
+        return (seenIdentities.count, totalBytes)
     }
 
     private static func matchesCompletedCodexFileSnapshot(
@@ -583,6 +620,7 @@ extension CostUsageStore {
             totalBytes: cache.codexScanTotalBytes,
             completedFiles: cache.codexScanCompletedFiles,
             totalFiles: cache.codexScanTotalFiles,
+            scanInventoryPaths: cache.codexScanInventoryPaths,
             rootMtimes: cache.roots,
             previousReportPayload: cache.codexPreviousReport.flatMap { try? JSONEncoder().encode($0) },
             priorityTurnStatePayload: try? JSONEncoder().encode(priority),

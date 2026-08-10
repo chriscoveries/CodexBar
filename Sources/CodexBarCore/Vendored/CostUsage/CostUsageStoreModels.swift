@@ -176,6 +176,7 @@ struct CostUsageStoreMetadata: Codable, Equatable, Sendable {
     var totalBytes: Int64?
     var completedFiles: Int?
     var totalFiles: Int?
+    var scanInventoryPaths: [String]?
     var rootMtimes: [String: Int64]?
     var previousReportPayload: Data?
     var priorityTurnStatePayload: Data?
@@ -193,6 +194,7 @@ struct CostUsageStoreMetadata: Codable, Equatable, Sendable {
         totalBytes: nil,
         completedFiles: nil,
         totalFiles: nil,
+        scanInventoryPaths: nil,
         rootMtimes: nil,
         previousReportPayload: nil,
         priorityTurnStatePayload: nil,

@@ -88,6 +88,7 @@ extension UsageStore {
     func stopSpendDashboardCodexCostCatchUp() {
         guard self.spendDashboardCodexCostCatchUpTask != nil else { return }
         self.spendDashboardCodexCostCatchUpStopRequested = true
+        self.spendDashboardCodexCostCatchUpRestartRequested = false
         guard !self.spendDashboardCodexCostCatchUpPassIsRunning else { return }
         if let activity = self.spendDashboardCodexCostCatchUpActivity {
             self.spendDashboardCodexCostCatchUpActivity = CodexCostCatchUpActivity(
@@ -104,7 +105,6 @@ extension UsageStore {
         self.spendDashboardCodexCostCatchUpTask = nil
         self.spendDashboardCodexCostCatchUpToken = nil
         self.spendDashboardCodexCostCatchUpScopeSignature = nil
-        self.spendDashboardCodexCostCatchUpRestartRequested = false
     }
 
     func cancelSpendDashboardCodexCostCatchUp() {

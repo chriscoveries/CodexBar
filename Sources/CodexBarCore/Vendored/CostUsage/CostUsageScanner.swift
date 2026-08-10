@@ -4887,6 +4887,7 @@ enum CostUsageScanner {
             cache.codexScanTotalBytes = scanProgress.totalBytes
             cache.codexScanCompletedFiles = scanProgress.completedFiles
             cache.codexScanTotalFiles = scanProgress.totalFiles
+            cache.codexScanInventoryPaths = filePathsInScan.sorted()
             cache.codexSessionDiscovery = fileIndex.persistedState
             let catchUpPending = scanBudget.resumedPartialFileCount > 0
                 || scanBudget.deferredByBudgetFileCount > 0

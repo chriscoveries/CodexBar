@@ -18,6 +18,7 @@ struct CostUsageCache: Codable, @unchecked Sendable {
     var codexScanTotalBytes: Int64?
     var codexScanCompletedFiles: Int?
     var codexScanTotalFiles: Int?
+    var codexScanInventoryPaths: [String]?
     var codexPreviousReport: CostUsageCodexPreviousReport?
     var codexSessionDiscovery: CostUsageCodexSessionDiscovery?
     var codexActiveLookbackState: CostUsageCodexActiveLookbackState?

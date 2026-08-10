@@ -1486,6 +1486,7 @@ extension CostUsageStoreTests {
             totalBytes: 200,
             completedFiles: 2,
             totalFiles: 4,
+            scanInventoryPaths: ["/root/2026/08/01/session.jsonl"],
             rootMtimes: ["/root": 123],
             previousReportPayload: Data([2, 4, 6]),
             priorityTurnStatePayload: Data([1, 3, 5]),
