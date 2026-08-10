@@ -92,6 +92,16 @@ public enum ZaiProviderDescriptor {
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "z.ai cost summary is not supported." }),
+            pace: ProviderPaceCapability(
+                resetWindowPace: .custom { window, _ in
+                    Self.isMonthlyMCPWindow(window)
+                },
+                inferredMonthlyDuration: .custom { window in
+                    Self.isMonthlyMCPWindow(window)
+                },
+                primary: .exact(kind: .session, minutes: 5 * 60),
+                secondary: .exact(kind: .weekly, minutes: 7 * 24 * 60),
+                sessionPaceWindowRule: .windowDuration(minutes: 5 * 60)),
             presentation: ProviderUsagePresentation(
                 extraRateWindowSelector: { snapshot in
                     (snapshot.extraRateWindows ?? []).filter { $0.id == "zai-mcp" }
@@ -108,6 +118,11 @@ public enum ZaiProviderDescriptor {
                 name: "zai",
                 aliases: ["z.ai"],
                 versionDetector: nil))
+    }
+
+    private static func isMonthlyMCPWindow(_ window: RateWindow) -> Bool {
+        window.windowMinutes == ProviderPaceCapability.monthlyWindowSentinelMinutes
+            && window.resetDescription == "MCP"
     }
 
     private static func fetchPlan() -> ProviderFetchPlan {
