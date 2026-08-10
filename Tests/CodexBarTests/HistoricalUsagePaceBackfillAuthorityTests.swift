@@ -493,7 +493,7 @@ extension HistoricalUsagePaceTests {
             windowMinutes: 10080,
             resetsAt: now.addingTimeInterval(4 * 24 * 60 * 60),
             resetDescription: nil)
-        // Barely into the window: below the 3% expected-usage floor, so pace stays unavailable.
+        // Barely into the window: below even the 1% menu-token floor, so pace stays unavailable.
         let tooEarly = RateWindow(
             usedPercent: 1,
             windowMinutes: 10080,
@@ -504,6 +504,42 @@ extension HistoricalUsagePaceTests {
         #expect(store.menuBarLayoutPaceText(provider: .zai, window: reserve, now: now) == "-13%")
         #expect(store.menuBarLayoutPaceText(provider: .zai, window: tooEarly, now: now) == nil)
         #expect(store.menuBarLayoutPaceText(provider: .zai, window: nil, now: now) == nil)
+    }
+
+    @MainActor
+    @Test
+    func `menu bar pace token shows pace inside the early window band`() throws {
+        let suite = "HistoricalUsagePaceTests-menu-bar-early-window-\(UUID().uuidString)"
+        let store = try Self.makeUsageStoreForBackfillTests(
+            suite: suite,
+            historyFileURL: Self.makeTempURL())
+
+        let now = Date(timeIntervalSince1970: 0)
+        // 4 of 168 hours elapsed => 2.38% expected usage, inside the 1-3% band where the menu-bar
+        // token still shows pace but the menu card keeps the 3% floor.
+        let barelyIntoWindow = RateWindow(
+            usedPercent: 5,
+            windowMinutes: 10080,
+            resetsAt: now.addingTimeInterval(7 * 24 * 60 * 60 - 4 * 60 * 60),
+            resetDescription: nil)
+
+        #expect(store.menuBarLayoutPaceText(provider: .zai, window: barelyIntoWindow, now: now) == nil)
+        #expect(store.weeklyPace(provider: .zai, window: barelyIntoWindow, now: now) == nil)
+        #expect(
+            store.menuBarLayoutPaceText(
+                provider: .zai,
+                window: barelyIntoWindow,
+                now: now,
+                minimumExpectedPercent: 1)
+                == "+3%")
+        let pace = try #require(
+            store.weeklyPace(
+                provider: .zai,
+                window: barelyIntoWindow,
+                now: now,
+                minimumExpectedPercent: 1))
+        #expect(abs(pace.expectedUsedPercent - (4.0 / 168.0 * 100.0)) < 0.001)
+        #expect(abs(pace.deltaPercent - (5 - 4.0 / 168.0 * 100.0)) < 0.001)
     }
 
     @MainActor

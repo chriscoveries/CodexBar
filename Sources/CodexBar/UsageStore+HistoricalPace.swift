@@ -3,10 +3,14 @@ import Foundation
 
 @MainActor
 extension UsageStore {
-    private static let minimumPaceExpectedPercent: Double = 3
     private static let backfillMaxTimestampMismatch: TimeInterval = 5 * 60
 
-    func weeklyPace(provider: UsageProvider, window: RateWindow, now: Date = .init()) -> UsagePace? {
+    func weeklyPace(
+        provider: UsageProvider,
+        window: RateWindow,
+        now: Date = .init(),
+        minimumExpectedPercent: Double = 3) -> UsagePace?
+    {
         guard window.remainingPercent > 0 else { return nil }
         let resolved: UsagePace?
         let workDays = self.settings.weeklyProgressWorkDays
@@ -44,7 +48,7 @@ extension UsageStore {
         }
 
         guard let resolved else { return nil }
-        guard resolved.expectedUsedPercent >= Self.minimumPaceExpectedPercent else { return nil }
+        guard resolved.expectedUsedPercent >= minimumExpectedPercent else { return nil }
         return resolved
     }
 
@@ -54,11 +58,18 @@ extension UsageStore {
     func menuBarLayoutPaceText(
         provider: UsageProvider,
         window: RateWindow?,
-        now: Date = .init())
+        now: Date = .init(),
+        minimumExpectedPercent: Double = 3)
         -> String?
     {
         window
-            .flatMap { self.weeklyPace(provider: provider, window: $0, now: now) }
+            .flatMap {
+                self.weeklyPace(
+                    provider: provider,
+                    window: $0,
+                    now: now,
+                    minimumExpectedPercent: minimumExpectedPercent)
+            }
             .flatMap { MenuBarDisplayText.paceText(pace: $0) }
     }
 
