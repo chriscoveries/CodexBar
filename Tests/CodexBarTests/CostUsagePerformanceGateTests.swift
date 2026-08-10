@@ -53,12 +53,10 @@ struct CostUsagePerformanceGateTests {
 
         #expect(saveCounter.value == candidateLimit && loadCounter.value == candidateLimit)
         #expect(firstMetrics.codexFileScanAttempts == candidateLimit)
-        #expect(firstMetrics.codexCandidateSelectionVisits == candidateLimit
-            && firstMetrics.codexProgressAccountingVisits == 0)
+        #expect(firstMetrics.codexLookbackPreparationVisits == candidateLimit)
         #expect(firstMetrics.activeLookbackCompletionCandidates == candidateLimit)
-        #expect(firstCache.files.count == candidateLimit)
+        #expect(firstCache.files.count == candidateLimit && firstCache.codexScanCatchUpPending == true)
         #expect(firstCache.codexActiveLookbackState?.pendingFilePaths.count == corpusSize - candidateLimit)
-        #expect(firstCache.codexScanCatchUpPending == true)
 
         let secondRecorder = CostUsageScanner.CodexScanWorkRecorder()
         options.codexScanWorkRecorderForTesting = secondRecorder
@@ -75,12 +73,14 @@ struct CostUsagePerformanceGateTests {
             "[candidate-selection-proof] first=\(firstCache.files.count), "
                 + "second=\(secondCache.files.count), overlap=\(cachePathOverlap), "
                 + "pending=\(secondCache.codexActiveLookbackState?.pendingFilePaths.count ?? 0), "
+                + "preparation=\(secondMetrics.codexLookbackPreparationVisits), "
                 + "visits=\(secondMetrics.codexCandidateSelectionVisits), "
                 + "attempts=\(secondMetrics.codexFileScanAttempts), "
                 + "accounting=\(secondMetrics.codexProgressAccountingVisits)")
 
         #expect(secondMetrics.codexFileScanAttempts == candidateLimit)
-        #expect(secondMetrics.codexCandidateSelectionVisits == candidateLimit
+        #expect(secondMetrics.codexLookbackPreparationVisits == candidateLimit
+            && secondMetrics.codexCandidateSelectionVisits == candidateLimit
             && secondMetrics.codexProgressAccountingVisits == 0)
         #expect(secondMetrics.activeLookbackCompletionCandidates == candidateLimit)
         #expect(secondCache.files.count == candidateLimit * 2)
