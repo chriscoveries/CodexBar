@@ -53,6 +53,7 @@ enum CostUsageScanner {
         var activeLookbackCompletionCandidates: Int
         var codexCandidateSelectionVisits: Int
         var codexFileScanAttempts: Int
+        var codexProgressAccountingVisits: Int
     }
 
     final class CodexScanWorkRecorder: @unchecked Sendable {
@@ -65,6 +66,7 @@ enum CostUsageScanner {
         private var activeLookbackCompletionCandidates = 0
         private var codexCandidateSelectionVisits = 0
         private var codexFileScanAttempts = 0
+        private var codexProgressAccountingVisits = 0
 
         func record(processed: Int, repriced: Int) {
             self.lock.lock()
@@ -104,6 +106,12 @@ enum CostUsageScanner {
             self.lock.unlock()
         }
 
+        func recordCodexProgressAccountingVisit() {
+            self.lock.lock()
+            self.codexProgressAccountingVisits += 1
+            self.lock.unlock()
+        }
+
         func snapshot() -> CodexScanWorkMetrics {
             self.lock.lock()
             defer { self.lock.unlock() }
@@ -115,7 +123,8 @@ enum CostUsageScanner {
                 cacheAliasCandidatesVisited: self.cacheAliasCandidatesVisited,
                 activeLookbackCompletionCandidates: self.activeLookbackCompletionCandidates,
                 codexCandidateSelectionVisits: self.codexCandidateSelectionVisits,
-                codexFileScanAttempts: self.codexFileScanAttempts)
+                codexFileScanAttempts: self.codexFileScanAttempts,
+                codexProgressAccountingVisits: self.codexProgressAccountingVisits)
         }
     }
 
@@ -4955,21 +4964,29 @@ enum CostUsageScanner {
             cache.codexPricingKey = plan.codexPricingKey
             cache.codexPriorityMetadataKey = plan.codexPriorityMetadataKey
             cache.codexProjectMetadataVersion = Self.codexProjectMetadataVersion
-            let scanProgress = Self.codexScanProgress(paths: filePathsInScan, cache: cache)
+            let hasIncompleteCachedFile = cache.files.values.contains {
+                $0.codexScanComplete == false || $0.hasBufferedCodexForkRetryLines
+            }
+            let hasBoundedWorkPending = scanBudget.resumedPartialFileCount > 0
+                || scanBudget.deferredByBudgetFileCount > 0
+                || scanBudget.deferredByTimeBudgetFileCount > 0
+                || hasIncompleteCachedFile
+                || fileIndex.hasPendingDiscovery
+                || cache.codexActiveLookbackState != nil
+            let finalizedProgress = Self.codexFinalizedScanProgress(
+                paths: filePathsInScan,
+                cache: cache,
+                hasBoundedWorkPending: hasBoundedWorkPending,
+                newlyCompletedFiles: completedScheduledPaths.count,
+                workRecorder: options.codexScanWorkRecorderForTesting)
+            let scanProgress = finalizedProgress.progress
+            let catchUpPending = finalizedProgress.catchUpPending
+            cache.codexScanInventoryPaths = finalizedProgress.inventoryPaths
             cache.codexScanProcessedBytes = scanProgress.processedBytes
             cache.codexScanTotalBytes = scanProgress.totalBytes
             cache.codexScanCompletedFiles = scanProgress.completedFiles
             cache.codexScanTotalFiles = scanProgress.totalFiles
-            cache.codexScanInventoryPaths = filePathsInScan.sorted()
             cache.codexSessionDiscovery = fileIndex.persistedState
-            let catchUpPending = scanBudget.resumedPartialFileCount > 0
-                || scanBudget.deferredByBudgetFileCount > 0
-                || scanBudget.deferredByTimeBudgetFileCount > 0
-                || scanProgress.completedFiles < scanProgress.totalFiles
-                || cache.files.values.contains { $0.codexScanComplete == false }
-                || cache.files.values.contains { $0.hasBufferedCodexForkRetryLines }
-                || fileIndex.hasPendingDiscovery
-                || cache.codexActiveLookbackState != nil
             cache.codexScanCatchUpPending = catchUpPending
             cache.codexPreviousReport = catchUpPending ? previousReport : nil
             if plan.hasPriorityMetadata {
@@ -5011,19 +5028,66 @@ enum CostUsageScanner {
         let totalBytes: Int64
         let completedFiles: Int
         let totalFiles: Int
+        let inventoryPaths: [String]?
+    }
+
+    private static func codexFinalizedScanProgress(
+        paths: Set<String>,
+        cache: CostUsageCache,
+        hasBoundedWorkPending: Bool,
+        newlyCompletedFiles: Int,
+        workRecorder: CodexScanWorkRecorder?)
+        -> (progress: CodexScanProgressSummary, catchUpPending: Bool, inventoryPaths: [String]?)
+    {
+        if hasBoundedWorkPending {
+            let progress = Self.incrementalCodexScanProgress(
+                paths: paths,
+                cache: cache,
+                newlyCompletedFiles: newlyCompletedFiles)
+            // Exact byte totals and inventory identity require visiting every path. Keep them
+            // indeterminate during catch-up so bounded refreshes never hide an unbounded pass.
+            return (progress, true, nil)
+        }
+        let progress = Self.codexScanProgress(paths: paths, cache: cache, workRecorder: workRecorder)
+        let catchUpPending = progress.completedFiles < progress.totalFiles
+        return (progress, catchUpPending, catchUpPending ? nil : progress.inventoryPaths)
+    }
+
+    private static func incrementalCodexScanProgress(
+        paths: Set<String>,
+        cache: CostUsageCache,
+        newlyCompletedFiles: Int) -> CodexScanProgressSummary
+    {
+        let totalFiles = max(max(0, cache.codexScanTotalFiles ?? 0), paths.count)
+        let completedFromPreviousPasses = max(0, cache.codexScanCompletedFiles ?? 0)
+        let completedFromActiveLookback = cache.codexActiveLookbackState.map {
+            max(0, totalFiles - $0.pendingFilePaths.count)
+        } ?? 0
+        let completedFiles = min(
+            totalFiles,
+            max(completedFromActiveLookback, completedFromPreviousPasses + max(0, newlyCompletedFiles)))
+        return CodexScanProgressSummary(
+            processedBytes: 0,
+            totalBytes: 0,
+            completedFiles: completedFiles,
+            totalFiles: totalFiles,
+            inventoryPaths: nil)
     }
 
     private static func codexScanProgress(
         paths: Set<String>,
-        cache: CostUsageCache) -> CodexScanProgressSummary
+        cache: CostUsageCache,
+        workRecorder: CodexScanWorkRecorder?) -> CodexScanProgressSummary
     {
         var processedBytes: Int64 = 0
         var totalBytes: Int64 = 0
         var completedFiles = 0
         var totalFiles = 0
         var seenIdentities: Set<String> = []
+        let inventoryPaths = paths.sorted()
 
-        for path in paths.sorted() {
+        for path in inventoryPaths {
+            workRecorder?.recordCodexProgressAccountingVisit()
             let fileURL = URL(fileURLWithPath: path)
             let metadata = Self.codexFileMetadata(fileURL: fileURL)
             let identity = metadata.fileId ?? fileURL.standardizedFileURL.path
@@ -5051,7 +5115,8 @@ enum CostUsageScanner {
             processedBytes: processedBytes,
             totalBytes: totalBytes,
             completedFiles: completedFiles,
-            totalFiles: totalFiles)
+            totalFiles: totalFiles,
+            inventoryPaths: inventoryPaths)
     }
 
     private static func scanCodexFiles(

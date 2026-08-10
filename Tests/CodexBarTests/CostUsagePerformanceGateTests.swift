@@ -15,7 +15,7 @@ struct CostUsagePerformanceGateTests {
         let env = try CostUsageTestEnvironment()
         defer { env.cleanup() }
         let day = try env.makeLocalNoon(year: 2026, month: 5, day: 10)
-        let corpusSize = 1500
+        let corpusSize = 1500, candidateLimit = CostUsageScanner.codexCatchUpScanCandidateLimit
         _ = try Self.writeSyntheticCodexCorpus(
             env: env,
             day: day,
@@ -51,14 +51,13 @@ struct CostUsagePerformanceGateTests {
         let pendingPaths = firstCache.codexActiveLookbackState?.pendingFilePaths.count ?? 0
         print("[reconcile-proof] save=\(saveCounter.value) load=\(loadCounter.value) pending=\(pendingPaths)")
 
-        #expect(saveCounter.value == CostUsageScanner.codexCatchUpScanCandidateLimit
-            && loadCounter.value == CostUsageScanner.codexCatchUpScanCandidateLimit)
-        #expect(firstMetrics.codexFileScanAttempts == CostUsageScanner.codexCatchUpScanCandidateLimit)
-        #expect(firstMetrics.codexCandidateSelectionVisits == CostUsageScanner.codexCatchUpScanCandidateLimit)
-        #expect(firstMetrics.activeLookbackCompletionCandidates == CostUsageScanner.codexCatchUpScanCandidateLimit)
-        #expect(firstCache.files.count == CostUsageScanner.codexCatchUpScanCandidateLimit)
-        #expect(firstCache.codexActiveLookbackState?.pendingFilePaths.count
-            == corpusSize - CostUsageScanner.codexCatchUpScanCandidateLimit)
+        #expect(saveCounter.value == candidateLimit && loadCounter.value == candidateLimit)
+        #expect(firstMetrics.codexFileScanAttempts == candidateLimit)
+        #expect(firstMetrics.codexCandidateSelectionVisits == candidateLimit
+            && firstMetrics.codexProgressAccountingVisits == 0)
+        #expect(firstMetrics.activeLookbackCompletionCandidates == candidateLimit)
+        #expect(firstCache.files.count == candidateLimit)
+        #expect(firstCache.codexActiveLookbackState?.pendingFilePaths.count == corpusSize - candidateLimit)
         #expect(firstCache.codexScanCatchUpPending == true)
 
         let secondRecorder = CostUsageScanner.CodexScanWorkRecorder()
@@ -77,14 +76,15 @@ struct CostUsagePerformanceGateTests {
                 + "second=\(secondCache.files.count), overlap=\(cachePathOverlap), "
                 + "pending=\(secondCache.codexActiveLookbackState?.pendingFilePaths.count ?? 0), "
                 + "visits=\(secondMetrics.codexCandidateSelectionVisits), "
-                + "attempts=\(secondMetrics.codexFileScanAttempts)")
+                + "attempts=\(secondMetrics.codexFileScanAttempts), "
+                + "accounting=\(secondMetrics.codexProgressAccountingVisits)")
 
-        #expect(secondMetrics.codexFileScanAttempts == CostUsageScanner.codexCatchUpScanCandidateLimit)
-        #expect(secondMetrics.codexCandidateSelectionVisits == CostUsageScanner.codexCatchUpScanCandidateLimit)
-        #expect(secondMetrics.activeLookbackCompletionCandidates == CostUsageScanner.codexCatchUpScanCandidateLimit)
-        #expect(secondCache.files.count == CostUsageScanner.codexCatchUpScanCandidateLimit * 2)
-        #expect(secondCache.codexActiveLookbackState?.pendingFilePaths.count
-            == corpusSize - CostUsageScanner.codexCatchUpScanCandidateLimit * 2)
+        #expect(secondMetrics.codexFileScanAttempts == candidateLimit)
+        #expect(secondMetrics.codexCandidateSelectionVisits == candidateLimit
+            && secondMetrics.codexProgressAccountingVisits == 0)
+        #expect(secondMetrics.activeLookbackCompletionCandidates == candidateLimit)
+        #expect(secondCache.files.count == candidateLimit * 2)
+        #expect(secondCache.codexActiveLookbackState?.pendingFilePaths.count == corpusSize - candidateLimit * 2)
     }
 
     @Test
