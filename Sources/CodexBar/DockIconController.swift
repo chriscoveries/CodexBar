@@ -98,8 +98,10 @@ final class DockIconController: NSObject {
     }
 
     func registerSettingsWindow(_ window: NSWindow) {
+        SettingsWindowStageBehavior.applyCollectionBehavior(window)
         guard self.settingsWindow !== window else { return }
         self.settingsWindow = window
+        SettingsWindowStageBehavior.present(window)
         self.reevaluatePolicy()
     }
 
@@ -131,6 +133,16 @@ final class DockIconController: NSObject {
         if !presentedWindowIDs.isEmpty {
             self.isAwaitingPresentedWindow = false
             self.ensureRegularPolicy(activate: hasNewPresentedWindow)
+            if hasNewPresentedWindow {
+                for item in describedWindows where presentedWindowIDs.contains(ObjectIdentifier(item.window)) {
+                    guard DockIconPolicyDecision.shouldPromoteForPresentedWindow(item.descriptor) else { continue }
+                    if item.descriptor.isSettingsWindow {
+                        SettingsWindowStageBehavior.present(item.window)
+                    } else {
+                        item.window.makeKeyAndOrderFront(nil)
+                    }
+                }
+            }
         }
 
         guard self.isManagingRegularPolicy, !self.isAwaitingPresentedWindow else { return }
