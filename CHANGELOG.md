@@ -5,6 +5,7 @@
 ### Fixed
 - PTY probes: bound hard-stop latency while still cleaning session-escaped output holders.
 - Cost history: honor the preferred display currency throughout the detail chart and refresh converted labels when exchange rates change (#2887). Thanks @vAhyThe!
+- Codex: preserve requested Spend Dashboard history when the local cost cache exceeds its byte budget, rather than deleting in-window sessions or repeatedly rebuilding protected data (#2823). Thanks @WillStark for the report and @Whiteknight07 for the initial fix!
 
 ## 0.49.3 — 2026-08-12
 
