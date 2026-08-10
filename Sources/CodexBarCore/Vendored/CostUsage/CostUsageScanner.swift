@@ -2510,7 +2510,14 @@ enum CostUsageScanner {
             return preferNewest ? self.sortedCodexSessionFilesNewestFirst(files) : files
         }
 
+        let pendingLookbackPaths = Set(activeLookbackState.pendingFilePaths)
         let candidates = files.filter { fileURL in
+            // A cache written by an older scanner can retain an already-complete file in the
+            // active-lookback queue. Schedule that cheap cache hit once so finalization can
+            // acknowledge it; filtering it out here leaves catch-up pending forever at 100%.
+            if pendingLookbackPaths.contains(Self.codexResolvedPath(fileURL)) {
+                return true
+            }
             guard let usage = cache.files[fileURL.path] else { return true }
             return usage.codexScanComplete == false || usage.hasBufferedCodexForkRetryLines
         }
