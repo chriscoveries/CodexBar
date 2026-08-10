@@ -44,6 +44,7 @@ struct CostUsagePerformanceGateTests {
         let firstCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
 
         #expect(firstMetrics.codexFileScanAttempts == CostUsageScanner.codexCatchUpScanCandidateLimit)
+        #expect(firstMetrics.codexCandidateSelectionVisits == CostUsageScanner.codexCatchUpScanCandidateLimit)
         #expect(firstMetrics.activeLookbackCompletionCandidates == CostUsageScanner.codexCatchUpScanCandidateLimit)
         #expect(firstCache.files.count == CostUsageScanner.codexCatchUpScanCandidateLimit)
         #expect(firstCache.codexActiveLookbackState?.pendingFilePaths.count
@@ -60,8 +61,16 @@ struct CostUsagePerformanceGateTests {
             options: options)
         let secondMetrics = secondRecorder.snapshot()
         let secondCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
+        let cachePathOverlap = Set(firstCache.files.keys).intersection(secondCache.files.keys).count
+        print(
+            "[candidate-selection-proof] first=\(firstCache.files.count), "
+                + "second=\(secondCache.files.count), overlap=\(cachePathOverlap), "
+                + "pending=\(secondCache.codexActiveLookbackState?.pendingFilePaths.count ?? 0), "
+                + "visits=\(secondMetrics.codexCandidateSelectionVisits), "
+                + "attempts=\(secondMetrics.codexFileScanAttempts)")
 
         #expect(secondMetrics.codexFileScanAttempts == CostUsageScanner.codexCatchUpScanCandidateLimit)
+        #expect(secondMetrics.codexCandidateSelectionVisits == CostUsageScanner.codexCatchUpScanCandidateLimit)
         #expect(secondMetrics.activeLookbackCompletionCandidates == CostUsageScanner.codexCatchUpScanCandidateLimit)
         #expect(secondCache.files.count == CostUsageScanner.codexCatchUpScanCandidateLimit * 2)
         #expect(secondCache.codexActiveLookbackState?.pendingFilePaths.count

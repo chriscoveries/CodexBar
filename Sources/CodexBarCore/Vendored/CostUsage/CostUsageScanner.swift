@@ -51,6 +51,7 @@ enum CostUsageScanner {
         var cacheAliasLookups: Int
         var cacheAliasCandidatesVisited: Int
         var activeLookbackCompletionCandidates: Int
+        var codexCandidateSelectionVisits: Int
         var codexFileScanAttempts: Int
     }
 
@@ -62,6 +63,7 @@ enum CostUsageScanner {
         private var cacheAliasLookups = 0
         private var cacheAliasCandidatesVisited = 0
         private var activeLookbackCompletionCandidates = 0
+        private var codexCandidateSelectionVisits = 0
         private var codexFileScanAttempts = 0
 
         func record(processed: Int, repriced: Int) {
@@ -90,6 +92,12 @@ enum CostUsageScanner {
             self.lock.unlock()
         }
 
+        func recordCodexCandidateSelectionVisit() {
+            self.lock.lock()
+            self.codexCandidateSelectionVisits += 1
+            self.lock.unlock()
+        }
+
         func recordCodexFileScanAttempt() {
             self.lock.lock()
             self.codexFileScanAttempts += 1
@@ -106,6 +114,7 @@ enum CostUsageScanner {
                 cacheAliasLookups: self.cacheAliasLookups,
                 cacheAliasCandidatesVisited: self.cacheAliasCandidatesVisited,
                 activeLookbackCompletionCandidates: self.activeLookbackCompletionCandidates,
+                codexCandidateSelectionVisits: self.codexCandidateSelectionVisits,
                 codexFileScanAttempts: self.codexFileScanAttempts)
         }
     }
@@ -2486,6 +2495,7 @@ enum CostUsageScanner {
         state: inout CostUsageCodexActiveLookbackState,
         roots: [URL],
         seenPaths: inout Set<String>,
+        fileURLsByPathKey: inout [String: URL],
         files: inout [URL])
     {
         state.pendingFilePaths = state.pendingFilePaths.filter { path in
@@ -2495,37 +2505,92 @@ enum CostUsageScanner {
             let fileURL = URL(fileURLWithPath: path)
             let pathKey = Self.codexPathKey(fileURL)
             guard seenPaths.insert(pathKey).inserted else { continue }
+            fileURLsByPathKey[pathKey] = fileURL
             files.append(fileURL)
         }
     }
 
+    private struct CodexRefreshCandidateSelectionContext {
+        let cache: CostUsageCache
+        let fileURLsByPathKey: [String: URL]
+        let shouldBoundCatchUp: Bool
+        let preferNewest: Bool
+        let workRecorder: CodexScanWorkRecorder?
+    }
+
     private static func codexFilesScheduledForRefresh(
         _ files: [URL],
-        cache: CostUsageCache,
         activeLookbackState: inout CostUsageCodexActiveLookbackState,
-        shouldBoundCatchUp: Bool,
-        preferNewest: Bool) -> [URL]
+        context: CodexRefreshCandidateSelectionContext) -> [URL]
     {
-        guard shouldBoundCatchUp else {
-            return preferNewest ? self.sortedCodexSessionFilesNewestFirst(files) : files
+        guard context.shouldBoundCatchUp else {
+            return context.preferNewest ? self.sortedCodexSessionFilesNewestFirst(files) : files
         }
 
-        let pendingLookbackPaths = Set(activeLookbackState.pendingFilePaths)
-        let candidates = files.filter { fileURL in
-            // A cache written by an older scanner can retain an already-complete file in the
-            // active-lookback queue. Schedule that cheap cache hit once so finalization can
-            // acknowledge it; filtering it out here leaves catch-up pending forever at 100%.
-            if pendingLookbackPaths.contains(Self.codexResolvedPath(fileURL)) {
-                return true
-            }
-            guard let usage = cache.files[fileURL.path] else { return true }
-            return usage.codexScanComplete == false || usage.hasBufferedCodexForkRetryLines
+        let candidateLimit = Self.codexCatchUpScanCandidateLimit
+        var candidates: [URL] = []
+        candidates.reserveCapacity(candidateLimit)
+        var selectedPathKeys: Set<String> = []
+        var selectionVisits = 0
+
+        func beginSelectionVisit() -> Bool {
+            guard selectionVisits < candidateLimit else { return false }
+            selectionVisits += 1
+            context.workRecorder?.recordCodexCandidateSelectionVisit()
+            return true
         }
-        let bounded = preferNewest
-            ? candidates.suffix(Self.codexCatchUpScanCandidateLimit)
-            : candidates.prefix(Self.codexCatchUpScanCandidateLimit)
+
+        func appendPendingCandidate(path: String) {
+            let pendingURL = URL(fileURLWithPath: path)
+            let pathKey = Self.codexPathKey(pendingURL)
+            guard selectedPathKeys.insert(pathKey).inserted else { return }
+            guard beginSelectionVisit() else { return }
+            candidates.append(context.fileURLsByPathKey[pathKey] ?? pendingURL)
+        }
+
+        // A cache written by an older scanner can retain an already-complete file in the
+        // active-lookback queue. Schedule that cheap cache hit once so finalization can
+        // acknowledge it; filtering it out here leaves catch-up pending forever at 100%.
+        let pendingPaths = activeLookbackState.pendingFilePaths
+        if context.preferNewest {
+            for path in pendingPaths.reversed() {
+                appendPendingCandidate(path: path)
+                if selectionVisits == candidateLimit { break }
+            }
+        } else {
+            for path in pendingPaths {
+                appendPendingCandidate(path: path)
+                if selectionVisits == candidateLimit { break }
+            }
+        }
+
+        func appendDirtyCandidate(_ fileURL: URL) {
+            let pathKey = Self.codexPathKey(fileURL)
+            guard selectedPathKeys.insert(pathKey).inserted else { return }
+            guard beginSelectionVisit() else { return }
+            if let usage = context.cache.files[fileURL.path],
+               usage.codexScanComplete != false,
+               !usage.hasBufferedCodexForkRetryLines
+            {
+                return
+            }
+            candidates.append(fileURL)
+        }
+
+        if context.preferNewest {
+            for fileURL in files.reversed() {
+                appendDirtyCandidate(fileURL)
+                if selectionVisits == candidateLimit { break }
+            }
+        } else {
+            for fileURL in files {
+                appendDirtyCandidate(fileURL)
+                if selectionVisits == candidateLimit { break }
+            }
+        }
+
         var missingPaths: Set<String> = []
-        let existing = bounded.filter { fileURL in
+        let existing = candidates.filter { fileURL in
             let exists = FileManager.default.fileExists(atPath: fileURL.path)
             if !exists {
                 missingPaths.insert(fileURL.path)
@@ -2536,7 +2601,7 @@ enum CostUsageScanner {
             activeLookbackState.pendingFilePaths.removeAll { missingPaths.contains($0) }
         }
         let scheduled = Array(existing)
-        return preferNewest ? self.sortedCodexSessionFilesNewestFirst(scheduled) : scheduled
+        return context.preferNewest ? self.sortedCodexSessionFilesNewestFirst(scheduled) : scheduled
     }
 
     private static func finalizedCodexActiveLookbackState(
@@ -4703,6 +4768,7 @@ enum CostUsageScanner {
                 scanSinceKey: range.scanSinceKey,
                 includeLegacyRecursiveScan: shouldRunColdCacheLookback)
             var seenPaths: Set<String> = []
+            var fileURLsByPathKey: [String: URL] = [:]
             var files: [URL] = []
             for root in plan.roots {
                 let rootFiles = Self.listCodexSessionFiles(
@@ -4711,9 +4777,10 @@ enum CostUsageScanner {
                     scanUntilKey: range.scanUntilKey,
                     includeRecursive: options.forceRescan,
                     calendar: options.calendar)
-                for fileURL in rootFiles.sorted(by: { $0.path < $1.path })
-                    where seenPaths.insert(Self.codexPathKey(fileURL)).inserted
-                {
+                for fileURL in rootFiles.sorted(by: { $0.path < $1.path }) {
+                    let pathKey = Self.codexPathKey(fileURL)
+                    guard seenPaths.insert(pathKey).inserted else { continue }
+                    fileURLsByPathKey[pathKey] = fileURL
                     files.append(fileURL)
                 }
 
@@ -4740,6 +4807,7 @@ enum CostUsageScanner {
                 state: &activeLookbackState,
                 roots: plan.roots,
                 seenPaths: &seenPaths,
+                fileURLsByPathKey: &fileURLsByPathKey,
                 files: &files)
 
             for fileURL in Self.cachedCodexSessionFiles(
@@ -4749,7 +4817,9 @@ enum CostUsageScanner {
                 excludingPaths: seenPaths)
                 .sorted(by: { $0.path < $1.path })
             {
-                seenPaths.insert(Self.codexPathKey(fileURL))
+                let pathKey = Self.codexPathKey(fileURL)
+                seenPaths.insert(pathKey)
+                fileURLsByPathKey[pathKey] = fileURL
                 files.append(fileURL)
             }
 
@@ -4761,10 +4831,13 @@ enum CostUsageScanner {
                     || cache.codexActiveLookbackState != nil)
             let filesScheduledForRefresh = Self.codexFilesScheduledForRefresh(
                 files,
-                cache: cache,
                 activeLookbackState: &activeLookbackState,
-                shouldBoundCatchUp: shouldBoundCatchUp,
-                preferNewest: options.preferNewestCodexSessionsFirst)
+                context: CodexRefreshCandidateSelectionContext(
+                    cache: cache,
+                    fileURLsByPathKey: fileURLsByPathKey,
+                    shouldBoundCatchUp: shouldBoundCatchUp,
+                    preferNewest: options.preferNewestCodexSessionsFirst,
+                    workRecorder: options.codexScanWorkRecorderForTesting))
             let fileIndex = CodexSessionFileIndex(
                 files: files,
                 roots: plan.roots,
