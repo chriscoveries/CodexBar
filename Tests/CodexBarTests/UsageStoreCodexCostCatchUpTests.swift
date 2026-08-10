@@ -205,6 +205,20 @@ struct UsageStoreCodexCostCatchUpTests {
         #expect(store.codexCostCatchUpActivity?.fractionCompleted == 0.5)
     }
 
+    @Test
+    func `stopping an active pass clears a queued restart`() throws {
+        let store = try Self.makeStore(suite: "stop-clears-restart")
+        store.codexCostCatchUpTask = Task {}
+        store.codexCostCatchUpPassIsRunning = true
+        store.codexCostCatchUpRestartRequested = true
+
+        store.stopCodexCostCatchUp()
+
+        #expect(store.codexCostCatchUpStopRequested)
+        #expect(!store.codexCostCatchUpRestartRequested)
+        store.cancelCodexCostCatchUp()
+    }
+
     private static func makeStore(suite: String) throws -> UsageStore {
         let settings = testSettingsStore(suiteName: "UsageStoreCodexCostCatchUpTests-\(suite)")
         settings.costUsageEnabled = true
