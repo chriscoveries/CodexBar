@@ -80,5 +80,38 @@ struct CostUsageCatchUpCompletionTests {
         #expect(completedCache.codexScanCatchUpPending == false)
         #expect(completedCache.files.count == 1)
         #expect(completedCache.files.values.first?.codexScanComplete == true)
+
+        var staleProgressCache = completedCache
+        var staleProgressUsage = try #require(staleProgressCache.files[path])
+        staleProgressUsage.codexScanFileId = "0:\(inode)"
+        staleProgressCache.files[path] = staleProgressUsage
+        staleProgressCache.codexActiveLookbackState = nil
+        staleProgressCache.codexScanCatchUpPending = true
+        staleProgressCache.codexScanProcessedBytes = 0
+        staleProgressCache.codexScanCompletedFiles = 0
+        CostUsageStoreAccess.replace(cacheRoot: env.cacheRoot, cache: staleProgressCache)
+        let handle = try FileHandle(forWritingTo: URL(fileURLWithPath: path))
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data("\n".utf8))
+        try handle.close()
+
+        let normalizedCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
+        #expect(normalizedCache.files[path]?.codexScanFileId == currentIdentity)
+        #expect(normalizedCache.files[path]?.codexScanComplete == false)
+
+        let normalizedRecorder = CostUsageScanner.CodexScanWorkRecorder()
+        options.codexScanWorkRecorderForTesting = normalizedRecorder
+        _ = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day.addingTimeInterval(2),
+            options: options)
+
+        let normalizedCompletedCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
+        #expect(normalizedRecorder.snapshot().codexFileScanAttempts == 1)
+        #expect(normalizedCompletedCache.codexScanCatchUpPending == false)
+        #expect(normalizedCompletedCache.codexScanProcessedBytes == normalizedCompletedCache.codexScanTotalBytes)
+        #expect(normalizedCompletedCache.codexScanCompletedFiles == normalizedCompletedCache.codexScanTotalFiles)
     }
 }

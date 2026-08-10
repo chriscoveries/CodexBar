@@ -147,6 +147,16 @@ extension CostUsageStore {
         var canReuseRows: Bool
     }
 
+    private struct CurrentCodexRootDevice {
+        var path: String
+        var device: String
+    }
+
+    private struct RestoredCodexScanState {
+        var identity: String?
+        var isComplete: Bool
+    }
+
     private static func cache(from snapshot: CostUsageStoreSnapshot) -> CostUsageCache {
         var cache = CostUsageCache()
         let metadata = snapshot.metadata
@@ -181,6 +191,11 @@ extension CostUsageStore {
         let lineageByPath = Dictionary(uniqueKeysWithValues: snapshot.forkLineage.map { ($0.path, $0) })
         let buffersByPath = Dictionary(grouping: snapshot.bufferedLines, by: \.path)
         let accumulatorByPath = Dictionary(uniqueKeysWithValues: snapshot.accumulators.map { ($0.path, $0) })
+        let currentRootDevices = Self.currentCodexRootDevices(rootMtimes: metadata.rootMtimes)
+        let shouldValidateMigratedFiles = snapshot.files.contains { file in
+            Self.normalizedCodexFileIdentity(file: file, currentRootDevices: currentRootDevices)
+                != file.scanState.fileIdentity
+        }
 
         for file in snapshot.files {
             guard let detailsData = file.scanState.detailsPayload,
@@ -195,6 +210,10 @@ extension CostUsageStore {
             let lineage = lineageByPath[file.path]
             let accumulator = accumulatorByPath[file.path]
             let buffers = buffersByPath[file.path] ?? []
+            let restoredScanState = Self.restoredCodexScanState(
+                file: file,
+                currentRootDevices: currentRootDevices,
+                validateMetadata: shouldValidateMigratedFiles)
             let usage = CostUsageFileUsage(
                 mtimeUnixMs: file.mtimeUnixMs,
                 size: file.size,
@@ -238,9 +257,9 @@ extension CostUsageStore {
                         sha256: $0.sha256)
                 },
                 claudeRows: nil,
-                codexScanFileId: file.scanState.fileIdentity,
+                codexScanFileId: restoredScanState.identity,
                 codexScanTargetSize: file.scanState.targetSize,
-                codexScanComplete: file.scanState.isComplete,
+                codexScanComplete: restoredScanState.isComplete,
                 codexJSONLResumeState: file.scanState.resumePayload.flatMap {
                     try? JSONDecoder().decode(CostUsageJsonl.ResumeState.self, from: $0)
                 },
@@ -251,6 +270,76 @@ extension CostUsageStore {
         Self.reconcileCompletedCodexCatchUp(cache: &cache)
         cache.days = Self.days(from: snapshot.dayAggregates)
         return cache
+    }
+
+    private static func currentCodexRootDevices(
+        rootMtimes: [String: Int64]?) -> [CurrentCodexRootDevice]
+    {
+        (rootMtimes ?? [:]).keys.compactMap { path in
+            let rootURL = URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
+            let metadata = CostUsageScanner.codexFileMetadata(fileURL: rootURL)
+            guard let device = Self.device(from: metadata.fileId) else { return nil }
+            return CurrentCodexRootDevice(path: Self.normalizedCodexPath(rootURL.path), device: device)
+        }.sorted { $0.path.count > $1.path.count }
+    }
+
+    private static func normalizedCodexFileIdentity(
+        file: CostUsageStoreFile,
+        currentRootDevices: [CurrentCodexRootDevice]) -> String?
+    {
+        guard let identity = file.scanState.fileIdentity,
+              let inode = Self.inode(from: identity)
+        else { return file.scanState.fileIdentity }
+        if let persistedInode = file.inode, persistedInode != inode {
+            return identity
+        }
+        let filePath = Self.normalizedCodexPath(file.path)
+        guard let root = currentRootDevices.first(where: { root in
+            if filePath == root.path {
+                return true
+            }
+            let prefix = root.path.hasSuffix("/") ? root.path : root.path + "/"
+            return filePath.hasPrefix(prefix)
+        }) else { return identity }
+        return "\(root.device):\(inode)"
+    }
+
+    private static func restoredCodexScanState(
+        file: CostUsageStoreFile,
+        currentRootDevices: [CurrentCodexRootDevice],
+        validateMetadata: Bool) -> RestoredCodexScanState
+    {
+        let identity = Self.normalizedCodexFileIdentity(
+            file: file,
+            currentRootDevices: currentRootDevices)
+        guard validateMetadata else {
+            return RestoredCodexScanState(identity: identity, isComplete: file.scanState.isComplete)
+        }
+
+        let fileURL = URL(fileURLWithPath: file.path)
+        let metadata = CostUsageScanner.codexFileMetadata(fileURL: fileURL)
+        guard let currentIdentity = metadata.fileId else {
+            return RestoredCodexScanState(identity: identity, isComplete: file.scanState.isComplete)
+        }
+        let metadataIsUnchanged = identity == currentIdentity
+            && file.mtimeUnixMs == metadata.mtimeUnixMs
+            && file.size == metadata.size
+        if metadataIsUnchanged {
+            return RestoredCodexScanState(identity: identity, isComplete: file.scanState.isComplete)
+        }
+
+        let isAppend = identity == currentIdentity && metadata.size > file.size
+        return RestoredCodexScanState(
+            identity: isAppend ? identity : nil,
+            isComplete: false)
+    }
+
+    private static func normalizedCodexPath(_ path: String) -> String {
+        let path = URL(fileURLWithPath: path).standardizedFileURL.path
+        if path.hasPrefix("/private/var/") {
+            return String(path.dropFirst("/private".count))
+        }
+        return path
     }
 
     private static func reconcileCompletedCodexCatchUp(cache: inout CostUsageCache) {
@@ -803,6 +892,10 @@ extension CostUsageStore {
 
     private static func inode(from identity: String?) -> Int64? {
         identity?.split(separator: ":").last.flatMap { Int64($0) }
+    }
+
+    private static func device(from identity: String?) -> String? {
+        identity?.split(separator: ":", maxSplits: 1).first.map(String.init)
     }
 
     private static func totals(_ value: CostUsageCodexTotals?) -> CostUsageStoreTotals? {
