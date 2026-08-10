@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.49.2 — Unreleased
+## 0.49.2 — 2026-08-10
 
 ### Fixed
 - Plugins: honor the “Usage bars fill” remaining/used setting in user-installed provider cards, keeping percentage labels and bar direction aligned (#2749). Thanks @RyloRiz!
