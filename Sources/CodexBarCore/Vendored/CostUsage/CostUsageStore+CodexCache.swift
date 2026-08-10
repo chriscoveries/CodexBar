@@ -64,6 +64,8 @@ extension CostUsageStore {
         rowBudget: Int = CostUsageStore.defaultRowBudget,
         fileBudgetBytes: Int64 = CostUsageStore.defaultFileBudgetBytes) -> CostUsageStoreBudgetResult
     {
+        var cache = cache
+        Self.reconcileCompletedCodexCatchUp(cache: &cache)
         let previous = self.readSnapshot()
         let canReuseStoredRows = previous.metadata.timeZoneIdentifier == calendar.timeZone.identifier
         let previousFilesByPath = Dictionary(uniqueKeysWithValues: previous.files.map { ($0.path, $0) })
@@ -394,13 +396,6 @@ extension CostUsageStore {
         let filesHavePendingWork = cache.files.values.contains {
             $0.codexScanComplete == false || $0.hasBufferedCodexForkRetryLines
         }
-        guard didCompleteLookback,
-              cache.codexScanCatchUpPending == true,
-              cache.codexActiveLookbackState == nil,
-              !discoveryHasPendingWork,
-              !filesHavePendingWork
-        else { return }
-
         var seenIdentities: Set<String> = []
         var totalBytes: Int64 = 0
         for (path, usage) in cache.files {
@@ -408,6 +403,16 @@ extension CostUsageStore {
             guard seenIdentities.insert(identity).inserted else { continue }
             totalBytes += max(0, usage.size)
         }
+        let expectedTotalFiles = max(0, cache.codexScanTotalFiles ?? 0)
+        let cacheCoversKnownInventory = expectedTotalFiles > 0
+            && seenIdentities.count >= expectedTotalFiles
+        guard didCompleteLookback || cacheCoversKnownInventory,
+              cache.codexScanCatchUpPending == true,
+              cache.codexActiveLookbackState == nil,
+              !discoveryHasPendingWork,
+              !filesHavePendingWork
+        else { return }
+
         cache.codexScanCatchUpPending = false
         cache.codexScanProcessedBytes = totalBytes
         cache.codexScanTotalBytes = totalBytes

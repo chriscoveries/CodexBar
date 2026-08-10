@@ -22,7 +22,13 @@ extension UsageStore {
         if self.codexCostCatchUpTask != nil,
            self.codexCostCatchUpScopeSignature == scopeSignature
         {
-            guard self.codexCostCatchUpMode != mode else { return }
+            if self.codexCostCatchUpMode == mode {
+                // Hydration can observe a complete cache while the foreground refresh that follows it
+                // creates new tail work. Keep one restart queued so that refresh cannot lose the race
+                // with the existing task's completion cleanup.
+                self.codexCostCatchUpRestartRequested = true
+                return
+            }
             self.codexCostCatchUpMode = mode
             // Never cancel a pass while it may be committing a resume checkpoint. The new mode
             // applies immediately after that bounded pass completes.
@@ -53,6 +59,10 @@ extension UsageStore {
                     self.codexCostCatchUpTask = nil
                     self.codexCostCatchUpToken = nil
                     self.codexCostCatchUpScopeSignature = nil
+                    if self.codexCostCatchUpRestartRequested {
+                        self.codexCostCatchUpRestartRequested = false
+                        self.startCodexCostCatchUpIfNeeded(mode: self.codexCostCatchUpMode)
+                    }
                 }
             }
             await self.runCodexCostCatchUp(context: context)
@@ -66,6 +76,7 @@ extension UsageStore {
         self.codexCostCatchUpScopeSignature = nil
         self.codexCostCatchUpStopRequested = false
         self.codexCostCatchUpPassIsRunning = false
+        self.codexCostCatchUpRestartRequested = false
         self.codexCostCatchUpActivity = nil
     }
 
@@ -96,6 +107,7 @@ extension UsageStore {
         self.codexCostCatchUpTask = nil
         self.codexCostCatchUpToken = nil
         self.codexCostCatchUpScopeSignature = nil
+        self.codexCostCatchUpRestartRequested = false
     }
 
     private func runCodexCostCatchUp(context: CodexCostCatchUpContext) async {

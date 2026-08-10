@@ -131,6 +131,41 @@ struct UsageStoreSpendDashboardCodexCostCatchUpTests {
     }
 
     @Test
+    func `a same-mode dashboard reload queues a worker after the completing task`() async throws {
+        let store = try Self.makeStore(suite: "same-mode-restart")
+        let accounts = [Self.account(id: "account", cacheIdentity: "cache-account")]
+        var statusLoadCount = 0
+        var advanceCount = 0
+        store._test_spendDashboardCodexCostCatchUpStatusOverride = { _ in
+            statusLoadCount += 1
+            return Self.status(
+                pending: statusLoadCount == 2,
+                key: "status-\(statusLoadCount)",
+                processedBytes: statusLoadCount == 2 ? 25 : 100)
+        }
+        store._test_spendDashboardCodexCostCatchUpAdvanceOverride = { _, _, _ in
+            advanceCount += 1
+            return Self.status(pending: false, key: "complete", processedBytes: 100)
+        }
+        store._test_spendDashboardCodexCostCatchUpSleepOverride = { _ in
+            await Task.yield()
+        }
+        store._test_spendDashboardCodexCostCatchUpResourceStateOverride = {
+            (.ac, false, .nominal)
+        }
+
+        store.startSpendDashboardCodexCostCatchUpIfNeeded(accounts: accounts)
+        store.startSpendDashboardCodexCostCatchUpIfNeeded(accounts: accounts)
+        await Self.waitUntil {
+            store.spendDashboardCodexCostCatchUpTask == nil && statusLoadCount == 2
+        }
+
+        #expect(statusLoadCount == 2)
+        #expect(advanceCount == 1)
+        #expect(store.spendDashboardCodexCostCatchUpActivity?.phase == .complete)
+    }
+
+    @Test
     func `dashboard synchronization keeps an accelerated account queue accelerated`() throws {
         let store = try Self.makeStore(suite: "preserve-mode")
         let accounts = [Self.account(id: "account", cacheIdentity: "cache-account")]

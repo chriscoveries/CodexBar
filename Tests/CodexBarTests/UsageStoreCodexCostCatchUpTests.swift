@@ -88,6 +88,44 @@ struct UsageStoreCodexCostCatchUpTests {
     }
 
     @Test
+    func `a same-mode refresh queues a worker after the completing task`() async throws {
+        let store = try Self.makeStore(suite: "same-mode-restart")
+        var statusLoadCount = 0
+        var advanceCount = 0
+        store._test_tokenUsageSnapshotLoaderOverride = { _, _, now, _, _ in
+            Self.tokenSnapshot(cost: 1, now: now)
+        }
+        store._test_codexCostCatchUpStatusOverride = { _ in
+            statusLoadCount += 1
+            return CostUsageFetcher.CodexScanCatchUpStatus(
+                pending: statusLoadCount == 2,
+                progressKey: "status-\(statusLoadCount)")
+        }
+        store._test_codexCostCatchUpAdvanceOverride = { _, _, _ in
+            advanceCount += 1
+            return CostUsageFetcher.CodexScanCatchUpStatus(
+                pending: false,
+                progressKey: "complete")
+        }
+        store._test_codexCostCatchUpSleepOverride = { _ in
+            await Task.yield()
+        }
+        store._test_codexCostCatchUpResourceStateOverride = {
+            (.ac, false, .nominal)
+        }
+
+        store.startCodexCostCatchUpIfNeeded()
+        store.startCodexCostCatchUpIfNeeded()
+        await Self.waitUntil {
+            store.codexCostCatchUpTask == nil && statusLoadCount == 3
+        }
+
+        #expect(statusLoadCount == 3)
+        #expect(advanceCount == 1)
+        #expect(store.codexCostCatchUpActivity?.phase == .complete)
+    }
+
+    @Test
     func `accelerated catch-up runs without an inter-pass delay and publishes progress`() async throws {
         let store = try Self.makeStore(suite: "accelerated")
         var statusLoadCount = 0

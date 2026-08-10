@@ -37,7 +37,12 @@ extension UsageStore {
         if self.spendDashboardCodexCostCatchUpTask != nil,
            self.spendDashboardCodexCostCatchUpScopeSignature == scopeSignature
         {
-            guard self.spendDashboardCodexCostCatchUpMode != mode else { return }
+            if self.spendDashboardCodexCostCatchUpMode == mode {
+                // A dashboard reload can discover fresh tail work while the previous task is
+                // completing. Queue one restart so that the new pending status retains a worker.
+                self.spendDashboardCodexCostCatchUpRestartRequested = true
+                return
+            }
             self.spendDashboardCodexCostCatchUpMode = mode
             // A bounded parser pass may be committing a resume checkpoint. Let it finish and
             // apply the new mode before scheduling the next account instead of cancelling it.
@@ -68,6 +73,12 @@ extension UsageStore {
                     self.spendDashboardCodexCostCatchUpTask = nil
                     self.spendDashboardCodexCostCatchUpToken = nil
                     self.spendDashboardCodexCostCatchUpScopeSignature = nil
+                    if self.spendDashboardCodexCostCatchUpRestartRequested {
+                        self.spendDashboardCodexCostCatchUpRestartRequested = false
+                        self.startSpendDashboardCodexCostCatchUpIfNeeded(
+                            accounts: context.accounts,
+                            mode: self.spendDashboardCodexCostCatchUpMode)
+                    }
                 }
             }
             await self.runSpendDashboardCodexCostCatchUp(context: context)
@@ -93,6 +104,7 @@ extension UsageStore {
         self.spendDashboardCodexCostCatchUpTask = nil
         self.spendDashboardCodexCostCatchUpToken = nil
         self.spendDashboardCodexCostCatchUpScopeSignature = nil
+        self.spendDashboardCodexCostCatchUpRestartRequested = false
     }
 
     func cancelSpendDashboardCodexCostCatchUp() {
@@ -102,6 +114,7 @@ extension UsageStore {
         self.spendDashboardCodexCostCatchUpScopeSignature = nil
         self.spendDashboardCodexCostCatchUpStopRequested = false
         self.spendDashboardCodexCostCatchUpPassIsRunning = false
+        self.spendDashboardCodexCostCatchUpRestartRequested = false
         self.spendDashboardCodexCostCatchUpActivity = nil
     }
 

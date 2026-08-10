@@ -5,7 +5,7 @@ import Testing
 @Suite(.serialized)
 struct CostUsageCatchUpCompletionTests {
     @Test
-    func `bounded catch-up clears already complete files from a retained lookback queue`() throws {
+    func `bounded catch-up clears already complete files from a retained lookback queue`() async throws {
         let env = try CostUsageTestEnvironment()
         defer { env.cleanup() }
         let day = try env.makeLocalNoon(year: 2026, month: 5, day: 10)
@@ -57,6 +57,7 @@ struct CostUsageCatchUpCompletionTests {
             pendingFilePaths: [path])
         staleCache.codexScanCatchUpPending = true
         CostUsageStoreAccess.replace(cacheRoot: env.cacheRoot, cache: staleCache)
+        #expect(await CostUsageStore(cacheRoot: env.cacheRoot).fetchMetadata().catchUpPending == false)
 
         let repairedCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
         #expect(repairedCache.codexActiveLookbackState == nil)
@@ -113,5 +114,36 @@ struct CostUsageCatchUpCompletionTests {
         #expect(normalizedCompletedCache.codexScanCatchUpPending == false)
         #expect(normalizedCompletedCache.codexScanProcessedBytes == normalizedCompletedCache.codexScanTotalBytes)
         #expect(normalizedCompletedCache.codexScanCompletedFiles == normalizedCompletedCache.codexScanTotalFiles)
+
+        var appendedWhilePendingCache = normalizedCompletedCache
+        appendedWhilePendingCache.codexScanCatchUpPending = true
+        appendedWhilePendingCache.codexScanProcessedBytes = 0
+        appendedWhilePendingCache.codexScanCompletedFiles = 0
+        CostUsageStoreAccess.replace(cacheRoot: env.cacheRoot, cache: appendedWhilePendingCache)
+        #expect(await CostUsageStore(cacheRoot: env.cacheRoot).fetchMetadata().catchUpPending == false)
+        let secondHandle = try FileHandle(forWritingTo: URL(fileURLWithPath: path))
+        try secondHandle.seekToEnd()
+        try secondHandle.write(contentsOf: Data("\n".utf8))
+        try secondHandle.close()
+
+        let repairedPendingCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
+        #expect(repairedPendingCache.codexScanCatchUpPending == false)
+        #expect(repairedPendingCache.codexScanProcessedBytes == repairedPendingCache.codexScanTotalBytes)
+        #expect(repairedPendingCache.codexScanCompletedFiles == repairedPendingCache.codexScanTotalFiles)
+
+        let appendedRecorder = CostUsageScanner.CodexScanWorkRecorder()
+        options.codexScanWorkRecorderForTesting = appendedRecorder
+        _ = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day.addingTimeInterval(3),
+            options: options)
+
+        let appendedCompletedCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
+        #expect(appendedRecorder.snapshot().codexFileScanAttempts == 1)
+        #expect(appendedCompletedCache.codexScanCatchUpPending == false)
+        #expect(appendedCompletedCache.codexScanProcessedBytes == appendedCompletedCache.codexScanTotalBytes)
+        #expect(appendedCompletedCache.codexScanCompletedFiles == appendedCompletedCache.codexScanTotalFiles)
     }
 }
