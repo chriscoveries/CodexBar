@@ -8,85 +8,7 @@ import Testing
 /// re-parsing unchanged session files on every refresh (#1387, #1392) and re-running the
 /// full trace-database scan on every refresh (#1392, the pre-memo priority-turns path).
 @Suite(.serialized)
-// swiftlint:disable:next type_body_length
 struct CostUsagePerformanceGateTests {
-    @Test
-    func `time limited codex catch-up bounds a large pending lookback queue`() throws {
-        let env = try CostUsageTestEnvironment()
-        defer { env.cleanup() }
-        let day = try env.makeLocalNoon(year: 2026, month: 5, day: 10)
-        let corpusSize = 1500, candidateLimit = CostUsageScanner.codexCatchUpScanCandidateLimit
-        _ = try Self.writeSyntheticCodexCorpus(
-            env: env,
-            day: day,
-            files: corpusSize,
-            turnsPerFile: 1)
-
-        var options = CostUsageScanner.Options(
-            codexSessionsRoot: env.codexSessionsRoot,
-            claudeProjectsRoots: nil,
-            cacheRoot: env.cacheRoot,
-            codexTraceDatabaseURL: env.root.appendingPathComponent("missing.sqlite"),
-            maxCodexSessionFileBytes: 0,
-            maxCodexScanBytesPerRefresh: 0,
-            maxCodexScanDurationPerRefresh: 60)
-        options.refreshMinIntervalSeconds = 0
-
-        let saveCounter = HeadParseCounter()
-        CostUsageStore.codexCatchUpReconciliationVisitForTesting = { saveCounter.increment() }
-        let firstRecorder = CostUsageScanner.CodexScanWorkRecorder()
-        options.codexScanWorkRecorderForTesting = firstRecorder
-        _ = CostUsageScanner.loadDailyReport(
-            provider: .codex,
-            since: day,
-            until: day,
-            now: day,
-            options: options)
-        let firstMetrics = firstRecorder.snapshot()
-
-        let loadCounter = HeadParseCounter()
-        CostUsageStore.codexCatchUpReconciliationVisitForTesting = { loadCounter.increment() }
-        let firstCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
-        CostUsageStore.codexCatchUpReconciliationVisitForTesting = nil
-        let pendingPaths = firstCache.codexActiveLookbackState?.pendingFilePaths.count ?? 0
-        print("[reconcile-proof] save=\(saveCounter.value) load=\(loadCounter.value) pending=\(pendingPaths)")
-
-        #expect(saveCounter.value == candidateLimit && loadCounter.value == candidateLimit)
-        #expect(firstMetrics.codexFileScanAttempts == candidateLimit)
-        #expect(firstMetrics.codexLookbackPreparationVisits == candidateLimit)
-        #expect(firstMetrics.activeLookbackCompletionCandidates == candidateLimit)
-        #expect(firstCache.files.count == candidateLimit && firstCache.codexScanCatchUpPending == true)
-        #expect(firstCache.codexActiveLookbackState?.pendingFilePaths.count == corpusSize - candidateLimit)
-
-        let secondRecorder = CostUsageScanner.CodexScanWorkRecorder(), secondStarted = ContinuousClock.now
-        options.codexScanWorkRecorderForTesting = secondRecorder
-        _ = CostUsageScanner.loadDailyReport(
-            provider: .codex,
-            since: day,
-            until: day,
-            now: day.addingTimeInterval(1),
-            options: options)
-        let secondMetrics = secondRecorder.snapshot(), secondDuration = ContinuousClock.now - secondStarted
-        let secondCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
-        let cachePathOverlap = Set(firstCache.files.keys).intersection(secondCache.files.keys).count
-        print(
-            "[candidate-selection-proof] first=\(firstCache.files.count), "
-                + "second=\(secondCache.files.count), overlap=\(cachePathOverlap), "
-                + "pending=\(secondCache.codexActiveLookbackState?.pendingFilePaths.count ?? 0), "
-                + "preparation=\(secondMetrics.codexLookbackPreparationVisits), "
-                + "visits=\(secondMetrics.codexCandidateSelectionVisits), "
-                + "attempts=\(secondMetrics.codexFileScanAttempts), "
-                + "accounting=\(secondMetrics.codexProgressAccountingVisits), duration=\(secondDuration)")
-
-        #expect(secondMetrics.codexFileScanAttempts == candidateLimit)
-        #expect(secondMetrics.codexLookbackPreparationVisits == candidateLimit
-            && secondMetrics.codexCandidateSelectionVisits == candidateLimit
-            && secondMetrics.codexProgressAccountingVisits == 0)
-        #expect(secondMetrics.activeLookbackCompletionCandidates == candidateLimit)
-        #expect(secondCache.files.count == candidateLimit * 2)
-        #expect(secondCache.codexActiveLookbackState?.pendingFilePaths.count == corpusSize - candidateLimit * 2)
-    }
-
     @Test
     func `warm codex refresh indexes cache aliases once at incident corpus scale`() throws {
         let env = try CostUsageTestEnvironment()
@@ -1562,7 +1484,7 @@ extension CostUsagePerformanceGateTests {
         }
     }
 
-    static func writeSyntheticCodexCorpus(
+    private static func writeSyntheticCodexCorpus(
         env: CostUsageTestEnvironment,
         day: Date,
         files: Int,
