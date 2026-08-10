@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.49.1 — Unreleased
+## 0.49.1 — 2026-08-09
 
 ### Fixed
 - DeepInfra: show billing-cycle spend against a positive spending limit in the automatic menu-bar icon (#2822). Thanks @selfagency for the report!
