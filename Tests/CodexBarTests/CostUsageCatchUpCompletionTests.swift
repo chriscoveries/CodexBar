@@ -10,7 +10,7 @@ struct CostUsageCatchUpCompletionTests {
         defer { env.cleanup() }
         let day = try env.makeLocalNoon(year: 2026, month: 5, day: 10)
         let iso = env.isoString(for: day)
-        let fileURL = try env.writeCodexSessionFile(
+        _ = try env.writeCodexSessionFile(
             day: day,
             filename: "retained-complete.jsonl",
             contents: [
@@ -41,11 +41,20 @@ struct CostUsageCatchUpCompletionTests {
         let roots = CostUsageScanner.codexSessionsRoots(options: options)
             .map { $0.resolvingSymlinksInPath().standardizedFileURL.path }
             .sorted()
+        #expect(staleCache.files.count == 1)
+        let path = try #require(staleCache.files.keys.first)
+        var completedUsage = try #require(staleCache.files[path])
+        let currentIdentity = try #require(completedUsage.codexScanFileId)
+        let inode = try #require(currentIdentity.split(separator: ":").last)
+        completedUsage.codexScanFileId = "0:\(inode)"
+        #expect(completedUsage.codexScanFileId != currentIdentity)
+        #expect(completedUsage.codexTokenIndexAnchor != nil)
+        staleCache.files[path] = completedUsage
         staleCache.codexActiveLookbackState = try CostUsageCodexActiveLookbackState(
             scanSinceKey: #require(staleCache.scanSinceKey),
             rootPaths: roots,
             completedRootPaths: roots,
-            pendingFilePaths: [fileURL.resolvingSymlinksInPath().standardizedFileURL.path])
+            pendingFilePaths: [path])
         staleCache.codexScanCatchUpPending = true
         CostUsageStoreAccess.replace(cacheRoot: env.cacheRoot, cache: staleCache)
 
@@ -54,6 +63,7 @@ struct CostUsageCatchUpCompletionTests {
         #expect(repairedCache.codexScanCatchUpPending == false)
         #expect(repairedCache.codexScanProcessedBytes == repairedCache.codexScanTotalBytes)
         #expect(repairedCache.codexScanCompletedFiles == repairedCache.codexScanTotalFiles)
+        #expect(repairedCache.files[path]?.codexScanFileId == currentIdentity)
 
         let recorder = CostUsageScanner.CodexScanWorkRecorder()
         options.codexScanWorkRecorderForTesting = recorder

@@ -262,18 +262,36 @@ extension CostUsageStore {
                 guard let identity = usage.codexScanFileId else { return }
                 result[identity] = usage
             }
-            lookback.pendingFilePaths.removeAll { path in
-                let metadata = CostUsageScanner.codexFileMetadata(fileURL: URL(fileURLWithPath: path))
+            var remainingPaths: [String] = []
+            for path in lookback.pendingFilePaths {
+                let fileURL = URL(fileURLWithPath: path)
+                let metadata = CostUsageScanner.codexFileMetadata(fileURL: fileURL)
                 guard let fileId = metadata.fileId,
                       let usage = cache.files[path] ?? cachedFilesByIdentity[fileId],
                       usage.codexScanComplete != false,
                       !usage.hasBufferedCodexForkRetryLines
-                else { return false }
+                else {
+                    remainingPaths.append(path)
+                    continue
+                }
 
-                return usage.codexScanFileId == metadata.fileId
-                    && usage.mtimeUnixMs == metadata.mtimeUnixMs
-                    && usage.size == metadata.size
+                guard Self.matchesCompletedCodexFileSnapshot(
+                    usage: usage,
+                    metadata: metadata,
+                    fileURL: fileURL)
+                else {
+                    remainingPaths.append(path)
+                    continue
+                }
+
+                // APFS can expose the same volume with a different st_dev value after relaunch.
+                // Retain the inode and validate the indexed content before adopting the current identity.
+                if usage.codexScanFileId != fileId, var normalized = cache.files[path] {
+                    normalized.codexScanFileId = fileId
+                    cache.files[path] = normalized
+                }
             }
+            lookback.pendingFilePaths = remainingPaths
             let lookbackIsComplete = Set(lookback.completedRootPaths) == Set(lookback.rootPaths)
                 && lookback.pendingFilePaths.isEmpty
                 && lookback.legacyRecursivePendingRootPaths.isEmpty
@@ -307,6 +325,32 @@ extension CostUsageStore {
         cache.codexScanCompletedFiles = seenIdentities.count
         cache.codexScanTotalFiles = seenIdentities.count
         cache.codexPreviousReport = nil
+    }
+
+    private static func matchesCompletedCodexFileSnapshot(
+        usage: CostUsageFileUsage,
+        metadata: CostUsageScanner.CodexFileMetadata,
+        fileURL: URL) -> Bool
+    {
+        guard usage.mtimeUnixMs == metadata.mtimeUnixMs,
+              usage.size == metadata.size,
+              let cachedIdentity = usage.codexScanFileId,
+              let currentIdentity = metadata.fileId
+        else { return false }
+        if cachedIdentity == currentIdentity {
+            return true
+        }
+        guard Self.inode(from: cachedIdentity) == Self.inode(from: currentIdentity) else {
+            return false
+        }
+        if metadata.size == 0 {
+            return true
+        }
+        guard let anchor = usage.codexTokenIndexAnchor else { return false }
+        return CostUsageScanner.codexTokenIndexAnchorMatches(
+            anchor,
+            fileURL: fileURL,
+            metadata: metadata)
     }
 
     private func persistFile(
