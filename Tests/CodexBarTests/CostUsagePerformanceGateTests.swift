@@ -32,6 +32,8 @@ struct CostUsagePerformanceGateTests {
             maxCodexScanDurationPerRefresh: 60)
         options.refreshMinIntervalSeconds = 0
 
+        let saveCounter = HeadParseCounter()
+        CostUsageStore.codexCatchUpReconciliationVisitForTesting = { saveCounter.increment() }
         let firstRecorder = CostUsageScanner.CodexScanWorkRecorder()
         options.codexScanWorkRecorderForTesting = firstRecorder
         _ = CostUsageScanner.loadDailyReport(
@@ -41,8 +43,16 @@ struct CostUsagePerformanceGateTests {
             now: day,
             options: options)
         let firstMetrics = firstRecorder.snapshot()
-        let firstCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
 
+        let loadCounter = HeadParseCounter()
+        CostUsageStore.codexCatchUpReconciliationVisitForTesting = { loadCounter.increment() }
+        let firstCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
+        CostUsageStore.codexCatchUpReconciliationVisitForTesting = nil
+        let pendingPaths = firstCache.codexActiveLookbackState?.pendingFilePaths.count ?? 0
+        print("[reconcile-proof] save=\(saveCounter.value) load=\(loadCounter.value) pending=\(pendingPaths)")
+
+        #expect(saveCounter.value == CostUsageScanner.codexCatchUpScanCandidateLimit
+            && loadCounter.value == CostUsageScanner.codexCatchUpScanCandidateLimit)
         #expect(firstMetrics.codexFileScanAttempts == CostUsageScanner.codexCatchUpScanCandidateLimit)
         #expect(firstMetrics.codexCandidateSelectionVisits == CostUsageScanner.codexCatchUpScanCandidateLimit)
         #expect(firstMetrics.activeLookbackCompletionCandidates == CostUsageScanner.codexCatchUpScanCandidateLimit)

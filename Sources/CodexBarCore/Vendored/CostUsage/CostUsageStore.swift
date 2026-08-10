@@ -77,6 +77,9 @@ actor CostUsageStore {
     /// process at a deterministic mid-save point. Never set in production.
     nonisolated(unsafe) static var saveCycleCheckpointForTesting: ((Int) -> Void)?
 
+    /// Test-only traversal proof for persisted Codex catch-up reconciliation. Never set in production.
+    nonisolated(unsafe) static var codexCatchUpReconciliationVisitForTesting: (() -> Void)?
+
     /// Process-wide serialization keeps every writable store connection on the same queue.
     /// This matches the scan pipeline's single-writer contract without multiplying executor
     /// threads when tests or short-lived readers create several store actors.

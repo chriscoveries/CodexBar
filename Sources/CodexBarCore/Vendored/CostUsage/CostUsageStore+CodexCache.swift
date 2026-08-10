@@ -347,41 +347,43 @@ extension CostUsageStore {
 
     private static func reconcileCompletedCodexCatchUp(cache: inout CostUsageCache) {
         if var lookback = cache.codexActiveLookbackState {
-            let cachedFilesByIdentity = cache.files.values.reduce(
-                into: [String: CostUsageFileUsage]())
-            { result, usage in
-                guard let identity = usage.codexScanFileId else { return }
-                result[identity] = usage
-            }
-            var remainingPaths: [String] = []
-            for path in lookback.pendingFilePaths {
+            let reconciliationLimit = CostUsageScanner.codexCatchUpScanCandidateLimit
+            let candidatePaths = lookback.pendingFilePaths.prefix(reconciliationLimit)
+            var remainingPaths = Array(lookback.pendingFilePaths.dropFirst(candidatePaths.count))
+            var incompleteCandidatePaths: [String] = []
+            incompleteCandidatePaths.reserveCapacity(candidatePaths.count)
+            for path in candidatePaths {
+                Self.codexCatchUpReconciliationVisitForTesting?()
                 let fileURL = URL(fileURLWithPath: path)
                 let metadata = CostUsageScanner.codexFileMetadata(fileURL: fileURL)
                 guard let fileId = metadata.fileId,
-                      let usage = cache.files[path] ?? cachedFilesByIdentity[fileId],
-                      usage.codexScanComplete != false,
-                      !usage.hasBufferedCodexForkRetryLines
+                      let cachedEntry = Self.cachedCodexUsageEntry(for: path, cache: cache),
+                      cachedEntry.usage.codexScanComplete != false,
+                      !cachedEntry.usage.hasBufferedCodexForkRetryLines
                 else {
-                    remainingPaths.append(path)
+                    incompleteCandidatePaths.append(path)
                     continue
                 }
 
                 guard Self.matchesCompletedCodexFileSnapshot(
-                    usage: usage,
+                    usage: cachedEntry.usage,
                     metadata: metadata,
                     fileURL: fileURL)
                 else {
-                    remainingPaths.append(path)
+                    incompleteCandidatePaths.append(path)
                     continue
                 }
 
                 // APFS can expose the same volume with a different st_dev value after relaunch.
                 // Retain the inode and validate the indexed content before adopting the current identity.
-                if usage.codexScanFileId != fileId, var normalized = cache.files[path] {
+                if cachedEntry.usage.codexScanFileId != fileId,
+                   var normalized = cache.files[cachedEntry.path]
+                {
                     normalized.codexScanFileId = fileId
-                    cache.files[path] = normalized
+                    cache.files[cachedEntry.path] = normalized
                 }
             }
+            remainingPaths.insert(contentsOf: incompleteCandidatePaths, at: 0)
             lookback.pendingFilePaths = remainingPaths
             let lookbackIsComplete = Set(lookback.completedRootPaths) == Set(lookback.rootPaths)
                 && lookback.pendingFilePaths.isEmpty
@@ -389,20 +391,21 @@ extension CostUsageStore {
             cache.codexActiveLookbackState = lookbackIsComplete ? nil : lookback
         }
 
+        guard cache.codexScanCatchUpPending == true,
+              cache.codexActiveLookbackState == nil
+        else { return }
         let discoveryHasPendingWork = cache.codexSessionDiscovery.map {
             !$0.isComplete && (!$0.pendingSessionIds.isEmpty || $0.headScan != nil)
         } ?? false
+        guard !discoveryHasPendingWork else { return }
         let filesHavePendingWork = cache.files.values.contains {
             $0.codexScanComplete == false || $0.hasBufferedCodexForkRetryLines
         }
+        guard !filesHavePendingWork else { return }
         let expectedTotalFiles = max(0, cache.codexScanTotalFiles ?? 0)
         guard let completedInventory = Self.completedCodexScanInventory(
             cache: cache,
-            expectedTotalFiles: expectedTotalFiles),
-            cache.codexScanCatchUpPending == true,
-            cache.codexActiveLookbackState == nil,
-            !discoveryHasPendingWork,
-            !filesHavePendingWork
+            expectedTotalFiles: expectedTotalFiles)
         else { return }
 
         cache.codexScanCatchUpPending = false
@@ -411,6 +414,27 @@ extension CostUsageStore {
         cache.codexScanCompletedFiles = completedInventory.fileCount
         cache.codexScanTotalFiles = completedInventory.fileCount
         cache.codexPreviousReport = nil
+    }
+
+    private static func cachedCodexUsageEntry(
+        for path: String,
+        cache: CostUsageCache) -> (path: String, usage: CostUsageFileUsage)?
+    {
+        let normalizedPath = Self.normalizedCodexPath(path)
+        var candidatePaths = [path]
+        if normalizedPath != path {
+            candidatePaths.append(normalizedPath)
+        }
+        if normalizedPath.hasPrefix("/var/") {
+            candidatePaths.append("/private" + normalizedPath)
+        }
+        var seenPaths: Set<String> = []
+        for candidatePath in candidatePaths where seenPaths.insert(candidatePath).inserted {
+            if let usage = cache.files[candidatePath] {
+                return (candidatePath, usage)
+            }
+        }
+        return nil
     }
 
     private static func completedCodexScanInventory(
