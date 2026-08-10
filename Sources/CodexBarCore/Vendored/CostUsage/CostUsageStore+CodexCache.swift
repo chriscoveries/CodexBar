@@ -248,8 +248,65 @@ extension CostUsageStore {
                 codexBufferedUnresolvedForkLines: Self.bufferedLines(buffers, kind: .unresolvedFork))
             cache.files[file.path] = usage
         }
+        Self.reconcileCompletedCodexCatchUp(cache: &cache)
         cache.days = Self.days(from: snapshot.dayAggregates)
         return cache
+    }
+
+    private static func reconcileCompletedCodexCatchUp(cache: inout CostUsageCache) {
+        var didCompleteLookback = false
+        if var lookback = cache.codexActiveLookbackState {
+            let cachedFilesByIdentity = cache.files.values.reduce(
+                into: [String: CostUsageFileUsage]())
+            { result, usage in
+                guard let identity = usage.codexScanFileId else { return }
+                result[identity] = usage
+            }
+            lookback.pendingFilePaths.removeAll { path in
+                let metadata = CostUsageScanner.codexFileMetadata(fileURL: URL(fileURLWithPath: path))
+                guard let fileId = metadata.fileId,
+                      let usage = cache.files[path] ?? cachedFilesByIdentity[fileId],
+                      usage.codexScanComplete != false,
+                      !usage.hasBufferedCodexForkRetryLines
+                else { return false }
+
+                return usage.codexScanFileId == metadata.fileId
+                    && usage.mtimeUnixMs == metadata.mtimeUnixMs
+                    && usage.size == metadata.size
+            }
+            let lookbackIsComplete = Set(lookback.completedRootPaths) == Set(lookback.rootPaths)
+                && lookback.pendingFilePaths.isEmpty
+                && lookback.legacyRecursivePendingRootPaths.isEmpty
+            cache.codexActiveLookbackState = lookbackIsComplete ? nil : lookback
+            didCompleteLookback = lookbackIsComplete
+        }
+
+        let discoveryHasPendingWork = cache.codexSessionDiscovery.map {
+            !$0.isComplete && (!$0.pendingSessionIds.isEmpty || $0.headScan != nil)
+        } ?? false
+        let filesHavePendingWork = cache.files.values.contains {
+            $0.codexScanComplete == false || $0.hasBufferedCodexForkRetryLines
+        }
+        guard didCompleteLookback,
+              cache.codexScanCatchUpPending == true,
+              cache.codexActiveLookbackState == nil,
+              !discoveryHasPendingWork,
+              !filesHavePendingWork
+        else { return }
+
+        var seenIdentities: Set<String> = []
+        var totalBytes: Int64 = 0
+        for (path, usage) in cache.files {
+            let identity = usage.codexScanFileId ?? path
+            guard seenIdentities.insert(identity).inserted else { continue }
+            totalBytes += max(0, usage.size)
+        }
+        cache.codexScanCatchUpPending = false
+        cache.codexScanProcessedBytes = totalBytes
+        cache.codexScanTotalBytes = totalBytes
+        cache.codexScanCompletedFiles = seenIdentities.count
+        cache.codexScanTotalFiles = seenIdentities.count
+        cache.codexPreviousReport = nil
     }
 
     private func persistFile(

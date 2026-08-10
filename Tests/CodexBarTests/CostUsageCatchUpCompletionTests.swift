@@ -49,6 +49,12 @@ struct CostUsageCatchUpCompletionTests {
         staleCache.codexScanCatchUpPending = true
         CostUsageStoreAccess.replace(cacheRoot: env.cacheRoot, cache: staleCache)
 
+        let repairedCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
+        #expect(repairedCache.codexActiveLookbackState == nil)
+        #expect(repairedCache.codexScanCatchUpPending == false)
+        #expect(repairedCache.codexScanProcessedBytes == repairedCache.codexScanTotalBytes)
+        #expect(repairedCache.codexScanCompletedFiles == repairedCache.codexScanTotalFiles)
+
         let recorder = CostUsageScanner.CodexScanWorkRecorder()
         options.codexScanWorkRecorderForTesting = recorder
         _ = CostUsageScanner.loadDailyReport(
