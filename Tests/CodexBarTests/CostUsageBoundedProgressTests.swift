@@ -407,6 +407,128 @@ struct CostUsageBoundedProgressTests {
         #expect(finalCache.codexScanCatchUpPending == false)
     }
 
+    @Test
+    func `missing queue prefix advances after scanner validation`() throws {
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+        let day = try env.makeLocalNoon(year: 2026, month: 5, day: 10)
+        let corpusSize = CostUsageScanner.codexCatchUpScanCandidateLimit + 1
+        let fileURLs = try Self.writeSyntheticCorpus(env: env, day: day, fileCount: corpusSize)
+
+        var options = Self.boundedOptions(env: env)
+        options.maxCodexScanDurationPerRefresh = nil
+        options.preferNewestCodexSessionsFirst = false
+        _ = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day,
+            options: options)
+
+        var pendingCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
+        let validURL = try #require(fileURLs.last)
+        let validPath = try #require(pendingCache.files.keys.first { $0.hasSuffix(validURL.lastPathComponent) })
+        let roots = CostUsageScanner.codexSessionsRoots(options: options)
+            .map { $0.resolvingSymlinksInPath().standardizedFileURL.path }
+            .sorted()
+        let missingURLs = fileURLs.prefix(CostUsageScanner.codexCatchUpScanCandidateLimit)
+        for fileURL in missingURLs {
+            try FileManager.default.removeItem(at: fileURL)
+        }
+        pendingCache.files[validPath]?.codexScanComplete = false
+        pendingCache.codexScanInventoryPaths = nil
+        pendingCache.codexActiveLookbackState = try CostUsageCodexActiveLookbackState(
+            scanSinceKey: #require(pendingCache.scanSinceKey),
+            rootPaths: roots,
+            completedRootPaths: roots,
+            pendingFilePaths: missingURLs.map(\.path.resolvingTemporaryPath) + [validURL.path.resolvingTemporaryPath])
+        pendingCache.codexScanCatchUpPending = true
+        CostUsageStoreAccess.replace(cacheRoot: env.cacheRoot, cache: pendingCache)
+
+        options.maxCodexScanDurationPerRefresh = 60
+        let firstRecorder = CostUsageScanner.CodexScanWorkRecorder()
+        options.codexScanWorkRecorderForTesting = firstRecorder
+        _ = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day.addingTimeInterval(1),
+            options: options)
+        let firstMetrics = firstRecorder.snapshot()
+        let firstCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
+        #expect(firstMetrics.codexCandidateSelectionVisits == CostUsageScanner.codexCatchUpScanCandidateLimit)
+        #expect(firstMetrics.codexFileScanAttempts == CostUsageScanner.codexCatchUpScanCandidateLimit)
+        #expect(firstMetrics.codexProgressAccountingVisits == 0)
+        #expect(firstCache.codexActiveLookbackState?.pendingFilePaths == [validURL.path.resolvingTemporaryPath])
+        #expect(firstCache.codexScanCatchUpPending == true)
+
+        let finalRecorder = CostUsageScanner.CodexScanWorkRecorder()
+        options.codexScanWorkRecorderForTesting = finalRecorder
+        _ = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day.addingTimeInterval(2),
+            options: options)
+        let finalMetrics = finalRecorder.snapshot()
+        let finalCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
+        #expect(finalMetrics.codexCandidateSelectionVisits == 1)
+        #expect(finalMetrics.codexFileScanAttempts == 1)
+        #expect(finalMetrics.codexProgressAccountingVisits == 1)
+        #expect(finalCache.codexActiveLookbackState == nil)
+        #expect(finalCache.codexScanCompletedFiles == 1)
+        #expect(finalCache.codexScanTotalFiles == 1)
+        #expect(finalCache.codexScanCatchUpPending == false)
+    }
+
+    @Test
+    func `time budget stop retains selected paths that were not scanned`() throws {
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+        let day = try env.makeLocalNoon(year: 2026, month: 5, day: 10)
+        let corpusSize = CostUsageScanner.codexCatchUpScanCandidateLimit + 1
+        let fileURLs = try Self.writeSyntheticCorpus(env: env, day: day, fileCount: corpusSize)
+
+        var options = Self.boundedOptions(env: env)
+        options.maxCodexScanDurationPerRefresh = nil
+        options.preferNewestCodexSessionsFirst = false
+        _ = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day,
+            options: options)
+
+        var pendingCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
+        let incompleteURL = try #require(fileURLs.last)
+        let incompletePath = try #require(pendingCache.files.keys
+            .first { $0.hasSuffix(incompleteURL.lastPathComponent) })
+        pendingCache.files[incompletePath]?.codexScanComplete = false
+        pendingCache.codexScanInventoryPaths = nil
+        pendingCache.codexActiveLookbackState = nil
+        pendingCache.codexScanCatchUpPending = true
+        CostUsageStoreAccess.replace(cacheRoot: env.cacheRoot, cache: pendingCache)
+
+        options.maxCodexScanDurationPerRefresh = .leastNonzeroMagnitude
+        let recorder = CostUsageScanner.CodexScanWorkRecorder()
+        options.codexScanWorkRecorderForTesting = recorder
+        _ = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day.addingTimeInterval(1),
+            options: options)
+        let metrics = recorder.snapshot()
+        let stoppedCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
+        #expect(metrics.codexCandidateSelectionVisits == CostUsageScanner.codexCatchUpScanCandidateLimit)
+        #expect(metrics.codexFileScanAttempts == 0)
+        #expect(metrics.activeLookbackCompletionCandidates == 0)
+        #expect(metrics.codexProgressAccountingVisits == 0)
+        #expect(stoppedCache.codexActiveLookbackState?.pendingFilePaths.count == corpusSize)
+        #expect(stoppedCache.files[incompletePath]?.codexScanComplete == false)
+        #expect(stoppedCache.codexScanCatchUpPending == true)
+    }
+
     private static func boundedOptions(env: CostUsageTestEnvironment) -> CostUsageScanner.Options {
         var options = CostUsageScanner.Options(
             codexSessionsRoot: env.codexSessionsRoot,
