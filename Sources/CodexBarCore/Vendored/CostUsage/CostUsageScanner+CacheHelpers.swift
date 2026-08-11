@@ -1394,9 +1394,20 @@ extension CostUsageScanner {
         let dayKeys = self.codexReportDayKeys(cache: reportCache, range: range)
         var rowsByDayModel: [String: [String: [CodexUsageRow]]] = [:]
         var unresolvedRowGroups = Set<CodexDayModelKey>()
+        var priorityEvidenceGroups = Set<CodexDayModelKey>()
         for usage in reportCache.files.values {
             let reconciled = self.codexCanonicalPricingRows(usage)
             unresolvedRowGroups.formUnion(reconciled.unresolvedGroups)
+            for (day, models) in usage.codexPriorityTokens ?? [:] {
+                for (model, tokens) in models where tokens > 0 {
+                    priorityEvidenceGroups.insert(CodexDayModelKey(day: day, model: model))
+                }
+            }
+            for row in usage.codexRows ?? [] where row.pricingMode == "priority"
+                || row.turnID.flatMap({ priorityTurns[$0] }) != nil
+            {
+                priorityEvidenceGroups.insert(CodexDayModelKey(day: row.day, model: row.model))
+            }
             for row in reconciled.rows where CostUsageDayRange.isInRange(
                 dayKey: row.day,
                 since: range.sinceKey,
@@ -1437,13 +1448,15 @@ extension CostUsageScanner {
                 let group = CodexDayModelKey(day: day, model: model)
                 let rowCostIsTrusted = !unresolvedRowGroups.contains(group)
                     && rowCost?.isTrusted(canonicalTotalTokens: totalTokens) == true
-                let aggregateCost = CostUsagePricing.codexAggregateCostUSD(
-                    model: model,
-                    inputTokens: input,
-                    cachedInputTokens: cached,
-                    outputTokens: output,
-                    modelsDevCatalog: catalogResolver.load(modelsDevCatalogLoader),
-                    modelsDevCacheRoot: modelsDevCacheRoot)
+                let aggregateCost = priorityEvidenceGroups.contains(group)
+                    ? nil
+                    : CostUsagePricing.codexAggregateCostUSD(
+                        model: model,
+                        inputTokens: input,
+                        cachedInputTokens: cached,
+                        outputTokens: output,
+                        modelsDevCatalog: catalogResolver.load(modelsDevCatalogLoader),
+                        modelsDevCacheRoot: modelsDevCacheRoot)
                 let cost = rowCostIsTrusted
                     ? rowCost?.totalCostUSD ?? aggregateCost
                     : aggregateCost

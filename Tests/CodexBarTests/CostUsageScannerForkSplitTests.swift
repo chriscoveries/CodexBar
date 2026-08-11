@@ -230,6 +230,23 @@ struct CostUsageScannerForkSplitTests {
         let aggregateOnly = CostUsageScanner.buildCodexReportFromCache(cache: cache, range: range)
         #expect(aggregateOnly.summary?.totalTokens == 200_000)
         #expect(aggregateOnly.summary?.totalCostUSD == nil)
+
+        let timestampedParent = row(index: 0, input: 200_000)
+        let untimestampedChild = CostUsageScanner.CodexUsageRow(
+            day: dayKey,
+            model: model,
+            turnID: "mixed-timestamp-child",
+            eventIndex: 1,
+            timestampUnixMs: nil,
+            input: 200_000,
+            cached: 0,
+            output: 0)
+        usage.codexRows = [timestampedParent, untimestampedChild]
+        let mixedTimestamps = CostUsageScanner.codexCanonicalPricingRows(usage)
+        #expect(mixedTimestamps.rows.isEmpty)
+        #expect(mixedTimestamps.unresolvedGroups == [
+            CostUsageScanner.CodexDayModelKey(day: dayKey, model: model),
+        ])
     }
 
     @Test
@@ -261,6 +278,13 @@ struct CostUsageScannerForkSplitTests {
             outputTokens: 100))
 
         #expect(abs((report.summary?.totalCostUSD ?? 0) - expected) < 1e-12)
+
+        var priorityUsage = usage
+        priorityUsage.codexPriorityTokens = [dayKey: [model: 400_100]]
+        cache.files = ["/linear-priority.jsonl": priorityUsage]
+        let priorityAggregate = CostUsageScanner.buildCodexReportFromCache(cache: cache, range: range)
+        #expect(priorityAggregate.summary?.totalTokens == 400_100)
+        #expect(priorityAggregate.summary?.totalCostUSD == nil)
     }
 
     @Test

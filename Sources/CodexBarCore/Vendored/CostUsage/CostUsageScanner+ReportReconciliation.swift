@@ -76,6 +76,8 @@ extension CostUsageScanner {
             return rows
         }
         guard allRowsTotal.exceeds(target) else { return nil }
+        let timestampPresence = Set(rows.map { $0.timestampUnixMs != nil })
+        guard timestampPresence.count <= 1 else { return nil }
 
         let chronological = rows.enumerated().sorted { lhs, rhs in
             let lhsTimestamp = lhs.element.timestampUnixMs ?? Int64.min
