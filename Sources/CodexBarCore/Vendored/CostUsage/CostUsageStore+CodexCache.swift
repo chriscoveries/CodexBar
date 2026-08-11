@@ -65,6 +65,23 @@ extension CostUsageStore {
         fileBudgetBytes: Int64 = CostUsageStore.defaultFileBudgetBytes) -> CostUsageStoreBudgetResult
     {
         let previous = self.readSnapshot()
+        if Self.persistedContentMatches(
+            previous: previous,
+            cache: cache,
+            calendar: calendar)
+        {
+            // The scanner stamps a fresh scan timestamp on every pass even when no content
+            // changed; rewriting the whole database for identical rows is the disk churn
+            // behind #2495. The persisted state already matches the incoming cache, so the
+            // save cycle can end before the transaction begins and the WAL stays untouched.
+            let attributes = try? FileManager.default.attributesOfItem(atPath: self.databaseURL.path)
+            let fileBytes = (attributes?[.size] as? NSNumber)?.int64Value ?? 0
+            return CostUsageStoreBudgetResult(
+                deletedRows: 0,
+                rowCount: previous.files.count,
+                fileBytes: fileBytes,
+                catchUpRequired: false)
+        }
         let canReuseStoredRows = previous.metadata.timeZoneIdentifier == calendar.timeZone.identifier
         let previousFilesByPath = Dictionary(uniqueKeysWithValues: previous.files.map { ($0.path, $0) })
         let snapshotCountsByPath = previous.tokenSnapshots
@@ -109,6 +126,37 @@ extension CostUsageStore {
             _ = self.setMetadata(metadata)
         }
         return result
+    }
+
+    /// True when persisting `cache` would leave every table byte-for-byte unchanged. The
+    /// persisted spellings of a few optional fields differ from their in-memory forms
+    /// (`catchUpPending` and `codexScanComplete` store nil as false/true, `timeZoneIdentifier`
+    /// is fixed by the caller's calendar, and `lastScanUnixMs` is a wall-clock stamp), so
+    /// those are normalized before the comparison.
+    private static func persistedContentMatches(
+        previous: CostUsageStoreSnapshot,
+        cache: CostUsageCache,
+        calendar: Calendar) -> Bool
+    {
+        var restored = Self.cache(from: previous)
+        guard restored.timeZoneIdentifier == nil
+            || restored.timeZoneIdentifier == calendar.timeZone.identifier
+        else { return false }
+        guard (cache.codexScanCatchUpPending ?? false) == restored.codexScanCatchUpPending
+        else { return false }
+        restored.lastScanUnixMs = cache.lastScanUnixMs
+        restored.timeZoneIdentifier = cache.timeZoneIdentifier
+        restored.codexScanCatchUpPending = cache.codexScanCatchUpPending
+        restored.files = restored.files.mapValues(Self.normalizingScanComplete)
+        var incoming = cache
+        incoming.files = incoming.files.mapValues(Self.normalizingScanComplete)
+        return restored == incoming
+    }
+
+    private static func normalizingScanComplete(_ usage: CostUsageFileUsage) -> CostUsageFileUsage {
+        var usage = usage
+        usage.codexScanComplete = usage.codexScanComplete ?? true
+        return usage
     }
 }
 

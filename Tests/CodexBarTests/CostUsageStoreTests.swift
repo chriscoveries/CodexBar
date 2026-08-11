@@ -354,6 +354,105 @@ extension CostUsageStoreTests {
     }
 
     @Test
+    func `identical codex cache save leaves the database and wal untouched`() async throws {
+        let fixture = try StoreFixture()
+        defer { fixture.remove() }
+        let store = CostUsageStore(cacheRoot: fixture.root)
+        let path = "/rollouts/stable.jsonl"
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(secondsFromGMT: 0))
+
+        func token(_ index: Int) -> CostUsageCodexTokenSnapshot {
+            CostUsageCodexTokenSnapshot(
+                timestamp: "2026-08-01T12:00:0\(index)Z",
+                last: CostUsageCodexTotals(input: index + 1, cached: 0, output: 1),
+                total: CostUsageCodexTotals(input: (index + 1) * 10, cached: 0, output: index + 1),
+                endOffset: Int64(100 + index))
+        }
+
+        func row(_ index: Int) -> CostUsageScanner.CodexUsageRow {
+            CostUsageScanner.CodexUsageRow(
+                day: "2026-08-01",
+                model: "model-\(index)",
+                turnID: "turn-\(index)",
+                eventIndex: index,
+                timestampUnixMs: Int64(1_754_046_000_000 + index),
+                input: index + 1,
+                cached: 0,
+                output: 1)
+        }
+
+        var usage = CostUsageFileUsage(
+            mtimeUnixMs: 1000,
+            size: 200,
+            days: ["2026-08-01": ["model-0": [1, 0, 1]]])
+        usage.parsedBytes = 200
+        usage.codexScanFileId = "1:42"
+        usage.codexScanComplete = true
+        usage.codexTokenTimestampsMonotonic = true
+        usage.codexTokenSnapshots = [token(0), token(1)]
+        usage.codexRows = [row(0), row(1)]
+
+        var cache = CostUsageCache()
+        cache.scanSinceKey = "2026-08-01"
+        cache.scanUntilKey = "2026-08-01"
+        cache.files = [path: usage]
+        cache.days = usage.days
+        cache.lastScanUnixMs = 1000
+
+        func save(_ cache: CostUsageCache) {
+            _ = store.syncSaveCodexCache(
+                cache,
+                calendar: calendar,
+                requestedScanWindow: (sinceKey: "2026-08-01", untilKey: "2026-08-01"))
+        }
+
+        save(cache)
+
+        let dbURL = store.databaseURL
+        let walURL = dbURL.appendingPathExtension("wal")
+        struct Footprint: Equatable {
+            var size: Int64
+            var mtime: Date?
+        }
+
+        func footprint() -> [URL: Footprint] {
+            var out: [URL: Footprint] = [:]
+            for url in [dbURL, walURL] {
+                if let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) {
+                    out[url] = Footprint(
+                        size: (attributes[.size] as? NSNumber)?.int64Value ?? 0,
+                        mtime: attributes[.modificationDate] as? Date)
+                }
+            }
+            return out
+        }
+
+        let before = footprint()
+
+        // A later scan pass over unchanged files stamps a new timestamp and nothing else.
+        var reread = CostUsageStoreAccess.read(cacheRoot: fixture.root, calendar: calendar)
+        #expect(reread.files[path] != nil)
+        reread.lastScanUnixMs = 2000
+        save(reread)
+
+        #expect(footprint() == before)
+        #expect(await store.fetchTokenSnapshots(path: path).map(\.eventIndex) == [0, 1])
+        #expect(await store.fetchUsageRows(path: path).count == 2)
+
+        // A real content change still persists.
+        var changed = reread
+        changed.lastScanUnixMs = 3000
+        changed.files[path]?.parsedBytes = 201
+        changed.files[path]?.codexTokenSnapshots = [token(0), token(1), token(2)]
+        changed.files[path]?.codexRows = [row(0), row(1), row(2)]
+        save(changed)
+
+        #expect(footprint() != before)
+        #expect(await store.fetchTokenSnapshots(path: path).map(\.eventIndex) == [0, 1, 2])
+    }
+
+    @Test
     func `day aggregate inserts and reads by model`() async throws {
         let fixture = try StoreFixture()
         defer { fixture.remove() }

@@ -1710,12 +1710,12 @@ enum CostUsageScanner {
         let parsedBytes: Int64
     }
 
-    enum ClaudePathRole: String, Codable {
+    enum ClaudePathRole: String, Codable, Equatable {
         case parent
         case subagent
     }
 
-    struct ClaudeUsageRow: Codable {
+    struct ClaudeUsageRow: Codable, Equatable {
         let dayKey: String
         let model: String
         let sessionId: String?
@@ -2481,7 +2481,7 @@ enum CostUsageScanner {
         return String(filename[matchRange])
     }
 
-    struct CodexSessionMetadata: Codable {
+    struct CodexSessionMetadata: Codable, Equatable {
         let sessionId: String?
         let forkedFromId: String?
         let forkTimestamp: String?
@@ -2490,14 +2490,14 @@ enum CostUsageScanner {
         let subagentHistoryStartOrdinal: Int?
     }
 
-    struct CodexTurnContextMetadata: Codable {
+    struct CodexTurnContextMetadata: Codable, Equatable {
         let timestamp: String?
         let model: String?
         let cwd: String?
         let title: String?
     }
 
-    struct CodexTokenCountRecord: Codable {
+    struct CodexTokenCountRecord: Codable, Equatable {
         let timestamp: String
         let model: String?
         let turnID: String?
@@ -2505,7 +2505,7 @@ enum CostUsageScanner {
         let total: CostUsageCodexTotals?
     }
 
-    enum CodexFastLine: Codable {
+    enum CodexFastLine: Codable, Equatable {
         case sessionMeta(CodexSessionMetadata)
         case turnContext(CodexTurnContextMetadata)
         case interAgentCommunication(triggerTurn: Bool)
@@ -2522,7 +2522,7 @@ enum CostUsageScanner {
         }
     }
 
-    struct CodexBufferedFastLine: Codable {
+    struct CodexBufferedFastLine: Codable, Equatable {
         let lineIndex: Int
         let ordinal: Int?
         let endOffset: Int64?
