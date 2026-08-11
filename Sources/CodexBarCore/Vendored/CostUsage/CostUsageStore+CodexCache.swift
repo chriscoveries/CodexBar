@@ -346,12 +346,9 @@ extension CostUsageStore {
     }
 
     private static func reconcileCompletedCodexCatchUp(cache: inout CostUsageCache) {
-        if var lookback = cache.codexActiveLookbackState {
+        if let lookback = cache.codexActiveLookbackState {
             let reconciliationLimit = CostUsageScanner.codexCatchUpScanCandidateLimit
             let candidatePaths = lookback.pendingFilePaths.prefix(reconciliationLimit)
-            var remainingPaths = Array(lookback.pendingFilePaths.dropFirst(candidatePaths.count))
-            var retainedCandidatePaths: [String] = []
-            retainedCandidatePaths.reserveCapacity(candidatePaths.count)
             for path in candidatePaths {
                 Self.codexCatchUpReconciliationVisitForTesting?()
                 let fileURL = URL(fileURLWithPath: path)
@@ -361,7 +358,6 @@ extension CostUsageStore {
                       cachedEntry.usage.codexScanComplete != false,
                       !cachedEntry.usage.hasBufferedCodexForkRetryLines
                 else {
-                    retainedCandidatePaths.append(path)
                     continue
                 }
 
@@ -370,7 +366,6 @@ extension CostUsageStore {
                     metadata: metadata,
                     fileURL: fileURL)
                 else {
-                    retainedCandidatePaths.append(path)
                     continue
                 }
 
@@ -382,13 +377,7 @@ extension CostUsageStore {
                     normalized.codexScanFileId = fileId
                     cache.files[cachedEntry.path] = normalized
                 }
-                // During bounded catch-up the persisted queue, rather than this store-level
-                // reconciliation, owns traversal. Retain even validated cache hits so the
-                // scanner observes later appends and rewrites through its normal file path.
-                retainedCandidatePaths.append(path)
             }
-            remainingPaths.insert(contentsOf: retainedCandidatePaths, at: 0)
-            lookback.pendingFilePaths = remainingPaths
             let lookbackIsComplete = Set(lookback.completedRootPaths) == Set(lookback.rootPaths)
                 && lookback.pendingFilePaths.isEmpty
                 && lookback.legacyRecursivePendingRootPaths.isEmpty

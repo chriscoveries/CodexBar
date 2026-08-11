@@ -2540,7 +2540,7 @@ enum CostUsageScanner {
         context: CodexPendingLookbackAppendContext,
         seenPaths: inout Set<String>,
         fileURLsByPathKey: inout [String: URL],
-        files: inout [URL])
+        files: inout [URL]) -> Int
     {
         if context.validateRoots {
             state.pendingFilePaths = state.pendingFilePaths.filter { path in
@@ -2548,23 +2548,26 @@ enum CostUsageScanner {
             }
         }
         let pendingCount = min(context.maxCount ?? state.pendingFilePaths.count, state.pendingFilePaths.count)
-        let normalizedPrefix = state.pendingFilePaths.prefix(pendingCount).map { path in
-            Self.codexResolvedPath(URL(fileURLWithPath: path))
+        var normalizedPathSet: Set<String> = []
+        let normalizedPrefix = state.pendingFilePaths.prefix(pendingCount).compactMap { path in
+            let resolvedPath = Self.codexResolvedPath(URL(fileURLWithPath: path))
+            return normalizedPathSet.insert(resolvedPath).inserted ? resolvedPath : nil
         }
         state.pendingFilePaths.replaceSubrange(0..<pendingCount, with: normalizedPrefix)
-        let pendingPaths = state.pendingFilePaths.prefix(pendingCount)
-        for path in pendingPaths {
+        for path in normalizedPrefix {
             let fileURL = URL(fileURLWithPath: path)
             let pathKey = Self.codexPathKey(fileURL)
             guard seenPaths.insert(pathKey).inserted else { continue }
             fileURLsByPathKey[pathKey] = fileURL
             files.append(fileURL)
         }
+        return normalizedPrefix.count
     }
 
     private struct CodexRefreshCandidateSelectionContext {
         let fileURLsByPathKey: [String: URL]
         let shouldBoundCatchUp: Bool
+        let boundedQueuePathCount: Int
         let preferNewest: Bool
         let workRecorder: CodexScanWorkRecorder?
     }
@@ -2599,7 +2602,7 @@ enum CostUsageScanner {
             candidates.append(context.fileURLsByPathKey[pathKey] ?? pendingURL)
         }
 
-        let pendingPaths = activeLookbackState.pendingFilePaths
+        let pendingPaths = activeLookbackState.pendingFilePaths.prefix(context.boundedQueuePathCount)
         for path in pendingPaths {
             appendPendingCandidate(path: path)
             if selectionVisits == candidateLimit {
@@ -2608,19 +2611,23 @@ enum CostUsageScanner {
         }
         return CodexRefreshCandidateSelection(
             files: context.preferNewest ? self.sortedCodexSessionFilesNewestFirst(candidates) : candidates,
-            exhaustedVisitBudget: pendingPaths.count > candidates.count)
+            exhaustedVisitBudget: activeLookbackState.pendingFilePaths.count > candidates.count)
     }
 
     private static func finalizedCodexActiveLookbackState(
         _ state: CostUsageCodexActiveLookbackState,
         completedFilePaths: Set<String>,
+        completionCandidateCount: Int,
         workRecorder: CodexScanWorkRecorder?) -> CostUsageCodexActiveLookbackState?
     {
         var state = state
         workRecorder?.recordActiveLookbackFinalization(completionCandidates: completedFilePaths.count)
-        state.pendingFilePaths.removeAll { path in
+        let prefixCount = min(completionCandidateCount, state.pendingFilePaths.count)
+        let retainedPrefix = state.pendingFilePaths.prefix(prefixCount).filter { path in
             completedFilePaths.contains(path)
+                == false
         }
+        state.pendingFilePaths.replaceSubrange(0..<prefixCount, with: retainedPrefix)
         let isComplete = Set(state.completedRootPaths) == Set(state.rootPaths)
             && state.pendingFilePaths.isEmpty
             && state.legacyRecursivePendingRootPaths.isEmpty
@@ -4845,7 +4852,7 @@ enum CostUsageScanner {
                 }
             }
 
-            Self.appendPendingCodexActiveLookbackFiles(
+            let materializedPendingPathCount = Self.appendPendingCodexActiveLookbackFiles(
                 state: &activeLookbackState,
                 context: CodexPendingLookbackAppendContext(
                     roots: plan.roots,
@@ -4874,12 +4881,16 @@ enum CostUsageScanner {
                 shouldBoundCatchUp: shouldBoundCatchUp,
                 shouldSeedBoundedQueue: shouldSeedBoundedQueue,
                 state: &activeLookbackState)
+            let boundedQueuePathCount = shouldSeedBoundedQueue
+                ? min(Self.codexCatchUpScanCandidateLimit, activeLookbackState.pendingFilePaths.count)
+                : materializedPendingPathCount
             let refreshSelection = Self.codexFilesScheduledForRefresh(
                 files,
                 activeLookbackState: &activeLookbackState,
                 context: CodexRefreshCandidateSelectionContext(
                     fileURLsByPathKey: fileURLsByPathKey,
                     shouldBoundCatchUp: shouldBoundCatchUp,
+                    boundedQueuePathCount: boundedQueuePathCount,
                     preferNewest: options.preferNewestCodexSessionsFirst,
                     workRecorder: options.codexScanWorkRecorderForTesting))
             let filesScheduledForRefresh = refreshSelection.files
@@ -4928,7 +4939,7 @@ enum CostUsageScanner {
                 inheritedResolver: inheritedResolver)
             filePathsInScan.formUnion(scanResult.scannedPaths)
             let pendingLookbackPathCount = shouldBoundCatchUp
-                ? min(Self.codexCatchUpScanCandidateLimit, activeLookbackState.pendingFilePaths.count)
+                ? boundedQueuePathCount
                 : activeLookbackState.pendingFilePaths.count
             let pendingLookbackPaths = Set(activeLookbackState.pendingFilePaths.prefix(pendingLookbackPathCount))
             let completedScheduledPaths = Self.completedCodexActiveLookbackPaths(
@@ -4939,6 +4950,7 @@ enum CostUsageScanner {
             cache.codexActiveLookbackState = Self.finalizedCodexActiveLookbackState(
                 activeLookbackState,
                 completedFilePaths: completedScheduledPaths,
+                completionCandidateCount: pendingLookbackPathCount,
                 workRecorder: options.codexScanWorkRecorderForTesting)
             if scanBudget.resumedPartialFileCount > 0
                 || scanBudget.deferredByBudgetFileCount > 0
