@@ -2,6 +2,9 @@
 
 ## 0.49.3 — Unreleased
 
+### Fixed
+- CLI: stop standalone version lookup from walking past the filesystem root and hanging with unbounded memory on affected macOS versions (#2856). Thanks @Manwholikespie!
+
 ## 0.49.2 — 2026-08-10
 
 ### Fixed
