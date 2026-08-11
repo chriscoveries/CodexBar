@@ -10,17 +10,12 @@ import CSQLite3
 
 struct CostUsageStoreTests {
     /// The store actor runs on a custom DispatchQueue-backed `SerialExecutor`, and its
-    /// `sync*` bridges call `assumeIsolated` from inside `queue.sync`. macOS 26+ runtimes
-    /// verify that through `SerialExecutor.isIsolatingCurrentContext()`, whose default
-    /// implementation cannot see through `DispatchQueue.sync` — without an explicit
-    /// implementation the bridge traps ("Incorrect actor executor assumption") and the app
-    /// dies on launch.
+    /// `sync*` bridges hand work to the actor from inside `queue.sync`. Getting that handoff
+    /// wrong takes the app down on launch with "Incorrect actor executor assumption", so the
+    /// bridges have to stay callable from an ordinary non-actor thread.
     ///
-    /// This covers the bridges from a non-actor thread. Note it does not by itself
-    /// reproduce the trap: whether `assumeIsolated` traps depends on the calling context's
-    /// current executor, and no test-harness context reproduced it (plain thread, Task, and
-    /// MainActor were all tried). The regression was verified against the app itself —
-    /// it died on launch with "Incorrect actor executor assumption" and starts cleanly now.
+    /// The subprocess coverage in `CostUsageStoreExecutorIsolationTests` exercises the legacy
+    /// runtime path that an in-process test cannot select.
     @Test
     func `sync bridges are callable from a plain thread`() throws {
         let fixture = try StoreFixture()
