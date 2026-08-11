@@ -446,6 +446,16 @@ extension CostUsageStoreTests {
         let reloaded = CostUsageStoreAccess.read(cacheRoot: fixture.root, calendar: calendar)
         #expect(reloaded.lastScanUnixMs == 2000)
 
+        // Tightening the budget must bypass the identical-content shortcut so retention still
+        // converges instead of leaving an already oversized database untouched.
+        let tightenedBudget = store.syncSaveCodexCache(
+            reread,
+            calendar: calendar,
+            requestedScanWindow: (sinceKey: "2026-08-01", untilKey: "2026-08-01"),
+            fileBudgetBytes: 1,
+            skipIdenticalContent: true)
+        #expect(tightenedBudget.catchUpRequired)
+
         // A real content change still persists.
         var changed = reread
         changed.lastScanUnixMs = 3000

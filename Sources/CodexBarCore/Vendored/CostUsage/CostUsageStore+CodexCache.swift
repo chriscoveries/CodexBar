@@ -66,7 +66,12 @@ extension CostUsageStore {
         skipIdenticalContent: Bool = false) -> CostUsageStoreBudgetResult
     {
         let previous = self.readSnapshot()
+        let currentFileBytes = (try? FileManager.default.attributesOfItem(atPath: self.databaseURL.path))
+            .flatMap { $0[.size] as? NSNumber }?.int64Value ?? 0
+        let isWithinBudgets = previous.files.count <= max(0, rowBudget)
+            && currentFileBytes <= max(0, fileBudgetBytes)
         if skipIdenticalContent,
+           isWithinBudgets,
            Self.persistedContentMatches(
                previous: previous,
                cache: cache,
@@ -79,12 +84,10 @@ extension CostUsageStore {
             // singleton metadata row so refresh debounce keeps working after cache reloads
             // and app restarts instead of rescanning on every interval.
             self.touchScanTimestampIfNeeded(cache.lastScanUnixMs)
-            let attributes = try? FileManager.default.attributesOfItem(atPath: self.databaseURL.path)
-            let fileBytes = (attributes?[.size] as? NSNumber)?.int64Value ?? 0
             return CostUsageStoreBudgetResult(
                 deletedRows: 0,
                 rowCount: previous.files.count,
-                fileBytes: fileBytes,
+                fileBytes: currentFileBytes,
                 catchUpRequired: false)
         }
         let canReuseStoredRows = previous.metadata.timeZoneIdentifier == calendar.timeZone.identifier
