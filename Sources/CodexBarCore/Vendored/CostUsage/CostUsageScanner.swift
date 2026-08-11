@@ -66,6 +66,7 @@ enum CostUsageScanner {
         private var activeLookbackCompletionCandidates = 0
         private var codexCandidateSelectionVisits = 0
         private var codexFileScanAttempts = 0
+        private var codexFileScanAttemptPaths: Set<String> = []
         private var codexProgressAccountingVisits = 0
 
         func record(processed: Int, repriced: Int) {
@@ -100,10 +101,15 @@ enum CostUsageScanner {
             self.lock.unlock()
         }
 
-        func recordCodexFileScanAttempt() {
+        func recordCodexFileScanAttempt(path: String) {
             self.lock.lock()
             self.codexFileScanAttempts += 1
+            self.codexFileScanAttemptPaths.insert(path)
             self.lock.unlock()
+        }
+
+        func attemptedCodexFilePaths() -> Set<String> {
+            self.lock.withLock { self.codexFileScanAttemptPaths }
         }
 
         func recordCodexProgressAccountingVisit() {
@@ -996,6 +1002,9 @@ enum CostUsageScanner {
         let priorityTurnsChanged: Bool
         let needsTurnIDCacheMigration: Bool
         let changedPriorityTurnIDs: Set<String>
+        let requiresAllFilesForCacheWideMigration: Bool
+        let cacheWideMigrationPendingPathKeys: Set<String>
+        let requiresCacheWideFileReprocessing: Bool
         let shouldRefresh: Bool
     }
 
@@ -2527,6 +2536,7 @@ enum CostUsageScanner {
 
     private struct CodexActiveLookbackQueueUpdateContext {
         let seedFiles: [URL]
+        let migrationSeedPathKeys: [String]?
         let discoveredFiles: [URL]
         let previousDiscovery: CostUsageCodexSessionDiscovery?
         let shouldBoundCatchUp: Bool
@@ -2539,10 +2549,14 @@ enum CostUsageScanner {
     {
         guard context.shouldBoundCatchUp else { return }
         if context.shouldSeedBoundedQueue {
-            self.appendCodexActiveLookbackPaths(
-                context.seedFiles,
-                normalizeExisting: true,
-                state: &state)
+            if let migrationSeedPathKeys = context.migrationSeedPathKeys {
+                self.reseedCodexActiveLookbackPathKeys(migrationSeedPathKeys, state: &state)
+            } else {
+                self.appendCodexActiveLookbackPaths(
+                    context.seedFiles,
+                    normalizeExisting: true,
+                    state: &state)
+            }
             return
         }
         guard let previousDiscovery = context.previousDiscovery else { return }
@@ -2551,6 +2565,41 @@ enum CostUsageScanner {
         })
         let newFiles = context.discoveredFiles.filter { !previousPaths.contains(Self.codexResolvedPath($0)) }
         Self.appendCodexActiveLookbackPaths(newFiles, state: &state)
+    }
+
+    private static func reseedCodexActiveLookbackPathKeys(
+        _ pathKeys: some Sequence<String>,
+        state: inout CostUsageCodexActiveLookbackState)
+    {
+        var queuedPaths: Set<String> = []
+        var reseededPaths: [String] = []
+        func append(_ path: String) {
+            let pathKey = Self.codexPathKey(URL(fileURLWithPath: path))
+            guard queuedPaths.insert(pathKey).inserted else { return }
+            reseededPaths.append(pathKey)
+        }
+        for path in pathKeys {
+            append(path)
+        }
+        for path in state.pendingFilePaths {
+            append(path)
+        }
+        state.pendingFilePaths = reseededPaths
+    }
+
+    private static func cacheWideMigrationNeedsQueueReseed(
+        plan: CodexRefreshPlan,
+        inventoryPathKeys: Set<String>,
+        state: CostUsageCodexActiveLookbackState) -> Bool
+    {
+        guard plan.requiresCacheWideFileReprocessing else { return false }
+        let queuedPathKeys = Set(state.pendingFilePaths.map {
+            Self.codexPathKey(URL(fileURLWithPath: $0))
+        })
+        let requiredPathKeys = plan.requiresAllFilesForCacheWideMigration
+            ? inventoryPathKeys
+            : plan.cacheWideMigrationPendingPathKeys.intersection(inventoryPathKeys)
+        return !requiredPathKeys.isSubset(of: queuedPathKeys)
     }
 
     private struct CodexPendingLookbackAppendContext {
@@ -4634,23 +4683,30 @@ enum CostUsageScanner {
         let rootsFingerprint = Self.codexRootsFingerprint(roots)
         let rootsChanged = cache.roots != rootsFingerprint
         let windowExpanded = Self.requestedWindowExpandsCache(range: range, cache: cache)
-        let needsPricingMetadataMigration = cache.files.values.contains {
-            Self.needsCodexPricingMetadata($0, range: range)
-        }
+        let pricingMetadataMigrationPathKeys = Set(cache.files.compactMap { path, usage in
+            Self.needsCodexPricingMetadata(usage, range: range)
+                ? Self.codexPathKey(URL(fileURLWithPath: path))
+                : nil
+        })
+        let needsPricingMetadataMigration = !pricingMetadataMigrationPathKeys.isEmpty
         let needsProjectMetadataMigration = cache.codexProjectMetadataVersion != Self.codexProjectMetadataVersion
         let modelsDevLoad = ModelsDevCache.load(now: now, cacheRoot: options.cacheRoot)
         let modelsDevCatalog = modelsDevLoad.artifact?.catalog
         let codexPricingKey = Self.codexPricingKey(modelsDevArtifact: modelsDevLoad.artifact)
+        let pricingKeyChanged = cache.codexPricingKey != codexPricingKey
         let codexPriorityMetadataKey = Self.codexPriorityMetadataKey(databaseURL: options.codexTraceDatabaseURL)
         let hasPriorityMetadata = codexPriorityMetadataKey.hasPrefix("sqlite:")
         let priorityMetadataChanged = Self.codexPriorityMetadataChanged(
             old: cache.codexPriorityMetadataKey,
             new: codexPriorityMetadataKey)
-        let needsTurnIDCacheMigration = hasPriorityMetadata && cache.files.values.contains {
-            $0.codexTurnIDs == nil && $0.touchesCodexScanWindow(
+        let turnIDCacheMigrationPathKeys = hasPriorityMetadata ? Set(cache.files.compactMap { path, usage in
+            usage.codexTurnIDs == nil && usage.touchesCodexScanWindow(
                 sinceKey: range.scanSinceKey,
                 untilKey: range.scanUntilKey)
-        }
+                ? Self.codexPathKey(URL(fileURLWithPath: path))
+                : nil
+        }) : []
+        let needsTurnIDCacheMigration = !turnIDCacheMigrationPathKeys.isEmpty
         let shouldInspectPriorityTurns = options.forceRescan
             || windowExpanded
             || rootsChanged
@@ -4681,10 +4737,20 @@ enum CostUsageScanner {
                 newKeys: priorityTurnKeys,
                 range: range)
             : []
+        let requiresAllFilesForCacheWideMigration = !cache.files.isEmpty
+            && (pricingKeyChanged
+                || needsProjectMetadataMigration
+                || priorityMetadataChanged
+                || priorityTurnsChanged)
+        let cacheWideMigrationPendingPathKeys = pricingMetadataMigrationPathKeys
+            .union(turnIDCacheMigrationPathKeys)
+        let requiresCacheWideFileReprocessing = requiresAllFilesForCacheWideMigration
+            || !cacheWideMigrationPendingPathKeys.isEmpty
         let shouldRefresh = options.forceRescan
             || windowExpanded
             || rootsChanged
             || needsPricingMetadataMigration
+            || pricingKeyChanged
             || needsProjectMetadataMigration
             || needsTurnIDCacheMigration
             || priorityMetadataChanged
@@ -4712,6 +4778,9 @@ enum CostUsageScanner {
             priorityTurnsChanged: priorityTurnsChanged,
             needsTurnIDCacheMigration: needsTurnIDCacheMigration,
             changedPriorityTurnIDs: changedPriorityTurnIDs,
+            requiresAllFilesForCacheWideMigration: requiresAllFilesForCacheWideMigration,
+            cacheWideMigrationPendingPathKeys: cacheWideMigrationPendingPathKeys,
+            requiresCacheWideFileReprocessing: requiresCacheWideFileReprocessing,
             shouldRefresh: shouldRefresh)
     }
 
@@ -4832,7 +4901,7 @@ enum CostUsageScanner {
                 roots: plan.roots,
                 scanSinceKey: range.scanSinceKey,
                 includeLegacyRecursiveScan: shouldRunColdCacheLookback)
-            let shouldSeedBoundedQueue = cache.codexActiveLookbackState.map {
+            let activeLookbackStateWasReset = cache.codexActiveLookbackState.map {
                 $0.scanSinceKey != activeLookbackState.scanSinceKey
                     || $0.rootPaths != activeLookbackState.rootPaths
             } ?? true
@@ -4843,7 +4912,8 @@ enum CostUsageScanner {
                     || cache.files.values.contains {
                         $0.codexScanComplete == false || $0.hasBufferedCodexForkRetryLines
                     }
-                    || cache.codexActiveLookbackState != nil)
+                    || cache.codexActiveLookbackState != nil
+                    || plan.requiresCacheWideFileReprocessing)
             var seenPaths: Set<String> = []
             var fileURLsByPathKey: [String: URL] = [:]
             var files: [URL] = []
@@ -4886,7 +4956,7 @@ enum CostUsageScanner {
                 context: CodexPendingLookbackAppendContext(
                     roots: plan.roots,
                     maxCount: shouldBoundCatchUp ? Self.codexCatchUpScanCandidateLimit : nil,
-                    validateRoots: shouldSeedBoundedQueue),
+                    validateRoots: activeLookbackStateWasReset),
                 seenPaths: &seenPaths,
                 fileURLsByPathKey: &fileURLsByPathKey,
                 files: &files)
@@ -4904,10 +4974,24 @@ enum CostUsageScanner {
                 files.append(fileURL)
             }
 
+            let inventoryPathKeys = Set(fileURLsByPathKey.keys)
+            let cacheWideMigrationNeedsQueueReseed = Self.cacheWideMigrationNeedsQueueReseed(
+                plan: plan,
+                inventoryPathKeys: inventoryPathKeys,
+                state: activeLookbackState)
+            let migrationSeedPathKeys = cacheWideMigrationNeedsQueueReseed
+                ? (options.preferNewestCodexSessionsFirst
+                    ? Self.sortedCodexSessionFilesNewestFirst(files)
+                    : files).map(Self.codexPathKey)
+                : nil
+            // One-shot metadata keys can advance in this pass because the durable queue now owns
+            // every required revisit. Later passes observe the new key and drain the queue without reseeding.
+            let shouldSeedBoundedQueue = activeLookbackStateWasReset || cacheWideMigrationNeedsQueueReseed
             var filePathsInScan = Set(files.map(\.path))
             Self.seedOrExtendCodexActiveLookbackQueue(
                 context: CodexActiveLookbackQueueUpdateContext(
                     seedFiles: files,
+                    migrationSeedPathKeys: migrationSeedPathKeys,
                     discoveredFiles: discoveredFiles,
                     previousDiscovery: cache.codexSessionDiscovery,
                     shouldBoundCatchUp: shouldBoundCatchUp,
@@ -5042,11 +5126,8 @@ enum CostUsageScanner {
             let canReuseApproximateProgress = !options.forceRescan
                 && !plan.rootsChanged
                 && !plan.windowExpanded
-                && !plan.needsPricingMetadataMigration
-                && !plan.needsProjectMetadataMigration
-                && !plan.needsTurnIDCacheMigration
-                && !plan.priorityMetadataChanged
-                && !plan.priorityTurnsChanged
+                && !plan.requiresAllFilesForCacheWideMigration
+                && !cacheWideMigrationNeedsQueueReseed
                 && cachedSinceKey == retainedSinceKey
                 && cachedUntilKey == retainedUntilKey
             Self.pruneDays(cache: &cache, sinceKey: retainedSinceKey, untilKey: retainedUntilKey)
@@ -5068,6 +5149,7 @@ enum CostUsageScanner {
                     inventoryPaths: filePathsInScan,
                     hasKnownBoundedWork: hasKnownBoundedWork,
                     canReuseApproximateProgress: canReuseApproximateProgress,
+                    pendingQueuePathCount: cache.codexActiveLookbackState?.pendingFilePaths.count,
                     completionStatesBeforeScan: completionStatesBeforeScan,
                     workRecorder: options.codexScanWorkRecorderForTesting))
             let scanProgress = progressUpdate.summary
@@ -5128,6 +5210,7 @@ enum CostUsageScanner {
         let inventoryPaths: Set<String>
         let hasKnownBoundedWork: Bool
         let canReuseApproximateProgress: Bool
+        let pendingQueuePathCount: Int?
         let completionStatesBeforeScan: [String: Bool]
         let workRecorder: CodexScanWorkRecorder?
     }
@@ -5172,6 +5255,9 @@ enum CostUsageScanner {
             : 0
         var completedFiles = max(0, previousCompletedFiles + completionDelta)
         let totalFiles = max(previousTotalFiles, context.inventoryPaths.count, 1)
+        if let pendingQueuePathCount = context.pendingQueuePathCount {
+            completedFiles = max(completedFiles, max(0, totalFiles - pendingQueuePathCount))
+        }
 
         // A bounded-work signal proves at least one pass remains even if this slice happened
         // to visit the final 512 candidates. Keep one conservative slot open until an exact
@@ -5284,7 +5370,7 @@ enum CostUsageScanner {
             if context.scanBudget?.shouldStopBeforeNextFile() == true {
                 break
             }
-            context.workRecorder?.recordCodexFileScanAttempt()
+            context.workRecorder?.recordCodexFileScanAttempt(path: Self.codexPathKey(fileURL))
             attemptedPaths.insert(fileURL.path)
             try Self.scanCodexFile(
                 fileURL: fileURL,
@@ -5311,7 +5397,7 @@ enum CostUsageScanner {
                 if context.scanBudget?.shouldStopBeforeNextFile() == true {
                     break dependencyScan
                 }
-                context.workRecorder?.recordCodexFileScanAttempt()
+                context.workRecorder?.recordCodexFileScanAttempt(path: Self.codexPathKey(fileURL))
                 scannedPaths.insert(fileURL.path)
                 attemptedPaths.insert(fileURL.path)
                 try Self.scanCodexFile(

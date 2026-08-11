@@ -2,6 +2,9 @@
 
 ## 0.49.3 — Unreleased
 
+### Fixed
+- Codex: keep large Usage & Spend history indexing bounded, durable across relaunches, and resumable after appends without replaying completed sessions (#2849). Thanks @Quicksaver!
+
 ## 0.49.2 — 2026-08-10
 
 ### Fixed
@@ -12,7 +15,6 @@
 - Sub2API: localize and group menu-card quota labels and request, token, and cost totals into a compact usage summary (#2835). Thanks @weirdo-adam!
 - Codex: avoid repeatedly converting historical token snapshots during cost-cache refreshes, preventing sustained CPU usage on large session histories.
 - Codex: make automatic cost-history catch-up near-idle and limit local-history scans to provider refreshes with a 15-minute energy floor.
-- Codex: keep large Usage & Spend history indexing bounded, durable across relaunches, and resumable after appends without replaying completed sessions (#2849). Thanks @Quicksaver!
 - Agent Sessions: stop inactive local and remote refresh schedulers from waking while monitoring is disabled.
 - Cost usage: refresh token-cost data when “Refresh all providers on menu open” is enabled, with a one-minute scan floor to avoid repeated work (#2388). Thanks @betive37!
 
