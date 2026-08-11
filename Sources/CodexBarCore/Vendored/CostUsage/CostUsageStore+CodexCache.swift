@@ -381,12 +381,9 @@ extension CostUsageStore {
             let lookbackIsComplete = Set(lookback.completedRootPaths) == Set(lookback.rootPaths)
                 && lookback.pendingFilePaths.isEmpty
                 && lookback.legacyRecursivePendingRootPaths.isEmpty
-            // A bounded scanner persists one completed lookback pass as a sentinel before
-            // its following zero-work pass computes the exact inventory. Dropping that
-            // sentinel here restarts recent-file discovery on every load, so the newest
-            // sessions are retried forever and catch-up never reaches its proof pass.
-            let awaitingExactInventory = lookback.awaitingExactInventory == true
-            cache.codexActiveLookbackState = lookbackIsComplete && !awaitingExactInventory ? nil : lookback
+            let awaitingExactValidation = cache.codexScanCatchUpPending == true
+                && cache.codexScanInventoryPaths == nil
+            cache.codexActiveLookbackState = lookbackIsComplete && !awaitingExactValidation ? nil : lookback
         }
 
         guard cache.codexScanCatchUpPending == true,
@@ -880,8 +877,7 @@ extension CostUsageStore {
                 nextDayByRoot: $0.nextDayKeyByRoot,
                 completedRootPaths: $0.completedRootPaths,
                 pendingFilePaths: $0.pendingFilePaths,
-                legacyRecursivePendingRootPaths: $0.legacyRecursivePendingRootPaths,
-                awaitingExactInventory: $0.awaitingExactInventory)
+                legacyRecursivePendingRootPaths: $0.legacyRecursivePendingRootPaths)
         }
     }
 
@@ -892,8 +888,7 @@ extension CostUsageStore {
             nextDayKeyByRoot: value.nextDayByRoot,
             completedRootPaths: value.completedRootPaths,
             pendingFilePaths: value.pendingFilePaths,
-            legacyRecursivePendingRootPaths: value.legacyRecursivePendingRootPaths,
-            awaitingExactInventory: value.awaitingExactInventory)
+            legacyRecursivePendingRootPaths: value.legacyRecursivePendingRootPaths)
     }
 
     private static func tokenSnapshot(

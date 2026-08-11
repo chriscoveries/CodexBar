@@ -2501,18 +2501,28 @@ enum CostUsageScanner {
 
     private static func appendCodexActiveLookbackPaths(
         _ files: some Sequence<URL>,
+        normalizeExisting: Bool = false,
         state: inout CostUsageCodexActiveLookbackState)
     {
-        // Existing order is the durable traversal priority. Normalize and deduplicate it in
-        // place, then append new discoveries so later batches cannot jump ahead of queued work.
-        var queuedPaths: Set<String> = []
-        state.pendingFilePaths = state.pendingFilePaths.compactMap { path in
-            let resolvedPath = Self.codexResolvedPath(URL(fileURLWithPath: path))
-            return queuedPaths.insert(resolvedPath).inserted ? resolvedPath : nil
+        let files = Array(files)
+        guard !files.isEmpty else { return }
+        var queuedPaths: Set<String>?
+        if normalizeExisting {
+            var normalizedPaths: Set<String> = []
+            state.pendingFilePaths = state.pendingFilePaths.compactMap { path in
+                let resolvedPath = Self.codexResolvedPath(URL(fileURLWithPath: path))
+                return normalizedPaths.insert(resolvedPath).inserted ? resolvedPath : nil
+            }
+            queuedPaths = normalizedPaths
         }
         for fileURL in files {
             let resolvedPath = Self.codexResolvedPath(fileURL)
-            guard queuedPaths.insert(resolvedPath).inserted else { continue }
+            let isNewPath: Bool = if queuedPaths != nil {
+                queuedPaths!.insert(resolvedPath).inserted
+            } else {
+                !state.pendingFilePaths.contains(resolvedPath)
+            }
+            guard isNewPath else { continue }
             state.pendingFilePaths.append(resolvedPath)
         }
     }
@@ -2531,7 +2541,10 @@ enum CostUsageScanner {
     {
         guard context.shouldBoundCatchUp else { return }
         if context.shouldSeedBoundedQueue {
-            self.appendCodexActiveLookbackPaths(context.seedFiles, state: &state)
+            self.appendCodexActiveLookbackPaths(
+                context.seedFiles,
+                normalizeExisting: true,
+                state: &state)
             return
         }
         guard let previousDiscovery = context.previousDiscovery else { return }
@@ -2631,6 +2644,7 @@ enum CostUsageScanner {
         _ state: CostUsageCodexActiveLookbackState,
         completedFilePaths: Set<String>,
         completionCandidateCount: Int,
+        retainCompletedStateForExactValidation: Bool,
         workRecorder: CodexScanWorkRecorder?) -> CostUsageCodexActiveLookbackState?
     {
         var state = state
@@ -2644,7 +2658,7 @@ enum CostUsageScanner {
         let isComplete = Set(state.completedRootPaths) == Set(state.rootPaths)
             && state.pendingFilePaths.isEmpty
             && state.legacyRecursivePendingRootPaths.isEmpty
-        return isComplete ? nil : state
+        return isComplete && !retainCompletedStateForExactValidation ? nil : state
     }
 
     private static func completedCodexActiveLookbackPaths(
@@ -4968,6 +4982,7 @@ enum CostUsageScanner {
                 activeLookbackState,
                 completedFilePaths: completedScheduledPaths,
                 completionCandidateCount: pendingLookbackPathCount,
+                retainCompletedStateForExactValidation: shouldBoundCatchUp && pendingLookbackPathCount > 0,
                 workRecorder: options.codexScanWorkRecorderForTesting)
             if scanBudget.resumedPartialFileCount > 0
                 || scanBudget.deferredByBudgetFileCount > 0

@@ -629,10 +629,10 @@ struct CostUsagePerformanceGateTests {
         let fetcher = CostUsageFetcher(scannerOptions: options)
         var status = await fetcher.codexScanCatchUpStatus()
         #expect(status.pending)
-        var progressKeys = [status.progressKey]
+        var progressStates = [(pending: status.pending, key: status.progressKey)]
         for _ in 0..<12 where status.pending {
             status = try await fetcher.advanceCodexScanCatchUp(now: day, historyDays: 1)
-            progressKeys.append(status.progressKey)
+            progressStates.append((pending: status.pending, key: status.progressKey))
         }
 
         let completedCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
@@ -643,7 +643,9 @@ struct CostUsagePerformanceGateTests {
         #expect(!status.pending)
         #expect(completedUsage.codexScanComplete == true)
         #expect(completedUsage.parsedBytes == metadata.size)
-        #expect(zip(progressKeys, progressKeys.dropFirst()).allSatisfy(!=))
+        #expect(zip(progressStates, progressStates.dropFirst()).allSatisfy { previous, next in
+            previous.key != next.key || (previous.pending && !next.pending)
+        })
         #expect(completedReport.summary?.totalTokens == baseline.summary?.totalTokens)
         #expect(completedReport.data.map(\.totalTokens) == baseline.data.map(\.totalTokens))
     }

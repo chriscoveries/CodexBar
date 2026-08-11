@@ -41,11 +41,30 @@ struct CostUsageBoundedProgressTests {
             now: day.addingTimeInterval(2),
             options: options)
         let secondCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
-        #expect(secondRecorder.snapshot().codexProgressAccountingVisits == corpusSize)
-        #expect(secondCache.codexScanCompletedFiles == corpusSize)
+        #expect(secondRecorder.snapshot().codexProgressAccountingVisits == 0)
+        #expect(secondCache.codexScanCompletedFiles == corpusSize - 1)
         #expect(secondCache.codexScanTotalFiles == corpusSize)
-        #expect(secondCache.codexScanInventoryPaths?.count == corpusSize)
-        #expect(secondCache.codexScanCatchUpPending == false)
+        #expect(secondCache.codexActiveLookbackState?.pendingFilePaths.isEmpty == true)
+        #expect(secondCache.codexScanInventoryPaths == nil)
+        #expect(secondCache.codexScanCatchUpPending == true)
+
+        let finalRecorder = CostUsageScanner.CodexScanWorkRecorder()
+        options.codexScanWorkRecorderForTesting = finalRecorder
+        _ = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day.addingTimeInterval(3),
+            options: options)
+        let finalCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
+        #expect(finalRecorder.snapshot().codexCandidateSelectionVisits == 0)
+        #expect(finalRecorder.snapshot().codexFileScanAttempts == 0)
+        #expect(finalRecorder.snapshot().codexProgressAccountingVisits == corpusSize)
+        #expect(finalCache.codexActiveLookbackState == nil)
+        #expect(finalCache.codexScanCompletedFiles == corpusSize)
+        #expect(finalCache.codexScanTotalFiles == corpusSize)
+        #expect(finalCache.codexScanInventoryPaths?.count == corpusSize)
+        #expect(finalCache.codexScanCatchUpPending == false)
     }
 
     @Test
@@ -211,12 +230,29 @@ struct CostUsageBoundedProgressTests {
         let secondCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
         #expect(secondMetrics.codexCandidateSelectionVisits == 1)
         #expect(secondMetrics.codexFileScanAttempts == 1)
-        #expect(secondMetrics.codexProgressAccountingVisits == corpusSize)
+        #expect(secondMetrics.codexProgressAccountingVisits == 0)
         #expect(secondCache.files[incompletePath]?.codexScanComplete == true)
-        #expect(secondCache.codexActiveLookbackState == nil)
-        #expect(secondCache.codexScanCompletedFiles == corpusSize)
+        #expect(secondCache.codexActiveLookbackState?.pendingFilePaths.isEmpty == true)
+        #expect(secondCache.codexScanCompletedFiles == corpusSize - 1)
         #expect(secondCache.codexScanTotalFiles == corpusSize)
-        #expect(secondCache.codexScanCatchUpPending == false)
+        #expect(secondCache.codexScanCatchUpPending == true)
+
+        let finalRecorder = CostUsageScanner.CodexScanWorkRecorder()
+        options.codexScanWorkRecorderForTesting = finalRecorder
+        _ = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day.addingTimeInterval(3),
+            options: options)
+        let finalCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
+        #expect(finalRecorder.snapshot().codexCandidateSelectionVisits == 0)
+        #expect(finalRecorder.snapshot().codexFileScanAttempts == 0)
+        #expect(finalRecorder.snapshot().codexProgressAccountingVisits == corpusSize)
+        #expect(finalCache.codexActiveLookbackState == nil)
+        #expect(finalCache.codexScanCompletedFiles == corpusSize)
+        #expect(finalCache.codexScanTotalFiles == corpusSize)
+        #expect(finalCache.codexScanCatchUpPending == false)
     }
 
     @Test
@@ -297,16 +333,33 @@ struct CostUsageBoundedProgressTests {
         let afterTotals = try #require(secondCache.files[appendedPath]?.lastCountedTotals)
         #expect(secondMetrics.codexCandidateSelectionVisits == 2)
         #expect(secondMetrics.codexFileScanAttempts == 2)
-        #expect(secondMetrics.codexProgressAccountingVisits == corpusSize)
+        #expect(secondMetrics.codexProgressAccountingVisits == 0)
         #expect(afterTotals.input == 250)
         #expect(afterTotals.cached == 80)
         #expect(afterTotals.output == 30)
         #expect(afterTotals != beforeTotals)
         #expect(secondCache.files[incompletePath]?.codexScanComplete == true)
-        #expect(secondCache.codexActiveLookbackState == nil)
-        #expect(secondCache.codexScanCompletedFiles == corpusSize)
+        #expect(secondCache.codexActiveLookbackState?.pendingFilePaths.isEmpty == true)
+        #expect(secondCache.codexScanCompletedFiles == corpusSize - 1)
         #expect(secondCache.codexScanTotalFiles == corpusSize)
-        #expect(secondCache.codexScanCatchUpPending == false)
+        #expect(secondCache.codexScanCatchUpPending == true)
+
+        let finalRecorder = CostUsageScanner.CodexScanWorkRecorder()
+        options.codexScanWorkRecorderForTesting = finalRecorder
+        _ = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day.addingTimeInterval(3),
+            options: options)
+        let finalCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
+        #expect(finalRecorder.snapshot().codexCandidateSelectionVisits == 0)
+        #expect(finalRecorder.snapshot().codexFileScanAttempts == 0)
+        #expect(finalRecorder.snapshot().codexProgressAccountingVisits == corpusSize)
+        #expect(finalCache.codexActiveLookbackState == nil)
+        #expect(finalCache.codexScanCompletedFiles == corpusSize)
+        #expect(finalCache.codexScanTotalFiles == corpusSize)
+        #expect(finalCache.codexScanCatchUpPending == false)
     }
 
     @Test
@@ -373,11 +426,28 @@ struct CostUsageBoundedProgressTests {
         let finalCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
         #expect(finalMetrics.codexCandidateSelectionVisits == 1)
         #expect(finalMetrics.codexFileScanAttempts == 1)
-        #expect(finalMetrics.codexProgressAccountingVisits == corpusSize + 1)
-        #expect(finalCache.codexActiveLookbackState == nil)
-        #expect(finalCache.codexScanCompletedFiles == corpusSize + 1)
+        #expect(finalMetrics.codexProgressAccountingVisits == 0)
+        #expect(finalCache.codexActiveLookbackState?.pendingFilePaths.isEmpty == true)
+        #expect(finalCache.codexScanCompletedFiles == corpusSize)
         #expect(finalCache.codexScanTotalFiles == corpusSize + 1)
-        #expect(finalCache.codexScanCatchUpPending == false)
+        #expect(finalCache.codexScanCatchUpPending == true)
+
+        let validationRecorder = CostUsageScanner.CodexScanWorkRecorder()
+        options.codexScanWorkRecorderForTesting = validationRecorder
+        _ = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day.addingTimeInterval(3),
+            options: options)
+        let validatedCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
+        #expect(validationRecorder.snapshot().codexCandidateSelectionVisits == 0)
+        #expect(validationRecorder.snapshot().codexFileScanAttempts == 0)
+        #expect(validationRecorder.snapshot().codexProgressAccountingVisits == corpusSize + 1)
+        #expect(validatedCache.codexActiveLookbackState == nil)
+        #expect(validatedCache.codexScanCompletedFiles == corpusSize + 1)
+        #expect(validatedCache.codexScanTotalFiles == corpusSize + 1)
+        #expect(validatedCache.codexScanCatchUpPending == false)
     }
 
     @Test
@@ -442,8 +512,8 @@ struct CostUsageBoundedProgressTests {
         let secondCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
         #expect(secondMetrics.codexCandidateSelectionVisits == 1)
         #expect(secondMetrics.codexFileScanAttempts == 1)
-        #expect(secondMetrics.codexProgressAccountingVisits == corpusSize)
-        #expect(secondCache.codexActiveLookbackState == nil)
+        #expect(secondMetrics.codexProgressAccountingVisits == 0)
+        #expect(secondCache.codexActiveLookbackState?.pendingFilePaths.isEmpty == true)
         #expect(secondCache.codexScanCompletedFiles == corpusSize - 1)
         #expect(secondCache.codexScanInventoryPaths == nil)
         #expect(secondCache.codexScanCatchUpPending == true)
@@ -458,15 +528,16 @@ struct CostUsageBoundedProgressTests {
             options: options)
         let thirdMetrics = thirdRecorder.snapshot()
         let thirdCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
-        #expect(thirdMetrics.codexCandidateSelectionVisits == CostUsageScanner.codexCatchUpScanCandidateLimit)
-        #expect(thirdMetrics.codexFileScanAttempts == CostUsageScanner.codexCatchUpScanCandidateLimit)
-        #expect(thirdMetrics.codexProgressAccountingVisits == 0)
-        #expect(thirdCache.files[rewrittenPath]?.lastCountedTotals?.input == 900)
-        #expect(thirdCache.codexActiveLookbackState?.pendingFilePaths.count == 1)
+        #expect(thirdMetrics.codexCandidateSelectionVisits == 0)
+        #expect(thirdMetrics.codexFileScanAttempts == 0)
+        #expect(thirdMetrics.codexProgressAccountingVisits == corpusSize)
+        #expect(thirdCache.codexActiveLookbackState == nil)
+        #expect(thirdCache.codexScanCompletedFiles == corpusSize - 1)
         #expect(thirdCache.codexScanCatchUpPending == true)
 
         let finalRecorder = CostUsageScanner.CodexScanWorkRecorder()
         options.codexScanWorkRecorderForTesting = finalRecorder
+        options.maxCodexScanDurationPerRefresh = nil
         _ = CostUsageScanner.loadDailyReport(
             provider: .codex,
             since: day,
@@ -475,9 +546,10 @@ struct CostUsageBoundedProgressTests {
             options: options)
         let finalMetrics = finalRecorder.snapshot()
         let finalCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
-        #expect(finalMetrics.codexCandidateSelectionVisits == 1)
-        #expect(finalMetrics.codexFileScanAttempts == 1)
+        #expect(finalMetrics.codexCandidateSelectionVisits == 0)
+        #expect(finalMetrics.codexFileScanAttempts == corpusSize)
         #expect(finalMetrics.codexProgressAccountingVisits == corpusSize)
+        #expect(finalCache.files[rewrittenPath]?.lastCountedTotals?.input == 900)
         #expect(finalCache.codexActiveLookbackState == nil)
         #expect(finalCache.codexScanCompletedFiles == corpusSize)
         #expect(finalCache.codexScanTotalFiles == corpusSize)
@@ -551,11 +623,28 @@ struct CostUsageBoundedProgressTests {
         let finalCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
         #expect(finalMetrics.codexCandidateSelectionVisits == 1)
         #expect(finalMetrics.codexFileScanAttempts == 1)
-        #expect(finalMetrics.codexProgressAccountingVisits == 1)
-        #expect(finalCache.codexActiveLookbackState == nil)
-        #expect(finalCache.codexScanCompletedFiles == 1)
-        #expect(finalCache.codexScanTotalFiles == 1)
-        #expect(finalCache.codexScanCatchUpPending == false)
+        #expect(finalMetrics.codexProgressAccountingVisits == 0)
+        #expect(finalCache.codexActiveLookbackState?.pendingFilePaths.isEmpty == true)
+        #expect(finalCache.codexScanCompletedFiles == corpusSize - 1)
+        #expect(finalCache.codexScanTotalFiles == corpusSize)
+        #expect(finalCache.codexScanCatchUpPending == true)
+
+        let validationRecorder = CostUsageScanner.CodexScanWorkRecorder()
+        options.codexScanWorkRecorderForTesting = validationRecorder
+        _ = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day.addingTimeInterval(3),
+            options: options)
+        let validatedCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
+        #expect(validationRecorder.snapshot().codexCandidateSelectionVisits == 0)
+        #expect(validationRecorder.snapshot().codexFileScanAttempts == 0)
+        #expect(validationRecorder.snapshot().codexProgressAccountingVisits == 1)
+        #expect(validatedCache.codexActiveLookbackState == nil)
+        #expect(validatedCache.codexScanCompletedFiles == 1)
+        #expect(validatedCache.codexScanTotalFiles == 1)
+        #expect(validatedCache.codexScanCatchUpPending == false)
     }
 
     @Test

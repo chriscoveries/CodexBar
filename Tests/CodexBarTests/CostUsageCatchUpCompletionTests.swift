@@ -142,6 +142,7 @@ struct CostUsageCatchUpCompletionTests {
         #expect(repairedCache.codexScanCatchUpPending == true)
         #expect(repairedCache.files[path]?.codexScanFileId == currentIdentity)
 
+        options.maxCodexScanDurationPerRefresh = nil
         let recorder = CostUsageScanner.CodexScanWorkRecorder()
         options.codexScanWorkRecorderForTesting = recorder
         _ = CostUsageScanner.loadDailyReport(
