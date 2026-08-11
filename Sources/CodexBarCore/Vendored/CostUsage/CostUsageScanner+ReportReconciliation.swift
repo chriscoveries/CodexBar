@@ -11,6 +11,11 @@ extension CostUsageScanner {
         let unresolvedGroups: Set<CodexDayModelKey>
     }
 
+    struct CodexPricingModeEvidence {
+        let mismatchGroups: Set<CodexDayModelKey>
+        let priorityGroups: Set<CodexDayModelKey>
+    }
+
     static func codexCanonicalPricingRows(_ usage: CostUsageFileUsage) -> CodexCanonicalPricingRows {
         let persistedRows = usage.codexRows ?? []
         let rowsByGroup = Dictionary(grouping: persistedRows) {
@@ -40,6 +45,57 @@ extension CostUsageScanner {
         }
 
         return CodexCanonicalPricingRows(rows: canonicalRows, unresolvedGroups: unresolvedGroups)
+    }
+
+    static func codexPricingModeEvidence(
+        usage: CostUsageFileUsage,
+        reconciledRows: [CodexUsageRow],
+        range: CostUsageDayRange,
+        priorityTurns: [String: CodexPriorityTurnMetadata]) -> CodexPricingModeEvidence
+    {
+        let reconciledModeTokens = self.codexModeTokenMaps(
+            rows: reconciledRows,
+            range: range,
+            priorityTurns: priorityTurns)
+        var mismatchGroups = Set<CodexDayModelKey>()
+        var priorityGroups = Set<CodexDayModelKey>()
+        for (day, models) in usage.days {
+            for (model, packed) in models {
+                let persistedStandard = usage.codexStandardTokens?[day]?[model]
+                let persistedPriority = usage.codexPriorityTokens?[day]?[model]
+                guard persistedStandard != nil || persistedPriority != nil else { continue }
+                let (persistedModeTotal, modeOverflow) = max(0, persistedStandard ?? 0)
+                    .addingReportingOverflow(max(0, persistedPriority ?? 0))
+                let (canonicalTotal, canonicalOverflow) = max(0, packed[safe: 0] ?? 0)
+                    .addingReportingOverflow(max(0, packed[safe: 2] ?? 0))
+                let key = CodexDayModelKey(day: day, model: model)
+                guard !modeOverflow, !canonicalOverflow else {
+                    mismatchGroups.insert(key)
+                    continue
+                }
+                // Copied fork prefixes can stale these legacy maps too. Only a map that is
+                // independently canonical for its file may constrain retained row ownership.
+                guard persistedModeTotal == canonicalTotal else { continue }
+                let rowStandard = reconciledModeTokens.standard?[day]?[model] ?? 0
+                let rowPriority = reconciledModeTokens.priority?[day]?[model] ?? 0
+                if rowStandard != max(0, persistedStandard ?? 0)
+                    || rowPriority != max(0, persistedPriority ?? 0)
+                {
+                    mismatchGroups.insert(key)
+                }
+            }
+        }
+        for (day, models) in usage.codexPriorityTokens ?? [:] {
+            for (model, tokens) in models where tokens > 0 {
+                priorityGroups.insert(CodexDayModelKey(day: day, model: model))
+            }
+        }
+        for row in usage.codexRows ?? [] where row.pricingMode == "priority"
+            || row.turnID.flatMap({ priorityTurns[$0] }) != nil
+        {
+            priorityGroups.insert(CodexDayModelKey(day: row.day, model: row.model))
+        }
+        return CodexPricingModeEvidence(mismatchGroups: mismatchGroups, priorityGroups: priorityGroups)
     }
 
     private struct CodexRowTokenTotals: Equatable {

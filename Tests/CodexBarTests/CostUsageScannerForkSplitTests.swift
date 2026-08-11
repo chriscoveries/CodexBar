@@ -285,6 +285,20 @@ struct CostUsageScannerForkSplitTests {
         let priorityAggregate = CostUsageScanner.buildCodexReportFromCache(cache: cache, range: range)
         #expect(priorityAggregate.summary?.totalTokens == 400_100)
         #expect(priorityAggregate.summary?.totalCostUSD == nil)
+
+        priorityUsage.codexRows = [CostUsageScanner.CodexUsageRow(
+            day: dayKey,
+            model: model,
+            turnID: "legacy-mode-less-turn",
+            eventIndex: 0,
+            timestampUnixMs: 1,
+            input: 400_000,
+            cached: 100_000,
+            output: 100)]
+        cache.files = ["/linear-mode-mismatch.jsonl": priorityUsage]
+        let modeMismatch = CostUsageScanner.buildCodexReportFromCache(cache: cache, range: range)
+        #expect(modeMismatch.summary?.totalTokens == 400_100)
+        #expect(modeMismatch.summary?.totalCostUSD == nil)
     }
 
     @Test
