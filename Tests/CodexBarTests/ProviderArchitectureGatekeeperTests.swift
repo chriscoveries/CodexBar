@@ -3638,7 +3638,7 @@ struct ProviderArchitectureGatekeeperTests {
             reason: "This exact cost scanner dispatch selects a provider-owned transcript, cache, or pricing format."),
         AllowedProviderConstruct(
             path: "Sources/CodexBarCore/Vendored/CostUsage/CostUsagePricing.swift",
-            line: 546,
+            line: 585,
             anchor: "guard let pricing = self.codex[key] else { return nil }",
             expectedProviderIDs: ["codex"],
             expectedReferenceCount: 1,
@@ -3646,7 +3646,7 @@ struct ProviderArchitectureGatekeeperTests {
             reason: "This exact cost scanner dispatch selects a provider-owned transcript, cache, or pricing format."),
         AllowedProviderConstruct(
             path: "Sources/CodexBarCore/Vendored/CostUsage/CostUsagePricing.swift",
-            line: 708,
+            line: 704,
             anchor: "guard let pricing = self.claude[key] else { return nil }",
             expectedProviderIDs: ["claude"],
             expectedReferenceCount: 1,

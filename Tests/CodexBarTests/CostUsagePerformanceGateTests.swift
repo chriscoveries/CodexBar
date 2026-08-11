@@ -334,7 +334,8 @@ struct CostUsagePerformanceGateTests {
         mixed.files[rowlessPath]?.codexRows = nil
 
         let mixedBackfilled = CostUsageScanner.buildCodexReportFromCache(cache: mixed, range: range)
-        #expect(abs((mixedBackfilled.summary?.totalCostUSD ?? 0) - (scanned.summary?.totalCostUSD ?? 0)) < 0.000000001)
+        #expect(mixedBackfilled.summary?.totalTokens == scanned.summary?.totalTokens)
+        #expect(mixedBackfilled.summary?.totalCostUSD == nil)
 
         let aggregateCost = CostUsagePricing.codexCostUSD(
             model: "gpt-5.5",

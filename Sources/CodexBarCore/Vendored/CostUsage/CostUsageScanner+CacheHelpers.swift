@@ -110,6 +110,8 @@ extension CostUsageScanner {
         var priorityTokens: Int = 0
         var sawStandardCost = false
         var sawPriorityCost = false
+        var hasUnstableTokenRows = false
+        var hasTokenOverflow = false
 
         var optionalStandardCostUSD: Double? {
             self.sawStandardCost ? self.standardCostUSD : nil
@@ -138,7 +140,10 @@ extension CostUsageScanner {
 
         func isTrusted(canonicalTotalTokens: Int) -> Bool {
             let (rowTokenTotal, overflow) = self.standardTokens.addingReportingOverflow(self.priorityTokens)
-            return !overflow && rowTokenTotal <= canonicalTotalTokens
+            return !self.hasUnstableTokenRows
+                && !self.hasTokenOverflow
+                && !overflow
+                && rowTokenTotal == canonicalTotalTokens
         }
     }
 
@@ -150,13 +155,23 @@ extension CostUsageScanner {
     {
         var breakdown = CodexRowCostBreakdown()
         for row in rows {
-            let tokenCount = row.input + row.output
+            let (tokenCount, tokenOverflow) = max(0, row.input).addingReportingOverflow(max(0, row.output))
+            if tokenOverflow {
+                breakdown.hasTokenOverflow = true
+            }
+            if row.input > 0 || row.cached > 0 || row.output > 0, row.eventIndex == nil {
+                breakdown.hasUnstableTokenRows = true
+            }
             let priorityMetadata = row.turnID.flatMap { priorityTurns[$0] }
             let isPriority = priorityMetadata != nil || row.pricingMode == "priority"
             if isPriority {
-                breakdown.priorityTokens += tokenCount
+                let (total, overflow) = breakdown.priorityTokens.addingReportingOverflow(tokenCount)
+                breakdown.priorityTokens = overflow ? breakdown.priorityTokens : total
+                breakdown.hasTokenOverflow = breakdown.hasTokenOverflow || overflow
             } else {
-                breakdown.standardTokens += tokenCount
+                let (total, overflow) = breakdown.standardTokens.addingReportingOverflow(tokenCount)
+                breakdown.standardTokens = overflow ? breakdown.standardTokens : total
+                breakdown.hasTokenOverflow = breakdown.hasTokenOverflow || overflow
             }
             guard let cost = self.codexResolvedCostUSD(
                 for: row,
@@ -1377,10 +1392,12 @@ extension CostUsageScanner {
         var (totalCost, costSeen) = (0.0, false)
 
         let dayKeys = self.codexReportDayKeys(cache: reportCache, range: range)
-        let authoritativeCostNanosByDayModel = self.codexCostNanosByDayModel(cache: reportCache, range: range)
         var rowsByDayModel: [String: [String: [CodexUsageRow]]] = [:]
+        var unresolvedRowGroups = Set<CodexDayModelKey>()
         for usage in reportCache.files.values {
-            for row in self.codexRowsForReadTimePricing(usage) where CostUsageDayRange.isInRange(
+            let reconciled = self.codexCanonicalPricingRows(usage)
+            unresolvedRowGroups.formUnion(reconciled.unresolvedGroups)
+            for row in reconciled.rows where CostUsageDayRange.isInRange(
                 dayKey: row.day,
                 since: range.sinceKey,
                 until: range.untilKey)
@@ -1417,23 +1434,19 @@ extension CostUsageScanner {
                     priorityTurns: priorityTurns,
                     modelsDevCatalog: catalogResolver.load(modelsDevCatalogLoader),
                     modelsDevCacheRoot: modelsDevCacheRoot)
-                let rowCostIsTrusted = rowCost?.isTrusted(canonicalTotalTokens: totalTokens) ?? true
-                let authoritativeCost = authoritativeCostNanosByDayModel[day]?[model].map {
-                    Double($0) / Self.costScale
-                }
-                let canonicalCost = CostUsagePricing.codexCostUSD(
+                let group = CodexDayModelKey(day: day, model: model)
+                let rowCostIsTrusted = !unresolvedRowGroups.contains(group)
+                    && rowCost?.isTrusted(canonicalTotalTokens: totalTokens) == true
+                let aggregateCost = CostUsagePricing.codexAggregateCostUSD(
                     model: model,
                     inputTokens: input,
                     cachedInputTokens: cached,
                     outputTokens: output,
                     modelsDevCatalog: catalogResolver.load(modelsDevCatalogLoader),
                     modelsDevCacheRoot: modelsDevCacheRoot)
-                // Physical pricing rows can retain fork-copied usage after canonical ownership
-                // has deduplicated the day/model totals. Reject the whole row-derived price so
-                // Fast uplift from the same unowned rows cannot leak into the fallback cost.
                 let cost = rowCostIsTrusted
-                    ? rowCost?.totalCostUSD ?? authoritativeCost ?? canonicalCost
-                    : canonicalCost
+                    ? rowCost?.totalCostUSD ?? aggregateCost
+                    : aggregateCost
                 let hasModeSplit = rowCostIsTrusted && rowCost?.hasModeSplit == true
                 breakdown.append(
                     CostUsageDailyReport.ModelBreakdown(
