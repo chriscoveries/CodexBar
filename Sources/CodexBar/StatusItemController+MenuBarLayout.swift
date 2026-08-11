@@ -63,7 +63,7 @@ extension StatusItemController {
                     provider: provider,
                     window: $0,
                     now: now,
-                    minimumExpectedPercent: 1)
+                    minimumExpectedPercent: windows.weekly != nil ? 1 : 3)
             }
             .flatMap { UsagePaceText.weeklyDetail(provider: provider, pace: $0, now: now).rightLabel }
         let costStrings = self.menuBarLayoutCostStrings(provider: provider, now: now)
@@ -83,8 +83,7 @@ extension StatusItemController {
             sessionPace: self.store.menuBarLayoutPaceText(
                 provider: provider,
                 window: windows.session,
-                now: now,
-                minimumExpectedPercent: 1),
+                now: now),
             weeklyPace: self.store.menuBarLayoutPaceText(
                 provider: provider,
                 window: windows.weekly,
@@ -93,8 +92,7 @@ extension StatusItemController {
             automaticPace: self.store.menuBarLayoutPaceText(
                 provider: provider,
                 window: windows.automatic,
-                now: now,
-                minimumExpectedPercent: 1),
+                now: now),
             runsOut: runsOut,
             costToday: costStrings.today,
             cost30d: costStrings.last30Days)

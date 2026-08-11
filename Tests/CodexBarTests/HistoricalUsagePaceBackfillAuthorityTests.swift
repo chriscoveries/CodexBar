@@ -544,6 +544,42 @@ extension HistoricalUsagePaceTests {
 
     @MainActor
     @Test
+    func `menu bar layout pace opens weekly early but floors session and automatic at three percent`() throws {
+        let (store, controller) = try Self.makeStoreAndControllerForMenuBarPaceTests(
+            suite: "HistoricalUsagePaceTests-menu-bar-early-window-floors-\(UUID().uuidString)")
+        defer { controller.releaseStatusItemsForTesting() }
+        let now = Date(timeIntervalSince1970: 0)
+        // Session window 2 minutes in of 120: 1.67% expected. Weekly window 4 hours in of 7 days:
+        // 2.38% expected, inside the 1-3% band that only the weekly token may open early.
+        let snapshot = UsageSnapshot(
+            primary: RateWindow(
+                usedPercent: 5,
+                windowMinutes: 120,
+                resetsAt: now.addingTimeInterval(118 * 60),
+                resetDescription: nil),
+            secondary: RateWindow(
+                usedPercent: 5,
+                windowMinutes: 10080,
+                resetsAt: now.addingTimeInterval(7 * 24 * 60 * 60 - 4 * 60 * 60),
+                resetDescription: nil),
+            updatedAt: now)
+
+        store._setSnapshotForTesting(snapshot, provider: .zai)
+        store._setErrorForTesting(nil, provider: .zai)
+
+        let data = controller.menuBarLayoutRenderData(
+            provider: .zai,
+            snapshot: snapshot,
+            warningFlash: false,
+            now: now)
+
+        #expect(data.sessionPace == nil)
+        #expect(data.automaticPace == nil)
+        #expect(data.weeklyPace == "+3%")
+    }
+
+    @MainActor
+    @Test
     func `usage store applies configured work days to generic weekly pace`() throws {
         let suite = "HistoricalUsagePaceTests-generic-workdays-\(UUID().uuidString)"
         let store = try Self.makeUsageStoreForBackfillTests(
