@@ -130,13 +130,11 @@ struct CostUsageCatchUpCompletionTests {
             pendingFilePaths: [path])
         staleCache.codexScanCatchUpPending = true
         CostUsageStoreAccess.replace(cacheRoot: env.cacheRoot, cache: staleCache)
-        #expect(await CostUsageStore(cacheRoot: env.cacheRoot).fetchMetadata().catchUpPending == false)
+        #expect(await CostUsageStore(cacheRoot: env.cacheRoot).fetchMetadata().catchUpPending == true)
 
         let repairedCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
-        #expect(repairedCache.codexActiveLookbackState == nil)
-        #expect(repairedCache.codexScanCatchUpPending == false)
-        #expect(repairedCache.codexScanProcessedBytes == repairedCache.codexScanTotalBytes)
-        #expect(repairedCache.codexScanCompletedFiles == repairedCache.codexScanTotalFiles)
+        #expect(repairedCache.codexActiveLookbackState?.pendingFilePaths == [path])
+        #expect(repairedCache.codexScanCatchUpPending == true)
         #expect(repairedCache.files[path]?.codexScanFileId == currentIdentity)
 
         let recorder = CostUsageScanner.CodexScanWorkRecorder()

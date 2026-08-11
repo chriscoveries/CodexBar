@@ -2529,21 +2529,30 @@ enum CostUsageScanner {
         self.appendCodexActiveLookbackPaths(files, state: &state)
     }
 
+    private struct CodexPendingLookbackAppendContext {
+        let roots: [URL]
+        let maxCount: Int?
+        let validateRoots: Bool
+    }
+
     private static func appendPendingCodexActiveLookbackFiles(
         state: inout CostUsageCodexActiveLookbackState,
-        roots: [URL],
-        maxCount: Int?,
-        validateRoots: Bool,
+        context: CodexPendingLookbackAppendContext,
         seenPaths: inout Set<String>,
         fileURLsByPathKey: inout [String: URL],
         files: inout [URL])
     {
-        if validateRoots {
+        if context.validateRoots {
             state.pendingFilePaths = state.pendingFilePaths.filter { path in
-                Self.isWithinCodexRoots(fileURL: URL(fileURLWithPath: path), roots: roots)
+                Self.isWithinCodexRoots(fileURL: URL(fileURLWithPath: path), roots: context.roots)
             }
         }
-        let pendingPaths = state.pendingFilePaths.prefix(maxCount ?? state.pendingFilePaths.count)
+        let pendingCount = min(context.maxCount ?? state.pendingFilePaths.count, state.pendingFilePaths.count)
+        let normalizedPrefix = state.pendingFilePaths.prefix(pendingCount).map { path in
+            Self.codexResolvedPath(URL(fileURLWithPath: path))
+        }
+        state.pendingFilePaths.replaceSubrange(0..<pendingCount, with: normalizedPrefix)
+        let pendingPaths = state.pendingFilePaths.prefix(pendingCount)
         for path in pendingPaths {
             let fileURL = URL(fileURLWithPath: path)
             let pathKey = Self.codexPathKey(fileURL)
@@ -4837,9 +4846,10 @@ enum CostUsageScanner {
 
             Self.appendPendingCodexActiveLookbackFiles(
                 state: &activeLookbackState,
-                roots: plan.roots,
-                maxCount: shouldBoundCatchUp ? Self.codexCatchUpScanCandidateLimit : nil,
-                validateRoots: shouldSeedBoundedQueue,
+                context: CodexPendingLookbackAppendContext(
+                    roots: plan.roots,
+                    maxCount: shouldBoundCatchUp ? Self.codexCatchUpScanCandidateLimit : nil,
+                    validateRoots: shouldSeedBoundedQueue),
                 seenPaths: &seenPaths,
                 fileURLsByPathKey: &fileURLsByPathKey,
                 files: &files)
@@ -4916,7 +4926,10 @@ enum CostUsageScanner {
                 cache: &cache,
                 inheritedResolver: inheritedResolver)
             filePathsInScan.formUnion(scanResult.scannedPaths)
-            let pendingLookbackPaths = Set(activeLookbackState.pendingFilePaths)
+            let pendingLookbackPathCount = shouldBoundCatchUp
+                ? min(Self.codexCatchUpScanCandidateLimit, activeLookbackState.pendingFilePaths.count)
+                : activeLookbackState.pendingFilePaths.count
+            let pendingLookbackPaths = Set(activeLookbackState.pendingFilePaths.prefix(pendingLookbackPathCount))
             let completedScheduledPaths = Self.completedCodexActiveLookbackPaths(
                 scheduledFiles: filesScheduledForRefresh,
                 pendingPaths: pendingLookbackPaths,

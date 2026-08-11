@@ -352,8 +352,6 @@ extension CostUsageStore {
             var remainingPaths = Array(lookback.pendingFilePaths.dropFirst(candidatePaths.count))
             var retainedCandidatePaths: [String] = []
             retainedCandidatePaths.reserveCapacity(candidatePaths.count)
-            let boundedQueueOwnsTraversal = cache.codexScanCatchUpPending == true
-                && cache.codexScanInventoryPaths == nil
             for path in candidatePaths {
                 Self.codexCatchUpReconciliationVisitForTesting?()
                 let fileURL = URL(fileURLWithPath: path)
@@ -387,9 +385,7 @@ extension CostUsageStore {
                 // During bounded catch-up the persisted queue, rather than this store-level
                 // reconciliation, owns traversal. Retain even validated cache hits so the
                 // scanner observes later appends and rewrites through its normal file path.
-                if boundedQueueOwnsTraversal {
-                    retainedCandidatePaths.append(path)
-                }
+                retainedCandidatePaths.append(path)
             }
             remainingPaths.insert(contentsOf: retainedCandidatePaths, at: 0)
             lookback.pendingFilePaths = remainingPaths
