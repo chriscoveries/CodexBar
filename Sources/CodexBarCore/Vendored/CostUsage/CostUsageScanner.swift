@@ -2532,14 +2532,19 @@ enum CostUsageScanner {
     private static func appendPendingCodexActiveLookbackFiles(
         state: inout CostUsageCodexActiveLookbackState,
         roots: [URL],
+        maxCount: Int?,
+        validateRoots: Bool,
         seenPaths: inout Set<String>,
         fileURLsByPathKey: inout [String: URL],
         files: inout [URL])
     {
-        state.pendingFilePaths = state.pendingFilePaths.filter { path in
-            Self.isWithinCodexRoots(fileURL: URL(fileURLWithPath: path), roots: roots)
+        if validateRoots {
+            state.pendingFilePaths = state.pendingFilePaths.filter { path in
+                Self.isWithinCodexRoots(fileURL: URL(fileURLWithPath: path), roots: roots)
+            }
         }
-        for path in state.pendingFilePaths {
+        let pendingPaths = state.pendingFilePaths.prefix(maxCount ?? state.pendingFilePaths.count)
+        for path in pendingPaths {
             let fileURL = URL(fileURLWithPath: path)
             let pathKey = Self.codexPathKey(fileURL)
             guard seenPaths.insert(pathKey).inserted else { continue }
@@ -4789,6 +4794,11 @@ enum CostUsageScanner {
                 $0.scanSinceKey != activeLookbackState.scanSinceKey
                     || $0.rootPaths != activeLookbackState.rootPaths
             } ?? true
+            let shouldBoundCatchUp = scanBudget.hasTimeLimit
+                && !options.forceRescan
+                && (cache.files.isEmpty
+                    || cache.codexScanCatchUpPending == true
+                    || cache.codexActiveLookbackState != nil)
             var seenPaths: Set<String> = []
             var fileURLsByPathKey: [String: URL] = [:]
             var files: [URL] = []
@@ -4828,6 +4838,8 @@ enum CostUsageScanner {
             Self.appendPendingCodexActiveLookbackFiles(
                 state: &activeLookbackState,
                 roots: plan.roots,
+                maxCount: shouldBoundCatchUp ? Self.codexCatchUpScanCandidateLimit : nil,
+                validateRoots: shouldSeedBoundedQueue,
                 seenPaths: &seenPaths,
                 fileURLsByPathKey: &fileURLsByPathKey,
                 files: &files)
@@ -4846,11 +4858,6 @@ enum CostUsageScanner {
             }
 
             var filePathsInScan = Set(files.map(\.path))
-            let shouldBoundCatchUp = scanBudget.hasTimeLimit
-                && !options.forceRescan
-                && (cache.files.isEmpty
-                    || cache.codexScanCatchUpPending == true
-                    || cache.codexActiveLookbackState != nil)
             Self.seedCodexActiveLookbackQueueIfNeeded(
                 files: files,
                 shouldBoundCatchUp: shouldBoundCatchUp,
@@ -5085,11 +5092,14 @@ enum CostUsageScanner {
             return (summary, true)
         }
 
+        let statesBeforeScan = context.canReuseApproximateProgress
+            ? context.completionStatesBeforeScan
+            : context.completionStatesBeforeScan.mapValues { _ in false }
         let statesAfterScan = Self.codexCompletionStates(
             paths: context.completionStatesBeforeScan.keys,
             cache: cache,
             includePreviouslyCompletedSnapshots: false)
-        let completionDelta = context.completionStatesBeforeScan.reduce(into: 0) { delta, entry in
+        let completionDelta = statesBeforeScan.reduce(into: 0) { delta, entry in
             let after = statesAfterScan[entry.key] ?? false
             delta += (after ? 1 : 0) - (entry.value ? 1 : 0)
         }
