@@ -98,6 +98,31 @@ extension CostUsageScanner {
         return CodexPricingModeEvidence(mismatchGroups: mismatchGroups, priorityGroups: priorityGroups)
     }
 
+    static func codexIncompletePricingEvidenceGroups(
+        usage: CostUsageFileUsage,
+        range: CostUsageDayRange,
+        priorityTurns: [String: CodexPriorityTurnMetadata],
+        modelsDevCatalog: ModelsDevCatalog?,
+        modelsDevCacheRoot: URL?) -> Set<CodexDayModelKey>
+    {
+        let rowsByGroup = Dictionary(grouping: usage.codexRows ?? []) {
+            CodexDayModelKey(day: $0.day, model: $0.model)
+        }
+        return Set(rowsByGroup.compactMap { group, rows in
+            guard CostUsageDayRange.isInRange(
+                dayKey: group.day,
+                since: range.sinceKey,
+                until: range.untilKey)
+            else { return nil }
+            let breakdown = self.codexRowCostBreakdown(
+                rows: rows,
+                priorityTurns: priorityTurns,
+                modelsDevCatalog: modelsDevCatalog,
+                modelsDevCacheRoot: modelsDevCacheRoot)
+            return breakdown.hasIncompletePricing ? group : nil
+        })
+    }
+
     private struct CodexRowTokenTotals: Equatable {
         var input: Int = 0
         var cached: Int = 0

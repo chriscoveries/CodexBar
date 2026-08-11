@@ -1405,6 +1405,7 @@ extension CostUsageScanner {
         var unresolvedRowGroups = Set<CodexDayModelKey>()
         var modeOwnershipMismatchGroups = Set<CodexDayModelKey>()
         var priorityEvidenceGroups = Set<CodexDayModelKey>()
+        var incompletePricingEvidenceGroups = Set<CodexDayModelKey>()
         for usage in reportCache.files.values {
             let reconciled = self.codexCanonicalPricingRows(usage)
             unresolvedRowGroups.formUnion(reconciled.unresolvedGroups)
@@ -1415,6 +1416,12 @@ extension CostUsageScanner {
                 priorityTurns: priorityTurns)
             modeOwnershipMismatchGroups.formUnion(modeEvidence.mismatchGroups)
             priorityEvidenceGroups.formUnion(modeEvidence.priorityGroups)
+            incompletePricingEvidenceGroups.formUnion(self.codexIncompletePricingEvidenceGroups(
+                usage: usage,
+                range: range,
+                priorityTurns: priorityTurns,
+                modelsDevCatalog: catalogResolver.load(modelsDevCatalogLoader),
+                modelsDevCacheRoot: modelsDevCacheRoot))
             for row in reconciled.rows where CostUsageDayRange.isInRange(
                 dayKey: row.day,
                 since: range.sinceKey,
@@ -1456,7 +1463,9 @@ extension CostUsageScanner {
                 let rowCostIsTrusted = !unresolvedRowGroups.contains(group)
                     && !modeOwnershipMismatchGroups.contains(group)
                     && rowCost?.isTrusted(canonicalTotalTokens: totalTokens) == true
-                let aggregateCost = priorityEvidenceGroups.contains(group) || rowCost?.hasIncompletePricing == true
+                let aggregateCost = priorityEvidenceGroups.contains(group)
+                    || incompletePricingEvidenceGroups.contains(group)
+                    || rowCost?.hasIncompletePricing == true
                     ? nil
                     : CostUsagePricing.codexAggregateCostUSD(
                         model: model,
