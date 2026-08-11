@@ -7,6 +7,12 @@ import SQLite3
 import CSQLite3
 #endif
 
+package enum CostUsageStoreExecutorTestControl {
+    package static let suppressCurrentContextArgument = "--cost-store-suppress-current-context-for-testing"
+    package static let suppressCurrentContextAnswer = CommandLine.arguments.contains(
+        Self.suppressCurrentContextArgument)
+}
+
 /// Single-writer persistence for Codex cost scanning. The actor owns the only writable
 /// connection; Phase 2 can keep its existing scan-queue serialization while independent
 /// app and CLI readers use WAL snapshots through separate read-only connections.
@@ -32,13 +38,12 @@ actor CostUsageStore {
             dispatchPrecondition(condition: .onQueue(self.queue))
         }
 
-        /// macOS 26+ runtimes ask this before falling back to `checkIsolated()`, and the
-        /// default implementation cannot see through `DispatchQueue.sync` — so every
-        /// `assumeIsolated` in the sync bridges below trapped on launch even though the
-        /// work really was on this queue. A queue-specific token answers accurately.
+        /// macOS 26+ runtimes ask this before `checkIsolated()`; the queue-specific token
+        /// sees through `DispatchQueue.sync` accurately.
         @available(macOS 26.0, *)
         func isIsolatingCurrentContext() -> Bool? {
-            DispatchQueue.getSpecific(key: Self.queueKey) == ObjectIdentifier(self)
+            guard !CostUsageStoreExecutorTestControl.suppressCurrentContextAnswer else { return nil }
+            return DispatchQueue.getSpecific(key: Self.queueKey) == ObjectIdentifier(self)
         }
 
         func sync<T>(_ operation: () throws -> T) rethrows -> T {
@@ -123,11 +128,23 @@ actor CostUsageStore {
 }
 
 extension CostUsageStore {
-    nonisolated func syncLoadCodexCache(calendar: Calendar) -> CostUsageCache {
-        Self.sharedExecutor.sync {
-            self.assumeIsolated { store in
-                store.loadCodexCache(calendar: calendar)
+    /// The shared queue establishes isolation; runtime checks are unreliable for SDK-14 binaries on macOS 15.
+    private nonisolated func syncWithStoreIsolation<T: Sendable>(
+        _ operation: (isolated CostUsageStore) throws -> T) rethrows -> T
+    {
+        try Self.sharedExecutor.sync {
+            Self.sharedExecutor.checkIsolated()
+            typealias Isolated = (isolated CostUsageStore) throws -> T
+            typealias Unisolated = (CostUsageStore) throws -> T
+            return try withoutActuallyEscaping(operation) { (operation: @escaping Isolated) throws -> T in
+                try unsafeBitCast(operation, to: Unisolated.self)(self)
             }
+        }
+    }
+
+    nonisolated func syncLoadCodexCache(calendar: Calendar) -> CostUsageCache {
+        self.syncWithStoreIsolation { store in
+            store.loadCodexCache(calendar: calendar)
         }
     }
 
@@ -139,16 +156,14 @@ extension CostUsageStore {
         rowBudget: Int = CostUsageStore.defaultRowBudget,
         fileBudgetBytes: Int64 = CostUsageStore.defaultFileBudgetBytes) -> CostUsageStoreBudgetResult
     {
-        Self.sharedExecutor.sync {
-            self.assumeIsolated { store in
-                store.saveCodexCache(
-                    cache,
-                    calendar: calendar,
-                    requestedScanWindow: requestedScanWindow,
-                    reportWindow: reportWindow,
-                    rowBudget: rowBudget,
-                    fileBudgetBytes: fileBudgetBytes)
-            }
+        self.syncWithStoreIsolation { store in
+            store.saveCodexCache(
+                cache,
+                calendar: calendar,
+                requestedScanWindow: requestedScanWindow,
+                reportWindow: reportWindow,
+                rowBudget: rowBudget,
+                fileBudgetBytes: fileBudgetBytes)
         }
     }
 }
