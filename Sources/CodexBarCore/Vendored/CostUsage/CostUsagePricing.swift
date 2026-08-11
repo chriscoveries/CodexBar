@@ -519,9 +519,13 @@ enum CostUsagePricing {
         guard let pricing = self.resolvedCodexPricing(
             model: model,
             modelsDevCatalog: modelsDevCatalog,
-            modelsDevCacheRoot: modelsDevCacheRoot),
-            pricing.thresholdTokens == nil
+            modelsDevCacheRoot: modelsDevCacheRoot)
         else { return nil }
+        if let thresholdTokens = pricing.thresholdTokens,
+           max(0, inputTokens) > thresholdTokens
+        {
+            return nil
+        }
         return self.codexCostUSD(
             pricing: pricing,
             inputTokens: inputTokens,

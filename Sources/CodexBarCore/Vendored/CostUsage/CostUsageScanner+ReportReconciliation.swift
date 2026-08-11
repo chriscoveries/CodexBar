@@ -132,27 +132,15 @@ extension CostUsageScanner {
             return rows
         }
         guard allRowsTotal.exceeds(target) else { return nil }
-        let timestampPresence = Set(rows.map { $0.timestampUnixMs != nil })
-        guard timestampPresence.count <= 1 else { return nil }
-
-        let chronological = rows.enumerated().sorted { lhs, rhs in
-            let lhsTimestamp = lhs.element.timestampUnixMs ?? Int64.min
-            let rhsTimestamp = rhs.element.timestampUnixMs ?? Int64.min
-            if lhsTimestamp != rhsTimestamp {
-                return lhsTimestamp < rhsTimestamp
-            }
-            let lhsEventIndex = lhs.element.eventIndex ?? Int.min
-            let rhsEventIndex = rhs.element.eventIndex ?? Int.min
-            if lhsEventIndex != rhsEventIndex {
-                return lhsEventIndex < rhsEventIndex
-            }
-            return lhs.offset < rhs.offset
+        if target == CodexRowTokenTotals() {
+            return []
         }
+
         var suffixTotal = CodexRowTokenTotals()
-        for index in chronological.indices.reversed() {
-            guard suffixTotal.add(chronological[index].element) else { return nil }
+        for index in rows.indices.reversed() {
+            guard suffixTotal.add(rows[index]) else { return nil }
             if suffixTotal == target {
-                return chronological[index...].map(\.element)
+                return Array(rows[index...])
             }
             if suffixTotal.exceeds(target) {
                 return nil

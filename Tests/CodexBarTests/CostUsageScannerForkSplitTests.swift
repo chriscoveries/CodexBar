@@ -5,7 +5,7 @@ import Testing
 
 struct CostUsageScannerForkSplitTests {
     @Test
-    func `codex report preserves short request pricing after copied fork prefix`() throws {
+    func `codex report preserves short request pricing after copied fork prefix`() async throws {
         let environment = try CostUsageTestEnvironment()
         defer { environment.cleanup() }
 
@@ -83,12 +83,21 @@ struct CostUsageScannerForkSplitTests {
         #expect(abs(projects.compactMap(\.totalCostUSD).reduce(0, +) - reportCost) < 1e-12)
         #expect(abs(sessions.compactMap(\.costUSD).reduce(0, +) - reportCost) < 1e-12)
 
-        _ = CostUsageStoreAccess.replace(
+        let predecessorHash = try #require(CostUsageStore.compatiblePredecessorParserHashes.first)
+        let predecessorStore = CostUsageStore(
             cacheRoot: environment.cacheRoot,
-            cache: cache,
-            calendar: range.calendar)
-        let restored = CostUsageStoreAccess.read(cacheRoot: environment.cacheRoot, calendar: range.calendar)
+            schemaVersion: CostUsageStore.combinedSchemaVersion(
+                base: CostUsageStore.baseSchemaVersion,
+                parserHash: predecessorHash),
+            parserHash: predecessorHash)
+        _ = predecessorStore.syncSaveCodexCache(
+            cache,
+            calendar: range.calendar,
+            requestedScanWindow: (sinceKey: dayKey, untilKey: dayKey))
+        let currentStore = CostUsageStore(cacheRoot: environment.cacheRoot)
+        let restored = currentStore.syncLoadCodexCache(calendar: range.calendar)
         let warmReport = CostUsageScanner.buildCodexReportFromCache(cache: restored, range: range)
+        #expect(await currentStore.rebuildCount == 0)
         #expect(restored.files.values.flatMap { $0.codexRows ?? [] }.count == 3)
         #expect(warmReport.data == report.data)
         #expect(warmReport.summary == report.summary)
@@ -211,42 +220,37 @@ struct CostUsageScannerForkSplitTests {
         var usage = CostUsageScanner.makeFileUsage(
             mtimeUnixMs: 2,
             size: 1,
-            days: [dayKey: [model: [200_000, 0, 0]]],
+            days: [dayKey: [model: [400_000, 0, 0]]],
             parsedBytes: 1,
             sessionId: "irreconcilable",
             codexCostNanos: [dayKey: [model: 84_000_000_000]],
-            codexRows: [row(index: 0, input: 120_000), row(index: 1, input: 120_000)],
+            codexRows: [row(index: 0, input: 220_000), row(index: 1, input: 220_000)],
             codexScanComplete: true)
         var cache = CostUsageCache()
         cache.files = ["/irreconcilable.jsonl": usage]
         cache.days = usage.days
 
         let irreconcilable = CostUsageScanner.buildCodexReportFromCache(cache: cache, range: range)
-        #expect(irreconcilable.summary?.totalTokens == 200_000)
+        #expect(irreconcilable.summary?.totalTokens == 400_000)
         #expect(irreconcilable.summary?.totalCostUSD == nil)
 
         usage.codexRows = nil
         cache.files = ["/aggregate-only.jsonl": usage]
         let aggregateOnly = CostUsageScanner.buildCodexReportFromCache(cache: cache, range: range)
-        #expect(aggregateOnly.summary?.totalTokens == 200_000)
+        #expect(aggregateOnly.summary?.totalTokens == 400_000)
         #expect(aggregateOnly.summary?.totalCostUSD == nil)
 
-        let timestampedParent = row(index: 0, input: 200_000)
-        let untimestampedChild = CostUsageScanner.CodexUsageRow(
-            day: dayKey,
+        usage.days = [dayKey: [model: [200_000, 0, 0]]]
+        usage.codexRows = nil
+        cache.files = ["/below-threshold.jsonl": usage]
+        cache.days = usage.days
+        let belowThreshold = CostUsageScanner.buildCodexReportFromCache(cache: cache, range: range)
+        let belowThresholdCost = try #require(CostUsagePricing.codexCostUSD(
             model: model,
-            turnID: "mixed-timestamp-child",
-            eventIndex: 1,
-            timestampUnixMs: nil,
-            input: 200_000,
-            cached: 0,
-            output: 0)
-        usage.codexRows = [timestampedParent, untimestampedChild]
-        let mixedTimestamps = CostUsageScanner.codexCanonicalPricingRows(usage)
-        #expect(mixedTimestamps.rows.isEmpty)
-        #expect(mixedTimestamps.unresolvedGroups == [
-            CostUsageScanner.CodexDayModelKey(day: dayKey, model: model),
-        ])
+            inputTokens: 200_000,
+            cachedInputTokens: 0,
+            outputTokens: 0))
+        #expect(abs((belowThreshold.summary?.totalCostUSD ?? 0) - belowThresholdCost) < 1e-12)
     }
 
     @Test
@@ -337,6 +341,309 @@ struct CostUsageScannerForkSplitTests {
     }
 
     @Test
+    func `copied fast prefix with later timestamp cannot replace persisted standard suffix`() throws {
+        let environment = try CostUsageTestEnvironment()
+        defer { environment.cleanup() }
+        let day = try environment.makeLocalNoon(year: 2026, month: 8, day: 11)
+        let range = CostUsageScanner.CostUsageDayRange(since: day, until: day)
+        let dayKey = range.sinceKey
+        let model = "gpt-5.6-sol"
+        let parent = CostUsageScanner.CodexUsageRow(
+            day: dayKey,
+            model: model,
+            turnID: "fast-parent",
+            eventIndex: 0,
+            timestampUnixMs: 2,
+            input: 100_000,
+            cached: 0,
+            output: 10,
+            pricingMode: "priority")
+        let child = CostUsageScanner.CodexUsageRow(
+            day: dayKey,
+            model: model,
+            turnID: "standard-child",
+            eventIndex: 1,
+            timestampUnixMs: 1,
+            input: 100_000,
+            cached: 0,
+            output: 10,
+            pricingMode: "standard")
+        let parentUsage = CostUsageScanner.makeFileUsage(
+            mtimeUnixMs: 2,
+            size: 1,
+            days: [dayKey: [model: [100_000, 0, 10]]],
+            parsedBytes: 1,
+            sessionId: "parent",
+            codexRows: [parent],
+            codexScanComplete: true)
+        let childUsage = CostUsageScanner.makeFileUsage(
+            mtimeUnixMs: 2,
+            size: 1,
+            days: [dayKey: [model: [100_000, 0, 10]]],
+            parsedBytes: 1,
+            sessionId: "child",
+            forkedFromId: "parent",
+            codexRows: [parent, child],
+            codexScanComplete: true)
+        let reconciled = CostUsageScanner.codexCanonicalPricingRows(childUsage)
+        #expect(reconciled.unresolvedGroups.isEmpty)
+        #expect(reconciled.rows == [child])
+
+        var cache = CostUsageCache()
+        cache.files = ["/parent.jsonl": parentUsage, "/child.jsonl": childUsage]
+        cache.days = [dayKey: [model: [200_000, 0, 20]]]
+        let report = CostUsageScanner.buildCodexReportFromCache(cache: cache, range: range)
+        let breakdown = try #require(report.data.first?.modelBreakdowns?.first)
+        let standardCost = try #require(CostUsagePricing.codexCostUSD(
+            model: model,
+            inputTokens: 100_000,
+            cachedInputTokens: 0,
+            outputTokens: 10))
+        let priorityCost = try #require(CostUsagePricing.codexPriorityCostUSD(
+            model: model,
+            inputTokens: 100_000,
+            cachedInputTokens: 0,
+            outputTokens: 10))
+        #expect(abs((breakdown.standardCostUSD ?? 0) - standardCost) < 1e-12)
+        #expect(abs((breakdown.priorityCostUSD ?? 0) - priorityCost) < 1e-12)
+        #expect(breakdown.standardTokens == 100_010)
+        #expect(breakdown.priorityTokens == 100_010)
+    }
+
+    @Test
+    func `zero owned fork rows use an empty suffix without hiding parent cost`() throws {
+        let environment = try CostUsageTestEnvironment()
+        defer { environment.cleanup() }
+        let day = try environment.makeLocalNoon(year: 2026, month: 8, day: 11)
+        let range = CostUsageScanner.CostUsageDayRange(since: day, until: day)
+        let dayKey = range.sinceKey
+        let model = "gpt-5.6-sol"
+        let parentRow = CostUsageScanner.CodexUsageRow(
+            day: dayKey,
+            model: model,
+            turnID: "parent",
+            eventIndex: 0,
+            timestampUnixMs: 1,
+            input: 300_000,
+            cached: 0,
+            output: 10)
+        let parentUsage = CostUsageScanner.makeFileUsage(
+            mtimeUnixMs: 1,
+            size: 1,
+            days: [dayKey: [model: [300_000, 0, 10]]],
+            parsedBytes: 1,
+            sessionId: "parent",
+            codexRows: [parentRow],
+            codexScanComplete: true)
+        let childUsage = CostUsageScanner.makeFileUsage(
+            mtimeUnixMs: 2,
+            size: 1,
+            days: [dayKey: [model: [0, 0, 0]]],
+            parsedBytes: 1,
+            sessionId: "zero-child",
+            forkedFromId: "parent",
+            codexRows: [parentRow],
+            codexScanComplete: true)
+        let reconciled = CostUsageScanner.codexCanonicalPricingRows(childUsage)
+        #expect(reconciled.rows.isEmpty)
+        #expect(reconciled.unresolvedGroups.isEmpty)
+
+        var cache = CostUsageCache()
+        cache.files = ["/parent.jsonl": parentUsage, "/child.jsonl": childUsage]
+        cache.days = parentUsage.days
+        let report = CostUsageScanner.buildCodexReportFromCache(cache: cache, range: range)
+        let expected = try #require(CostUsagePricing.codexCostUSD(
+            model: model,
+            inputTokens: 300_000,
+            cachedInputTokens: 0,
+            outputTokens: 10))
+        #expect(abs((report.summary?.totalCostUSD ?? 0) - expected) < 1e-12)
+    }
+
+    @Test
+    func `exact rows require complete request pricing coverage`() throws {
+        let environment = try CostUsageTestEnvironment()
+        defer { environment.cleanup() }
+        let day = try environment.makeLocalNoon(year: 2026, month: 8, day: 11)
+        let range = CostUsageScanner.CostUsageDayRange(since: day, until: day)
+        let dayKey = range.sinceKey
+        let model = "gpt-5.6-sol"
+        let priced = CostUsageScanner.CodexUsageRow(
+            day: dayKey,
+            model: model,
+            turnID: "priced",
+            eventIndex: 0,
+            input: 100_000,
+            cached: 0,
+            output: 10,
+            pricingModel: model)
+        let unpriced = CostUsageScanner.CodexUsageRow(
+            day: dayKey,
+            model: model,
+            turnID: "unpriced",
+            eventIndex: 1,
+            input: 100_000,
+            cached: 0,
+            output: 10,
+            unpricedTokens: 100_010,
+            pricingModel: "unpriced-test-model")
+        let usage = CostUsageScanner.makeFileUsage(
+            mtimeUnixMs: 1,
+            size: 1,
+            days: [dayKey: [model: [200_000, 0, 20]]],
+            parsedBytes: 1,
+            codexRows: [priced, unpriced],
+            codexScanComplete: true)
+        var cache = CostUsageCache()
+        cache.files = ["/partial-pricing.jsonl": usage]
+        cache.days = usage.days
+        let report = CostUsageScanner.buildCodexReportFromCache(cache: cache, range: range)
+        #expect(report.data.first?.modelBreakdowns?.first?.costUSD == nil)
+        #expect(report.summary?.totalCostUSD == nil)
+
+        let authoritativeZero = CostUsageScanner.CodexUsageRow(
+            day: dayKey,
+            model: model,
+            turnID: "authoritative-zero",
+            eventIndex: 2,
+            input: 0,
+            cached: 0,
+            output: 0,
+            knownCostNanos: 42_000_000_000)
+        let completeUsage = CostUsageScanner.makeFileUsage(
+            mtimeUnixMs: 1,
+            size: 1,
+            days: [dayKey: [model: [100_000, 0, 10]]],
+            parsedBytes: 1,
+            codexRows: [priced, authoritativeZero],
+            codexScanComplete: true)
+        cache.files = ["/complete-pricing.jsonl": completeUsage]
+        cache.days = completeUsage.days
+        let complete = CostUsageScanner.buildCodexReportFromCache(cache: cache, range: range)
+        let pricedCost = try #require(CostUsagePricing.codexCostUSD(
+            model: model,
+            inputTokens: 100_000,
+            cachedInputTokens: 0,
+            outputTokens: 10))
+        #expect(abs((complete.summary?.totalCostUSD ?? 0) - (pricedCost + 42)) < 1e-12)
+    }
+
+    @Test
+    func `project primary report propagates unresolved same model ownership`() throws {
+        let environment = try CostUsageTestEnvironment()
+        defer { environment.cleanup() }
+        let day = try environment.makeLocalNoon(year: 2026, month: 8, day: 11)
+        let range = CostUsageScanner.CostUsageDayRange(since: day, until: day)
+        let dayKey = range.sinceKey
+        let model = "gpt-5.6-sol"
+        let projectPath = "/tmp/codexbar-unresolved-project"
+        let exactRow = CostUsageScanner.CodexUsageRow(
+            day: dayKey,
+            model: model,
+            turnID: "exact",
+            eventIndex: 0,
+            input: 300_000,
+            cached: 0,
+            output: 10)
+        func unresolvedRow(_ index: Int) -> CostUsageScanner.CodexUsageRow {
+            CostUsageScanner.CodexUsageRow(
+                day: dayKey,
+                model: model,
+                turnID: "unresolved-\(index)",
+                eventIndex: index,
+                input: 220_000,
+                cached: 0,
+                output: 5)
+        }
+        let exactUsage = CostUsageScanner.makeFileUsage(
+            mtimeUnixMs: 1,
+            size: 1,
+            days: [dayKey: [model: [300_000, 0, 10]]],
+            parsedBytes: 1,
+            sessionId: "exact",
+            projectPath: projectPath,
+            canonicalProjectPath: projectPath,
+            codexRows: [exactRow],
+            codexScanComplete: true)
+        let unresolvedUsage = CostUsageScanner.makeFileUsage(
+            mtimeUnixMs: 2,
+            size: 1,
+            days: [dayKey: [model: [400_000, 0, 10]]],
+            parsedBytes: 1,
+            sessionId: "unresolved",
+            projectPath: projectPath,
+            canonicalProjectPath: projectPath,
+            codexRows: [unresolvedRow(1), unresolvedRow(2)],
+            codexScanComplete: true)
+        var cache = CostUsageCache()
+        cache.files = ["/exact.jsonl": exactUsage, "/unresolved.jsonl": unresolvedUsage]
+        cache.days = [dayKey: [model: [700_000, 0, 20]]]
+        let global = CostUsageScanner.buildCodexReportFromCache(cache: cache, range: range)
+        #expect(global.data.first?.modelBreakdowns?.first?.costUSD == nil)
+        #expect(global.summary?.totalCostUSD == nil)
+
+        let project = try #require(CostUsageScanner.buildCodexProjectBreakdownsFromCache(
+            cache: cache,
+            range: range).first)
+        #expect(project.path == projectPath)
+        #expect(project.modelBreakdowns?.first?.costUSD == nil)
+        #expect(project.totalCostUSD == nil)
+        #expect(project.totalTokens == 700_020)
+    }
+
+    @Test
+    func `project primary report keeps priced models beside explicitly unpriced models`() throws {
+        let environment = try CostUsageTestEnvironment()
+        defer { environment.cleanup() }
+        let day = try environment.makeLocalNoon(year: 2026, month: 8, day: 11)
+        let range = CostUsageScanner.CostUsageDayRange(since: day, until: day)
+        let dayKey = range.sinceKey
+        let pricedModel = "gpt-5.6-sol"
+        let unpricedModel = "codex-auto-review"
+        let projectPath = "/tmp/codexbar-partial-project"
+        func usage(model: String, input: Int, path: String) -> (String, CostUsageFileUsage) {
+            let row = CostUsageScanner.CodexUsageRow(
+                day: dayKey,
+                model: model,
+                turnID: path,
+                eventIndex: 0,
+                input: input,
+                cached: 0,
+                output: 10,
+                pricingModel: model)
+            return (path, CostUsageScanner.makeFileUsage(
+                mtimeUnixMs: 1,
+                size: 1,
+                days: [dayKey: [model: [input, 0, 10]]],
+                parsedBytes: 1,
+                sessionId: path,
+                projectPath: projectPath,
+                canonicalProjectPath: projectPath,
+                codexRows: [row],
+                codexScanComplete: true))
+        }
+        let priced = usage(model: pricedModel, input: 100_000, path: "/priced.jsonl")
+        let unpriced = usage(model: unpricedModel, input: 50000, path: "/unpriced.jsonl")
+        var cache = CostUsageCache()
+        cache.files = [priced.0: priced.1, unpriced.0: unpriced.1]
+        cache.days = [
+            dayKey: [pricedModel: [100_000, 0, 10], unpricedModel: [50000, 0, 10]],
+        ]
+        let expected = try #require(CostUsagePricing.codexCostUSD(
+            model: pricedModel,
+            inputTokens: 100_000,
+            cachedInputTokens: 0,
+            outputTokens: 10))
+
+        let project = try #require(CostUsageScanner.buildCodexProjectBreakdownsFromCache(
+            cache: cache,
+            range: range).first)
+        #expect(abs((project.totalCostUSD ?? 0) - expected) < 1e-12)
+        #expect(project.modelBreakdowns?.first { $0.modelName == pricedModel }?.costUSD == expected)
+        #expect(project.modelBreakdowns?.first { $0.modelName == unpricedModel }?.costUSD == nil)
+    }
+
+    @Test
     func `codex report reconciles copied fork prefix without losing fast split`() throws {
         let fixture = try self.makeFixture()
         defer { fixture.environment.cleanup() }
@@ -346,7 +653,7 @@ struct CostUsageScannerForkSplitTests {
         let child = try #require(cache.files.first { $0.value.sessionId == "child-session" })
         let copiedParentRows = try #require(parent.value.codexRows)
         var inflatedChild = child.value
-        inflatedChild.codexRows = (inflatedChild.codexRows ?? []) + copiedParentRows
+        inflatedChild.codexRows = copiedParentRows + (inflatedChild.codexRows ?? [])
         cache.files[child.key] = inflatedChild
 
         let canonical = try #require(cache.days[fixture.dayKey]?[fixture.model])

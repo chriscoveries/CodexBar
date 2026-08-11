@@ -112,6 +112,7 @@ extension CostUsageScanner {
         var sawPriorityCost = false
         var hasUnstableTokenRows = false
         var hasTokenOverflow = false
+        var hasIncompletePricing = false
 
         var optionalStandardCostUSD: Double? {
             self.sawStandardCost ? self.standardCostUSD : nil
@@ -142,6 +143,7 @@ extension CostUsageScanner {
             let (rowTokenTotal, overflow) = self.standardTokens.addingReportingOverflow(self.priorityTokens)
             return !self.hasUnstableTokenRows
                 && !self.hasTokenOverflow
+                && !self.hasIncompletePricing
                 && !overflow
                 && rowTokenTotal == canonicalTotalTokens
         }
@@ -156,11 +158,15 @@ extension CostUsageScanner {
         var breakdown = CodexRowCostBreakdown()
         for row in rows {
             let (tokenCount, tokenOverflow) = max(0, row.input).addingReportingOverflow(max(0, row.output))
+            let hasTokens = row.input > 0 || row.cached > 0 || row.output > 0
             if tokenOverflow {
                 breakdown.hasTokenOverflow = true
             }
-            if row.input > 0 || row.cached > 0 || row.output > 0, row.eventIndex == nil {
+            if hasTokens, row.eventIndex == nil {
                 breakdown.hasUnstableTokenRows = true
+            }
+            if (row.unpricedTokens ?? 0) > 0 {
+                breakdown.hasIncompletePricing = true
             }
             let priorityMetadata = row.turnID.flatMap { priorityTurns[$0] }
             let isPriority = priorityMetadata != nil || row.pricingMode == "priority"
@@ -178,7 +184,10 @@ extension CostUsageScanner {
                 priorityTurns: priorityTurns,
                 modelsDevCatalog: modelsDevCatalog,
                 modelsDevCacheRoot: modelsDevCacheRoot)
-            else { continue }
+            else {
+                breakdown.hasIncompletePricing = breakdown.hasIncompletePricing || hasTokens
+                continue
+            }
             if isPriority {
                 breakdown.priorityCostUSD += cost
                 breakdown.sawPriorityCost = true
@@ -374,7 +383,7 @@ extension CostUsageScanner {
                 output: row.output,
                 reasoning: row.reasoning,
                 knownCostNanos: row.knownCostNanos,
-                unpricedTokens: nil,
+                unpricedTokens: row.unpricedTokens,
                 pricingModel: pricedModel,
                 pricingMode: isPriority ? "priority" : "standard")
         }
@@ -1447,7 +1456,7 @@ extension CostUsageScanner {
                 let rowCostIsTrusted = !unresolvedRowGroups.contains(group)
                     && !modeOwnershipMismatchGroups.contains(group)
                     && rowCost?.isTrusted(canonicalTotalTokens: totalTokens) == true
-                let aggregateCost = priorityEvidenceGroups.contains(group)
+                let aggregateCost = priorityEvidenceGroups.contains(group) || rowCost?.hasIncompletePricing == true
                     ? nil
                     : CostUsagePricing.codexAggregateCostUSD(
                         model: model,

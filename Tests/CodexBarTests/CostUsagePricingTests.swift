@@ -617,9 +617,21 @@ struct CostUsagePricingTests {
     }
 
     @Test
-    func `codex aggregate pricing rejects effective thresholds and keeps linear rates`() throws {
+    func `codex aggregate pricing uses safe base rates and rejects aggregates above thresholds`() throws {
         let emptyRoot = try Self.cacheRoot()
-        let bundledThreshold = CostUsagePricing.codexAggregateCostUSD(
+        let bundledBelowThreshold = CostUsagePricing.codexAggregateCostUSD(
+            model: "gpt-5.6-sol",
+            inputTokens: 200_000,
+            cachedInputTokens: 0,
+            outputTokens: 100,
+            modelsDevCacheRoot: emptyRoot)
+        let bundledAtThreshold = CostUsagePricing.codexAggregateCostUSD(
+            model: "gpt-5.6-sol",
+            inputTokens: 272_000,
+            cachedInputTokens: 0,
+            outputTokens: 100,
+            modelsDevCacheRoot: emptyRoot)
+        let bundledAboveThreshold = CostUsagePricing.codexAggregateCostUSD(
             model: "gpt-5.6-sol",
             inputTokens: 400_000,
             cachedInputTokens: 0,
@@ -648,16 +660,25 @@ struct CostUsagePricingTests {
           }
         }
         """)
-        let catalogThreshold = CostUsagePricing.codexAggregateCostUSD(
+        let catalogAtThreshold = CostUsagePricing.codexAggregateCostUSD(
             model: "aggregate-threshold-model",
-            inputTokens: 400_000,
+            inputTokens: 200_000,
+            cachedInputTokens: 0,
+            outputTokens: 100,
+            modelsDevCacheRoot: catalogThresholdRoot)
+        let catalogAboveThreshold = CostUsagePricing.codexAggregateCostUSD(
+            model: "aggregate-threshold-model",
+            inputTokens: 200_001,
             cachedInputTokens: 0,
             outputTokens: 100,
             modelsDevCacheRoot: catalogThresholdRoot)
 
-        #expect(bundledThreshold == nil)
+        #expect(bundledBelowThreshold == (200_000.0 * 5e-6) + (100.0 * 30e-6))
+        #expect(bundledAtThreshold == (272_000.0 * 5e-6) + (100.0 * 30e-6))
+        #expect(bundledAboveThreshold == nil)
         #expect(linear == (300_000.0 * 7.5e-7) + (100_000.0 * 7.5e-8) + (100.0 * 4.5e-6))
-        #expect(catalogThreshold == nil)
+        #expect(catalogAtThreshold == (200_000.0 * 5e-6) + (100.0 * 30e-6))
+        #expect(catalogAboveThreshold == nil)
     }
 
     @Test
