@@ -4508,23 +4508,6 @@ enum CostUsageScanner {
         return previous
     }
 
-    private static func saveCodexCache(
-        _ cache: CostUsageCache,
-        store: CostUsageStore,
-        options: Options,
-        range: CostUsageDayRange)
-    {
-        // The serial scan queue remains the per-process writer boundary. The store actor owns
-        // the sole writable connection; app and CLI readers take independent WAL snapshots.
-        CostUsageStoreAccess.save(
-            store: store,
-            cache: cache,
-            calendar: range.calendar,
-            requestedScanWindow: (sinceKey: range.scanSinceKey, untilKey: range.scanUntilKey),
-            reportWindow: (sinceKey: range.sinceKey, untilKey: range.untilKey),
-            skipIdenticalContent: true)
-    }
-
     // swiftlint:disable:next function_body_length
     private static func loadCodexDaily(
         range: CostUsageDayRange,
@@ -4747,7 +4730,19 @@ enum CostUsageScanner {
             }
             cache.lastScanUnixMs = nowMs
             try checkCancellation?()
-            Self.saveCodexCache(cache, store: loadedCache.store, options: options, range: range)
+            // The serial scan queue remains the per-process writer boundary. The store actor owns
+            // the sole writable connection; app and CLI readers take independent WAL snapshots.
+            let saveResult = CostUsageStoreAccess.save(
+                store: loadedCache.store,
+                cache: cache,
+                calendar: range.calendar,
+                requestedScanWindow: (sinceKey: range.scanSinceKey, untilKey: range.scanUntilKey),
+                reportWindow: (sinceKey: range.sinceKey, untilKey: range.untilKey),
+                skipIdenticalContent: true)
+            if saveResult.catchUpRequired {
+                cache.codexScanCatchUpPending = true
+                cache.codexPreviousReport = previousReport
+            }
         }
 
         if let previous = Self.codexPreviousReport(

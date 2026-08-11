@@ -73,22 +73,42 @@ extension CostUsageStore {
                calendar: calendar)
         {
             // Retention owns the safety boundary: even a semantically unchanged scanner result
-            // must honor newly tightened row/file budgets before it can return. Decide identity
-            // first so changed content stays entirely on the existing atomic full-save path.
+            // must honor newly tightened row/file budgets before it can return.
             let result = self.enforceBudgets(
                 maxRows: rowBudget,
                 maxFileBytes: fileBudgetBytes,
                 requestedSinceDay: requestedScanWindow.sinceKey,
                 requestedUntilDay: requestedScanWindow.untilKey,
                 calendar: calendar)
-            // The scanner stamps a fresh scan timestamp on every pass even when no content
-            // changed; rewriting the whole database for identical rows is the disk churn
-            // behind #2495. When retention finds the store already within bounds, the content
-            // tables stay untouched and only the singleton metadata row advances, so refresh
-            // debounce keeps working after cache reloads and app restarts. A retention-induced
-            // catch-up keeps its zero timestamp instead of being masked by fresh scan metadata.
-            if !result.catchUpRequired {
-                _ = self.advanceLastScanUnixMs(cache.lastScanUnixMs)
+            guard !result.catchUpRequired else { return result }
+            Self.identicalContentPreLockCheckpointForTesting?()
+            guard self.beginSaveTransaction() else {
+                var retry = result
+                retry.catchUpRequired = true
+                return retry
+            }
+
+            // Another process may have committed a full save after the optimistic comparison.
+            // Recheck the complete semantic snapshot under this writer lock. A mismatch means
+            // this scanner's cache is stale, so preserve the newer store and request a rescan.
+            let lockedPrevious = self.readSnapshotInCurrentTransaction()
+            guard Self.persistedContentMatches(
+                previous: lockedPrevious,
+                cache: cache,
+                calendar: calendar)
+            else {
+                _ = self.rollbackSaveTransaction()
+                var retry = result
+                retry.catchUpRequired = true
+                return retry
+            }
+
+            let advanced = self.advanceLastScanUnixMs(cache.lastScanUnixMs)
+            let committed = self.endSaveTransaction()
+            guard advanced, committed else {
+                var retry = result
+                retry.catchUpRequired = true
+                return retry
             }
             return result
         }
@@ -101,7 +121,13 @@ extension CostUsageStore {
         // midway can never leave e.g. files upserted while day_aggregates stay stale.
         // Budget enforcement below runs outside: it checkpoints the WAL and vacuums, which
         // SQLite forbids inside an open transaction.
-        self.beginSaveTransaction()
+        guard self.beginSaveTransaction() else {
+            return CostUsageStoreBudgetResult(
+                deletedRows: 0,
+                rowCount: previous.files.count,
+                fileBytes: 0,
+                catchUpRequired: true)
+        }
         self.deleteRemovedFiles(previous: previous, cache: cache)
         var persistedFiles = 0
         for (path, usage) in cache.files.sorted(by: { $0.key < $1.key }) {
@@ -121,7 +147,13 @@ extension CostUsageStore {
         _ = self.setMetadata(Self.metadata(cache: cache, calendar: calendar))
         _ = self.setDiscoveryState(Self.discoveryState(cache.codexSessionDiscovery))
         _ = self.setLookbackState(Self.lookbackState(cache.codexActiveLookbackState))
-        self.endSaveTransaction()
+        guard self.endSaveTransaction() else {
+            return CostUsageStoreBudgetResult(
+                deletedRows: 0,
+                rowCount: previous.files.count,
+                fileBytes: 0,
+                catchUpRequired: true)
+        }
         let result = self.enforceBudgets(
             maxRows: rowBudget,
             maxFileBytes: fileBudgetBytes,

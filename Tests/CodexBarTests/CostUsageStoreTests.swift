@@ -555,6 +555,131 @@ extension CostUsageStoreTests {
     }
 
     @Test
+    func `identical scanner save preserves content committed before the writer lock`() async throws {
+        let fixture = try StoreFixture()
+        defer { fixture.remove() }
+        let store = CostUsageStore(cacheRoot: fixture.root)
+        let path = "/rollouts/recheck.jsonl"
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(secondsFromGMT: 0))
+
+        var usage = CostUsageFileUsage(
+            mtimeUnixMs: 1000,
+            size: 100,
+            days: ["2026-08-01": ["gpt-5.6-sol": [10, 2, 1]]])
+        usage.parsedBytes = 100
+        usage.codexScanFileId = "1:42"
+        usage.codexScanComplete = true
+        var cache = CostUsageCache()
+        cache.scanSinceKey = "2026-08-01"
+        cache.scanUntilKey = "2026-08-01"
+        cache.timeZoneIdentifier = calendar.timeZone.identifier
+        cache.files = [path: usage]
+        cache.days = usage.days
+        cache.lastScanUnixMs = 1000
+
+        func save(_ value: CostUsageCache) -> CostUsageStoreBudgetResult {
+            store.syncSaveCodexCache(
+                value,
+                calendar: calendar,
+                requestedScanWindow: (sinceKey: "2026-08-01", untilKey: "2026-08-01"),
+                skipIdenticalContent: true)
+        }
+
+        _ = save(cache)
+        var reread = CostUsageStoreAccess.read(cacheRoot: fixture.root, calendar: calendar)
+        reread.lastScanUnixMs = 2000
+        let interloper = try SQLiteTestConnection(url: store.databaseURL)
+        var checkpointError: Error?
+        CostUsageStore.identicalContentPreLockCheckpointForTesting = {
+            do {
+                try interloper.execute("UPDATE files SET parsed_bytes = 999 WHERE path = '\(path)'")
+            } catch {
+                checkpointError = error
+            }
+        }
+        defer { CostUsageStore.identicalContentPreLockCheckpointForTesting = nil }
+
+        let result = save(reread)
+
+        #expect(checkpointError == nil)
+        #expect(result.catchUpRequired)
+        #expect(await store.rebuildCount == 0)
+        #expect(await store.fetchFile(path: path)?.parsedBytes == 999)
+        #expect(CostUsageStoreAccess.read(cacheRoot: fixture.root, calendar: calendar).lastScanUnixMs == 1000)
+
+        CostUsageStore.identicalContentPreLockCheckpointForTesting = nil
+        var refreshed = CostUsageStoreAccess.read(cacheRoot: fixture.root, calendar: calendar)
+        refreshed.lastScanUnixMs = 3000
+        let retried = save(refreshed)
+        #expect(!retried.catchUpRequired)
+        #expect(await store.fetchFile(path: path)?.parsedBytes == 999)
+        #expect(CostUsageStoreAccess.read(cacheRoot: fixture.root, calendar: calendar).lastScanUnixMs == 3000)
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func `identical scanner save reports retry while the writer lock is unavailable`() async throws {
+        let fixture = try StoreFixture()
+        defer { fixture.remove() }
+        let store = CostUsageStore(cacheRoot: fixture.root)
+        let path = "/rollouts/locked-save.jsonl"
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(secondsFromGMT: 0))
+
+        var usage = CostUsageFileUsage(
+            mtimeUnixMs: 1000,
+            size: 100,
+            days: ["2026-08-01": ["gpt-5.6-sol": [10, 2, 1]]])
+        usage.parsedBytes = 100
+        usage.codexScanFileId = "1:42"
+        usage.codexScanComplete = true
+        var cache = CostUsageCache()
+        cache.scanSinceKey = "2026-08-01"
+        cache.scanUntilKey = "2026-08-01"
+        cache.timeZoneIdentifier = calendar.timeZone.identifier
+        cache.files = [path: usage]
+        cache.days = usage.days
+        cache.lastScanUnixMs = 1000
+
+        func save(_ value: CostUsageCache) -> CostUsageStoreBudgetResult {
+            store.syncSaveCodexCache(
+                value,
+                calendar: calendar,
+                requestedScanWindow: (sinceKey: "2026-08-01", untilKey: "2026-08-01"),
+                skipIdenticalContent: true)
+        }
+
+        _ = save(cache)
+        var reread = CostUsageStoreAccess.read(cacheRoot: fixture.root, calendar: calendar)
+        reread.lastScanUnixMs = 2000
+        let holder = try SQLiteTestConnection(url: store.databaseURL)
+        try holder.execute("BEGIN IMMEDIATE")
+        try holder.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('save-holder', '1')")
+
+        let blocked = save(reread)
+
+        #expect(blocked.catchUpRequired)
+        #expect(await store.rebuildCount == 0)
+        #expect(CostUsageStoreAccess.read(cacheRoot: fixture.root, calendar: calendar).lastScanUnixMs == 1000)
+
+        var changed = reread
+        changed.files[path]?.parsedBytes = 200
+        changed.lastScanUnixMs = 2500
+        let blockedFullSave = store.syncSaveCodexCache(
+            changed,
+            calendar: calendar,
+            requestedScanWindow: (sinceKey: "2026-08-01", untilKey: "2026-08-01"))
+        #expect(blockedFullSave.catchUpRequired)
+        #expect(await store.fetchFile(path: path)?.parsedBytes == 100)
+        #expect(CostUsageStoreAccess.read(cacheRoot: fixture.root, calendar: calendar).lastScanUnixMs == 1000)
+
+        try holder.execute("COMMIT")
+        let retried = save(reread)
+        #expect(!retried.catchUpRequired)
+        #expect(CostUsageStoreAccess.read(cacheRoot: fixture.root, calendar: calendar).lastScanUnixMs == 2000)
+    }
+
+    @Test
     func `day aggregate inserts and reads by model`() async throws {
         let fixture = try StoreFixture()
         defer { fixture.remove() }
@@ -877,6 +1002,7 @@ extension CostUsageStoreTests {
         let fixture = try StoreFixture()
         defer { fixture.remove() }
         #expect(CostUsageStore.compatiblePredecessorParserHashes == [
+            "98da5914d2f6a9cd",
             "43609cc56f76a003",
             "b975eb705f905b9a",
         ])
