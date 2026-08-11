@@ -686,8 +686,7 @@ struct MenuBarLayoutPreview: View {
                 self.store.weeklyPace(
                     provider: provider,
                     window: $0,
-                    now: now,
-                    minimumExpectedPercent: weekly != nil ? 1 : 3)
+                    now: now)
             }
             .flatMap { UsagePaceText.weeklyDetail(provider: provider, pace: $0, now: now).rightLabel }
         let cost = self.store.tokenSnapshotForCurrentProviderConfig(for: provider)?.snapshot
@@ -710,7 +709,7 @@ struct MenuBarLayoutPreview: View {
                 provider: provider,
                 window: weekly,
                 now: now,
-                minimumExpectedPercent: 1),
+                minimumElapsedPercent: 1),
             automaticPace: self.store.menuBarLayoutPaceText(
                 provider: provider,
                 window: automatic,

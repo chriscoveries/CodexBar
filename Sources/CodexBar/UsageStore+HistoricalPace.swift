@@ -9,7 +9,8 @@ extension UsageStore {
         provider: UsageProvider,
         window: RateWindow,
         now: Date = .init(),
-        minimumExpectedPercent: Double = 3) -> UsagePace?
+        minimumExpectedPercent: Double = 3,
+        minimumElapsedPercent: Double? = nil) -> UsagePace?
     {
         guard window.remainingPercent > 0 else { return nil }
         let resolved: UsagePace?
@@ -48,7 +49,11 @@ extension UsageStore {
         }
 
         guard let resolved else { return nil }
-        guard resolved.expectedUsedPercent >= minimumExpectedPercent else { return nil }
+        let expectedFloorMet = resolved.expectedUsedPercent >= minimumExpectedPercent
+        let elapsedFloorMet = minimumElapsedPercent.map { minimum in
+            (Self.windowElapsedPercent(window: window, now: now) ?? 0) >= minimum
+        } ?? false
+        guard expectedFloorMet || elapsedFloorMet else { return nil }
         return resolved
     }
 
@@ -59,7 +64,8 @@ extension UsageStore {
         provider: UsageProvider,
         window: RateWindow?,
         now: Date = .init(),
-        minimumExpectedPercent: Double = 3)
+        minimumExpectedPercent: Double = 3,
+        minimumElapsedPercent: Double? = nil)
         -> String?
     {
         window
@@ -68,9 +74,24 @@ extension UsageStore {
                     provider: provider,
                     window: $0,
                     now: now,
-                    minimumExpectedPercent: minimumExpectedPercent)
+                    minimumExpectedPercent: minimumExpectedPercent,
+                    minimumElapsedPercent: minimumElapsedPercent)
             }
             .flatMap { MenuBarDisplayText.paceText(pace: $0) }
+    }
+
+    /// A learned Codex curve can stay flat near the start of a weekly window even as the window
+    /// itself advances. The weekly menu token uses elapsed progress as an eligibility fallback,
+    /// while the returned pace still retains the learned expected-use value.
+    private static func windowElapsedPercent(window: RateWindow, now: Date) -> Double? {
+        guard let resetsAt = window.resetsAt,
+              let windowMinutes = window.windowMinutes,
+              windowMinutes > 0
+        else { return nil }
+        let duration = TimeInterval(windowMinutes) * 60
+        let start = resetsAt.addingTimeInterval(-duration)
+        let elapsed = now.timeIntervalSince(start)
+        return min(100, max(0, elapsed / duration * 100))
     }
 
     func recordCodexHistoricalSampleIfNeeded(snapshot: UsageSnapshot) {

@@ -530,16 +530,60 @@ extension HistoricalUsagePaceTests {
                 provider: .zai,
                 window: barelyIntoWindow,
                 now: now,
-                minimumExpectedPercent: 1)
+                minimumElapsedPercent: 1)
                 == "+3%")
         let pace = try #require(
             store.weeklyPace(
                 provider: .zai,
                 window: barelyIntoWindow,
                 now: now,
-                minimumExpectedPercent: 1))
+                minimumElapsedPercent: 1))
         #expect(abs(pace.expectedUsedPercent - (4.0 / 168.0 * 100.0)) < 0.001)
         #expect(abs(pace.deltaPercent - (5 - 4.0 / 168.0 * 100.0)) < 0.001)
+    }
+
+    @MainActor
+    @Test
+    func `weekly menu token uses elapsed progress when learned pace is below its floor`() throws {
+        let store = try Self.makeUsageStoreForBackfillTests(
+            suite: "HistoricalUsagePaceTests-codex-early-learned-pace-\(UUID().uuidString)",
+            historyFileURL: Self.makeTempURL())
+        let now = Date(timeIntervalSince1970: 0)
+        let windowMinutes = 10080
+        let duration = TimeInterval(windowMinutes) * 60
+        let resetsAt = now.addingTimeInterval(duration - 4 * 60 * 60)
+        let window = RateWindow(
+            usedPercent: 5,
+            windowMinutes: windowMinutes,
+            resetsAt: resetsAt,
+            resetDescription: nil)
+        let flatEarlyCurve = (0..<CodexHistoricalDataset.gridPointCount).map { index in
+            let progress = Double(index) / Double(CodexHistoricalDataset.gridPointCount - 1)
+            return progress < 0.1 ? 0 : ((progress - 0.1) / 0.9) * 100
+        }
+        let dataset = CodexHistoricalDataset(weeks: (0..<20).map { index in
+            HistoricalWeekProfile(
+                resetsAt: resetsAt.addingTimeInterval(-duration * Double(index + 1)),
+                windowMinutes: windowMinutes,
+                curve: flatEarlyCurve)
+        })
+        store._setCodexHistoricalDatasetForTesting(
+            dataset,
+            accountKey: store.codexOwnershipContext().canonicalKey)
+
+        #expect(store.weeklyPace(provider: .codex, window: window, now: now) == nil)
+        let pace = try #require(
+            store.weeklyPace(
+                provider: .codex,
+                window: window,
+                now: now,
+                minimumElapsedPercent: 1))
+        #expect(pace.expectedUsedPercent < 1)
+        #expect(store.menuBarLayoutPaceText(
+            provider: .codex,
+            window: window,
+            now: now,
+            minimumElapsedPercent: 1) != nil)
     }
 
     @MainActor
@@ -576,6 +620,7 @@ extension HistoricalUsagePaceTests {
         #expect(data.sessionPace == nil)
         #expect(data.automaticPace == nil)
         #expect(data.weeklyPace == "+3%")
+        #expect(data.runsOut == nil)
     }
 
     @MainActor

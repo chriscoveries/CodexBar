@@ -137,7 +137,7 @@ extension StatusItemController {
                 let pace = self.store.menuBarLayoutPaceText(
                     provider: provider,
                     window: window,
-                    minimumExpectedPercent: percentWindow == .weekly ? 1 : 3)
+                    minimumElapsedPercent: percentWindow == .weekly ? 1 : nil)
                 return "\(percentWindow.rawValue)=\(pace ?? "nil")"
             }
             .joined(separator: ",")
