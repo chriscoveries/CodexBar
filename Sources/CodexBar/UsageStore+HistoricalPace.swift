@@ -14,10 +14,12 @@ extension UsageStore {
     {
         guard window.remainingPercent > 0 else { return nil }
         let resolved: UsagePace?
+        let elapsedWindow: RateWindow
         let workDays = self.settings.weeklyProgressWorkDays
         // Provider-specific by design: only Codex's dashboard yields an account-scoped daily curve for learned pace;
         // other providers use the generic linear window calculation.
         if provider == .codex, self.settings.historicalTrackingEnabled, workDays == nil {
+            elapsedWindow = window
             let codexAccountKey = self.codexOwnershipContext().canonicalKey
             if self.codexHistoricalDatasetAccountKey == codexAccountKey,
                let historical = CodexHistoricalPaceEvaluator.evaluate(
@@ -30,6 +32,7 @@ extension UsageStore {
                 resolved = UsagePace.weekly(window: window, now: now, defaultWindowMinutes: 10080, workDays: workDays)
             }
         } else if provider == .codex, self.settings.historicalTrackingEnabled {
+            elapsedWindow = window
             // An explicit work-day schedule is the user's declared plan and takes precedence over learned history.
             // Keep collecting history in the background so Automatic can resume historical pacing immediately.
             resolved = UsagePace.weekly(window: window, now: now, defaultWindowMinutes: 10080, workDays: workDays)
@@ -42,16 +45,15 @@ extension UsageStore {
             // CLI both resolve first, so skipping it here would score a billing period as a flat 30 days
             // and disagree with them — and a 31-day cycle would exceed the sentinel outright, dropping the
             // pace for the first day of every long month.
-            let paceWindow = ProviderDescriptorRegistry.descriptor(for: provider)
-                .pace
-                .resolvedResetWindowForPace(window)
+            let paceWindow = self.paceWindowForElapsedEligibility(provider: provider, window: window)
+            elapsedWindow = paceWindow
             resolved = UsagePace.weekly(window: paceWindow, now: now, defaultWindowMinutes: 10080, workDays: workDays)
         }
 
         guard let resolved else { return nil }
         let expectedFloorMet = resolved.expectedUsedPercent >= minimumExpectedPercent
         let elapsedFloorMet = minimumElapsedPercent.map { minimum in
-            (Self.windowElapsedPercent(window: window, now: now) ?? 0) >= minimum
+            (Self.windowElapsedPercent(window: elapsedWindow, now: now) ?? 0) >= minimum
         } ?? false
         guard expectedFloorMet || elapsedFloorMet else { return nil }
         return resolved
@@ -83,6 +85,27 @@ extension UsageStore {
     /// A learned Codex curve can stay flat near the start of a weekly window even as the window
     /// itself advances. The weekly menu token uses elapsed progress as an eligibility fallback,
     /// while the returned pace still retains the learned expected-use value.
+    func paceWindowForElapsedEligibility(provider: UsageProvider, window: RateWindow) -> RateWindow {
+        guard provider != .codex, window.windowMinutes != nil else { return window }
+        return ProviderDescriptorRegistry.descriptor(for: provider)
+            .pace
+            .resolvedResetWindowForPace(window)
+    }
+
+    nonisolated static func paceElapsedBoundary(
+        window: RateWindow,
+        minimumElapsedPercent: Double) -> Date?
+    {
+        guard minimumElapsedPercent > 0,
+              let resetsAt = window.resetsAt,
+              let windowMinutes = window.windowMinutes,
+              windowMinutes > 0
+        else { return nil }
+        let duration = TimeInterval(windowMinutes) * 60
+        let start = resetsAt.addingTimeInterval(-duration)
+        return start.addingTimeInterval(duration * minimumElapsedPercent / 100)
+    }
+
     private static func windowElapsedPercent(window: RateWindow, now: Date) -> Double? {
         guard let resetsAt = window.resetsAt,
               let windowMinutes = window.windowMinutes,

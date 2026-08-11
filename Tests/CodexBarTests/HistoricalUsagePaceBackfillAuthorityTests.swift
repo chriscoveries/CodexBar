@@ -588,6 +588,42 @@ extension HistoricalUsagePaceTests {
 
     @MainActor
     @Test
+    func `weekly menu token uses the resolved calendar month for elapsed progress`() throws {
+        let store = try Self.makeUsageStoreForBackfillTests(
+            suite: "HistoricalUsagePaceTests-calendar-month-elapsed-\(UUID().uuidString)",
+            historyFileURL: Self.makeTempURL())
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(secondsFromGMT: 0))
+        let now = try #require(calendar.date(from: DateComponents(
+            calendar: calendar,
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 2,
+            day: 1,
+            hour: 7)))
+        let resetsAt = try #require(calendar.date(from: DateComponents(
+            calendar: calendar,
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 3,
+            day: 1)))
+        let window = RateWindow(
+            usedPercent: 5,
+            windowMinutes: 30 * 24 * 60,
+            resetsAt: resetsAt,
+            resetDescription: nil)
+
+        let pace = try #require(
+            store.weeklyPace(
+                provider: .amp,
+                window: window,
+                now: now,
+                minimumElapsedPercent: 1))
+        #expect(pace.expectedUsedPercent > 1)
+    }
+
+    @MainActor
+    @Test
     func `menu bar layout pace opens weekly early but floors session and automatic at three percent`() throws {
         let (store, controller) = try Self.makeStoreAndControllerForMenuBarPaceTests(
             suite: "HistoricalUsagePaceTests-menu-bar-early-window-floors-\(UUID().uuidString)")
