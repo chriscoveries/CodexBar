@@ -1,5 +1,7 @@
 # Changelog
 
+## 0.49.3 — Unreleased
+
 ## 0.49.2 — 2026-08-10
 
 ### Fixed
