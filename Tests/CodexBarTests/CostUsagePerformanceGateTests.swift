@@ -56,6 +56,67 @@ struct CostUsagePerformanceGateTests {
     }
 
     @Test
+    func `identical refresh advances the scan timestamp without rewriting content tables`() throws {
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+        let day = try env.makeLocalNoon(year: 2026, month: 5, day: 10)
+        _ = try Self.writeSyntheticCodexCorpus(env: env, day: day, files: 2, turnsPerFile: 4)
+
+        var options = CostUsageScanner.Options(
+            codexSessionsRoot: env.codexSessionsRoot,
+            claudeProjectsRoots: nil,
+            cacheRoot: env.cacheRoot,
+            codexTraceDatabaseURL: env.root.appendingPathComponent("missing.sqlite"))
+        // Always refresh so the second pass rescans the unchanged corpus instead of debouncing.
+        options.refreshMinIntervalSeconds = 0
+
+        let first = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day,
+            options: options)
+        #expect(first.data.count == 1)
+
+        let store = CostUsageStore(cacheRoot: env.cacheRoot)
+        let dbURL = store.databaseURL
+        func fileSize(_ url: URL) -> Int64? {
+            guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) else { return nil }
+            return (attributes[.size] as? NSNumber)?.int64Value
+        }
+
+        let dbSizeBefore = fileSize(dbURL)
+        let stampBefore = store.syncLoadCodexCache(calendar: .current).lastScanUnixMs
+
+        let second = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day.addingTimeInterval(60),
+            options: options)
+        #expect(second.data.first?.totalTokens == first.data.first?.totalTokens)
+
+        // The identical pass advances the durable timestamp but leaves the content tables alone,
+        // so refresh debounce survives cache reloads instead of rescanning every interval.
+        let stampAfter = store.syncLoadCodexCache(calendar: .current).lastScanUnixMs
+        #expect(stampAfter > stampBefore)
+        #expect(fileSize(dbURL) == dbSizeBefore)
+        #expect(store.syncLoadCodexCache(calendar: .current).files.count == 2)
+
+        // A later cycle inside the debounce window skips the rescan and any save entirely.
+        options.refreshMinIntervalSeconds = 300
+        let debounced = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day.addingTimeInterval(120),
+            options: options)
+        #expect(debounced.data.first?.totalTokens == first.data.first?.totalTokens)
+        #expect(store.syncLoadCodexCache(calendar: .current).lastScanUnixMs == stampAfter)
+        #expect(fileSize(dbURL) == dbSizeBefore)
+    }
+
+    @Test
     func `compatible predecessor store adoption performs zero session head parses`() throws {
         let env = try CostUsageTestEnvironment()
         defer { env.cleanup() }
