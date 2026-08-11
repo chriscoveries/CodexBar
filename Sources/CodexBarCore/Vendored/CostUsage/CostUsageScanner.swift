@@ -2643,6 +2643,7 @@ enum CostUsageScanner {
             }
             guard let usage = cache.files[fileURL.path],
                   usage.codexScanComplete == true,
+                  !usage.hasBufferedCodexForkRetryLines,
                   usage.codexScanFileId == metadata.fileId,
                   usage.mtimeUnixMs == metadata.mtimeUnixMs,
                   usage.size == metadata.size
