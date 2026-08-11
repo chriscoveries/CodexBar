@@ -5,6 +5,58 @@ import Testing
 @Suite(.serialized)
 struct CostUsageCatchUpCompletionTests {
     @Test
+    func `device identity restoration queues validation beyond the bounded slice`() async throws {
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+        let day = try env.makeLocalNoon(year: 2026, month: 5, day: 10)
+        let iso = env.isoString(for: day)
+        let corpusSize = 600
+        for index in 0..<corpusSize {
+            _ = try env.writeCodexSessionFile(
+                day: day,
+                filename: String(format: "identity-%04d.jsonl", index),
+                contents: [
+                    #"{"type":"session_meta","timestamp":"\#(iso)","payload":{"session_id":"identity-\#(index)"}}"#,
+                    #"{"type":"turn_context","timestamp":"\#(iso)","payload":{"model":"openai/gpt-5.2-codex"}}"#,
+                    // swiftlint:disable:next line_length
+                    #"{"type":"event_msg","timestamp":"\#(iso)","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":1,"cached_input_tokens":0,"output_tokens":0},"model":"openai/gpt-5.2-codex"}}}"#,
+                ].joined(separator: "\n") + "\n")
+        }
+        var options = CostUsageScanner.Options(
+            codexSessionsRoot: env.codexSessionsRoot,
+            claudeProjectsRoots: nil,
+            cacheRoot: env.cacheRoot,
+            codexTraceDatabaseURL: env.root.appendingPathComponent("missing.sqlite"))
+        options.refreshMinIntervalSeconds = 0
+        _ = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day,
+            options: options)
+
+        let store = CostUsageStore(cacheRoot: env.cacheRoot)
+        let snapshot = await store.readSnapshot()
+        #expect(snapshot.files.count == corpusSize)
+        for var file in snapshot.files {
+            let identity = try #require(file.scanState.fileIdentity)
+            let inode = try #require(identity.split(separator: ":").last)
+            file.scanState.fileIdentity = "0:\(inode)"
+            #expect(await store.upsertFile(file))
+        }
+
+        let counter = IdentityValidationCounter()
+        CostUsageStore.codexCatchUpReconciliationVisitForTesting = { counter.increment() }
+        defer { CostUsageStore.codexCatchUpReconciliationVisitForTesting = nil }
+        let restored = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
+
+        #expect(counter.value == CostUsageScanner.codexCatchUpScanCandidateLimit)
+        #expect(restored.codexActiveLookbackState?.pendingFilePaths.count
+            == corpusSize - CostUsageScanner.codexCatchUpScanCandidateLimit)
+        #expect(restored.codexScanCatchUpPending == true)
+    }
+
+    @Test
     func `completion reconciliation requires the current scan inventory`() async throws {
         let env = try CostUsageTestEnvironment()
         defer { env.cleanup() }
@@ -208,5 +260,22 @@ struct CostUsageCatchUpCompletionTests {
         #expect(appendedCompletedCache.codexScanCatchUpPending == false)
         #expect(appendedCompletedCache.codexScanProcessedBytes == appendedCompletedCache.codexScanTotalBytes)
         #expect(appendedCompletedCache.codexScanCompletedFiles == appendedCompletedCache.codexScanTotalFiles)
+    }
+}
+
+private final class IdentityValidationCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    var value: Int {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        return self.count
+    }
+
+    func increment() {
+        self.lock.lock()
+        self.count += 1
+        self.lock.unlock()
     }
 }

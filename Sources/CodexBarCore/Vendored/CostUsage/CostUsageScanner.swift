@@ -5,6 +5,11 @@ import Crypto
 #endif
 import Dispatch
 import Foundation
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 
 // swiftlint:disable type_body_length file_length
 enum CostUsageScanner {
@@ -2418,11 +2423,17 @@ enum CostUsageScanner {
         }
     }
 
+    #if os(Linux)
+    private typealias CodexDirectoryHandle = OpaquePointer
+    #else
+    private typealias CodexDirectoryHandle = UnsafeMutablePointer<DIR>
+    #endif
+
     private final class CodexDirectoryCursor: @unchecked Sendable {
-        let directory: UnsafeMutablePointer<DIR>
+        let directory: CodexDirectoryHandle
         var logicalOffset: Int64
 
-        init(directory: UnsafeMutablePointer<DIR>, logicalOffset: Int64 = 0) {
+        init(directory: CodexDirectoryHandle, logicalOffset: Int64 = 0) {
             self.directory = directory
             self.logicalOffset = logicalOffset
         }

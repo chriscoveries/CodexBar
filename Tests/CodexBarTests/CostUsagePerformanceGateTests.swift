@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import Foundation
 #if canImport(SQLite3)
 import SQLite3

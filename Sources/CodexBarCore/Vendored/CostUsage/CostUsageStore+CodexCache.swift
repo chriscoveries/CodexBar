@@ -195,10 +195,8 @@ extension CostUsageStore {
         let buffersByPath = Dictionary(grouping: snapshot.bufferedLines, by: \.path)
         let accumulatorByPath = Dictionary(uniqueKeysWithValues: snapshot.accumulators.map { ($0.path, $0) })
         let currentRootDevices = Self.currentCodexRootDevices(rootMtimes: metadata.rootMtimes)
-        let shouldValidateMigratedFiles = snapshot.files.contains { file in
-            Self.normalizedCodexFileIdentity(file: file, currentRootDevices: currentRootDevices)
-                != file.scanState.fileIdentity
-        }
+        var remainingIdentityValidationVisits = CostUsageScanner.codexCatchUpScanCandidateLimit
+        var deferredIdentityValidationPaths: [String] = []
 
         for file in snapshot.files {
             guard let detailsData = file.scanState.detailsPayload,
@@ -213,10 +211,28 @@ extension CostUsageStore {
             let lineage = lineageByPath[file.path]
             let accumulator = accumulatorByPath[file.path]
             let buffers = buffersByPath[file.path] ?? []
-            let restoredScanState = Self.restoredCodexScanState(
+            let normalizedIdentity = Self.normalizedCodexFileIdentity(
                 file: file,
-                currentRootDevices: currentRootDevices,
-                validateMetadata: shouldValidateMigratedFiles)
+                currentRootDevices: currentRootDevices)
+            let identityNeedsValidation = normalizedIdentity != file.scanState.fileIdentity
+            let restoredScanState: RestoredCodexScanState
+            if identityNeedsValidation, remainingIdentityValidationVisits > 0 {
+                Self.codexCatchUpReconciliationVisitForTesting?()
+                remainingIdentityValidationVisits -= 1
+                restoredScanState = Self.restoredCodexScanState(
+                    file: file,
+                    currentRootDevices: currentRootDevices,
+                    validateMetadata: true)
+            } else if identityNeedsValidation {
+                deferredIdentityValidationPaths.append(file.path)
+                restoredScanState = RestoredCodexScanState(
+                    identity: file.scanState.fileIdentity,
+                    isComplete: file.scanState.isComplete)
+            } else {
+                restoredScanState = RestoredCodexScanState(
+                    identity: normalizedIdentity,
+                    isComplete: file.scanState.isComplete)
+            }
             let usage = CostUsageFileUsage(
                 mtimeUnixMs: file.mtimeUnixMs,
                 size: file.size,
@@ -270,9 +286,44 @@ extension CostUsageStore {
                 codexBufferedUnresolvedForkLines: Self.bufferedLines(buffers, kind: .unresolvedFork))
             cache.files[file.path] = usage
         }
-        Self.reconcileCompletedCodexCatchUp(cache: &cache)
+        Self.enqueueDeferredCodexIdentityValidation(
+            deferredIdentityValidationPaths,
+            metadata: metadata,
+            cache: &cache)
+        Self.reconcileCompletedCodexCatchUp(
+            cache: &cache,
+            visitLimit: remainingIdentityValidationVisits)
         cache.days = Self.days(from: snapshot.dayAggregates)
         return cache
+    }
+
+    private static func enqueueDeferredCodexIdentityValidation(
+        _ paths: [String],
+        metadata: CostUsageStoreMetadata,
+        cache: inout CostUsageCache)
+    {
+        guard !paths.isEmpty, let scanSinceKey = metadata.scanSinceDay else { return }
+        let rootPaths = (metadata.rootMtimes ?? [:]).keys.map { path in
+            Self.normalizedCodexPath(
+                URL(fileURLWithPath: path, isDirectory: true)
+                    .resolvingSymlinksInPath()
+                    .standardizedFileURL.path)
+        }.sorted()
+        guard !rootPaths.isEmpty else { return }
+        var lookback = cache.codexActiveLookbackState ?? CostUsageCodexActiveLookbackState(
+            scanSinceKey: scanSinceKey,
+            rootPaths: rootPaths,
+            completedRootPaths: rootPaths,
+            currentWindowNextDayKeyByRoot: [:],
+            currentWindowDirectoryOffsetByRoot: [:],
+            completedCurrentWindowRootPaths: rootPaths,
+            currentWindowFlatDirectoryOffsetByRoot: [:],
+            completedCurrentWindowFlatRootPaths: rootPaths)
+        var pendingPaths = Set(lookback.pendingFilePaths)
+        pendingPaths.formUnion(paths)
+        lookback.pendingFilePaths = pendingPaths.sorted()
+        cache.codexActiveLookbackState = lookback
+        cache.codexScanCatchUpPending = true
     }
 
     private static func currentCodexRootDevices(
@@ -345,9 +396,14 @@ extension CostUsageStore {
         return path
     }
 
-    private static func reconcileCompletedCodexCatchUp(cache: inout CostUsageCache) {
+    private static func reconcileCompletedCodexCatchUp(
+        cache: inout CostUsageCache,
+        visitLimit: Int = CostUsageScanner.codexCatchUpScanCandidateLimit)
+    {
         if let lookback = cache.codexActiveLookbackState {
-            let reconciliationLimit = CostUsageScanner.codexCatchUpScanCandidateLimit
+            let reconciliationLimit = max(0, min(
+                visitLimit,
+                CostUsageScanner.codexCatchUpScanCandidateLimit))
             let candidatePaths = lookback.pendingFilePaths.prefix(reconciliationLimit)
             for path in candidatePaths {
                 Self.codexCatchUpReconciliationVisitForTesting?()

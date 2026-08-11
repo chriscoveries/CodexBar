@@ -643,6 +643,28 @@ extension CostUsageStoreTests {
     }
 
     @Test
+    func `v0_49_2 parser hash upgrades without rebuilding completed files`() async throws {
+        let fixture = try StoreFixture()
+        defer { fixture.remove() }
+        let previousParserHash = "b975eb705f905b9a"
+        let previousSchemaVersion = CostUsageStore.combinedSchemaVersion(
+            base: CostUsageStore.baseSchemaVersion,
+            parserHash: previousParserHash)
+        let previousStore = CostUsageStore(
+            cacheRoot: fixture.root,
+            schemaVersion: previousSchemaVersion,
+            parserHash: previousParserHash)
+        let file = Self.file(path: "/rollouts/completed.jsonl", day: "2026-08-01")
+        #expect(await previousStore.upsertFile(file))
+
+        let upgradedStore = CostUsageStore(cacheRoot: fixture.root)
+
+        #expect(await upgradedStore.fetchFile(path: file.path) == file)
+        #expect(await upgradedStore.rebuildCount == 0)
+        #expect(await upgradedStore.configuration()?.userVersion == Int(CostUsageStore.schemaVersion))
+    }
+
+    @Test
     func `garbage database recovers by rebuild`() async throws {
         let fixture = try StoreFixture()
         defer { fixture.remove() }

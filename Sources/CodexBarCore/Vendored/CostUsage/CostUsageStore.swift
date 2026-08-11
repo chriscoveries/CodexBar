@@ -71,6 +71,15 @@ actor CostUsageStore {
         base: CostUsageStore.baseSchemaVersion,
         parserHash: CodexParserHash.value)
     static let cacheGeneration = "sqlite:\(CostUsageStore.schemaVersion)"
+    private static let compatibleParserHashUpgrades: Set<ParserHashUpgrade> = [
+        // v0.49.2 parser results remain valid because this branch changes only scan scheduling and discovery.
+        ParserHashUpgrade(from: "b975eb705f905b9a", to: "94a9b9b27b50eb42"),
+    ]
+
+    private struct ParserHashUpgrade: Hashable {
+        let from: String
+        let to: String
+    }
 
     /// Test-only crash injection: invoked inside `saveCodexCache`'s transaction after each
     /// persisted file with the running count, so a crash-safety harness can SIGKILL the
@@ -310,13 +319,36 @@ extension CostUsageStore {
     }
 
     private func validateExistingDatabase(_ database: OpaquePointer) throws {
-        guard try Self.scalarInt(database, "PRAGMA user_version") == Int64(self.expectedSchemaVersion) else {
-            throw StoreError.incompatibleSchema
-        }
-        guard try Self.scalarText(
+        let storedSchemaVersion = try Self.scalarInt(database, "PRAGMA user_version")
+        let storedParserHash = try Self.scalarText(
             database,
-            "SELECT value FROM meta WHERE key = 'parser_hash'") == self.expectedParserHash
-        else { throw StoreError.incompatibleSchema }
+            "SELECT value FROM meta WHERE key = 'parser_hash'")
+        let schemaMatches = storedSchemaVersion == Int64(self.expectedSchemaVersion)
+        let parserMatches = storedParserHash == self.expectedParserHash
+        if !schemaMatches || !parserMatches {
+            guard let storedParserHash,
+                  self.expectedSchemaVersion == Self.schemaVersion,
+                  self.expectedParserHash == CodexParserHash.value,
+                  Self.compatibleParserHashUpgrades.contains(ParserHashUpgrade(
+                      from: storedParserHash,
+                      to: self.expectedParserHash)),
+                  storedSchemaVersion == Int64(Self.combinedSchemaVersion(
+                      base: Self.baseSchemaVersion,
+                      parserHash: storedParserHash))
+            else { throw StoreError.incompatibleSchema }
+            try Self.execute(database, "BEGIN IMMEDIATE")
+            do {
+                try Self.execute(database, "PRAGMA user_version = \(self.expectedSchemaVersion)")
+                let statement = try Self.prepare(database, "UPDATE meta SET value = ? WHERE key = 'parser_hash'")
+                defer { sqlite3_finalize(statement) }
+                Self.bind(self.expectedParserHash, to: statement, at: 1)
+                try Self.stepDone(statement, database: database)
+                try Self.execute(database, "COMMIT")
+            } catch {
+                try? Self.execute(database, "ROLLBACK")
+                throw error
+            }
+        }
         guard try Self.scalarText(database, "PRAGMA quick_check") == "ok" else {
             throw StoreError.invalidData
         }
