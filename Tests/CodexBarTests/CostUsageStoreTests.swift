@@ -656,6 +656,36 @@ extension CostUsageStoreTests {
             "SELECT COUNT(*) FROM meta WHERE key = 'parser_hash' AND value = '\(CodexParserHash.value)'") == 1)
     }
 
+    @Test(.timeLimit(.minutes(1)))
+    func `concurrent predecessor adoption never rebuilds a valid store`() async throws {
+        let fixture = try StoreFixture()
+        defer { fixture.remove() }
+        let predecessorHash = try #require(CostUsageStore.compatiblePredecessorParserHashes.first)
+        let predecessorVersion = CostUsageStore.combinedSchemaVersion(
+            base: CostUsageStore.baseSchemaVersion,
+            parserHash: predecessorHash)
+        let predecessor = CostUsageStore(
+            cacheRoot: fixture.root,
+            schemaVersion: predecessorVersion,
+            parserHash: predecessorHash)
+        let metadata = Self.metadata()
+        #expect(await predecessor.setMetadata(metadata))
+
+        let stores = (0..<16).map { _ in CostUsageStore(cacheRoot: fixture.root) }
+        await withTaskGroup(of: Void.self) { group in
+            for store in stores {
+                group.addTask {
+                    #expect(await store.fetchMetadata() == metadata)
+                    #expect(await store.rebuildCount == 0)
+                }
+            }
+        }
+        let connection = try SQLiteTestConnection(url: fixture.databaseURL, readOnly: true)
+        #expect(try connection.scalarInt("PRAGMA user_version") == Int64(CostUsageStore.schemaVersion))
+        #expect(try connection.scalarInt(
+            "SELECT COUNT(*) FROM meta WHERE key = 'parser_hash' AND value = '\(CodexParserHash.value)'") == 1)
+    }
+
     @Test
     func `version mismatch drops and recreates`() async throws {
         let fixture = try StoreFixture()

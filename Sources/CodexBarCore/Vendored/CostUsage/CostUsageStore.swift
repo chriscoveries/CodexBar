@@ -324,45 +324,46 @@ extension CostUsageStore {
     }
 
     private func validateExistingDatabase(_ database: OpaquePointer) throws {
-        let actualVersion = try Self.scalarInt(database, "PRAGMA user_version")
-        guard let storedHash = try Self.scalarText(
-            database,
-            "SELECT value FROM meta WHERE key = 'parser_hash'")
-        else { throw StoreError.incompatibleSchema }
-        let isCurrent = actualVersion == Int64(self.expectedSchemaVersion) && storedHash == self.expectedParserHash
-        let predecessorVersion = Self.combinedSchemaVersion(
-            base: Self.baseSchemaVersion,
-            parserHash: storedHash)
-        let canAdoptPredecessor = self.expectedParserHash == CodexParserHash.value
-            && self.expectedSchemaVersion == Self.schemaVersion
-            && Self.compatiblePredecessorParserHashes.contains(storedHash)
-            && actualVersion == Int64(predecessorVersion)
-        guard isCurrent || canAdoptPredecessor else { throw StoreError.incompatibleSchema }
-        guard try Self.scalarText(database, "PRAGMA quick_check") == "ok" else {
-            throw StoreError.invalidData
-        }
-        guard try Self.scalarInt(database, "PRAGMA auto_vacuum") == 2 else {
-            throw StoreError.incompatibleSchema
-        }
-        if canAdoptPredecessor {
-            try self.adoptCompatiblePredecessor(database)
-        }
-    }
-
-    private func adoptCompatiblePredecessor(_ database: OpaquePointer) throws {
         try Self.execute(database, "BEGIN IMMEDIATE")
         do {
-            let statement = try Self.prepare(database, "UPDATE meta SET value = ? WHERE key = 'parser_hash'")
-            defer { sqlite3_finalize(statement) }
-            Self.bind(self.expectedParserHash, to: statement, at: 1)
-            try Self.stepDone(statement, database: database)
-            guard sqlite3_changes(database) == 1 else { throw StoreError.incompatibleSchema }
-            try Self.execute(database, "PRAGMA user_version = \(self.expectedSchemaVersion)")
+            let actualVersion = try Self.scalarInt(database, "PRAGMA user_version")
+            guard let storedHash = try Self.scalarText(
+                database,
+                "SELECT value FROM meta WHERE key = 'parser_hash'")
+            else { throw StoreError.incompatibleSchema }
+            let isCurrent = actualVersion == Int64(self.expectedSchemaVersion)
+                && storedHash == self.expectedParserHash
+            let predecessorVersion = Self.combinedSchemaVersion(
+                base: Self.baseSchemaVersion,
+                parserHash: storedHash)
+            let canAdoptPredecessor = self.expectedParserHash == CodexParserHash.value
+                && self.expectedSchemaVersion == Self.schemaVersion
+                && Self.compatiblePredecessorParserHashes.contains(storedHash)
+                && actualVersion == Int64(predecessorVersion)
+            guard isCurrent || canAdoptPredecessor else { throw StoreError.incompatibleSchema }
+            guard try Self.scalarText(database, "PRAGMA quick_check") == "ok" else {
+                throw StoreError.invalidData
+            }
+            guard try Self.scalarInt(database, "PRAGMA auto_vacuum") == 2 else {
+                throw StoreError.incompatibleSchema
+            }
+            if canAdoptPredecessor {
+                try self.adoptCompatiblePredecessor(database)
+            }
             try Self.execute(database, "COMMIT")
         } catch {
             try? Self.execute(database, "ROLLBACK")
             throw error
         }
+    }
+
+    private func adoptCompatiblePredecessor(_ database: OpaquePointer) throws {
+        let statement = try Self.prepare(database, "UPDATE meta SET value = ? WHERE key = 'parser_hash'")
+        defer { sqlite3_finalize(statement) }
+        Self.bind(self.expectedParserHash, to: statement, at: 1)
+        try Self.stepDone(statement, database: database)
+        guard sqlite3_changes(database) == 1 else { throw StoreError.incompatibleSchema }
+        try Self.execute(database, "PRAGMA user_version = \(self.expectedSchemaVersion)")
     }
 
     private func createSchema(_ database: OpaquePointer) throws {
