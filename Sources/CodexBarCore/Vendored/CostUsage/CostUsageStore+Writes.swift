@@ -385,27 +385,42 @@ extension CostUsageStore {
     func advanceLastScanUnixMs(_ incomingUnixMs: Int64) -> Bool {
         self.withDatabase(default: false) { database in
             try Self.inTransaction(database) {
-                var metadata = try Self.readSingleton(
-                    CostUsageStoreMetadata.self,
-                    database: database,
-                    table: "scan_metadata") ?? .empty
-                // Retention may have required catch-up after the caller's preflight. Recheck
-                // under this writer lock so stale freshness can never mask that recovery state.
-                guard !metadata.catchUpPending else { return true }
-                let advancedUnixMs = max(metadata.lastScanUnixMs, incomingUnixMs)
-                guard advancedUnixMs != metadata.lastScanUnixMs else { return true }
-                metadata.lastScanUnixMs = advancedUnixMs
-                let payload = try JSONEncoder().encode(metadata)
-                let statement = try Self.prepare(database, """
-                INSERT INTO scan_metadata(id, payload) VALUES (1, ?)
-                ON CONFLICT(id) DO UPDATE SET payload = excluded.payload
-                """)
-                defer { sqlite3_finalize(statement) }
-                Self.bind(payload, to: statement, at: 1)
-                try Self.stepDone(statement, database: database)
-                return true
+                try Self.writeAdvancedLastScanUnixMs(incomingUnixMs, database: database)
             }
         }
+    }
+
+    /// The caller already owns the save transaction's writer lock.
+    @discardableResult
+    func advanceLastScanUnixMsInCurrentTransaction(_ incomingUnixMs: Int64) -> Bool {
+        self.withDatabase(default: false) { database in
+            try Self.writeAdvancedLastScanUnixMs(incomingUnixMs, database: database)
+        }
+    }
+
+    private static func writeAdvancedLastScanUnixMs(
+        _ incomingUnixMs: Int64,
+        database: OpaquePointer) throws -> Bool
+    {
+        var metadata = try self.readSingleton(
+            CostUsageStoreMetadata.self,
+            database: database,
+            table: "scan_metadata") ?? .empty
+        // Retention may have required catch-up after the caller's preflight. Recheck
+        // under this writer lock so stale freshness can never mask that recovery state.
+        guard !metadata.catchUpPending else { return true }
+        let advancedUnixMs = max(metadata.lastScanUnixMs, incomingUnixMs)
+        guard advancedUnixMs != metadata.lastScanUnixMs else { return true }
+        metadata.lastScanUnixMs = advancedUnixMs
+        let payload = try JSONEncoder().encode(metadata)
+        let statement = try self.prepare(database, """
+        INSERT INTO scan_metadata(id, payload) VALUES (1, ?)
+        ON CONFLICT(id) DO UPDATE SET payload = excluded.payload
+        """)
+        defer { sqlite3_finalize(statement) }
+        self.bind(payload, to: statement, at: 1)
+        try self.stepDone(statement, database: database)
+        return true
     }
 
     @discardableResult

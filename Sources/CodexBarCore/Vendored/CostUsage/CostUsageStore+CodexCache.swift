@@ -103,7 +103,7 @@ extension CostUsageStore {
                 return retry
             }
 
-            let advanced = self.advanceLastScanUnixMs(cache.lastScanUnixMs)
+            let advanced = self.advanceLastScanUnixMsInCurrentTransaction(cache.lastScanUnixMs)
             let committed = self.endSaveTransaction()
             guard advanced, committed else {
                 var retry = result
