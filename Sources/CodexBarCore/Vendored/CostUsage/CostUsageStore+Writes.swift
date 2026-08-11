@@ -377,6 +377,16 @@ extension CostUsageStore {
         self.setSingleton(metadata, table: "scan_metadata")
     }
 
+    /// Advances only the persisted scan timestamp without touching the content tables.
+    /// The identical-save shortcut uses this so a skipped rewrite does not leave the
+    /// durable refresh timestamp stale and force a rescan on every interval.
+    func touchScanTimestampIfNeeded(_ unixMs: Int64) {
+        var metadata = self.fetchMetadata()
+        guard metadata.lastScanUnixMs != unixMs else { return }
+        metadata.lastScanUnixMs = unixMs
+        _ = self.setMetadata(metadata)
+    }
+
     @discardableResult
     func upsertAccumulator(_ accumulator: CostUsageStoreAccumulator) -> Bool {
         self.withDatabase(default: false) { database in

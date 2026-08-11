@@ -75,7 +75,10 @@ extension CostUsageStore {
             // The scanner stamps a fresh scan timestamp on every pass even when no content
             // changed; rewriting the whole database for identical rows is the disk churn
             // behind #2495. The persisted state already matches the incoming cache, so the
-            // save cycle can end before the transaction begins and the WAL stays untouched.
+            // content tables stay untouched. The scan timestamp still advances in the
+            // singleton metadata row so refresh debounce keeps working after cache reloads
+            // and app restarts instead of rescanning on every interval.
+            self.touchScanTimestampIfNeeded(cache.lastScanUnixMs)
             let attributes = try? FileManager.default.attributesOfItem(atPath: self.databaseURL.path)
             let fileBytes = (attributes?[.size] as? NSNumber)?.int64Value ?? 0
             return CostUsageStoreBudgetResult(

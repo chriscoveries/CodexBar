@@ -354,7 +354,7 @@ extension CostUsageStoreTests {
     }
 
     @Test
-    func `identical codex cache save leaves the database and wal untouched`() async throws {
+    func `identical codex cache save skips content rewrites but advances the scan timestamp`() async throws {
         let fixture = try StoreFixture()
         defer { fixture.remove() }
         let store = CostUsageStore(cacheRoot: fixture.root)
@@ -431,15 +431,20 @@ extension CostUsageStoreTests {
 
         let before = footprint()
 
-        // A later scan pass over unchanged files stamps a new timestamp and nothing else.
+        // A later scan pass over unchanged files stamps a new timestamp: the content tables
+        // stay untouched, but the durable timestamp advances so refresh debounce survives
+        // cache reloads and app restarts.
         var reread = CostUsageStoreAccess.read(cacheRoot: fixture.root, calendar: calendar)
         #expect(reread.files[path] != nil)
         reread.lastScanUnixMs = 2000
         save(reread)
 
-        #expect(footprint() == before)
+        #expect(await store.fetchMetadata().lastScanUnixMs == 2000)
+        #expect(footprint()[dbURL]?.size == before[dbURL]?.size)
         #expect(await store.fetchTokenSnapshots(path: path).map(\.eventIndex) == [0, 1])
         #expect(await store.fetchUsageRows(path: path).count == 2)
+        let reloaded = CostUsageStoreAccess.read(cacheRoot: fixture.root, calendar: calendar)
+        #expect(reloaded.lastScanUnixMs == 2000)
 
         // A real content change still persists.
         var changed = reread
