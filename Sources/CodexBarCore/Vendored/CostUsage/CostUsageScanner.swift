@@ -2656,6 +2656,7 @@ enum CostUsageScanner {
     private static func finalizedCodexActiveLookbackState(
         _ state: CostUsageCodexActiveLookbackState,
         completedFilePaths: Set<String>,
+        retainCompletedState: Bool,
         workRecorder: CodexScanWorkRecorder?) -> CostUsageCodexActiveLookbackState?
     {
         var state = state
@@ -2666,7 +2667,8 @@ enum CostUsageScanner {
         let isComplete = Set(state.completedRootPaths) == Set(state.rootPaths)
             && state.pendingFilePaths.isEmpty
             && state.legacyRecursivePendingRootPaths.isEmpty
-        return isComplete ? nil : state
+        state.awaitingExactInventory = isComplete && retainCompletedState ? true : nil
+        return isComplete && !retainCompletedState ? nil : state
     }
 
     private static func listCodexSessionFilesFlat(root: URL, scanSinceKey: String, scanUntilKey: String) -> [URL] {
@@ -4947,6 +4949,7 @@ enum CostUsageScanner {
             cache.codexActiveLookbackState = Self.finalizedCodexActiveLookbackState(
                 activeLookbackState,
                 completedFilePaths: completedScheduledPaths,
+                retainCompletedState: shouldBoundCatchUp && !completedScheduledPaths.isEmpty,
                 workRecorder: options.codexScanWorkRecorderForTesting)
             if scanBudget.resumedPartialFileCount > 0
                 || scanBudget.deferredByBudgetFileCount > 0

@@ -58,7 +58,7 @@ struct CostUsagePerformanceGateTests {
         #expect(firstCache.files.count == candidateLimit && firstCache.codexScanCatchUpPending == true)
         #expect(firstCache.codexActiveLookbackState?.pendingFilePaths.count == corpusSize - candidateLimit)
 
-        let secondRecorder = CostUsageScanner.CodexScanWorkRecorder()
+        let secondRecorder = CostUsageScanner.CodexScanWorkRecorder(), secondStarted = ContinuousClock.now
         options.codexScanWorkRecorderForTesting = secondRecorder
         _ = CostUsageScanner.loadDailyReport(
             provider: .codex,
@@ -66,7 +66,7 @@ struct CostUsagePerformanceGateTests {
             until: day,
             now: day.addingTimeInterval(1),
             options: options)
-        let secondMetrics = secondRecorder.snapshot()
+        let secondMetrics = secondRecorder.snapshot(), secondDuration = ContinuousClock.now - secondStarted
         let secondCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
         let cachePathOverlap = Set(firstCache.files.keys).intersection(secondCache.files.keys).count
         print(
@@ -76,7 +76,7 @@ struct CostUsagePerformanceGateTests {
                 + "preparation=\(secondMetrics.codexLookbackPreparationVisits), "
                 + "visits=\(secondMetrics.codexCandidateSelectionVisits), "
                 + "attempts=\(secondMetrics.codexFileScanAttempts), "
-                + "accounting=\(secondMetrics.codexProgressAccountingVisits)")
+                + "accounting=\(secondMetrics.codexProgressAccountingVisits), duration=\(secondDuration)")
 
         #expect(secondMetrics.codexFileScanAttempts == candidateLimit)
         #expect(secondMetrics.codexLookbackPreparationVisits == candidateLimit
@@ -1562,7 +1562,7 @@ extension CostUsagePerformanceGateTests {
         }
     }
 
-    private static func writeSyntheticCodexCorpus(
+    static func writeSyntheticCodexCorpus(
         env: CostUsageTestEnvironment,
         day: Date,
         files: Int,

@@ -322,6 +322,11 @@ public struct CostUsageFetcher: Sendable {
         }
         let hasIncompleteFile = scoped.files.values.contains { $0.codexScanComplete == false }
         let pending = cache.codexScanCatchUpPending == true || hasIncompleteFile
+        progressHasher.combine(pending)
+        progressHasher.combine(cache.codexScanProcessedBytes)
+        progressHasher.combine(cache.codexScanTotalBytes)
+        progressHasher.combine(cache.codexScanCompletedFiles)
+        progressHasher.combine(cache.codexScanTotalFiles)
         return CodexScanCatchUpStatus(
             pending: pending,
             progressKey: "\(scoped.files.count):\(progressHasher.finalize())",
