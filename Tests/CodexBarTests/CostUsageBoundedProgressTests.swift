@@ -132,6 +132,12 @@ struct CostUsageBoundedProgressTests {
         #expect(finalCache.codexScanTotalBytes == exactTotalBytes)
         #expect(finalCache.codexScanCompletedFiles == corpusSize)
         #expect(finalCache.codexScanTotalFiles == corpusSize)
+
+        var deferredCompletionCache = finalCache
+        deferredCompletionCache.codexScanCatchUpPending = true
+        CostUsageStoreAccess.replace(cacheRoot: env.cacheRoot, cache: deferredCompletionCache)
+        let restoredPendingCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
+        #expect(restoredPendingCache.codexScanCatchUpPending == true)
     }
 
     @Test

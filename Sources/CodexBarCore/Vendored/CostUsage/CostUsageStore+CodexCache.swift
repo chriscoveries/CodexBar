@@ -401,6 +401,10 @@ extension CostUsageStore {
         }
         guard !filesHavePendingWork else { return }
         let expectedTotalFiles = max(0, cache.codexScanTotalFiles ?? 0)
+        let reconciliationLimit = CostUsageScanner.codexCatchUpScanCandidateLimit
+        guard expectedTotalFiles <= reconciliationLimit,
+              (cache.codexScanInventoryPaths?.count ?? 0) <= reconciliationLimit
+        else { return }
         guard let completedInventory = Self.completedCodexScanInventory(
             cache: cache,
             expectedTotalFiles: expectedTotalFiles)
