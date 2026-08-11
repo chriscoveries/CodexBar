@@ -288,6 +288,7 @@ extension CostUsageStore {
             self.connection = SQLiteConnection(handle: opened)
             return opened
         } catch {
+            guard Self.shouldRebuild(after: error) else { throw error }
             self.rebuildDatabase(reason: "open failed: \(error)")
             guard let database = self.connection?.handle else { throw error }
             return database
@@ -324,36 +325,67 @@ extension CostUsageStore {
     }
 
     private func validateExistingDatabase(_ database: OpaquePointer) throws {
-        try Self.execute(database, "BEGIN IMMEDIATE")
+        let state: (isCurrent: Bool, canAdoptPredecessor: Bool)
+        try Self.execute(database, "BEGIN")
         do {
-            let actualVersion = try Self.scalarInt(database, "PRAGMA user_version")
-            guard let storedHash = try Self.scalarText(
-                database,
-                "SELECT value FROM meta WHERE key = 'parser_hash'")
-            else { throw StoreError.incompatibleSchema }
-            let isCurrent = actualVersion == Int64(self.expectedSchemaVersion)
-                && storedHash == self.expectedParserHash
-            let predecessorVersion = Self.combinedSchemaVersion(
-                base: Self.baseSchemaVersion,
-                parserHash: storedHash)
-            let canAdoptPredecessor = self.expectedParserHash == CodexParserHash.value
-                && self.expectedSchemaVersion == Self.schemaVersion
-                && Self.compatiblePredecessorParserHashes.contains(storedHash)
-                && actualVersion == Int64(predecessorVersion)
-            guard isCurrent || canAdoptPredecessor else { throw StoreError.incompatibleSchema }
-            guard try Self.scalarText(database, "PRAGMA quick_check") == "ok" else {
-                throw StoreError.invalidData
-            }
-            guard try Self.scalarInt(database, "PRAGMA auto_vacuum") == 2 else {
+            state = try self.databaseCompatibilityState(database)
+            guard state.isCurrent || state.canAdoptPredecessor else {
                 throw StoreError.incompatibleSchema
             }
-            if canAdoptPredecessor {
+            try Self.validateDatabaseIntegrity(database)
+            try Self.execute(database, "COMMIT")
+        } catch {
+            try? Self.execute(database, "ROLLBACK")
+            throw error
+        }
+        if state.isCurrent { return }
+
+        try Self.execute(database, "BEGIN IMMEDIATE")
+        do {
+            // Another process may have adopted the predecessor while this connection waited
+            // for the writer lock. Re-read the compatibility state before changing metadata.
+            let lockedState = try self.databaseCompatibilityState(database)
+            guard lockedState.isCurrent || lockedState.canAdoptPredecessor else {
+                throw StoreError.incompatibleSchema
+            }
+            try Self.validateDatabaseIntegrity(database)
+            if lockedState.canAdoptPredecessor {
                 try self.adoptCompatiblePredecessor(database)
             }
             try Self.execute(database, "COMMIT")
         } catch {
             try? Self.execute(database, "ROLLBACK")
             throw error
+        }
+    }
+
+    private func databaseCompatibilityState(_ database: OpaquePointer) throws -> (
+        isCurrent: Bool,
+        canAdoptPredecessor: Bool)
+    {
+        let actualVersion = try Self.scalarInt(database, "PRAGMA user_version")
+        guard let storedHash = try Self.scalarText(
+            database,
+            "SELECT value FROM meta WHERE key = 'parser_hash'")
+        else { throw StoreError.incompatibleSchema }
+        let isCurrent = actualVersion == Int64(self.expectedSchemaVersion)
+            && storedHash == self.expectedParserHash
+        let predecessorVersion = Self.combinedSchemaVersion(
+            base: Self.baseSchemaVersion,
+            parserHash: storedHash)
+        let canAdoptPredecessor = self.expectedParserHash == CodexParserHash.value
+            && self.expectedSchemaVersion == Self.schemaVersion
+            && Self.compatiblePredecessorParserHashes.contains(storedHash)
+            && actualVersion == Int64(predecessorVersion)
+        return (isCurrent, canAdoptPredecessor)
+    }
+
+    private static func validateDatabaseIntegrity(_ database: OpaquePointer) throws {
+        guard try self.scalarText(database, "PRAGMA quick_check") == "ok" else {
+            throw StoreError.invalidData
+        }
+        guard try self.scalarInt(database, "PRAGMA auto_vacuum") == 2 else {
+            throw StoreError.incompatibleSchema
         }
     }
 
