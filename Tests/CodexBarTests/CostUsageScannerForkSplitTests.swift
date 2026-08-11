@@ -83,7 +83,7 @@ struct CostUsageScannerForkSplitTests {
         #expect(abs(projects.compactMap(\.totalCostUSD).reduce(0, +) - reportCost) < 1e-12)
         #expect(abs(sessions.compactMap(\.costUSD).reduce(0, +) - reportCost) < 1e-12)
 
-        let predecessorHash = try #require(CostUsageStore.compatiblePredecessorParserHashes.first)
+        let predecessorHash = "43609cc56f76a003"
         let predecessorStore = CostUsageStore(
             cacheRoot: environment.cacheRoot,
             schemaVersion: CostUsageStore.combinedSchemaVersion(

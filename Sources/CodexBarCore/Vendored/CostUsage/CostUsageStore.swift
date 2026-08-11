@@ -77,7 +77,10 @@ actor CostUsageStore {
         parserHash: CodexParserHash.value)
     static let cacheGeneration = "sqlite:\(CostUsageStore.schemaVersion)"
     /// CodexBar 0.49.0-0.49.2 SQLite producer; its persisted CodexUsageRow payload is compatible.
-    static let compatiblePredecessorParserHashes: Set<String> = ["b975eb705f905b9a"]
+    static let compatiblePredecessorParserHashes: Set<String> = [
+        "43609cc56f76a003",
+        "b975eb705f905b9a",
+    ]
 
     /// Test-only crash injection: invoked inside `saveCodexCache`'s transaction after each
     /// persisted file with the running count, so a crash-safety harness can SIGKILL the

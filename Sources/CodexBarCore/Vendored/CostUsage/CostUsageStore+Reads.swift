@@ -148,6 +148,47 @@ extension CostUsageStore {
         }
     }
 
+    /// SQLite connection counters used by persistence regression tests. These count logical
+    /// row changes and cache pages flushed by this connection; they supplement, but are not a
+    /// substitute for, filesystem-level write evidence.
+    func persistenceWriteMetricsForTesting(resetPageCounter: Bool = false) -> (rows: Int, pages: Int) {
+        self.withDatabase(default: (rows: 0, pages: 0)) { database in
+            var current: Int32 = 0
+            var highwater: Int32 = 0
+            let result = sqlite3_db_status(
+                database,
+                SQLITE_DBSTATUS_CACHE_WRITE,
+                &current,
+                &highwater,
+                resetPageCounter ? 1 : 0)
+            guard result == SQLITE_OK else { throw StoreError.sqlite(result) }
+            return (rows: Int(sqlite3_total_changes(database)), pages: Int(current))
+        }
+    }
+
+    func setWALAutoCheckpointForTesting(_ pages: Int32) -> Bool {
+        self.withDatabase(default: false) { database in
+            let result = sqlite3_wal_autocheckpoint(database, pages)
+            guard result == SQLITE_OK else { throw StoreError.sqlite(result) }
+            return true
+        }
+    }
+
+    func truncateWALForTesting() -> Bool {
+        self.withDatabase(default: false) { database in
+            var logFrames: Int32 = 0
+            var checkpointedFrames: Int32 = 0
+            let result = sqlite3_wal_checkpoint_v2(
+                database,
+                nil,
+                SQLITE_CHECKPOINT_TRUNCATE,
+                &logFrames,
+                &checkpointedFrames)
+            guard result == SQLITE_OK else { throw StoreError.sqlite(result) }
+            return true
+        }
+    }
+
     private func readSingleton<Value: Decodable>(_ type: Value.Type, table: String) -> Value? {
         self.withDatabase(default: nil) { database in
             try Self.readSingleton(type, database: database, table: table)

@@ -66,29 +66,31 @@ extension CostUsageStore {
         skipIdenticalContent: Bool = false) -> CostUsageStoreBudgetResult
     {
         let previous = self.readSnapshot()
-        let currentFileBytes = (try? FileManager.default.attributesOfItem(atPath: self.databaseURL.path))
-            .flatMap { $0[.size] as? NSNumber }?.int64Value ?? 0
-        let isWithinBudgets = previous.files.count <= max(0, rowBudget)
-            && currentFileBytes <= max(0, fileBudgetBytes)
         if skipIdenticalContent,
-           isWithinBudgets,
            Self.persistedContentMatches(
                previous: previous,
                cache: cache,
                calendar: calendar)
         {
+            // Retention owns the safety boundary: even a semantically unchanged scanner result
+            // must honor newly tightened row/file budgets before it can return. Decide identity
+            // first so changed content stays entirely on the existing atomic full-save path.
+            let result = self.enforceBudgets(
+                maxRows: rowBudget,
+                maxFileBytes: fileBudgetBytes,
+                requestedSinceDay: requestedScanWindow.sinceKey,
+                requestedUntilDay: requestedScanWindow.untilKey,
+                calendar: calendar)
             // The scanner stamps a fresh scan timestamp on every pass even when no content
             // changed; rewriting the whole database for identical rows is the disk churn
-            // behind #2495. The persisted state already matches the incoming cache, so the
-            // content tables stay untouched. The scan timestamp still advances in the
-            // singleton metadata row so refresh debounce keeps working after cache reloads
-            // and app restarts instead of rescanning on every interval.
-            self.touchScanTimestampIfNeeded(cache.lastScanUnixMs)
-            return CostUsageStoreBudgetResult(
-                deletedRows: 0,
-                rowCount: previous.files.count,
-                fileBytes: currentFileBytes,
-                catchUpRequired: false)
+            // behind #2495. When retention finds the store already within bounds, the content
+            // tables stay untouched and only the singleton metadata row advances, so refresh
+            // debounce keeps working after cache reloads and app restarts. A retention-induced
+            // catch-up keeps its zero timestamp instead of being masked by fresh scan metadata.
+            if !result.catchUpRequired {
+                _ = self.advanceLastScanUnixMs(cache.lastScanUnixMs)
+            }
+            return result
         }
         let canReuseStoredRows = previous.metadata.timeZoneIdentifier == calendar.timeZone.identifier
         let previousFilesByPath = Dictionary(uniqueKeysWithValues: previous.files.map { ($0.path, $0) })
@@ -136,7 +138,9 @@ extension CostUsageStore {
         return result
     }
 
-    /// True when persisting `cache` would leave every table byte-for-byte unchanged. The
+    /// True when persisting `cache` would leave every content table semantically unchanged.
+    /// This is O(persisted cache rows): it reconstructs typed values already read from SQLite
+    /// and compares them in memory; it never parses timestamps or opens session JSONL files. The
     /// persisted spellings of a few optional fields differ from their in-memory forms
     /// (`catchUpPending` and `codexScanComplete` store nil as false/true, `timeZoneIdentifier`
     /// is fixed by the caller's calendar, and `lastScanUnixMs` is a wall-clock stamp), so
@@ -152,11 +156,14 @@ extension CostUsageStore {
         else { return false }
         guard (cache.codexScanCatchUpPending ?? false) == restored.codexScanCatchUpPending
         else { return false }
+        // Freshness is the sole ignored semantic field. The time zone is a persistence-derived
+        // spelling: metadata(cache:calendar:) always writes the caller's calendar identifier.
         restored.lastScanUnixMs = cache.lastScanUnixMs
-        restored.timeZoneIdentifier = cache.timeZoneIdentifier
+        restored.timeZoneIdentifier = calendar.timeZone.identifier
         restored.codexScanCatchUpPending = cache.codexScanCatchUpPending
         restored.files = restored.files.mapValues(Self.normalizingScanComplete)
         var incoming = cache
+        incoming.timeZoneIdentifier = calendar.timeZone.identifier
         incoming.files = incoming.files.mapValues(Self.normalizingScanComplete)
         return restored == incoming
     }

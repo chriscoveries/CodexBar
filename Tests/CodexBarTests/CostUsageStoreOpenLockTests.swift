@@ -34,7 +34,7 @@ extension CostUsageStoreTests {
     func `locked compatible predecessor is preserved and adopts after retry`() async throws {
         let fixture = try OpenLockStoreFixture()
         defer { fixture.remove() }
-        let predecessorHash = try #require(CostUsageStore.compatiblePredecessorParserHashes.first)
+        let predecessorHash = "43609cc56f76a003"
         let predecessorVersion = CostUsageStore.combinedSchemaVersion(
             base: CostUsageStore.baseSchemaVersion,
             parserHash: predecessorHash)
