@@ -2665,9 +2665,13 @@ enum CostUsageScanner {
         {
             return cached
         }
+        let retainedPendingFilePaths = cache.codexScanCatchUpPending == true
+            ? cache.codexActiveLookbackState?.pendingFilePaths ?? []
+            : []
         return CostUsageCodexActiveLookbackState(
             scanSinceKey: scanSinceKey,
             rootPaths: rootPaths,
+            pendingFilePaths: retainedPendingFilePaths,
             legacyRecursivePendingRootPaths: includeLegacyRecursiveScan ? rootPaths : [])
     }
 

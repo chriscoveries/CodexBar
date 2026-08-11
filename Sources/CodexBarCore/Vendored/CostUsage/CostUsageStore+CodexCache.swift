@@ -157,6 +157,7 @@ extension CostUsageStore {
     private struct RestoredCodexScanState {
         var identity: String?
         var isComplete: Bool
+        var validatedCurrentSnapshot = false
     }
 
     private static func cache(from snapshot: CostUsageStoreSnapshot) -> CostUsageCache {
@@ -197,6 +198,8 @@ extension CostUsageStore {
         let currentRootDevices = Self.currentCodexRootDevices(rootMtimes: metadata.rootMtimes)
         var remainingIdentityValidationVisits = CostUsageScanner.codexCatchUpScanCandidateLimit
         var deferredIdentityValidationPaths: [String] = []
+        var completedIdentityValidationPaths: [String] = []
+        var invalidatedIdentityValidationPaths: [String] = []
 
         for file in snapshot.files {
             guard let detailsData = file.scanState.detailsPayload,
@@ -223,6 +226,11 @@ extension CostUsageStore {
                     file: file,
                     currentRootDevices: currentRootDevices,
                     validateMetadata: true)
+                if restoredScanState.isComplete, restoredScanState.validatedCurrentSnapshot {
+                    completedIdentityValidationPaths.append(file.path)
+                } else {
+                    invalidatedIdentityValidationPaths.append(file.path)
+                }
             } else if identityNeedsValidation {
                 deferredIdentityValidationPaths.append(file.path)
                 restoredScanState = RestoredCodexScanState(
@@ -287,8 +295,11 @@ extension CostUsageStore {
             cache.files[file.path] = usage
         }
         Self.enqueueDeferredCodexIdentityValidation(
-            deferredIdentityValidationPaths,
+            deferredIdentityValidationPaths + invalidatedIdentityValidationPaths,
             metadata: metadata,
+            cache: &cache)
+        Self.removeCompletedCodexIdentityValidation(
+            completedIdentityValidationPaths,
             cache: &cache)
         Self.reconcileCompletedCodexCatchUp(
             cache: &cache,
@@ -324,6 +335,18 @@ extension CostUsageStore {
         lookback.pendingFilePaths = pendingPaths.sorted()
         cache.codexActiveLookbackState = lookback
         cache.codexScanCatchUpPending = true
+    }
+
+    private static func removeCompletedCodexIdentityValidation(
+        _ paths: [String],
+        cache: inout CostUsageCache)
+    {
+        guard !paths.isEmpty, var lookback = cache.codexActiveLookbackState else { return }
+        let completedPathKeys = Set(paths.map(Self.normalizedCodexPath))
+        lookback.pendingFilePaths.removeAll { path in
+            completedPathKeys.contains(Self.normalizedCodexPath(path))
+        }
+        cache.codexActiveLookbackState = lookback
     }
 
     private static func currentCodexRootDevices(
@@ -379,7 +402,10 @@ extension CostUsageStore {
             && file.mtimeUnixMs == metadata.mtimeUnixMs
             && file.size == metadata.size
         if metadataIsUnchanged {
-            return RestoredCodexScanState(identity: identity, isComplete: file.scanState.isComplete)
+            return RestoredCodexScanState(
+                identity: identity,
+                isComplete: file.scanState.isComplete,
+                validatedCurrentSnapshot: true)
         }
 
         let isAppend = identity == currentIdentity && metadata.size > file.size
@@ -400,11 +426,12 @@ extension CostUsageStore {
         cache: inout CostUsageCache,
         visitLimit: Int = CostUsageScanner.codexCatchUpScanCandidateLimit)
     {
-        if let lookback = cache.codexActiveLookbackState {
+        if var lookback = cache.codexActiveLookbackState {
             let reconciliationLimit = max(0, min(
                 visitLimit,
                 CostUsageScanner.codexCatchUpScanCandidateLimit))
             let candidatePaths = lookback.pendingFilePaths.prefix(reconciliationLimit)
+            var completedIdentityValidationPathKeys: Set<String> = []
             for path in candidatePaths {
                 Self.codexCatchUpReconciliationVisitForTesting?()
                 let fileURL = URL(fileURLWithPath: path)
@@ -432,6 +459,12 @@ extension CostUsageStore {
                 {
                     normalized.codexScanFileId = fileId
                     cache.files[cachedEntry.path] = normalized
+                    completedIdentityValidationPathKeys.insert(Self.normalizedCodexPath(path))
+                }
+            }
+            if !completedIdentityValidationPathKeys.isEmpty {
+                lookback.pendingFilePaths.removeAll { path in
+                    completedIdentityValidationPathKeys.contains(Self.normalizedCodexPath(path))
                 }
             }
             let rootPaths = Set(lookback.rootPaths)

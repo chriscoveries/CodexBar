@@ -73,7 +73,7 @@ actor CostUsageStore {
     static let cacheGeneration = "sqlite:\(CostUsageStore.schemaVersion)"
     private static let compatibleParserHashUpgrades: Set<ParserHashUpgrade> = [
         // v0.49.2 parser results remain valid because this branch changes only scan scheduling and discovery.
-        ParserHashUpgrade(from: "b975eb705f905b9a", to: "94a9b9b27b50eb42"),
+        ParserHashUpgrade(from: "b975eb705f905b9a", to: "f1d04f67770b64cf"),
     ]
 
     private struct ParserHashUpgrade: Hashable {

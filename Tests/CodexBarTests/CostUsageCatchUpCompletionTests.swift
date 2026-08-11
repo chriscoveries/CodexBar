@@ -114,6 +114,120 @@ struct CostUsageCatchUpCompletionTests {
     }
 
     @Test
+    func `missing identity-drift candidate remains queued for scanner removal`() throws {
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+        let day = try env.makeLocalNoon(year: 2026, month: 5, day: 10)
+        let iso = env.isoString(for: day)
+        let fileURL = try env.writeCodexSessionFile(
+            day: day,
+            filename: "missing-drift.jsonl",
+            contents: [
+                #"{"type":"session_meta","timestamp":"\#(iso)","payload":{"session_id":"missing-drift"}}"#,
+                #"{"type":"turn_context","timestamp":"\#(iso)","payload":{"model":"openai/gpt-5.2-codex"}}"#,
+            ].joined(separator: "\n") + "\n")
+        var options = CostUsageScanner.Options(
+            codexSessionsRoot: env.codexSessionsRoot,
+            claudeProjectsRoots: nil,
+            cacheRoot: env.cacheRoot,
+            codexTraceDatabaseURL: env.root.appendingPathComponent("missing.sqlite"))
+        options.refreshMinIntervalSeconds = 0
+        _ = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day,
+            options: options)
+
+        var staleCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
+        let path = try #require(staleCache.files.keys.first)
+        var usage = try #require(staleCache.files[path])
+        let identity = try #require(usage.codexScanFileId)
+        let inode = try #require(identity.split(separator: ":").last)
+        usage.codexScanFileId = "0:\(inode)"
+        staleCache.files[path] = usage
+        let roots = CostUsageScanner.codexSessionsRoots(options: options)
+            .map { $0.resolvingSymlinksInPath().standardizedFileURL.path }
+            .sorted()
+        staleCache.codexActiveLookbackState = try CostUsageCodexActiveLookbackState(
+            scanSinceKey: #require(staleCache.scanSinceKey),
+            rootPaths: roots,
+            completedRootPaths: roots,
+            pendingFilePaths: [path])
+        staleCache.codexScanCatchUpPending = true
+        try FileManager.default.removeItem(at: fileURL)
+        CostUsageStoreAccess.replace(cacheRoot: env.cacheRoot, cache: staleCache)
+
+        let restored = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
+        #expect(restored.codexActiveLookbackState?.pendingFilePaths == [path])
+        #expect(restored.codexScanCatchUpPending == true)
+    }
+
+    @Test
+    func `scan window reset preserves the bounded pending queue`() async throws {
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+        let day = try env.makeLocalNoon(year: 2026, month: 5, day: 10)
+        var options = CostUsageScanner.Options(
+            codexSessionsRoot: env.codexSessionsRoot,
+            claudeProjectsRoots: nil,
+            cacheRoot: env.cacheRoot,
+            codexTraceDatabaseURL: env.root.appendingPathComponent("missing.sqlite"),
+            maxCodexScanDurationPerRefresh: 60)
+        options.refreshMinIntervalSeconds = 0
+        _ = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day,
+            options: options)
+
+        let roots = CostUsageScanner.codexSessionsRoots(options: options)
+            .map { $0.resolvingSymlinksInPath().standardizedFileURL.path }
+            .sorted()
+        let pendingPaths = try (0..<600).map { index in
+            try env.writeCodexSessionFile(
+                day: day,
+                filename: "queued-\(index).jsonl",
+                contents: "").standardizedFileURL.path
+        }
+        let store = CostUsageStore(cacheRoot: env.cacheRoot)
+        var metadata = await store.fetchMetadata()
+        metadata.scanSinceDay = "2026-05-09"
+        metadata.catchUpPending = true
+        #expect(await store.setMetadata(metadata))
+        #expect(await store.setLookbackState(CostUsageStoreLookbackState(
+            scanSinceDay: "2026-05-09",
+            rootPaths: roots,
+            nextDayByRoot: [:],
+            nextDirectoryOffsetByRoot: [:],
+            completedRootPaths: roots,
+            pendingFilePaths: pendingPaths,
+            legacyRecursivePendingRootPaths: [],
+            currentWindowNextDayKeyByRoot: [:],
+            currentWindowDirectoryOffsetByRoot: [:],
+            completedCurrentWindowRootPaths: roots,
+            currentWindowFlatDirectoryOffsetByRoot: [:],
+            completedCurrentWindowFlatRootPaths: roots,
+            cacheWideMigrationQueueActive: nil)))
+
+        let recorder = CostUsageScanner.CodexScanWorkRecorder()
+        options.codexScanWorkRecorderForTesting = recorder
+        _ = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day.addingTimeInterval(1),
+            options: options)
+
+        let restored = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
+        #expect(recorder.snapshot().codexFileScanAttempts == CostUsageScanner.codexCatchUpScanCandidateLimit)
+        #expect(restored.codexActiveLookbackState?.pendingFilePaths.count
+            == pendingPaths.count - CostUsageScanner.codexCatchUpScanCandidateLimit)
+        #expect(restored.codexScanCatchUpPending == true)
+    }
+
+    @Test
     func `bounded catch-up clears already complete files from a retained lookback queue`() async throws {
         let env = try CostUsageTestEnvironment()
         defer { env.cleanup() }
@@ -176,7 +290,7 @@ struct CostUsageCatchUpCompletionTests {
         #expect(await CostUsageStore(cacheRoot: env.cacheRoot).fetchMetadata().catchUpPending == true)
 
         let repairedCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
-        #expect(repairedCache.codexActiveLookbackState?.pendingFilePaths == [path, normalizedPath])
+        #expect(repairedCache.codexActiveLookbackState?.pendingFilePaths.isEmpty == true)
         #expect(repairedCache.codexScanCatchUpPending == true)
         #expect(repairedCache.files[path]?.codexScanFileId == currentIdentity)
 
