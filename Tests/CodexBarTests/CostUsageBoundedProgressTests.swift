@@ -310,6 +310,77 @@ struct CostUsageBoundedProgressTests {
     }
 
     @Test
+    func `active bounded queue appends a newly discovered tail path`() throws {
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+        let day = try env.makeLocalNoon(year: 2026, month: 5, day: 10)
+        let corpusSize = CostUsageScanner.codexCatchUpScanCandidateLimit + 1
+        try Self.writeSyntheticCorpus(env: env, day: day, fileCount: corpusSize)
+
+        var options = Self.boundedOptions(env: env)
+        options.preferNewestCodexSessionsFirst = false
+        let firstRecorder = CostUsageScanner.CodexScanWorkRecorder()
+        options.codexScanWorkRecorderForTesting = firstRecorder
+        _ = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day,
+            options: options)
+        let firstCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
+        #expect(firstRecorder.snapshot().codexFileScanAttempts == CostUsageScanner.codexCatchUpScanCandidateLimit)
+        #expect(firstCache.codexActiveLookbackState?.pendingFilePaths.count == 1)
+
+        let iso = env.isoString(for: day.addingTimeInterval(1))
+        _ = try env.writeCodexSessionFile(
+            day: day,
+            filename: "progress-new-tail.jsonl",
+            contents: [
+                #"{"type":"session_meta","timestamp":"\#(iso)","payload":{"session_id":"progress-new-tail"}}"#,
+                #"{"type":"turn_context","timestamp":"\#(iso)","payload":{"model":"openai/gpt-5.2-codex"}}"#,
+                #"{"type":"event_msg","timestamp":"\#(iso)","payload":{"type":"token_count","info":"#
+                    + #"{"total_token_usage":{"input_tokens":300,"cached_input_tokens":40,"output_tokens":20},"#
+                    + #""model":"openai/gpt-5.2-codex"}}}"#,
+            ].joined(separator: "\n") + "\n")
+
+        let secondRecorder = CostUsageScanner.CodexScanWorkRecorder()
+        options.codexScanWorkRecorderForTesting = secondRecorder
+        _ = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day.addingTimeInterval(1),
+            options: options)
+        let secondMetrics = secondRecorder.snapshot()
+        let secondCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
+        #expect(secondMetrics.codexCandidateSelectionVisits == 1)
+        #expect(secondMetrics.codexFileScanAttempts == 1)
+        #expect(secondMetrics.codexProgressAccountingVisits == 0)
+        #expect(secondCache.codexActiveLookbackState?.pendingFilePaths.count == 1)
+        #expect(secondCache.codexScanCompletedFiles == corpusSize)
+        #expect(secondCache.codexScanTotalFiles == corpusSize + 1)
+        #expect(secondCache.codexScanCatchUpPending == true)
+
+        let finalRecorder = CostUsageScanner.CodexScanWorkRecorder()
+        options.codexScanWorkRecorderForTesting = finalRecorder
+        _ = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day.addingTimeInterval(2),
+            options: options)
+        let finalMetrics = finalRecorder.snapshot()
+        let finalCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
+        #expect(finalMetrics.codexCandidateSelectionVisits == 1)
+        #expect(finalMetrics.codexFileScanAttempts == 1)
+        #expect(finalMetrics.codexProgressAccountingVisits == corpusSize + 1)
+        #expect(finalCache.codexActiveLookbackState == nil)
+        #expect(finalCache.codexScanCompletedFiles == corpusSize + 1)
+        #expect(finalCache.codexScanTotalFiles == corpusSize + 1)
+        #expect(finalCache.codexScanCatchUpPending == false)
+    }
+
+    @Test
     func `exact validation requeues a completed prefix path rewritten after its slice`() throws {
         let env = try CostUsageTestEnvironment()
         defer { env.cleanup() }

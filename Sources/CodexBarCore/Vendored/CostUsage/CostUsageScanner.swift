@@ -2517,16 +2517,29 @@ enum CostUsageScanner {
         }
     }
 
-    private static func seedCodexActiveLookbackQueueIfNeeded(
-        files: [URL],
-        shouldBoundCatchUp: Bool,
-        shouldSeedBoundedQueue: Bool,
+    private struct CodexActiveLookbackQueueUpdateContext {
+        let seedFiles: [URL]
+        let discoveredFiles: [URL]
+        let previousDiscovery: CostUsageCodexSessionDiscovery?
+        let shouldBoundCatchUp: Bool
+        let shouldSeedBoundedQueue: Bool
+    }
+
+    private static func seedOrExtendCodexActiveLookbackQueue(
+        context: CodexActiveLookbackQueueUpdateContext,
         state: inout CostUsageCodexActiveLookbackState)
     {
-        guard shouldBoundCatchUp, shouldSeedBoundedQueue else { return }
-        // Seed once per catch-up cycle. Later passes consume the persisted queue;
-        // lookback discovery appends newly found paths without re-adding completed ones.
-        self.appendCodexActiveLookbackPaths(files, state: &state)
+        guard context.shouldBoundCatchUp else { return }
+        if context.shouldSeedBoundedQueue {
+            self.appendCodexActiveLookbackPaths(context.seedFiles, state: &state)
+            return
+        }
+        guard let previousDiscovery = context.previousDiscovery else { return }
+        let previousPaths = Set(previousDiscovery.fileStamps.keys.map {
+            Self.codexResolvedPath(URL(fileURLWithPath: $0))
+        })
+        let newFiles = context.discoveredFiles.filter { !previousPaths.contains(Self.codexResolvedPath($0)) }
+        Self.appendCodexActiveLookbackPaths(newFiles, state: &state)
     }
 
     private struct CodexPendingLookbackAppendContext {
@@ -4851,6 +4864,7 @@ enum CostUsageScanner {
                         state: &activeLookbackState)
                 }
             }
+            let discoveredFiles = files
 
             let materializedPendingPathCount = Self.appendPendingCodexActiveLookbackFiles(
                 state: &activeLookbackState,
@@ -4876,10 +4890,13 @@ enum CostUsageScanner {
             }
 
             var filePathsInScan = Set(files.map(\.path))
-            Self.seedCodexActiveLookbackQueueIfNeeded(
-                files: files,
-                shouldBoundCatchUp: shouldBoundCatchUp,
-                shouldSeedBoundedQueue: shouldSeedBoundedQueue,
+            Self.seedOrExtendCodexActiveLookbackQueue(
+                context: CodexActiveLookbackQueueUpdateContext(
+                    seedFiles: files,
+                    discoveredFiles: discoveredFiles,
+                    previousDiscovery: cache.codexSessionDiscovery,
+                    shouldBoundCatchUp: shouldBoundCatchUp,
+                    shouldSeedBoundedQueue: shouldSeedBoundedQueue),
                 state: &activeLookbackState)
             let boundedQueuePathCount = shouldSeedBoundedQueue
                 ? min(Self.codexCatchUpScanCandidateLimit, activeLookbackState.pendingFilePaths.count)
