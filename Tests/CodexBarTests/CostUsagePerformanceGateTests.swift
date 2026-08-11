@@ -56,6 +56,59 @@ struct CostUsagePerformanceGateTests {
     }
 
     @Test
+    func `compatible predecessor store adoption performs zero session head parses`() throws {
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+        let day = try env.makeLocalNoon(year: 2026, month: 5, day: 10)
+        _ = try Self.writeSyntheticCodexCorpus(env: env, day: day, files: 3, turnsPerFile: 2)
+        let coldCacheRoot = env.root.appendingPathComponent("cold-cache", isDirectory: true)
+        var coldOptions = CostUsageScanner.Options(
+            codexSessionsRoot: env.codexSessionsRoot,
+            claudeProjectsRoots: nil,
+            cacheRoot: coldCacheRoot,
+            codexTraceDatabaseURL: env.root.appendingPathComponent("missing.sqlite"))
+        coldOptions.refreshMinIntervalSeconds = 0
+        let cold = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day,
+            options: coldOptions)
+        let cache = CostUsageStoreAccess.read(cacheRoot: coldCacheRoot, calendar: coldOptions.calendar)
+        let predecessorHash = try #require(CostUsageStore.compatiblePredecessorParserHashes.first)
+        let predecessorStore = CostUsageStore(
+            cacheRoot: env.cacheRoot,
+            schemaVersion: CostUsageStore.combinedSchemaVersion(
+                base: CostUsageStore.baseSchemaVersion,
+                parserHash: predecessorHash),
+            parserHash: predecessorHash)
+        _ = predecessorStore.syncSaveCodexCache(
+            cache,
+            calendar: coldOptions.calendar,
+            requestedScanWindow: (
+                sinceKey: CostUsageScanner.CostUsageDayRange.dayKey(from: day),
+                untilKey: CostUsageScanner.CostUsageDayRange.dayKey(from: day)))
+
+        var warmOptions = coldOptions
+        warmOptions.cacheRoot = env.cacheRoot
+        let counter = HeadParseCounter()
+        let warm = CostUsageScanner.withCodexSessionHeadParseObserverForTesting {
+            counter.increment()
+        } operation: {
+            CostUsageScanner.loadDailyReport(
+                provider: .codex,
+                since: day,
+                until: day,
+                now: day.addingTimeInterval(1),
+                options: warmOptions)
+        }
+
+        #expect(counter.value == 0)
+        #expect(warm.data == cold.data)
+        #expect(warm.summary == cold.summary)
+    }
+
+    @Test
     func `over budget prune retains stale coverage file modified inside the window`() async throws {
         let env = try CostUsageTestEnvironment()
         defer { env.cleanup() }
@@ -334,7 +387,8 @@ struct CostUsagePerformanceGateTests {
         mixed.files[rowlessPath]?.codexRows = nil
 
         let mixedBackfilled = CostUsageScanner.buildCodexReportFromCache(cache: mixed, range: range)
-        #expect(abs((mixedBackfilled.summary?.totalCostUSD ?? 0) - (scanned.summary?.totalCostUSD ?? 0)) < 0.000000001)
+        #expect(mixedBackfilled.summary?.totalTokens == scanned.summary?.totalTokens)
+        #expect(mixedBackfilled.summary?.totalCostUSD == nil)
 
         let aggregateCost = CostUsagePricing.codexCostUSD(
             model: "gpt-5.5",

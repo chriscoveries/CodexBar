@@ -605,6 +605,88 @@ extension CostUsageStoreTests {
 
 extension CostUsageStoreTests {
     @Test
+    func `compatible predecessor parser hash adopts without rebuilding`() async throws {
+        let fixture = try StoreFixture()
+        defer { fixture.remove() }
+        #expect(CostUsageStore.compatiblePredecessorParserHashes == ["b975eb705f905b9a"])
+        let predecessorHash = try #require(CostUsageStore.compatiblePredecessorParserHashes.first)
+        let predecessorVersion = CostUsageStore.combinedSchemaVersion(
+            base: CostUsageStore.baseSchemaVersion,
+            parserHash: predecessorHash)
+        let predecessor = CostUsageStore(
+            cacheRoot: fixture.root,
+            schemaVersion: predecessorVersion,
+            parserHash: predecessorHash)
+        let file = Self.file(path: "/rollouts/compatible.jsonl", day: "2026-08-01")
+        let token = Self.snapshot(path: file.path, eventIndex: 0)
+        let usageRow = CostUsageStoreUsageRow(path: file.path, rowIndex: 0, payload: Data([8, 9, 10]))
+        let aggregate = Self.aggregate(day: "2026-08-01", model: "gpt-5.6-sol", scale: 1)
+        let lineage = Self.lineage(path: file.path)
+        let line = Self.bufferedLine(path: file.path, kind: .subagent, index: 0)
+        let discovery = Self.discoveryState(paths: [file.path])
+        let lookback = CostUsageStoreLookbackState(
+            scanSinceDay: "2026-08-01",
+            rootPaths: ["/root"],
+            nextDayByRoot: ["/root": "2026-08-02"],
+            completedRootPaths: [],
+            pendingFilePaths: [file.path],
+            legacyRecursivePendingRootPaths: [])
+        let accumulator = Self.accumulator(path: file.path)
+        let metadata = Self.metadata()
+        #expect(await predecessor.upsertFile(file))
+        #expect(await predecessor.appendTokenSnapshots([token]))
+        #expect(await predecessor.replaceUsageRows(path: file.path, rows: [usageRow]))
+        #expect(await predecessor.replaceFileDayAggregates(path: file.path, aggregates: [aggregate]))
+        #expect(await predecessor.mergeDayAggregates([aggregate]))
+        #expect(await predecessor.upsertForkLineage(lineage))
+        #expect(await predecessor.replaceBufferedLines(path: file.path, kind: .subagent, lines: [line]))
+        #expect(await predecessor.setDiscoveryState(discovery))
+        #expect(await predecessor.setLookbackState(lookback))
+        #expect(await predecessor.upsertAccumulator(accumulator))
+        #expect(await predecessor.setMetadata(metadata))
+        let before = await predecessor.readSnapshot()
+
+        let current = CostUsageStore(cacheRoot: fixture.root)
+        let after = await current.readSnapshot()
+        #expect(after == before)
+        #expect(await current.rebuildCount == 0)
+        #expect(await current.configuration()?.userVersion == Int(CostUsageStore.schemaVersion))
+        let connection = try SQLiteTestConnection(url: fixture.databaseURL, readOnly: true)
+        #expect(try connection.scalarInt(
+            "SELECT COUNT(*) FROM meta WHERE key = 'parser_hash' AND value = '\(CodexParserHash.value)'") == 1)
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func `concurrent predecessor adoption never rebuilds a valid store`() async throws {
+        let fixture = try StoreFixture()
+        defer { fixture.remove() }
+        let predecessorHash = try #require(CostUsageStore.compatiblePredecessorParserHashes.first)
+        let predecessorVersion = CostUsageStore.combinedSchemaVersion(
+            base: CostUsageStore.baseSchemaVersion,
+            parserHash: predecessorHash)
+        let predecessor = CostUsageStore(
+            cacheRoot: fixture.root,
+            schemaVersion: predecessorVersion,
+            parserHash: predecessorHash)
+        let metadata = Self.metadata()
+        #expect(await predecessor.setMetadata(metadata))
+
+        let stores = (0..<16).map { _ in CostUsageStore(cacheRoot: fixture.root) }
+        await withTaskGroup(of: Void.self) { group in
+            for store in stores {
+                group.addTask {
+                    #expect(await store.fetchMetadata() == metadata)
+                    #expect(await store.rebuildCount == 0)
+                }
+            }
+        }
+        let connection = try SQLiteTestConnection(url: fixture.databaseURL, readOnly: true)
+        #expect(try connection.scalarInt("PRAGMA user_version") == Int64(CostUsageStore.schemaVersion))
+        #expect(try connection.scalarInt(
+            "SELECT COUNT(*) FROM meta WHERE key = 'parser_hash' AND value = '\(CodexParserHash.value)'") == 1)
+    }
+
+    @Test
     func `version mismatch drops and recreates`() async throws {
         let fixture = try StoreFixture()
         defer { fixture.remove() }
@@ -635,6 +717,51 @@ extension CostUsageStoreTests {
 
         #expect(await store.fetchMetadata() == .empty)
         #expect(await store.rebuildCount == 1)
+    }
+
+    @Test
+    func `compatible predecessor hash with mismatched version still rebuilds`() async throws {
+        let fixture = try StoreFixture()
+        defer { fixture.remove() }
+        let predecessorHash = try #require(CostUsageStore.compatiblePredecessorParserHashes.first)
+        let predecessorVersion = CostUsageStore.combinedSchemaVersion(
+            base: CostUsageStore.baseSchemaVersion,
+            parserHash: predecessorHash)
+        let predecessor = CostUsageStore(
+            cacheRoot: fixture.root,
+            schemaVersion: predecessorVersion,
+            parserHash: predecessorHash)
+        #expect(await predecessor.setMetadata(Self.metadata()))
+        try SQLiteTestConnection.execute(
+            at: fixture.databaseURL,
+            sql: "PRAGMA user_version = \(predecessorVersion + 1)")
+
+        let current = CostUsageStore(cacheRoot: fixture.root)
+        #expect(await current.fetchMetadata() == .empty)
+        #expect(await current.rebuildCount == 1)
+    }
+
+    @Test
+    func `compatible predecessor hash without incremental auto vacuum still rebuilds`() async throws {
+        let fixture = try StoreFixture()
+        defer { fixture.remove() }
+        let predecessorHash = try #require(CostUsageStore.compatiblePredecessorParserHashes.first)
+        let predecessorVersion = CostUsageStore.combinedSchemaVersion(
+            base: CostUsageStore.baseSchemaVersion,
+            parserHash: predecessorHash)
+        try FileManager.default.createDirectory(
+            at: fixture.databaseURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true)
+        try SQLiteTestConnection.execute(at: fixture.databaseURL, sql: """
+        CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        INSERT INTO meta(key, value) VALUES ('parser_hash', '\(predecessorHash)');
+        PRAGMA user_version = \(predecessorVersion);
+        """)
+
+        let current = CostUsageStore(cacheRoot: fixture.root)
+        #expect(await current.fetchMetadata() == .empty)
+        #expect(await current.rebuildCount == 1)
+        #expect(await current.configuration()?.autoVacuumMode == 2)
     }
 
     @Test
