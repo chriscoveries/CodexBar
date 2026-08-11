@@ -2011,7 +2011,8 @@ enum CostUsageScanner {
             let hasRelevantDay = usage.days.keys.contains {
                 CostUsageDayRange.isInRange(dayKey: $0, since: range.scanSinceKey, until: range.scanUntilKey)
             }
-            guard hasRelevantDay else { return nil }
+            let hasPendingWork = usage.codexScanComplete == false || usage.hasBufferedCodexForkRetryLines
+            guard hasRelevantDay || hasPendingWork else { return nil }
             guard FileManager.default.fileExists(atPath: path) else { return nil }
             let fileURL = URL(fileURLWithPath: path)
             guard Self.isWithinCodexRoots(fileURL: fileURL, roots: roots) else { return nil }
@@ -2506,7 +2507,7 @@ enum CostUsageScanner {
     {
         let files = Array(files)
         guard !files.isEmpty else { return }
-        var queuedPaths: Set<String>?
+        var queuedPaths: Set<String>
         if normalizeExisting {
             var normalizedPaths: Set<String> = []
             state.pendingFilePaths = state.pendingFilePaths.compactMap { path in
@@ -2514,15 +2515,12 @@ enum CostUsageScanner {
                 return normalizedPaths.insert(resolvedPath).inserted ? resolvedPath : nil
             }
             queuedPaths = normalizedPaths
+        } else {
+            queuedPaths = Set(state.pendingFilePaths)
         }
         for fileURL in files {
             let resolvedPath = Self.codexResolvedPath(fileURL)
-            let isNewPath: Bool = if queuedPaths != nil {
-                queuedPaths!.insert(resolvedPath).inserted
-            } else {
-                !state.pendingFilePaths.contains(resolvedPath)
-            }
-            guard isNewPath else { continue }
+            guard queuedPaths.insert(resolvedPath).inserted else { continue }
             state.pendingFilePaths.append(resolvedPath)
         }
     }
@@ -4842,6 +4840,9 @@ enum CostUsageScanner {
                 && !options.forceRescan
                 && (cache.files.isEmpty
                     || cache.codexScanCatchUpPending == true
+                    || cache.files.values.contains {
+                        $0.codexScanComplete == false || $0.hasBufferedCodexForkRetryLines
+                    }
                     || cache.codexActiveLookbackState != nil)
             var seenPaths: Set<String> = []
             var fileURLsByPathKey: [String: URL] = [:]
@@ -5078,6 +5079,8 @@ enum CostUsageScanner {
             cache.codexSessionDiscovery = fileIndex.persistedState
             let catchUpPending = !canValidateExactInventory
                 || scanProgress.completedFiles < scanProgress.totalFiles
+                || cache.files.values.contains { $0.codexScanComplete == false }
+                || cache.files.values.contains { $0.hasBufferedCodexForkRetryLines }
             cache.codexScanCatchUpPending = catchUpPending
             cache.codexPreviousReport = catchUpPending ? previousReport : nil
             if plan.hasPriorityMetadata {

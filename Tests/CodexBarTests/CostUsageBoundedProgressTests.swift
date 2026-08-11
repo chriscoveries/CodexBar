@@ -68,6 +68,75 @@ struct CostUsageBoundedProgressTests {
     }
 
     @Test
+    func `narrow bounded catch-up completes a retained-window pending file`() throws {
+        let env = try CostUsageTestEnvironment()
+        defer { env.cleanup() }
+        let day = try env.makeLocalNoon(year: 2026, month: 5, day: 10)
+        let priorDay = try #require(Calendar.current.date(byAdding: .day, value: -1, to: day))
+        let retainedURL = try #require(Self.writeSyntheticCorpus(env: env, day: priorDay, fileCount: 1).first)
+
+        var options = Self.boundedOptions(env: env)
+        options.maxCodexScanDurationPerRefresh = nil
+        _ = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: priorDay,
+            until: day,
+            now: day,
+            options: options)
+
+        let handle = try FileHandle(forWritingTo: retainedURL)
+        try handle.seekToEnd()
+        let iso = env.isoString(for: day)
+        let appendedRow =
+            #"{"type":"event_msg","timestamp":"\#(iso)","payload":{"type":"token_count","info":"#
+                + #"{"total_token_usage":{"input_tokens":250,"cached_input_tokens":80,"output_tokens":30},"#
+                + #""model":"openai/gpt-5.2-codex"}}}"#
+        try handle.write(contentsOf: Data((appendedRow + "\n").utf8))
+        try handle.close()
+
+        var pendingCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
+        let pendingPath = try #require(pendingCache.files.keys.first { $0.hasSuffix(retainedURL.lastPathComponent) })
+        pendingCache.files[pendingPath]?.codexScanComplete = false
+        pendingCache.codexActiveLookbackState = nil
+        pendingCache.codexScanInventoryPaths = nil
+        pendingCache.codexScanCatchUpPending = true
+        CostUsageStoreAccess.replace(cacheRoot: env.cacheRoot, cache: pendingCache)
+
+        options.maxCodexScanDurationPerRefresh = 60
+        let boundedRecorder = CostUsageScanner.CodexScanWorkRecorder()
+        options.codexScanWorkRecorderForTesting = boundedRecorder
+        _ = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day.addingTimeInterval(1),
+            options: options)
+        let boundedCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
+        let retainedPath = try #require(boundedCache.files.keys.first { $0.hasSuffix(retainedURL.lastPathComponent) })
+        #expect(boundedRecorder.snapshot().codexCandidateSelectionVisits == 1)
+        #expect(boundedRecorder.snapshot().codexFileScanAttempts == 1)
+        #expect(boundedRecorder.snapshot().codexProgressAccountingVisits == 0)
+        #expect(boundedCache.files[retainedPath]?.lastCountedTotals?.input == 250)
+        #expect(boundedCache.codexActiveLookbackState?.pendingFilePaths.isEmpty == true)
+        #expect(boundedCache.codexScanCatchUpPending == true)
+
+        let exactRecorder = CostUsageScanner.CodexScanWorkRecorder()
+        options.codexScanWorkRecorderForTesting = exactRecorder
+        _ = CostUsageScanner.loadDailyReport(
+            provider: .codex,
+            since: day,
+            until: day,
+            now: day.addingTimeInterval(2),
+            options: options)
+        let exactCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
+        #expect(exactRecorder.snapshot().codexCandidateSelectionVisits == 0)
+        #expect(exactRecorder.snapshot().codexFileScanAttempts == 0)
+        #expect(exactRecorder.snapshot().codexProgressAccountingVisits == 1)
+        #expect(exactCache.codexActiveLookbackState == nil)
+        #expect(exactCache.codexScanCatchUpPending == false)
+    }
+
+    @Test
     func `time limited catch-up keeps bounded progress until exact validation`() throws {
         let env = try CostUsageTestEnvironment()
         defer { env.cleanup() }
