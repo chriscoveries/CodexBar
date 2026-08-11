@@ -144,7 +144,7 @@ struct MenuBarLayoutEditorTests {
 
     @Test
     func `drag payload codable round trips`() throws {
-        let layout = MenuBarLayout(lines: [[.icon], [.providerName, .space, .percent(window: .automatic)]])
+        let layout = MenuBarLayout(lines: [[.icon, .balance], [.providerName, .space, .percent(window: .automatic)]])
         let payload = MenuBarLayoutDragItem.placed(
             .percent(window: .automatic),
             at: MenuBarLayoutPosition(line: 1, index: 2),
@@ -167,5 +167,20 @@ struct MenuBarLayoutEditorTests {
             importing: data,
             contentType: .codexBarMenuLayoutItem)
         #expect(decoded == payload)
+    }
+
+    @Test
+    func `balance token is provider aware`() {
+        let snapshot = UsageSnapshot(
+            primary: nil,
+            secondary: nil,
+            details: [.makeSection(title: "Credits", rows: [
+                .makeRow(label: "Remaining", value: "$12.34"),
+            ])],
+            updatedAt: Date())
+
+        #expect(MenuBarLayoutBalanceResolver.balance(provider: .openrouter, snapshot: snapshot) == "$12.34")
+        #expect(MenuBarLayoutBalanceResolver.balance(provider: .codex, snapshot: snapshot) == nil)
+        #expect(MenuBarLayoutToken.balance.editorLabel(provider: .openrouter) == L("Balance"))
     }
 }

@@ -20,6 +20,7 @@ enum MenuBarLayoutToken: Codable, Hashable, Sendable {
     case resetCountdown
     case resetAbsolute
     case runsOut
+    case balance
     case costToday
     case cost30d
     case separatorDot
@@ -52,6 +53,17 @@ enum MenuBarLayoutSemanticWindowResolver {
         return (snapshot.extraRateWindows ?? [])
             .filter { $0.id.hasPrefix("claude-weekly-scoped-") && !$0.window.isSyntheticPlaceholder }
             .max { $0.window.usedPercent < $1.window.usedPercent }
+    }
+}
+
+enum MenuBarLayoutBalanceResolver {
+    static func balance(
+        provider: UsageProvider,
+        snapshot: UsageSnapshot?)
+        -> String?
+    {
+        guard provider == .openrouter else { return nil }
+        return snapshot?.detailRow(label: "Remaining")?.value
     }
 }
 

@@ -344,6 +344,28 @@ struct StatusItemIconObservationSignatureTests {
     }
 
     @Test
+    func `custom OpenRouter balance token changes the store icon observation signature`() throws {
+        let (settings, store, controller) = self.makeController(
+            suiteName: "StatusItemIconObservationSignatureTests-openrouter-balance",
+            menuBarLayout: MenuBarLayout(lines: [[.balance]]))
+        defer { controller.releaseStatusItemsForTesting() }
+
+        let registry = ProviderRegistry.shared
+        let codexMetadata = try #require(registry.metadata[.codex])
+        let openRouterMetadata = try #require(registry.metadata[.openrouter])
+        settings.setProviderEnabled(provider: .codex, metadata: codexMetadata, enabled: false)
+        settings.setProviderEnabled(provider: .openrouter, metadata: openRouterMetadata, enabled: true)
+        settings.selectedMenuProvider = .openrouter
+        settings.setMenuBarMetricPreference(.primary, for: .openrouter)
+        store._setSnapshotForTesting(Self.makeBalanceSnapshot("$12.34"), provider: .openrouter)
+        let baseline = controller.storeIconObservationSignature()
+
+        store._setSnapshotForTesting(Self.makeBalanceSnapshot("$9.87"), provider: .openrouter)
+
+        #expect(controller.storeIconObservationSignature() != baseline)
+    }
+
+    @Test
     func `token cost publication enters the icon refresh path without a usage change`() async {
         let (_, store, controller) = self.makeController(
             suiteName: "StatusItemIconObservationSignatureTests-custom-cost-title",
@@ -485,6 +507,21 @@ struct StatusItemIconObservationSignatureTests {
                 accountEmail: "copilot@example.com",
                 accountOrganization: nil,
                 loginMethod: "individual"))
+    }
+
+    private static func makeBalanceSnapshot(_ balance: String) -> UsageSnapshot {
+        UsageSnapshot(
+            primary: nil,
+            secondary: nil,
+            details: [.makeSection(title: "Credits", rows: [
+                .makeRow(label: "Remaining", value: balance),
+            ])],
+            updatedAt: Date(timeIntervalSince1970: 100),
+            identity: ProviderIdentitySnapshot(
+                providerID: .openrouter,
+                accountEmail: nil,
+                accountOrganization: nil,
+                loginMethod: "api_key"))
     }
 
     private static func makeTokenSnapshot(

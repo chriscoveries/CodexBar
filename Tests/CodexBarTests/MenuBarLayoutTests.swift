@@ -27,6 +27,7 @@ struct MenuBarLayoutTests {
                 .resetCountdown,
                 .resetAbsolute,
                 .runsOut,
+                .balance,
                 .costToday,
                 .cost30d,
                 .separatorDot,
