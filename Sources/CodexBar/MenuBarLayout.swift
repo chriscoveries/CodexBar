@@ -223,6 +223,9 @@ extension MenuBarLayout {
     {
         _ = iconStyle // Critters and bars keep rendering through their unchanged legacy path.
         let icon: MenuBarLayoutToken = .icon
+        if provider == .openrouter, metricPreference == .automatic {
+            return MenuBarLayout(lines: [[icon, .balance]])
+        }
         switch displayMode {
         case .percent:
             if metricPreference == .primaryAndSecondary {
