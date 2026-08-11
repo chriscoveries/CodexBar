@@ -73,9 +73,8 @@ struct CostUsageCacheWideMigrationTests {
             now: day,
             options: options)
         var migrationCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
-        #expect(migrationCache.codexActiveLookbackState?.pendingFilePaths.count
-            == corpusSize - CostUsageScanner.codexCatchUpScanCandidateLimit)
-        #expect(migrationCache.codexActiveLookbackState?.pendingFilePaths.contains(oldestURL.path) == true)
+        #expect(migrationCache.codexActiveLookbackState?.pendingFilePaths.isEmpty == true)
+        #expect(migrationCache.codexActiveLookbackState?.currentWindowNextDayKeyByRoot?.isEmpty == false)
         migrationCache.codexPricingKey = "legacy-pricing-key"
         CostUsageStoreAccess.replace(cacheRoot: env.cacheRoot, cache: migrationCache)
 

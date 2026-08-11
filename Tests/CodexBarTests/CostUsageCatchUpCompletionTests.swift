@@ -107,10 +107,12 @@ struct CostUsageCatchUpCompletionTests {
         #expect(completedUsage.codexScanFileId != currentIdentity)
         #expect(completedUsage.codexTokenIndexAnchor != nil)
         staleCache.files[path] = completedUsage
-        let normalizedPath = path.replacingOccurrences(
-            of: "/private/var/",
-            with: "/var/",
-            options: [.anchored])
+        let normalizedPath = path.hasPrefix("/var/")
+            ? "/private" + path
+            : path.replacingOccurrences(
+                of: "/private/var/",
+                with: "/var/",
+                options: [.anchored])
         #expect(normalizedPath != path)
         staleCache.codexActiveLookbackState = try CostUsageCodexActiveLookbackState(
             scanSinceKey: #require(staleCache.scanSinceKey),

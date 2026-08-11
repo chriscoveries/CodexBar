@@ -31,9 +31,16 @@ struct CostUsageCodexActiveLookbackState: Codable {
     var scanSinceKey: String
     var rootPaths: [String]
     var nextDayKeyByRoot: [String: String] = [:]
+    var nextDirectoryOffsetByRoot: [String: Int64]?
     var completedRootPaths: [String] = []
     var pendingFilePaths: [String] = []
     var legacyRecursivePendingRootPaths: [String] = []
+    var currentWindowNextDayKeyByRoot: [String: String]?
+    var currentWindowDirectoryOffsetByRoot: [String: Int64]?
+    var completedCurrentWindowRootPaths: [String]?
+    var currentWindowFlatDirectoryOffsetByRoot: [String: Int64]?
+    var completedCurrentWindowFlatRootPaths: [String]?
+    var cacheWideMigrationQueueActive: Bool?
 }
 
 struct CostUsageCodexSessionDiscovery: Codable {

@@ -378,7 +378,10 @@ extension CostUsageStore {
                     cache.files[cachedEntry.path] = normalized
                 }
             }
-            let lookbackIsComplete = Set(lookback.completedRootPaths) == Set(lookback.rootPaths)
+            let rootPaths = Set(lookback.rootPaths)
+            let lookbackIsComplete = Set(lookback.completedRootPaths) == rootPaths
+                && Set(lookback.completedCurrentWindowRootPaths ?? []) == rootPaths
+                && Set(lookback.completedCurrentWindowFlatRootPaths ?? []) == rootPaths
                 && lookback.pendingFilePaths.isEmpty
                 && lookback.legacyRecursivePendingRootPaths.isEmpty
             let awaitingExactValidation = cache.codexScanCatchUpPending == true
@@ -875,9 +878,16 @@ extension CostUsageStore {
                 scanSinceDay: $0.scanSinceKey,
                 rootPaths: $0.rootPaths,
                 nextDayByRoot: $0.nextDayKeyByRoot,
+                nextDirectoryOffsetByRoot: $0.nextDirectoryOffsetByRoot,
                 completedRootPaths: $0.completedRootPaths,
                 pendingFilePaths: $0.pendingFilePaths,
-                legacyRecursivePendingRootPaths: $0.legacyRecursivePendingRootPaths)
+                legacyRecursivePendingRootPaths: $0.legacyRecursivePendingRootPaths,
+                currentWindowNextDayKeyByRoot: $0.currentWindowNextDayKeyByRoot,
+                currentWindowDirectoryOffsetByRoot: $0.currentWindowDirectoryOffsetByRoot,
+                completedCurrentWindowRootPaths: $0.completedCurrentWindowRootPaths,
+                currentWindowFlatDirectoryOffsetByRoot: $0.currentWindowFlatDirectoryOffsetByRoot,
+                completedCurrentWindowFlatRootPaths: $0.completedCurrentWindowFlatRootPaths,
+                cacheWideMigrationQueueActive: $0.cacheWideMigrationQueueActive)
         }
     }
 
@@ -886,9 +896,16 @@ extension CostUsageStore {
             scanSinceKey: value.scanSinceDay,
             rootPaths: value.rootPaths,
             nextDayKeyByRoot: value.nextDayByRoot,
+            nextDirectoryOffsetByRoot: value.nextDirectoryOffsetByRoot,
             completedRootPaths: value.completedRootPaths,
             pendingFilePaths: value.pendingFilePaths,
-            legacyRecursivePendingRootPaths: value.legacyRecursivePendingRootPaths)
+            legacyRecursivePendingRootPaths: value.legacyRecursivePendingRootPaths,
+            currentWindowNextDayKeyByRoot: value.currentWindowNextDayKeyByRoot,
+            currentWindowDirectoryOffsetByRoot: value.currentWindowDirectoryOffsetByRoot,
+            completedCurrentWindowRootPaths: value.completedCurrentWindowRootPaths,
+            currentWindowFlatDirectoryOffsetByRoot: value.currentWindowFlatDirectoryOffsetByRoot,
+            completedCurrentWindowFlatRootPaths: value.completedCurrentWindowFlatRootPaths,
+            cacheWideMigrationQueueActive: value.cacheWideMigrationQueueActive)
     }
 
     private static func tokenSnapshot(
