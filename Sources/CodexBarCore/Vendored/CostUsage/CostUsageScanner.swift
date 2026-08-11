@@ -4521,7 +4521,8 @@ enum CostUsageScanner {
             cache: cache,
             calendar: range.calendar,
             requestedScanWindow: (sinceKey: range.scanSinceKey, untilKey: range.scanUntilKey),
-            reportWindow: (sinceKey: range.sinceKey, untilKey: range.untilKey))
+            reportWindow: (sinceKey: range.sinceKey, untilKey: range.untilKey),
+            skipIdenticalContent: true)
     }
 
     // swiftlint:disable:next function_body_length

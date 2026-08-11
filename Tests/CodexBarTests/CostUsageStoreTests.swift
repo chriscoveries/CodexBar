@@ -404,7 +404,8 @@ extension CostUsageStoreTests {
             _ = store.syncSaveCodexCache(
                 cache,
                 calendar: calendar,
-                requestedScanWindow: (sinceKey: "2026-08-01", untilKey: "2026-08-01"))
+                requestedScanWindow: (sinceKey: "2026-08-01", untilKey: "2026-08-01"),
+                skipIdenticalContent: true)
         }
 
         save(cache)

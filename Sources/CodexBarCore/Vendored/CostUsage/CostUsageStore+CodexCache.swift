@@ -62,13 +62,15 @@ extension CostUsageStore {
         requestedScanWindow: (sinceKey: String, untilKey: String),
         reportWindow: (sinceKey: String, untilKey: String)? = nil,
         rowBudget: Int = CostUsageStore.defaultRowBudget,
-        fileBudgetBytes: Int64 = CostUsageStore.defaultFileBudgetBytes) -> CostUsageStoreBudgetResult
+        fileBudgetBytes: Int64 = CostUsageStore.defaultFileBudgetBytes,
+        skipIdenticalContent: Bool = false) -> CostUsageStoreBudgetResult
     {
         let previous = self.readSnapshot()
-        if Self.persistedContentMatches(
-            previous: previous,
-            cache: cache,
-            calendar: calendar)
+        if skipIdenticalContent,
+           Self.persistedContentMatches(
+               previous: previous,
+               cache: cache,
+               calendar: calendar)
         {
             // The scanner stamps a fresh scan timestamp on every pass even when no content
             // changed; rewriting the whole database for identical rows is the disk churn
@@ -823,12 +825,14 @@ enum CostUsageStoreAccess {
         cache: CostUsageCache,
         calendar: Calendar,
         requestedScanWindow: (sinceKey: String, untilKey: String),
-        reportWindow: (sinceKey: String, untilKey: String)? = nil) -> CostUsageStoreBudgetResult
+        reportWindow: (sinceKey: String, untilKey: String)? = nil,
+        skipIdenticalContent: Bool = false) -> CostUsageStoreBudgetResult
     {
         store.syncSaveCodexCache(
             cache,
             calendar: calendar,
             requestedScanWindow: requestedScanWindow,
-            reportWindow: reportWindow)
+            reportWindow: reportWindow,
+            skipIdenticalContent: skipIdenticalContent)
     }
 }

@@ -156,7 +156,8 @@ extension CostUsageStore {
         requestedScanWindow: (sinceKey: String, untilKey: String),
         reportWindow: (sinceKey: String, untilKey: String)? = nil,
         rowBudget: Int = CostUsageStore.defaultRowBudget,
-        fileBudgetBytes: Int64 = CostUsageStore.defaultFileBudgetBytes) -> CostUsageStoreBudgetResult
+        fileBudgetBytes: Int64 = CostUsageStore.defaultFileBudgetBytes,
+        skipIdenticalContent: Bool = false) -> CostUsageStoreBudgetResult
     {
         self.syncWithStoreIsolation { store in
             store.saveCodexCache(
@@ -165,7 +166,8 @@ extension CostUsageStore {
                 requestedScanWindow: requestedScanWindow,
                 reportWindow: reportWindow,
                 rowBudget: rowBudget,
-                fileBudgetBytes: fileBudgetBytes)
+                fileBudgetBytes: fileBudgetBytes,
+                skipIdenticalContent: skipIdenticalContent)
         }
     }
 }
