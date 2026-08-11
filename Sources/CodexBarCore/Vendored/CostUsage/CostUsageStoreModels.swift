@@ -149,7 +149,6 @@ struct CostUsageStoreLookbackState: Codable, Equatable, Sendable {
     var completedRootPaths: [String]
     var pendingFilePaths: [String]
     var legacyRecursivePendingRootPaths: [String]
-    var awaitingExactInventory: Bool?
 }
 
 struct CostUsageStoreAccumulator: Codable, Equatable, Sendable {

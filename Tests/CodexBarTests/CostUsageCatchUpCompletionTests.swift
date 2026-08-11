@@ -38,15 +38,6 @@ struct CostUsageCatchUpCompletionTests {
             until: day,
             now: day,
             options: options)
-        // A bounded final work slice intentionally defers exact inventory accounting to
-        // a following zero-work pass. Establish that completed baseline before injecting
-        // the legacy retained-queue state exercised below.
-        _ = CostUsageScanner.loadDailyReport(
-            provider: .codex,
-            since: day,
-            until: day,
-            now: day.addingTimeInterval(0.5),
-            options: options)
 
         var staleCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)
         #expect(staleCache.files.count == 2)
@@ -101,13 +92,6 @@ struct CostUsageCatchUpCompletionTests {
             since: day,
             until: day,
             now: day,
-            options: options)
-
-        _ = CostUsageScanner.loadDailyReport(
-            provider: .codex,
-            since: day,
-            until: day,
-            now: day.addingTimeInterval(0.5),
             options: options)
 
         var staleCache = CostUsageStoreAccess.read(cacheRoot: env.cacheRoot)

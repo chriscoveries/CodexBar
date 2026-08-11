@@ -34,7 +34,6 @@ struct CostUsageCodexActiveLookbackState: Codable {
     var completedRootPaths: [String] = []
     var pendingFilePaths: [String] = []
     var legacyRecursivePendingRootPaths: [String] = []
-    var awaitingExactInventory: Bool?
 }
 
 struct CostUsageCodexSessionDiscovery: Codable {
