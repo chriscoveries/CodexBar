@@ -31,6 +31,8 @@ extension UsageStore {
             } else {
                 resolved = UsagePace.weekly(window: window, now: now, defaultWindowMinutes: 10080, workDays: workDays)
             }
+            // Provider-specific by design: explicit Codex work-day scheduling keeps this branch on the
+            // shared pace calculation while learned history remains disabled by the user's declared plan.
         } else if provider == .codex, self.settings.historicalTrackingEnabled {
             elapsedWindow = window
             // An explicit work-day schedule is the user's declared plan and takes precedence over learned history.
@@ -86,6 +88,7 @@ extension UsageStore {
     /// itself advances. The weekly menu token uses elapsed progress as an eligibility fallback,
     /// while the returned pace still retains the learned expected-use value.
     func paceWindowForElapsedEligibility(provider: UsageProvider, window: RateWindow) -> RateWindow {
+        // Provider-specific by design: Codex's consumer projection already resolves its historical window.
         guard provider != .codex, window.windowMinutes != nil else { return window }
         return ProviderDescriptorRegistry.descriptor(for: provider)
             .pace
