@@ -153,13 +153,21 @@ extension CostUsageScanner {
     {
         var allRowsTotal = CodexRowTokenTotals()
         guard rows.allSatisfy({ allRowsTotal.add($0) }) else { return nil }
-        if allRowsTotal == target {
-            return rows
-        }
-        guard allRowsTotal.exceeds(target) else { return nil }
         if target == CodexRowTokenTotals() {
             return []
         }
+        if allRowsTotal == target {
+            let firstTokenRow = rows.firstIndex {
+                $0.input > 0 || $0.cached > 0 || $0.output > 0
+            }
+            if let firstTokenRow,
+               rows[..<firstTokenRow].contains(where: { ($0.knownCostNanos ?? 0) != 0 })
+            {
+                return nil
+            }
+            return rows
+        }
+        guard allRowsTotal.exceeds(target) else { return nil }
 
         var suffixTotal = CodexRowTokenTotals()
         for index in rows.indices.reversed() {
