@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.49.3 — Unreleased
+## 0.49.3 — 2026-08-12
 
 ### Fixed
 - CLI: load bundled provider-plugin resources when `codexbar` is installed as a symlink to the packaged helper or standalone executable (#2889). Thanks @djbclark for the report!
