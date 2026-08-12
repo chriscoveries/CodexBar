@@ -318,6 +318,21 @@ struct CostHistoryChartMenuViewTests {
 
     @Test
     @MainActor
+    func `render fingerprint honors display currency override`() {
+        let snapshot = Self.makeSnapshot(dailyCost: 1.0)
+        let native = CostHistoryChartMenuView.renderFingerprint(from: snapshot, provider: .codex)
+        let converted = CostHistoryChartMenuView.renderFingerprint(
+            from: snapshot,
+            provider: .codex,
+            displayCurrencyCode: "CZK")
+
+        #expect(native.currencyCode == snapshot.currencyCode)
+        #expect(converted.currencyCode == "CZK")
+        #expect(native != converted)
+    }
+
+    @Test
+    @MainActor
     func `render fingerprint changes when daily cost changes`() {
         let before = CostHistoryChartMenuView.renderFingerprint(
             from: Self.makeSnapshot(dailyCost: 1.0),
