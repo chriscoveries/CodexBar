@@ -8,7 +8,8 @@ import Testing
 struct StatusItemIconObservationSignatureTests {
     private func makeController(
         suiteName: String,
-        menuBarLayout: MenuBarLayout? = nil)
+        menuBarLayout: MenuBarLayout? = nil,
+        provider: UsageProvider = .codex)
         -> (SettingsStore, UsageStore, StatusItemController)
     {
         let settings = testSettingsStore(suiteName: suiteName)
@@ -20,23 +21,35 @@ struct StatusItemIconObservationSignatureTests {
         settings.menuBarShowsHighestUsage = false
         settings.mergeIcons = true
         settings.mergedMenuLastSelectedWasOverview = false
-        settings.selectedMenuProvider = .codex
+        settings.selectedMenuProvider = provider.instanceID
         if let menuBarLayout {
             settings.menuBarShowsBrandIconWithPercent = true
             settings.setMenuBarLayout(menuBarLayout, for: nil)
         }
 
         let registry = ProviderRegistry.shared
-        if let codexMeta = registry.metadata[.codex] {
-            settings.setProviderEnabled(provider: .codex, metadata: codexMeta, enabled: true)
+        if provider != .codex, let codexMeta = registry.metadata[.codex] {
+            settings.setProviderEnabled(provider: .codex, metadata: codexMeta, enabled: false)
         }
-        if let claudeMeta = registry.metadata[.claude] {
+        if provider != .claude, let claudeMeta = registry.metadata[.claude] {
             settings.setProviderEnabled(provider: .claude, metadata: claudeMeta, enabled: false)
+        }
+        if let providerMeta = registry.metadata[provider] {
+            settings.setProviderEnabled(provider: provider, metadata: providerMeta, enabled: true)
         }
 
         let fetcher = UsageFetcher()
-        let store = UsageStore(fetcher: fetcher, browserDetection: BrowserDetection(cacheTTL: 0), settings: settings)
-        store._setSnapshotForTesting(Self.makeSnapshot(provider: .codex, email: "icon@example.com"), provider: .codex)
+        let environmentBase = provider == .openrouter
+            ? [OpenRouterSettingsReader.envKey: "test-openrouter-key"]
+            : [:]
+        let store = UsageStore(
+            fetcher: fetcher,
+            browserDetection: BrowserDetection(cacheTTL: 0),
+            settings: settings,
+            environmentBase: environmentBase)
+        store._setSnapshotForTesting(
+            Self.makeSnapshot(provider: provider, email: "icon@example.com"),
+            provider: provider)
         let controller = StatusItemController(
             store: store,
             settings: settings,
@@ -347,15 +360,10 @@ struct StatusItemIconObservationSignatureTests {
     func `custom OpenRouter balance token changes the store icon observation signature`() throws {
         let (settings, store, controller) = self.makeController(
             suiteName: "StatusItemIconObservationSignatureTests-openrouter-balance",
-            menuBarLayout: MenuBarLayout(lines: [[.balance]]))
+            menuBarLayout: MenuBarLayout(lines: [[.balance]]),
+            provider: .openrouter)
         defer { controller.releaseStatusItemsForTesting() }
 
-        let registry = ProviderRegistry.shared
-        let codexMetadata = try #require(registry.metadata[.codex])
-        let openRouterMetadata = try #require(registry.metadata[.openrouter])
-        settings.setProviderEnabled(provider: .codex, metadata: codexMetadata, enabled: false)
-        settings.setProviderEnabled(provider: .openrouter, metadata: openRouterMetadata, enabled: true)
-        settings.selectedMenuProvider = .openrouter
         settings.setMenuBarMetricPreference(.primary, for: .openrouter)
         try store._setSnapshotForTesting(Self.makeBalanceSnapshot("$12.34"), provider: .openrouter)
         let baseline = controller.storeIconObservationSignature()
