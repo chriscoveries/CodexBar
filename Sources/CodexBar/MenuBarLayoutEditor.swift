@@ -745,6 +745,7 @@ struct MenuBarLayoutPreview: View {
             weeklyPace: samplePace(weekly),
             automaticPace: samplePace(session),
             runsOut: L("menu_bar_layout_sample_runs_out"),
+            // Provider-specific by design: only OpenRouter previews the Balance palette token.
             balance: provider == .openrouter ? "$12.34" : nil,
             costToday: "$1.25",
             cost30d: "$20.00")

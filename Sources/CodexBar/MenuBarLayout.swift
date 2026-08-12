@@ -62,6 +62,7 @@ enum MenuBarLayoutBalanceResolver {
         snapshot: UsageSnapshot?)
         -> String?
     {
+        // Provider-specific by design: only OpenRouter exposes its credit balance as the "Remaining" detail row.
         guard provider == .openrouter else { return nil }
         return snapshot?.detailRow(label: "Remaining")?.value
     }
@@ -223,6 +224,7 @@ extension MenuBarLayout {
     {
         _ = iconStyle // Critters and bars keep rendering through their unchanged legacy path.
         let icon: MenuBarLayoutToken = .icon
+        // Provider-specific by design: OpenRouter Automatic historically renders remaining credit balance.
         if provider == .openrouter, metricPreference == .automatic {
             return MenuBarLayout(lines: [[icon, .balance]])
         }
