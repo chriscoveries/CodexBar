@@ -333,7 +333,10 @@ struct CostHistoryChartMenuViewTests {
             displayCostMultiplier: 21.5)
 
         #expect(native.currencyCode == snapshot.currencyCode)
+        #expect(native.costMultiplierBitPattern == 1.0.bitPattern)
         #expect(converted.currencyCode == "CZK")
+        #expect(converted.costMultiplierBitPattern == 21.0.bitPattern)
+        #expect(rateRefreshed.costMultiplierBitPattern == 21.5.bitPattern)
         #expect(native != converted)
         #expect(converted != rateRefreshed)
     }
