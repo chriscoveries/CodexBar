@@ -76,13 +76,18 @@ actor CostUsageStore {
         base: CostUsageStore.baseSchemaVersion,
         parserHash: CodexParserHash.value)
     static let cacheGeneration = "sqlite:\(CostUsageStore.schemaVersion)"
-    /// CodexBar 0.49.0-0.49.2 SQLite producer; its persisted CodexUsageRow payload is compatible.
-    static let compatiblePredecessorParserHashes: Set<String> = ["b975eb705f905b9a"]
+    static let compatiblePredecessorParserHashes: Set<String> = [
+        "98da5914d2f6a9cd", // Pushed PR producer before retry signaling; persisted rows unchanged.
+        "43609cc56f76a003", // 0.49.3 request-tier pricing; persisted row shape unchanged.
+        "b975eb705f905b9a", // 0.49.0-0.49.2 SQLite producer with compatible rows.
+    ]
 
     /// Test-only crash injection: invoked inside `saveCodexCache`'s transaction after each
     /// persisted file with the running count, so a crash-safety harness can SIGKILL the
     /// process at a deterministic mid-save point. Never set in production.
     nonisolated(unsafe) static var saveCycleCheckpointForTesting: ((Int) -> Void)?
+    /// Test-only interleaving point after optimistic identity succeeds and before its writer lock.
+    nonisolated(unsafe) static var identicalContentPreLockCheckpointForTesting: (() -> Void)?
 
     /// Process-wide serialization keeps every writable store connection on the same queue.
     /// This matches the scan pipeline's single-writer contract without multiplying executor
@@ -156,7 +161,8 @@ extension CostUsageStore {
         requestedScanWindow: (sinceKey: String, untilKey: String),
         reportWindow: (sinceKey: String, untilKey: String)? = nil,
         rowBudget: Int = CostUsageStore.defaultRowBudget,
-        fileBudgetBytes: Int64 = CostUsageStore.defaultFileBudgetBytes) -> CostUsageStoreBudgetResult
+        fileBudgetBytes: Int64 = CostUsageStore.defaultFileBudgetBytes,
+        skipIdenticalContent: Bool = false) -> CostUsageStoreBudgetResult
     {
         self.syncWithStoreIsolation { store in
             store.saveCodexCache(
@@ -165,7 +171,8 @@ extension CostUsageStore {
                 requestedScanWindow: requestedScanWindow,
                 reportWindow: reportWindow,
                 rowBudget: rowBudget,
-                fileBudgetBytes: fileBudgetBytes)
+                fileBudgetBytes: fileBudgetBytes,
+                skipIdenticalContent: skipIdenticalContent)
         }
     }
 }
@@ -221,10 +228,10 @@ extension CostUsageStore {
     /// every store call made until `endSaveTransaction()`. Nested `withDatabase` calls join
     /// the open transaction and the first inner failure aborts the cycle, so a crash or
     /// error midway leaves the previous on-disk state fully intact — matching the old JSON
-    /// path's atomic single-file replace. If the transaction cannot open, subsequent writes
-    /// proceed unprotected, exactly like the pre-transaction behavior.
-    func beginSaveTransaction() {
-        _ = self.withDatabase(default: false) { database in
+    /// path's atomic single-file replace. Callers must stop the save when this returns false.
+    @discardableResult
+    func beginSaveTransaction() -> Bool {
+        self.withDatabase(default: false) { database in
             try Self.execute(database, "BEGIN IMMEDIATE")
             self.activeTransactionDatabase = database
             return true
@@ -246,6 +253,17 @@ extension CostUsageStore {
                 throw failure
             }
             try Self.execute(database, "COMMIT")
+            return true
+        }
+    }
+
+    @discardableResult
+    func rollbackSaveTransaction() -> Bool {
+        guard self.activeTransactionDatabase != nil else { return false }
+        self.activeTransactionDatabase = nil
+        self.activeTransactionError = nil
+        return self.withDatabase(default: false) { database in
+            try Self.execute(database, "ROLLBACK")
             return true
         }
     }
@@ -338,7 +356,9 @@ extension CostUsageStore {
             try? Self.execute(database, "ROLLBACK")
             throw error
         }
-        if state.isCurrent { return }
+        if state.isCurrent {
+            return
+        }
 
         try Self.execute(database, "BEGIN IMMEDIATE")
         do {
