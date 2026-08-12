@@ -170,13 +170,13 @@ struct MenuBarLayoutEditorTests {
     }
 
     @Test
-    func `balance token is provider aware`() {
+    func `balance token is provider aware`() throws {
+        let row = try ProviderDetailSection.Row(label: "Remaining", value: "$12.34")
+        let section = try ProviderDetailSection(title: "Credits", rows: [row])
         let snapshot = UsageSnapshot(
             primary: nil,
             secondary: nil,
-            details: [.makeSection(title: "Credits", rows: [
-                .makeRow(label: "Remaining", value: "$12.34"),
-            ])],
+            details: [section],
             updatedAt: Date())
 
         #expect(MenuBarLayoutBalanceResolver.balance(provider: .openrouter, snapshot: snapshot) == "$12.34")

@@ -357,10 +357,10 @@ struct StatusItemIconObservationSignatureTests {
         settings.setProviderEnabled(provider: .openrouter, metadata: openRouterMetadata, enabled: true)
         settings.selectedMenuProvider = .openrouter
         settings.setMenuBarMetricPreference(.primary, for: .openrouter)
-        store._setSnapshotForTesting(Self.makeBalanceSnapshot("$12.34"), provider: .openrouter)
+        try store._setSnapshotForTesting(Self.makeBalanceSnapshot("$12.34"), provider: .openrouter)
         let baseline = controller.storeIconObservationSignature()
 
-        store._setSnapshotForTesting(Self.makeBalanceSnapshot("$9.87"), provider: .openrouter)
+        try store._setSnapshotForTesting(Self.makeBalanceSnapshot("$9.87"), provider: .openrouter)
 
         #expect(controller.storeIconObservationSignature() != baseline)
     }
@@ -509,13 +509,13 @@ struct StatusItemIconObservationSignatureTests {
                 loginMethod: "individual"))
     }
 
-    private static func makeBalanceSnapshot(_ balance: String) -> UsageSnapshot {
-        UsageSnapshot(
+    private static func makeBalanceSnapshot(_ balance: String) throws -> UsageSnapshot {
+        let row = try ProviderDetailSection.Row(label: "Remaining", value: balance)
+        let section = try ProviderDetailSection(title: "Credits", rows: [row])
+        return UsageSnapshot(
             primary: nil,
             secondary: nil,
-            details: [.makeSection(title: "Credits", rows: [
-                .makeRow(label: "Remaining", value: balance),
-            ])],
+            details: [section],
             updatedAt: Date(timeIntervalSince1970: 100),
             identity: ProviderIdentitySnapshot(
                 providerID: .openrouter,
