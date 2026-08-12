@@ -286,10 +286,12 @@ extension StatusItemController {
         guard let snapshot = self.tokenSnapshotForCostHistorySubmenu(provider: provider) else {
             return .text("none")
         }
+        let displayConversion = self.costHistoryDisplayConversion(for: snapshot)
         return .costHistory(CostHistoryChartMenuView.renderFingerprint(
             from: snapshot,
             provider: provider,
-            displayCurrencyCode: self.costHistoryDisplayConversion(for: snapshot).currencyCode))
+            displayCurrencyCode: displayConversion.currencyCode,
+            displayCostMultiplier: displayConversion.multiplier))
     }
 
     /// Resolves the user's preferred display currency for cost-history values, falling back to

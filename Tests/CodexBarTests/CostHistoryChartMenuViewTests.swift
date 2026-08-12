@@ -324,11 +324,18 @@ struct CostHistoryChartMenuViewTests {
         let converted = CostHistoryChartMenuView.renderFingerprint(
             from: snapshot,
             provider: .codex,
-            displayCurrencyCode: "CZK")
+            displayCurrencyCode: "CZK",
+            displayCostMultiplier: 21.0)
+        let rateRefreshed = CostHistoryChartMenuView.renderFingerprint(
+            from: snapshot,
+            provider: .codex,
+            displayCurrencyCode: "CZK",
+            displayCostMultiplier: 21.5)
 
         #expect(native.currencyCode == snapshot.currencyCode)
         #expect(converted.currencyCode == "CZK")
         #expect(native != converted)
+        #expect(converted != rateRefreshed)
     }
 
     @Test

@@ -894,6 +894,7 @@ struct CostHistoryChartMenuView: View {
 extension CostHistoryChartMenuView {
     struct RenderFingerprint: Equatable {
         let currencyCode: String
+        let costMultiplierBitPattern: UInt64?
         let historyDays: Int
         let windowLabel: String?
         let totalCostBitPattern: UInt64?
@@ -951,12 +952,14 @@ extension CostHistoryChartMenuView {
     static func renderFingerprint(
         from snapshot: CostUsageTokenSnapshot,
         provider: UsageProvider,
-        displayCurrencyCode: String? = nil) -> RenderFingerprint
+        displayCurrencyCode: String? = nil,
+        displayCostMultiplier: Double? = nil) -> RenderFingerprint
     {
         let projects = provider == .codex ? snapshot.projects : []
         let sessions = provider == .codex ? snapshot.sessions : []
         return RenderFingerprint(
             currencyCode: displayCurrencyCode ?? snapshot.currencyCode,
+            costMultiplierBitPattern: displayCostMultiplier.map(\.bitPattern),
             historyDays: snapshot.historyDays,
             windowLabel: snapshot.historyLabel,
             totalCostBitPattern: snapshot.last30DaysCostUSD.map(\.bitPattern),
