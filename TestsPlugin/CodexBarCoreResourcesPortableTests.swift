@@ -34,7 +34,12 @@ struct CodexBarCoreResourcesPortableTests {
             executableURL: symlinkURL,
             swiftPMBuildDirectory: nil))
 
-        #expect(directBundle.bundleURL.resolvingSymlinksInPath() == resourceURL.resolvingSymlinksInPath())
-        #expect(symlinkBundle.bundleURL.resolvingSymlinksInPath() == resourceURL.resolvingSymlinksInPath())
+        let expectedPath = Self.canonicalPathComponents(resourceURL)
+        #expect(Self.canonicalPathComponents(directBundle.bundleURL) == expectedPath)
+        #expect(Self.canonicalPathComponents(symlinkBundle.bundleURL) == expectedPath)
+    }
+
+    private static func canonicalPathComponents(_ url: URL) -> [String] {
+        url.resolvingSymlinksInPath().standardizedFileURL.pathComponents
     }
 }
