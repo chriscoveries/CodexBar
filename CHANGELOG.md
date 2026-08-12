@@ -4,14 +4,29 @@
 
 ### Fixed
 - Settings: keep the Settings window on the active Stage Manager stage/Space via `.moveToActiveSpace`, and key only newly presented Settings/update dialogs when Dock promotion runs.
+- CLI: load bundled provider-plugin resources when `codexbar` is installed as a symlink to the packaged helper or standalone executable (#2889). Thanks @djbclark for the report!
+- Menu bar layout: restore dragging placed chips to reorder or remove them while preserving click and keyboard selection (#2582). Thanks @ikkira!
+- Plan history: avoid atomically replacing byte-identical provider history files, reducing unnecessary disk writes (#2495). Thanks @guocity for the report!
+- OpenRouter: restore remaining credit balance in saved custom menu-bar layouts and preserve the legacy Automatic display during migration (#2870). Thanks @yuansaysay!
+- Claude: distinguish claude-swap account switching from ambient Claude Code sign-in in the menu without changing either action (#2874). Thanks @ynaamane!
+- Codex: avoid full SQLite cost-cache rewrites for unchanged scans while preserving retention, freshness, and concurrent saves (#2852). Thanks @Yuxin-Qiao!
+- Azure OpenAI: allow enough v1 completion budget for reasoning-capable deployment validation while keeping the probe bounded (#2867). Thanks @yilinxia!
+- Codex: preserve request-level pricing tiers while reconciling forked usage, preventing day aggregates from triggering long-context rates (#2858). Thanks @thomaschow19!
+- CLI: stop standalone version lookup from walking past the filesystem root and hanging with unbounded memory on affected macOS versions (#2856). Thanks @Manwholikespie!
+- Cost store: prevent launch-time executor-assumption crashes on macOS 15 by keeping synchronous SQLite cache bridges on their validated serial queue (#2857). Thanks @Manwholikespie!
 
 ## 0.49.2 — 2026-08-10
 
 ### Fixed
+- Sync: collapse duplicate usage rows for the same provider account across Macs, with the current Mac's configured result taking precedence over synced copies.
 - Menu cards: show session quota as exhausted until the final reset of every binding weekly/monthly plan lane, while preserving session-specific details and independent purchased credits (#2840). Thanks @Yuxin-Qiao!
+- Menu cards: keep primary usage values and long localized reset timestamps readable by stacking the row only when both cannot fit (#2846). Thanks @Yuxin-Qiao!
 - Plugins: honor the “Usage bars fill” remaining/used setting in user-installed provider cards, keeping percentage labels and bar direction aligned (#2749). Thanks @RyloRiz!
 - Sub2API: localize and group menu-card quota labels and request, token, and cost totals into a compact usage summary (#2835). Thanks @weirdo-adam!
 - Codex: avoid repeatedly converting historical token snapshots during cost-cache refreshes, preventing sustained CPU usage on large session histories.
+- Codex: make automatic cost-history catch-up near-idle and limit local-history scans to provider refreshes with a 15-minute energy floor.
+- Agent Sessions: stop inactive local and remote refresh schedulers from waking while monitoring is disabled.
+- Cost usage: refresh token-cost data when “Refresh all providers on menu open” is enabled, with a one-minute scan floor to avoid repeated work (#2388). Thanks @betive37!
 
 ## 0.49.1 — 2026-08-09
 
