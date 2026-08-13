@@ -4,6 +4,7 @@
 
 ### Fixed
 - PTY probes: bound hard-stop latency while still cleaning session-escaped output holders.
+- Codex: stop the hidden ChatGPT dashboard WebView from staying resident after usage refresh, so idle WebKit helper processes can return to zero.
 - Cost history: honor the preferred display currency throughout the detail chart and refresh converted labels when exchange rates change (#2887). Thanks @vAhyThe!
 
 ## 0.49.3 — 2026-08-12

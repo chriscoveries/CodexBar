@@ -347,4 +347,129 @@ struct OpenAIDashboardFetcherCreditsWaitTests {
 
         #expect(OpenAIDashboardFetcher.findFirstEmail(inJSONData: Data(json.utf8)) == "nested@example.com")
     }
+
+    @Test
+    func `page scrape is skipped whenever the caller disables it`() {
+        #expect(OpenAIDashboardFetcher.shouldSkipPageScrape(allowPageScrape: false))
+        #expect(!OpenAIDashboardFetcher.shouldSkipPageScrape(allowPageScrape: true))
+    }
+
+    @Test
+    func `api snapshot keeps previous credits history and overwrites live usage`() {
+        let previous = OpenAIDashboardSnapshot(
+            signedInEmail: "old@example.com",
+            codeReviewRemainingPercent: 81,
+            creditEvents: [
+                CreditEvent(date: Date(timeIntervalSince1970: 1_700_000_000), service: "Codex", creditsUsed: 2),
+            ],
+            dailyBreakdown: [
+                OpenAIDashboardDailyBreakdown(
+                    day: "2026-04-19",
+                    services: [OpenAIDashboardServiceUsage(service: "Codex", creditsUsed: 2)],
+                    totalCreditsUsed: 2),
+            ],
+            usageBreakdown: [
+                OpenAIDashboardDailyBreakdown(
+                    day: "2026-04-19",
+                    services: [OpenAIDashboardServiceUsage(service: "Codex", creditsUsed: 2)],
+                    totalCreditsUsed: 2),
+            ],
+            creditsPurchaseURL: "https://chatgpt.com/checkout",
+            primaryLimit: RateWindow(usedPercent: 10, windowMinutes: 300, resetsAt: nil, resetDescription: nil),
+            creditsRemaining: 10,
+            updatedAt: Date(timeIntervalSince1970: 1))
+        let apiData = OpenAIDashboardFetcher.DashboardAPIData(
+            primaryLimit: RateWindow(usedPercent: 44, windowMinutes: 300, resetsAt: nil, resetDescription: nil),
+            secondaryLimit: nil,
+            extraRateWindows: [],
+            creditsRemaining: 7.5,
+            codexCreditLimit: nil,
+            accountPlan: "pro")
+        let subscription = OpenAISubscriptionMetadata.parse(
+            activeUntil: "2026-08-20T14:30:07Z",
+            willRenew: true)
+
+        let snapshot = OpenAIDashboardFetcher.snapshotByMergingAPI(
+            apiData: apiData,
+            verifiedEmail: "new@example.com",
+            subscription: subscription,
+            previous: previous,
+            updatedAt: Date(timeIntervalSince1970: 2))
+
+        #expect(snapshot.signedInEmail == "new@example.com")
+        #expect(snapshot.primaryLimit?.usedPercent == 44)
+        #expect(snapshot.creditsRemaining == 7.5)
+        #expect(snapshot.accountPlan == "pro")
+        #expect(snapshot.creditEvents.count == 1)
+        #expect(snapshot.dailyBreakdown.count == 1)
+        #expect(snapshot.usageBreakdown.count == 1)
+        #expect(snapshot.codeReviewRemainingPercent == 81)
+        #expect(snapshot.creditsPurchaseURL == "https://chatgpt.com/checkout")
+        #expect(snapshot.subscriptionRenewsAt != nil)
+    }
+
+    @Test
+    func `empty scrape keeps previous page history`() {
+        let previous = OpenAIDashboardSnapshot(
+            signedInEmail: "keep@example.com",
+            codeReviewRemainingPercent: 70,
+            creditEvents: [
+                CreditEvent(date: Date(timeIntervalSince1970: 1_700_000_000), service: "Codex", creditsUsed: 3),
+            ],
+            dailyBreakdown: [
+                OpenAIDashboardDailyBreakdown(
+                    day: "2026-04-19",
+                    services: [OpenAIDashboardServiceUsage(service: "Codex", creditsUsed: 3)],
+                    totalCreditsUsed: 3),
+            ],
+            usageBreakdown: [
+                OpenAIDashboardDailyBreakdown(
+                    day: "2026-04-19",
+                    services: [OpenAIDashboardServiceUsage(service: "Codex", creditsUsed: 3)],
+                    totalCreditsUsed: 3),
+            ],
+            creditsPurchaseURL: "https://chatgpt.com/checkout",
+            creditsRemaining: 8,
+            subscriptionRenewsAt: Date(timeIntervalSince1970: 1_800_000_000),
+            updatedAt: Date(timeIntervalSince1970: 1))
+        let incoming = OpenAIDashboardSnapshot(
+            signedInEmail: nil,
+            codeReviewRemainingPercent: nil,
+            creditEvents: [],
+            dailyBreakdown: [],
+            usageBreakdown: [],
+            creditsPurchaseURL: nil,
+            primaryLimit: RateWindow(usedPercent: 50, windowMinutes: 300, resetsAt: nil, resetDescription: nil),
+            creditsRemaining: 6,
+            updatedAt: Date(timeIntervalSince1970: 2))
+
+        let snapshot = OpenAIDashboardFetcher.fillingMissingPageFields(incoming, from: previous)
+        #expect(snapshot.signedInEmail == "keep@example.com")
+        #expect(snapshot.codeReviewRemainingPercent == 70)
+        #expect(snapshot.creditEvents.count == 1)
+        #expect(snapshot.dailyBreakdown.count == 1)
+        #expect(snapshot.usageBreakdown.count == 1)
+        #expect(snapshot.creditsPurchaseURL == "https://chatgpt.com/checkout")
+        #expect(snapshot.primaryLimit?.usedPercent == 50)
+        #expect(snapshot.creditsRemaining == 6)
+        #expect(snapshot.subscriptionRenewsAt != nil)
+    }
+
+    @Test
+    func `subscription api request carries cookies and English localization`() {
+        let request = OpenAIDashboardFetcher.dashboardSubscriptionAPIRequest(cookieHeader: "a=b")
+        #expect(request.url?.absoluteString == "https://chatgpt.com/backend-api/subscriptions")
+        #expect(request.value(forHTTPHeaderField: "Cookie") == "a=b")
+        #expect(request.value(forHTTPHeaderField: "Accept") == "application/json")
+        #expect(request.value(forHTTPHeaderField: "Accept-Language") == "en-US,en;q=0.9")
+        #expect(request.cachePolicy == .reloadIgnoringLocalCacheData)
+    }
+
+    @Test
+    func `subscription api payload maps renewal date`() {
+        let json = #"{"active_until":"2026-08-20T14:30:07Z","will_renew":true}"#
+        let metadata = OpenAIDashboardFetcher.subscriptionMetadata(from: Data(json.utf8))
+        #expect(metadata?.renewsAt != nil)
+        #expect(metadata?.expiresAt == nil)
+    }
 }

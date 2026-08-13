@@ -18,6 +18,17 @@ extension StatusItemController {
         return UsageProvider.allCases.contains { self.shouldAnimate(provider: $0) }
     }
 
+    func activeLoadingAnimationPhase() -> Double? {
+        guard self.needsMenuBarIconAnimation(), self.animationDriver != nil else { return nil }
+        return self.animationPhase
+    }
+
+    func anyEnabledProviderNeedsLoadingAnimation() -> Bool {
+        UsageProvider.allCases.contains {
+            self.isEnabled($0) && self.shouldAnimate(provider: $0, mergeIcons: false)
+        }
+    }
+
     func updateBlinkingState() {
         #if DEBUG
         guard !self.isReleasedForTesting else { return }
@@ -66,7 +77,7 @@ extension StatusItemController {
         self.blinkTask?.cancel()
         self.blinkTask = nil
         self.blinkAmounts.removeAll()
-        let phase: Double? = self.needsMenuBarIconAnimation() ? self.animationPhase : nil
+        let phase: Double? = self.activeLoadingAnimationPhase()
         if self.shouldMergeIcons {
             self.applyIcon(phase: phase)
         } else {
@@ -1471,36 +1482,49 @@ extension StatusItemController {
 
     func updateAnimationState() {
         let needsAnimation = self.needsMenuBarIconAnimation()
-        if needsAnimation {
-            if self.animationDriver == nil {
-                if let forced = self.settings.debugLoadingPattern {
-                    self.animationPattern = forced
-                } else if !LoadingPattern.allCases.contains(self.animationPattern) {
-                    self.animationPattern = .knightRider
-                }
-                self.animationPhase = 0
-                self.animationStartedAt = Date()
-                let driver = DisplayLinkDriver(onTick: { [weak self] in
-                    self?.updateAnimationFrame()
-                })
-                self.animationDriver = driver
-                driver.start(fps: Self.loadingAnimationFPS)
-            } else if let forced = self.settings.debugLoadingPattern,
-                      forced != self.animationPattern
-            {
-                self.animationPattern = forced
-                self.animationPhase = 0
+        let stillLoading = self.anyEnabledProviderNeedsLoadingAnimation()
+        if self.animationStartedAt == .distantPast {
+            if !stillLoading {
+                self.animationStartedAt = nil
             }
-        } else {
+            if !needsAnimation {
+                self.stopLoadingAnimation(resetStart: false)
+            }
+            return
+        }
+        if !needsAnimation {
+            self.animationStartedAt = nil
             self.stopLoadingAnimation()
+            return
+        }
+        if self.animationDriver == nil {
+            if let forced = self.settings.debugLoadingPattern {
+                self.animationPattern = forced
+            } else if !LoadingPattern.allCases.contains(self.animationPattern) {
+                self.animationPattern = .knightRider
+            }
+            self.animationPhase = 0
+            self.animationStartedAt = Date()
+            let driver = DisplayLinkDriver(onTick: { [weak self] in
+                self?.updateAnimationFrame()
+            })
+            self.animationDriver = driver
+            driver.start(fps: Self.loadingAnimationFPS)
+        } else if let forced = self.settings.debugLoadingPattern,
+                  forced != self.animationPattern
+        {
+            self.animationPattern = forced
+            self.animationPhase = 0
         }
     }
 
-    private func stopLoadingAnimation() {
+    private func stopLoadingAnimation(resetStart: Bool = true) {
         self.animationDriver?.stop()
         self.animationDriver = nil
         self.animationPhase = 0
-        self.animationStartedAt = nil
+        if resetStart {
+            self.animationStartedAt = nil
+        }
         if self.shouldMergeIcons {
             self.applyIcon(phase: nil)
         } else {
@@ -1515,7 +1539,8 @@ extension StatusItemController {
         if let startedAt = self.animationStartedAt,
            Date().timeIntervalSince(startedAt) > Self.loadingAnimationMaxContinuousDuration
         {
-            self.stopLoadingAnimation()
+            self.animationStartedAt = .distantPast
+            self.stopLoadingAnimation(resetStart: false)
             return
         }
         self.animationPhase += Self.loadingAnimationPhaseIncrement
