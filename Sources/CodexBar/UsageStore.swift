@@ -45,6 +45,8 @@ extension UsageStore {
 
     var iconObservationToken: Int {
         _ = self.snapshots
+        _ = self.claudeSwapAccountSnapshots
+        _ = self.claudeSwapRevision
         _ = self.errors
         _ = self.diagnostics
         _ = self.knownLimitsAvailabilityByProvider
@@ -71,7 +73,6 @@ extension UsageStore {
                 self.probeLogs = [:]
                 guard self.startupBehavior.automaticallyStartsBackgroundWork else { return }
                 self.startTimer()
-                self.startTokenTimer()
                 self.updateProviderRuntimes()
                 let enabledNow = Set(self.settings.enabledProvidersOrdered(
                     metadataByProvider: self.providerMetadata))
@@ -197,6 +198,8 @@ final class UsageStore {
     var openAIDashboardCookieImportDebugLog: String?
     var versions: [ProviderInstanceID: String] = [:]
     @ObservationIgnored var versionDetectionProviders: Set<ProviderInstanceID> = []
+    @ObservationIgnored private(set) var versionDetectionTask: Task<Void, Never>?
+    @ObservationIgnored var claudeVersionRefreshTask: Task<Void, Never>?
     var isRefreshing = false
     var hasForcedRefreshEnrichmentInFlight = false
     var refreshingProviders: Set<ProviderInstanceID> = []
@@ -225,6 +228,7 @@ final class UsageStore {
     @ObservationIgnored var lastOpenAIDashboardTargetEmail: String?
     @ObservationIgnored var lastOpenAIDashboardTargetIsolationKey: String?
     @ObservationIgnored var lastOpenAIDashboardAttemptAt: Date?
+    @ObservationIgnored var lastOpenAIDashboardPageScrapeAt: Date?
     @ObservationIgnored var lastOpenAIDashboardCookieImportAttemptAt: Date?
     @ObservationIgnored var lastOpenAIDashboardCookieImportEmail: String?
     @ObservationIgnored var lastCodexAccountScopedRefreshGuard: CodexAccountScopedRefreshGuard?
@@ -340,10 +344,12 @@ final class UsageStore {
     /// In-memory only; paths and session identities never enter the refresh policy.
     @ObservationIgnored private(set) var lastCodingActivityAt: Date?
     @ObservationIgnored var adaptiveRefreshScheduledAt: Date?
-    @ObservationIgnored var tokenTimerTask: Task<Void, Never>?
     @ObservationIgnored var tokenRefreshSequenceTask: Task<Void, Never>?
     @ObservationIgnored var tokenRefreshSequenceToken: UUID?
     @ObservationIgnored var tokenRefreshSequenceProvider: ProviderInstanceID?
+    @ObservationIgnored var tokenRefreshSequenceIsForcedAllPass = false
+    @ObservationIgnored var pendingForcedTokenRefresh = false
+    @ObservationIgnored var lastForcedTokenRefreshStartedAt: Date?
     @ObservationIgnored var tokenRefreshRetryProviders: Set<ProviderInstanceID> = []
     @ObservationIgnored var codexCostCatchUpTask: Task<Void, Never>?
     @ObservationIgnored var codexCostCatchUpToken: UUID?
@@ -422,10 +428,9 @@ final class UsageStore {
     @ObservationIgnored private var hasCompletedInitialRefresh: Bool = false
     @ObservationIgnored private let providerAvailabilityCacheTTL: TimeInterval = 1
     @ObservationIgnored let accountInfoCacheTTL: TimeInterval = 30
-    /// Token scans can cause an additional widget snapshot publication. Keep the shortest automatic
-    /// cadence at five minutes so one- and two-minute provider refreshes do not exhaust WidgetKit's
-    /// reload budget or repeatedly traverse large local histories.
-    static let minimumTokenFetchTTL: TimeInterval = 5 * 60
+    /// Energy/WidgetKit floor for expensive local-history scans and their additional snapshot publications.
+    /// Faster provider refreshes still update quota/status normally, but reuse token-cost history within this TTL.
+    static let minimumTokenFetchTTL: TimeInterval = 15 * 60
 
     var tokenFetchTTL: TimeInterval? {
         Self.tokenFetchTTL(
@@ -538,7 +543,6 @@ final class UsageStore {
         }
         Task { await self.refresh(enrichmentMode: .automatic) }
         self.startTimer()
-        self.startTokenTimer()
     }
 
     var iconStyle: IconStyle {
@@ -587,6 +591,17 @@ final class UsageStore {
 
     func snapshot(for instanceID: ProviderInstanceID) -> UsageSnapshot? {
         self.snapshots[instanceID]
+    }
+
+    /// The snapshot the menu-bar indicator should render for a provider instance.
+    /// When the claude-swap adapter owns Claude account presentation, the active
+    /// account's snapshot drives the bar so the indicator agrees with the account
+    /// cards shown in the menu; the ambient provider snapshot remains the fallback
+    /// whenever the adapter is disabled, below its presentation threshold, or the
+    /// active account has no usable usage windows.
+    func menuBarSnapshot(for instanceID: ProviderInstanceID) -> UsageSnapshot? {
+        // Provider-specific by design: claude-swap adapter owns Claude menu-bar presentation; see #2731.
+        self.claudeSwapMenuBarSnapshotOverride(for: instanceID) ?? self.snapshot(for: instanceID)
     }
 
     func sourceLabel(for provider: UsageProvider) -> String {
@@ -916,7 +931,6 @@ final class UsageStore {
 
     deinit {
         self.timerTask?.cancel()
-        self.tokenTimerTask?.cancel()
         self.tokenRefreshSequenceTask?.cancel()
         self.codexCostCatchUpTask?.cancel()
         self.forcedRefreshEnrichmentTask?.cancel()
@@ -1337,9 +1351,13 @@ extension UsageStore {
         self.versionDetectionProviders = enabled
         let implementations = Self.versionDetectionImplementations(
             enabled: Set(enabled.compactMap(\.firstPartyProvider)))
+        // Provider-specific by design: only Claude's version probe is background-gated and needs recovery handling.
+        let probesClaude = implementations.contains { $0.id == .claude }
         let browserDetection = self.browserDetection
-        Task { @MainActor [weak self] in
-            let resolved = await Task.detached { () -> [UsageProvider: String] in
+        self.versionDetectionTask = Task { @MainActor [weak self] in
+            let detection = await Task.detached { () -> (
+                resolved: [UsageProvider: String],
+                claudeBinaryResolvable: Bool) in
                 var resolved: [UsageProvider: String] = [:]
                 await withTaskGroup(of: (UsageProvider, String?).self) { group in
                     for implementation in implementations {
@@ -1355,9 +1373,27 @@ extension UsageStore {
                         resolved[provider] = version
                     }
                 }
-                return resolved
+                // Provider-specific by design: disabled providers must not be probed (#2267), so the
+                // Claude binary resolves only when Claude was in this run and its probe returned nil.
+                let claudeBinaryResolvable = probesClaude
+                    && resolved[.claude] == nil
+                    && ProviderVersionDetector.claudeBinaryResolvable()
+                return (resolved, claudeBinaryResolvable)
             }.value
-            self?.versions = Dictionary(uniqueKeysWithValues: resolved.map { ($0.key.instanceID, $0.value) })
+            guard let self else { return }
+            let resolved = detection.resolved
+            var versions = Dictionary(uniqueKeysWithValues: resolved.map { ($0.key.instanceID, $0.value) })
+            let claudeID = UsageProvider.claude.instanceID
+            // A gated or failed Claude probe preserves a user-initiated recovery while the binary still resolves.
+            // A missing/uninstalled binary clears the version so stale data does not survive CLI removal.
+            if probesClaude,
+               resolved[.claude] == nil,
+               detection.claudeBinaryResolvable,
+               let recoveredClaudeVersion = self.versions[claudeID]
+            {
+                versions[claudeID] = recoveredClaudeVersion
+            }
+            self.versions = versions
         }
     }
 

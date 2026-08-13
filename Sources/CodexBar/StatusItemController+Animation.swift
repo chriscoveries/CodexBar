@@ -9,13 +9,24 @@ extension StatusItemController {
     static let loadingAnimationFPS: Double = 30.0
     static let loadingAnimationPhaseIncrement: Double =
         2.7 / StatusItemController.loadingAnimationFPS
-    private static let loadingAnimationMaxContinuousDuration: TimeInterval = 30.0
+    private nonisolated static let loadingAnimationMaxContinuousDuration: TimeInterval = 30.0
     func needsMenuBarIconAnimation() -> Bool {
         if self.shouldMergeIcons {
             let primaryProvider = self.primaryProviderForUnifiedIcon()
             return self.shouldAnimate(provider: primaryProvider)
         }
         return UsageProvider.allCases.contains { self.shouldAnimate(provider: $0) }
+    }
+
+    func activeLoadingAnimationPhase() -> Double? {
+        guard self.needsMenuBarIconAnimation(), self.animationDriver != nil else { return nil }
+        return self.animationPhase
+    }
+
+    func anyEnabledProviderNeedsLoadingAnimation() -> Bool {
+        UsageProvider.allCases.contains {
+            self.isEnabled($0) && self.shouldAnimate(provider: $0, mergeIcons: false)
+        }
     }
 
     func updateBlinkingState() {
@@ -66,7 +77,7 @@ extension StatusItemController {
         self.blinkTask?.cancel()
         self.blinkTask = nil
         self.blinkAmounts.removeAll()
-        let phase: Double? = self.needsMenuBarIconAnimation() ? self.animationPhase : nil
+        let phase: Double? = self.activeLoadingAnimationPhase()
         if self.shouldMergeIcons {
             self.applyIcon(phase: phase)
         } else {
@@ -256,7 +267,7 @@ extension StatusItemController {
         let showBrandPercent = self.settings.menuBarShowsBrandIconWithPercent
         let primaryProvider = self.primaryProviderForUnifiedIcon()
         let resolverStyle = self.store.style(for: primaryProvider)
-        let snapshot = self.store.snapshot(for: primaryProvider.instanceID)
+        let snapshot = self.store.menuBarSnapshot(for: primaryProvider.instanceID)
         let warningFlash = self.quotaWarningFlashActive(provider: primaryProvider)
 
         if let layoutResult = self.applyStoredUnifiedMenuBarLayoutIfNeeded(
@@ -474,7 +485,7 @@ extension StatusItemController {
     @discardableResult
     func applyIcon(for provider: UsageProvider, phase: Double?) -> Bool {
         guard let button = self.statusItems[provider.instanceID]?.button else { return false }
-        let snapshot = self.store.snapshot(for: provider.instanceID)
+        let snapshot = self.store.menuBarSnapshot(for: provider.instanceID)
         // IconRenderer treats these values as a left-to-right "progress fill" percentage; depending on the
         // user setting we pass either "percent left" or "percent used".
         let showUsed = self.settings.usageBarsShowUsed
@@ -877,7 +888,7 @@ extension StatusItemController {
             return balance
         }
         if provider == .deepseek,
-           let balance = Self.deepSeekBalanceDisplayText(snapshot: snapshot)
+           let balance = MenuBarDisplayText.deepSeekBalanceText(snapshot: snapshot)
         {
             return balance
         }
@@ -997,20 +1008,6 @@ extension StatusItemController {
             resetTimeDisplayStyle: self.settings.resetTimeDisplayStyle,
             showsResetTimeWhenExhausted: self.settings.menuBarShowsResetTimeWhenExhausted,
             now: now)
-    }
-
-    nonisolated static func deepSeekBalanceDisplayText(snapshot: UsageSnapshot?) -> String? {
-        guard
-            let rawValue = snapshot?.primary?.resetDescription?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-                !rawValue.isEmpty,
-                rawValue.hasPrefix("$") || rawValue.hasPrefix("¥")
-        else {
-            return nil
-        }
-
-        let balance = rawValue.split(separator: " ", maxSplits: 1).first
-        return balance.map(String.init)
     }
 
     nonisolated static func deepInfraBalanceDisplayText(snapshot: UsageSnapshot?) -> String? {
@@ -1252,7 +1249,7 @@ extension StatusItemController {
     /// while pace/both render the one lane chosen by `combinedDisplayPercentWindow` — mirror that presentation
     /// here rather than scheduling whichever lane happened to drive the icon.
     func menuBarDisplayedResetDates(for provider: UsageProvider, now: Date) -> [Date] {
-        let snapshot = self.store.snapshot(for: provider.instanceID)
+        let snapshot = self.store.menuBarSnapshot(for: provider.instanceID)
         let layoutResolution = self.settings.menuBarLayoutResolution(for: provider)
         if !layoutResolution.usesLegacyRendering,
            self.settings.menuBarIconStyle == .iconAndPercent
@@ -1408,7 +1405,7 @@ extension StatusItemController {
             return selected
         }
         for provider in self.store.enabledFirstPartyProviders() {
-            if self.store.isEnabled(provider), self.store.snapshot(for: provider.instanceID) != nil {
+            if self.store.isEnabled(provider), self.store.menuBarSnapshot(for: provider.instanceID) != nil {
                 return provider
             }
         }
@@ -1485,36 +1482,49 @@ extension StatusItemController {
 
     func updateAnimationState() {
         let needsAnimation = self.needsMenuBarIconAnimation()
-        if needsAnimation {
-            if self.animationDriver == nil {
-                if let forced = self.settings.debugLoadingPattern {
-                    self.animationPattern = forced
-                } else if !LoadingPattern.allCases.contains(self.animationPattern) {
-                    self.animationPattern = .knightRider
-                }
-                self.animationPhase = 0
-                self.animationStartedAt = Date()
-                let driver = DisplayLinkDriver(onTick: { [weak self] in
-                    self?.updateAnimationFrame()
-                })
-                self.animationDriver = driver
-                driver.start(fps: Self.loadingAnimationFPS)
-            } else if let forced = self.settings.debugLoadingPattern,
-                      forced != self.animationPattern
-            {
-                self.animationPattern = forced
-                self.animationPhase = 0
+        let stillLoading = self.anyEnabledProviderNeedsLoadingAnimation()
+        if self.animationStartedAt == .distantPast {
+            if !stillLoading {
+                self.animationStartedAt = nil
             }
-        } else {
+            if !needsAnimation {
+                self.stopLoadingAnimation(resetStart: false)
+            }
+            return
+        }
+        if !needsAnimation {
+            self.animationStartedAt = nil
             self.stopLoadingAnimation()
+            return
+        }
+        if self.animationDriver == nil {
+            if let forced = self.settings.debugLoadingPattern {
+                self.animationPattern = forced
+            } else if !LoadingPattern.allCases.contains(self.animationPattern) {
+                self.animationPattern = .knightRider
+            }
+            self.animationPhase = 0
+            self.animationStartedAt = Date()
+            let driver = DisplayLinkDriver(onTick: { [weak self] in
+                self?.updateAnimationFrame()
+            })
+            self.animationDriver = driver
+            driver.start(fps: Self.loadingAnimationFPS)
+        } else if let forced = self.settings.debugLoadingPattern,
+                  forced != self.animationPattern
+        {
+            self.animationPattern = forced
+            self.animationPhase = 0
         }
     }
 
-    private func stopLoadingAnimation() {
+    private func stopLoadingAnimation(resetStart: Bool = true) {
         self.animationDriver?.stop()
         self.animationDriver = nil
         self.animationPhase = 0
-        self.animationStartedAt = nil
+        if resetStart {
+            self.animationStartedAt = nil
+        }
         if self.shouldMergeIcons {
             self.applyIcon(phase: nil)
         } else {
@@ -1526,10 +1536,9 @@ extension StatusItemController {
         #if DEBUG
         guard !self.isReleasedForTesting else { return }
         #endif
-        if let startedAt = self.animationStartedAt,
-           Date().timeIntervalSince(startedAt) > Self.loadingAnimationMaxContinuousDuration
-        {
-            self.stopLoadingAnimation()
+        if Self.loadingAnimationHasExceededContinuousCap(startedAt: self.animationStartedAt, now: Date()) {
+            self.animationStartedAt = .distantPast
+            self.stopLoadingAnimation(resetStart: false)
             return
         }
         self.animationPhase += Self.loadingAnimationPhaseIncrement
@@ -1538,6 +1547,14 @@ extension StatusItemController {
         } else {
             UsageProvider.allCases.forEach { self.applyIcon(for: $0, phase: self.animationPhase) }
         }
+    }
+
+    nonisolated static func loadingAnimationHasExceededContinuousCap(
+        startedAt: Date?,
+        now: Date) -> Bool
+    {
+        guard let startedAt, startedAt != .distantPast else { return false }
+        return now.timeIntervalSince(startedAt) > Self.loadingAnimationMaxContinuousDuration
     }
 
     nonisolated static func brandImageWithStatusOverlay(
