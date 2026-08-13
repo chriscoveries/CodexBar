@@ -15,6 +15,15 @@ struct ClaudeBaselineCharacterizationTests {
             invocationLog: invocationLog)
     }
 
+    private func makeIdentifiedClaudeProfile() throws -> (root: URL, environment: [String: String]) {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codexbar-claude-baseline-profile-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try Data(#"{"oauthAccount":{"accountUuid":"baseline-account"}}"#.utf8)
+            .write(to: root.appendingPathComponent(".config.json"), options: .atomic)
+        return (root: root, environment: ["CLAUDE_CONFIG_DIR": root.path])
+    }
+
     private func makeStubClaudeCLI(authStatusScript: String, invocationLog: URL? = nil) throws -> String {
         let sample = """
         Current session
@@ -273,10 +282,13 @@ struct ClaudeBaselineCharacterizationTests {
         let invocationLog = FileManager.default.temporaryDirectory
             .appendingPathComponent("claude-invocations-\(UUID().uuidString).log")
         let stubCLIPath = try self.makeStubClaudeCLI(loggedIn: false, invocationLog: invocationLog)
-        let env = ["CLAUDE_CLI_PATH": stubCLIPath]
+        let profile = try self.makeIdentifiedClaudeProfile()
+        defer { try? FileManager.default.removeItem(at: profile.root) }
+        let env = ["CLAUDE_CLI_PATH": stubCLIPath].merging(profile.environment) { current, _ in current }
 
-        // Without a durable "OAuth is dead" signal, background Auto never starts CLI here: no established
-        // marker exists (cold launch) and there is no confirmed credential absence yet.
+        // The isolated profile is identified so this reaches the credential-absence check without depending
+        // on the host's real ~/.claude.json. Without a durable "OAuth is dead" signal, background Auto never
+        // starts CLI here: no established marker exists (cold launch) and there is no confirmed absence yet.
         await ClaudeCLIBackgroundAvailability.withIsolatedStoreForTesting {
             await self.withBackgroundKeychainAccess {
                 await ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.always) {
@@ -306,7 +318,9 @@ struct ClaudeBaselineCharacterizationTests {
         let invocationLog = FileManager.default.temporaryDirectory
             .appendingPathComponent("claude-invocations-\(UUID().uuidString).log")
         let stubCLIPath = try self.makeStubClaudeCLI(loggedIn: false, invocationLog: invocationLog)
-        let env = ["CLAUDE_CLI_PATH": stubCLIPath]
+        let profile = try self.makeIdentifiedClaudeProfile()
+        defer { try? FileManager.default.removeItem(at: profile.root) }
+        let env = ["CLAUDE_CLI_PATH": stubCLIPath].merging(profile.environment) { current, _ in current }
 
         // A direct, non-interactive read confirming OAuth credentials are absent (not merely
         // unreadable/denied) breaks the deadlock: this is the one background-Auto case where CLI must
@@ -342,7 +356,9 @@ struct ClaudeBaselineCharacterizationTests {
         let invocationLog = FileManager.default.temporaryDirectory
             .appendingPathComponent("claude-invocations-\(UUID().uuidString).log")
         let stubCLIPath = try self.makeStubClaudeCLI(invocationLog: invocationLog)
-        let env = ["CLAUDE_CLI_PATH": stubCLIPath]
+        let profile = try self.makeIdentifiedClaudeProfile()
+        defer { try? FileManager.default.removeItem(at: profile.root) }
+        let env = ["CLAUDE_CLI_PATH": stubCLIPath].merging(profile.environment) { current, _ in current }
 
         await ClaudeOAuthKeychainReadStrategyPreference.withTaskOverrideForTesting(.securityCLIExperimental) {
             await ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.onlyOnUserAction) {
@@ -352,11 +368,10 @@ struct ClaudeBaselineCharacterizationTests {
                         sourceMode: .auto,
                         env: env,
                         settings: settings)
-                    // OAuth credentials are confirmed absent here (`withNoOAuthCredentials`), but the
-                    // deadlock-breaker still requires the user's explicit background opt-in (`.always`)
-                    // before launching the interactive CLI unattended — a confirmed absence of
-                    // CodexBar-readable credentials does not by itself prove the CLI is safe to launch.
-                    // With the stored policy left at `.onlyOnUserAction`, the pipeline stops at web.
+                    // The identified test profile reaches the deadlock-breaker's explicit background opt-in
+                    // guard. OAuth credentials are confirmed absent here (`withNoOAuthCredentials`), but a
+                    // confirmed absence of CodexBar-readable credentials does not by itself prove the CLI is
+                    // safe to launch. With the stored policy left at `.onlyOnUserAction`, the pipeline stops at web.
                     #expect(outcome.attempts.map(\.strategyID) == ["claude.oauth", "claude.cli", "claude.web"])
                     #expect(outcome.attempts.map(\.wasAvailable) == [true, false, false])
                 }
@@ -376,7 +391,9 @@ struct ClaudeBaselineCharacterizationTests {
         let invocationLog = FileManager.default.temporaryDirectory
             .appendingPathComponent("claude-invocations-\(UUID().uuidString).log")
         let stubCLIPath = try self.makeStubClaudeCLI(invocationLog: invocationLog)
-        let env = ["CLAUDE_CLI_PATH": stubCLIPath]
+        let profile = try self.makeIdentifiedClaudeProfile()
+        defer { try? FileManager.default.removeItem(at: profile.root) }
+        let env = ["CLAUDE_CLI_PATH": stubCLIPath].merging(profile.environment) { current, _ in current }
         let usageLoader: ClaudeWebFetchStrategy.UsageLoader = { _ in
             ClaudeUsageSnapshot(
                 primary: RateWindow(
@@ -425,7 +442,9 @@ struct ClaudeBaselineCharacterizationTests {
         let invocationLog = FileManager.default.temporaryDirectory
             .appendingPathComponent("claude-invocations-\(UUID().uuidString).log")
         let stubCLIPath = try self.makeStubClaudeCLI(invocationLog: invocationLog)
-        let env = ["CLAUDE_CLI_PATH": stubCLIPath]
+        let profile = try self.makeIdentifiedClaudeProfile()
+        defer { try? FileManager.default.removeItem(at: profile.root) }
+        let env = ["CLAUDE_CLI_PATH": stubCLIPath].merging(profile.environment) { current, _ in current }
         let descriptor = ProviderDescriptorRegistry.descriptor(for: .claude)
         let context = self.makeContext(runtime: .app, sourceMode: .auto, env: env, settings: settings)
         let strategies = await descriptor.fetchPlan.pipeline.resolveStrategies(context)
@@ -436,8 +455,9 @@ struct ClaudeBaselineCharacterizationTests {
                 .securityCLIExperimental)
             {
                 await ClaudeOAuthKeychainPromptPreference.withTaskOverrideForTesting(.onlyOnUserAction) {
-                    // Present-but-denied by policy here, not a durable OAuth absence, so the
-                    // no-established-marker deadlock-breaker must not fire for this stored policy check.
+                    // The identified test profile reaches the policy guard, where `.onlyOnUserAction` stops the
+                    // deadlock-breaker before credential absence is even evaluated. The override pins the
+                    // absence signal to false anyway so this stays a pure stored-policy check either way.
                     await ClaudeOAuthFetchStrategy.$directCredentialIsMissingOverride.withValue(false) {
                         await cli.isAvailable(context)
                     }
