@@ -7,6 +7,7 @@
 
 ### Fixed
 - Token activity: draw the Cumulative running total at the default 30-day history window instead of a blank grid, and keep the week clipped by the scan window (#2893). Thanks @urda!
+- LongCat: read live usage from the token-packs summary endpoint, falling back to the legacy token-usage endpoint when no active token lot is available (#2670).
 - PTY probes: bound hard-stop latency while still cleaning session-escaped output holders.
 - Cost history: honor the preferred display currency throughout the detail chart and refresh converted labels when exchange rates change (#2887). Thanks @vAhyThe!
 - Codex: preserve requested Spend Dashboard history when the local cost cache exceeds its byte budget, rather than deleting in-window sessions or repeatedly rebuilding protected data (#2823). Thanks @WillStark for the report and @Whiteknight07 for the initial fix!
