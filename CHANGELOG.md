@@ -2,6 +2,9 @@
 
 ## 0.49.5 — Unreleased
 
+### Fixed
+- Menu bar layout: surface a leading icon token as the native status-item image so it follows the system's inactive-display dimming, render it at the standard 18 pt size, dim stale snapshots, and add a stepper-tuned vertical adjustment that moves icon and text together (#2365, #2898). Thanks @luantu!
+
 ## 0.49.4 — 2026-08-13
 
 ### Added

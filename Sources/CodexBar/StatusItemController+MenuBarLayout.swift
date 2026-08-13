@@ -42,8 +42,13 @@ extension StatusItemController {
             data: data,
             icon: renderedIcon,
             options: options)
-        let wasCached = button.image == nil
-            && button.imagePosition == .noImage
+        let expectedImagePosition: NSControl.ImagePosition = if rendered.leadingIcon != nil {
+            rendered.attributedTitle.length > 0 ? .imageLeft : .imageOnly
+        } else {
+            .noImage
+        }
+        let wasCached = button.image === rendered.leadingIcon
+            && button.imagePosition == expectedImagePosition
             && button.attributedTitle.isEqual(to: rendered.attributedTitle)
         self.setButtonLayoutContent(rendered, for: button, statusItem: statusItem)
         return wasCached

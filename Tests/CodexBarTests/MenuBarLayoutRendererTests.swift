@@ -108,6 +108,62 @@ struct MenuBarLayoutRendererTests {
     }
 
     @Test
+    func `vertical adjustment offsets the surfaced leading icon`() throws {
+        let renderer = MenuBarLayoutRenderer()
+        let icon = NSImage(size: NSSize(width: 16, height: 16))
+        icon.isTemplate = true
+        let layout = MenuBarLayout(lines: [[.icon, .percent(window: .automatic)]])
+        let raised = renderer.render(
+            layout: layout,
+            data: self.data(),
+            icon: icon,
+            options: self.options(verticalAdjustment: 2))
+        let lowered = renderer.render(
+            layout: layout,
+            data: self.data(),
+            icon: icon,
+            options: self.options(verticalAdjustment: -2))
+
+        let raisedIcon = try #require(raised.leadingIcon)
+        #expect(raisedIcon.size == NSSize(width: 16, height: 20))
+        #expect(raisedIcon.isTemplate)
+        let loweredIcon = try #require(lowered.leadingIcon)
+        #expect(loweredIcon.size == NSSize(width: 16, height: 20))
+        #expect(loweredIcon.isTemplate)
+    }
+
+    @Test
+    func `vertical adjustment on the surfaced icon is capped to the menu bar height`() throws {
+        let renderer = MenuBarLayoutRenderer()
+        let icon = NSImage(size: NSSize(width: 18, height: 18))
+        icon.isTemplate = true
+        let output = renderer.render(
+            layout: MenuBarLayout(lines: [[.icon, .percent(window: .automatic)]]),
+            data: self.data(),
+            icon: icon,
+            options: self.options(verticalAdjustment: 10))
+
+        let leadingIcon = try #require(output.leadingIcon)
+        #expect(leadingIcon.size == NSSize(width: 18, height: 22))
+        #expect(leadingIcon.isTemplate)
+    }
+
+    @Test
+    func `zero vertical adjustment returns the original leading icon instance`() throws {
+        let renderer = MenuBarLayoutRenderer()
+        let icon = NSImage(size: NSSize(width: 16, height: 16))
+        icon.isTemplate = true
+        let output = renderer.render(
+            layout: MenuBarLayout(lines: [[.icon, .percent(window: .automatic)]]),
+            data: self.data(),
+            icon: icon,
+            options: self.options(verticalAdjustment: 0))
+
+        let leadingIcon = try #require(output.leadingIcon)
+        #expect(leadingIcon === icon)
+    }
+
+    @Test
     func `missing token data keeps every sibling visible as a placeholder`() {
         let renderer = MenuBarLayoutRenderer()
         let missingData = MenuBarLayoutRenderData(

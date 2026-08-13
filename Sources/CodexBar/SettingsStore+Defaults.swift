@@ -472,7 +472,7 @@ extension SettingsStore {
     }
 
     /// User-tunable vertical nudge for the menu bar title, clamped to -20...20.
-    /// Positive moves content down, negative moves it up; 0 keeps the optical default.
+    /// Positive moves content up, negative moves it down; 0 keeps the optical default.
     var menuBarLayoutVerticalAdjustment: Int {
         get { self.defaultsState.menuBarLayoutVerticalAdjustment }
         set {

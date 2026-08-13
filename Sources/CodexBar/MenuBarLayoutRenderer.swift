@@ -58,7 +58,7 @@ struct MenuBarLayoutRenderOptions: Hashable {
     /// the same visible countdown still reuse the cached title.
     let now: Date
     /// User-tunable vertical nudge for the whole title, applied on top of the optical baseline
-    /// offset. Positive moves content down, negative moves it up.
+    /// offset. Positive moves content up, negative moves it down.
     let verticalAdjustment: Int
 
     init(
@@ -242,7 +242,7 @@ final class MenuBarLayoutRenderer {
         let leadingIcon: NSImage? = if options.highContrast {
             nil
         } else if layout.lines.first?.first == .icon, icon != nil {
-            icon
+            icon.map { Self.offsetLeadingIcon($0, adjustment: options.verticalAdjustment) }
         } else {
             nil
         }
@@ -420,6 +420,29 @@ final class MenuBarLayoutRenderer {
 
     private static func iconAccessibilityText(data: MenuBarLayoutRenderData) -> String {
         L("%@ icon", data.providerName ?? L("Provider"))
+    }
+
+    private static func offsetLeadingIcon(_ image: NSImage, adjustment: Int) -> NSImage {
+        // Bake the offset into the surfaced image so the status button and preferences preview share it.
+        // Cap the canvas at the 22 pt menu bar content height to avoid proportional downscaling.
+        let maxShift = max(0, floor((22 - image.size.height) / 2))
+        let shift = min(CGFloat(abs(adjustment)), maxShift)
+        guard adjustment != 0, shift > 0 else { return image }
+
+        let offsetImage = NSImage(
+            size: NSSize(width: image.size.width, height: image.size.height + 2 * shift),
+            flipped: false)
+        { _ in
+            image.draw(
+                in: NSRect(
+                    x: 0,
+                    y: adjustment > 0 ? 2 * shift : 0,
+                    width: image.size.width,
+                    height: image.size.height))
+            return true
+        }
+        offsetImage.isTemplate = true
+        return offsetImage
     }
 
     private static func attachmentImage(_ image: NSImage, tint: NSColor) -> NSImage {
