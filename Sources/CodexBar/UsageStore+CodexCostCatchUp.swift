@@ -118,7 +118,8 @@ extension UsageStore {
                 context: context,
                 phase: status.pending ? .indexing : .complete)
             var didAdvance = false
-            var previousActiveDuration: TimeInterval?
+            var (previousActiveDuration, seenProgressKeys): (TimeInterval?, Set<String>) =
+                (nil, [status.progressKey])
             while status.pending {
                 do {
                     guard self.codexCostCatchUpContextIsCurrent(context) else { return }
@@ -195,7 +196,7 @@ extension UsageStore {
                             pauseReason: .user)
                         return
                     }
-                    if nextStatus.pending, nextStatus.progressKey == status.progressKey {
+                    if nextStatus.pending, !seenProgressKeys.insert(nextStatus.progressKey).inserted {
                         self.publishCodexCostCatchUpActivity(
                             status: nextStatus,
                             context: context,
