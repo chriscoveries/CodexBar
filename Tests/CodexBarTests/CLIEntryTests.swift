@@ -710,6 +710,21 @@ final class CLIEntryTests: XCTestCase {
                 ollama: .init(cookieSource: .off, manualCookieHeader: nil))))
         XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(
             .auto,
+            provider: .ollama,
+            settings: ProviderSettingsSnapshot.make(
+                ollama: .init(cookieSource: .manual, manualCookieHeader: "__Secure-session=manual"))))
+        XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(
+            .web,
+            provider: .ollama,
+            settings: ProviderSettingsSnapshot.make(
+                ollama: .init(cookieSource: .manual, manualCookieHeader: "__Secure-session=manual"))))
+        XCTAssertTrue(CodexBarCLI.sourceModeRequiresWebSupport(
+            .web,
+            provider: .ollama,
+            settings: ProviderSettingsSnapshot.make(
+                ollama: .init(cookieSource: .manual, manualCookieHeader: "   "))))
+        XCTAssertFalse(CodexBarCLI.sourceModeRequiresWebSupport(
+            .auto,
             provider: .kimi,
             environment: ["KIMI_CODE_API_KEY": "kimi-test"]))
         try self.assertKimiCodeCredentialSourceMode(in: directory)
