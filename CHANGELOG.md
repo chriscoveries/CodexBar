@@ -4,6 +4,7 @@
 
 ### Fixed
 - Settings: keep the Settings window on the active Stage Manager stage/Space via `.moveToActiveSpace`, and key only newly presented Settings/update dialogs when Dock promotion runs (#2833). Thanks @KGBos!
+- Merged menu: provider detail cards that render the inline token/cost chart now open the cost-history submenu on hover, matching the Overview card (#2885). Thanks @SJY051!
 
 ## 0.49.4 — 2026-08-13
 
