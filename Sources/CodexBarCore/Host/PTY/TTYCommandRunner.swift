@@ -677,7 +677,11 @@ public struct TTYCommandRunner {
                 launchedProcess.abortSynchronously()
             } else {
                 if !didTerminateSynchronously {
-                    launchedProcess.terminateSynchronously()
+                    if launchedProcess.isRunning {
+                        launchedProcess.hardStopLivePTYRootSynchronously()
+                    } else {
+                        launchedProcess.terminateSynchronously()
+                    }
                 }
                 try? primaryHandle.close()
             }

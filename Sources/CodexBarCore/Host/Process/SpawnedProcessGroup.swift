@@ -7,6 +7,10 @@ import Musl
 #endif
 import Foundation
 
+private enum SpawnedProcessGroupTestingOverrides {
+    @TaskLocal static var outputHolderDiscoveryDelay: TimeInterval?
+}
+
 package final class SpawnedProcessGroup: @unchecked Sendable {
     package enum LaunchError: LocalizedError {
         case setupFailed(String)
@@ -895,5 +899,55 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
     private static func exitStatus(from rawStatus: Int32) -> Int32 {
         let signal = rawStatus & 0x7F
         return signal == 0 ? (rawStatus >> 8) & 0xFF : signal
+    }
+}
+
+extension SpawnedProcessGroup {
+    /// Hard-stop a live PTY root without making the caller wait on system-wide holder discovery.
+    @discardableResult
+    package func hardStopLivePTYRootSynchronously(grace: TimeInterval = 0.4) -> Int32? {
+        // Task-local values do not cross a GCD boundary, so capture the test delay before dispatching.
+        let discoveryDelay = max(0, SpawnedProcessGroupTestingOverrides.outputHolderDiscoveryDelay ?? 0)
+        let holderSweep = DispatchGroup()
+        holderSweep.enter()
+        DispatchQueue.global(qos: .utility).async { [self] in
+            defer { holderSweep.leave() }
+            if discoveryDelay > 0 {
+                Thread.sleep(forTimeInterval: discoveryDelay)
+            }
+            self.terminateOutputHoldersSynchronously(grace: grace)
+        }
+
+        let status = self.abortSynchronously(grace: grace)
+        _ = holderSweep.wait(timeout: .now() + 0.2)
+        return status
+    }
+
+    private func terminateOutputHoldersSynchronously(grace: TimeInterval) {
+        let grace = max(0, grace)
+        let processIdentities = self.currentOutputHolderIdentities()
+        Self.signal(processIdentities: processIdentities, signal: SIGTERM)
+
+        let termDeadline = Date().addingTimeInterval(grace)
+        while processIdentities.contains(where: TTYProcessTreeTerminator.isCurrent(_:)),
+              Date() < termDeadline
+        {
+            usleep(20000)
+        }
+
+        Self.signal(processIdentities: processIdentities, signal: SIGKILL)
+        let killDeadline = Date().addingTimeInterval(grace)
+        while processIdentities.contains(where: TTYProcessTreeTerminator.isCurrent(_:)),
+              Date() < killDeadline
+        {
+            usleep(20000)
+        }
+    }
+
+    package static func withOutputHolderDiscoveryDelayForTesting<T>(
+        _ delay: TimeInterval,
+        operation: () throws -> T) rethrows -> T
+    {
+        try SpawnedProcessGroupTestingOverrides.$outputHolderDiscoveryDelay.withValue(delay, operation: operation)
     }
 }
