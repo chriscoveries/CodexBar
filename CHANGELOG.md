@@ -2,6 +2,9 @@
 
 ## 0.49.4 — Unreleased
 
+### Added
+- Terminal picker: offer Ghostty 1.3+ as a default terminal for Open Terminal and provider login commands, falling back to Terminal.app when unavailable (#2830). Thanks @darwinz!
+
 ### Fixed
 - PTY probes: bound hard-stop latency while still cleaning session-escaped output holders.
 - Cost history: honor the preferred display currency throughout the detail chart and refresh converted labels when exchange rates change (#2887). Thanks @vAhyThe!
