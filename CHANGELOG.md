@@ -7,6 +7,7 @@
 
 ### Fixed
 - Token activity: draw the Cumulative running total at the default 30-day history window instead of a blank grid, and keep the week clipped by the scan window (#2893). Thanks @urda!
+- Cost history: avoid reporting partial token or cost totals when any daily row lacks that value.
 - PTY probes: bound hard-stop latency while still cleaning session-escaped output holders.
 - Cost history: honor the preferred display currency throughout the detail chart and refresh converted labels when exchange rates change (#2887). Thanks @vAhyThe!
 
