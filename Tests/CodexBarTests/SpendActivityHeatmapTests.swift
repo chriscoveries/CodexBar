@@ -286,6 +286,34 @@ struct SpendActivityHeatmapTests {
     }
 
     @Test
+    func `trailing unscanned days keep their week and later totals unavailable`() throws {
+        let calendar = Self.calendar
+        let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 8, day: 12)))
+        // A stale snapshot: the scan covers now-30 ... now-2, so the two most recent days were
+        // never reached. That is missing recent data, not a window edge.
+        let points = try (0..<SpendActivitySeries.rangeDayCount).map { offset -> SpendDashboardModel
+            .TokenActivityPoint in
+            let day = try #require(calendar.date(byAdding: .day, value: -offset, to: now))
+            guard (2..<31).contains(offset) else {
+                return .init(day: day, totalTokens: nil, isScanned: false)
+            }
+            return .init(day: day, totalTokens: 10)
+        }
+
+        let series = SpendActivitySeries.make(from: points, now: now, calendar: calendar)
+        let weekly = series.weeklyActivity()
+        let cumulative = weekly.cumulative()
+
+        // The scanned interior still draws.
+        #expect(cumulative.isCovered.contains(true))
+        // The week holding the trailing unscanned days is a lower bound, so it and everything
+        // after it stay unavailable.
+        let lastWeek = weekly.isCovered.count - 1
+        #expect(weekly.isCovered[lastWeek] == false)
+        #expect(cumulative.isCovered[lastWeek] == false)
+    }
+
+    @Test
     func `model with a 30 day scan window yields a cumulative view that still draws`() throws {
         let now = try #require(Self.calendar.date(from: DateComponents(year: 2026, month: 7, day: 16)))
         let formatter = DateFormatter()

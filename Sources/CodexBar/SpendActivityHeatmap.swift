@@ -131,19 +131,26 @@ struct SpendActivitySeries {
     }
 
     func weeklyActivity() -> SpendActivityAggregateSeries {
+        let firstScannedIndex = self.daily.indices.first { self.isVisible($0) && self.isScanned[$0] }
         var values: [Int] = []
         var coverage: [Bool] = []
         var scanned: [Bool] = []
         for start in stride(from: 0, to: self.daily.count, by: Self.dayCount) {
             let indices = start..<min(start + Self.dayCount, self.daily.count)
             let visible = indices.filter(self.isVisible)
-            let scannedVisible = visible.filter { self.isScanned[$0] }
+            // The scanned region is contiguous, so unscanned days split into a leading window edge
+            // and a trailing stale suffix. Only days before the first scanned day are the window
+            // edge; they cannot make a week unavailable. Every visible day from that point on
+            // counts, so a trailing unscanned day (a stale snapshot) keeps its week — and every
+            // later running total — unavailable.
+            let counted: [Int] = if let firstScannedIndex {
+                visible.filter { $0 >= firstScannedIndex }
+            } else {
+                []
+            }
             values.append(visible.reduce(0) { Self.saturatingAdd($0, self.daily[$1]) })
-            // A week is covered when every day the scan reached is covered. Days the scan never
-            // reached cannot make the week unavailable, otherwise the week straddling the start of
-            // a 30-day window would drop even though its scanned portion is complete.
-            coverage.append(!scannedVisible.isEmpty && scannedVisible.allSatisfy { self.isCovered[$0] })
-            scanned.append(!scannedVisible.isEmpty)
+            coverage.append(!counted.isEmpty && counted.allSatisfy { self.isCovered[$0] })
+            scanned.append(!counted.isEmpty)
         }
         return SpendActivityAggregateSeries(values: values, isCovered: coverage, isScanned: scanned)
     }
@@ -162,7 +169,8 @@ struct SpendActivitySeries {
 struct SpendActivityAggregateSeries: Equatable {
     let values: [Int]
     let isCovered: [Bool]
-    /// Whether the scan window reached any day in the week.
+    /// Whether the week holds any day at or after the first scanned day. Weeks entirely before the
+    /// scan window are skipped by the running coverage; weeks at or after it participate.
     let isScanned: [Bool]
 
     init(values: [Int], isCovered: [Bool], isScanned: [Bool]? = nil) {
