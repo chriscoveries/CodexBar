@@ -456,9 +456,17 @@ struct ClaudeOAuthUpgradeCompatibilityTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let cli = try Self.makeFakeClaudeCLI(in: root)
         let missingCredentials = root.appendingPathComponent("missing-credentials.json")
+        // The deadlock-breaker only fires for a profile CodexBar can identify. Pin an isolated identified
+        // profile via CLAUDE_CONFIG_DIR so this does not depend on the host's real ~/.claude.json
+        // (signed in on dev machines, absent on CI).
+        try Data(#"{"oauthAccount":{"accountUuid":"upgrade-compat-account"}}"#.utf8)
+            .write(to: root.appendingPathComponent(".config.json"), options: .atomic)
         let context = try self.makePersistedOAuthContext(
             suite: "ClaudeOAuthUpgradeCompatibilityTests-auto-foreign-only",
-            environment: ["CLAUDE_CLI_PATH": cli.executable.path],
+            environment: [
+                "CLAUDE_CLI_PATH": cli.executable.path,
+                "CLAUDE_CONFIG_DIR": root.path,
+            ],
             sourceMode: .auto)
         let descriptor = ProviderDescriptorRegistry.descriptor(for: .claude)
         let strategies = await descriptor.fetchPlan.pipeline.resolveStrategies(context)
