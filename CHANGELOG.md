@@ -5,6 +5,7 @@
 ### Fixed
 - Codex: show the administrator-defined monthly usage limit for EDU/workspace accounts by querying the spend-controls monthly-usage endpoint when wham/usage omits it (#2900). Thanks @ygnask!
 - Merged menu: provider detail cards that render the inline token/cost chart now open the cost-history submenu on hover, matching the Overview card (#2885). Thanks @SJY051!
+- Claude: keep environment- and CodexBar-owned OAuth usage authoritative when the local Claude CLI account switches mid-fetch, preserve background CLI availability across cancelled refreshes, and carry OAuth credential ownership through web-extras enrichment (#2591). Thanks @ProspectOre!
 
 ## 0.49.4 — 2026-08-13
 
