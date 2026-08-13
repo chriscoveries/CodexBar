@@ -678,7 +678,7 @@ public struct TTYCommandRunner {
             } else {
                 if !didTerminateSynchronously {
                     if launchedProcess.isRunning {
-                        launchedProcess.hardStopLivePTYRootSynchronously()
+                        launchedProcess.hardStopLivePTYRootSynchronously(primaryFileDescriptor: primaryFD)
                     } else {
                         launchedProcess.terminateSynchronously()
                     }

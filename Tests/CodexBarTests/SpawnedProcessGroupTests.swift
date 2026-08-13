@@ -8,6 +8,33 @@ import Glibc
 #endif
 
 struct SpawnedProcessGroupTests {
+    #if DEBUG
+    @Test
+    func `output holder cleanup lease expires closes descriptor and disarms cleanup`() throws {
+        var descriptors = [Int32](repeating: -1, count: 2)
+        try #require(pipe(&descriptors) == 0)
+        let readDescriptor = descriptors[0]
+        let leasedWriteDescriptor = descriptors[1]
+        defer { _ = close(readDescriptor) }
+
+        let start = Date()
+        let result = SpawnedProcessGroup._test_outputHolderCleanupLeaseExpiry(
+            ownedFileDescriptor: leasedWriteDescriptor,
+            maxLifetime: 0.05,
+            waitTimeout: 0.5)
+        let elapsed = Date().timeIntervalSince(start)
+
+        #expect(result.completed)
+        #expect(!result.active)
+        #expect(elapsed < 0.5)
+        let flags = fcntl(readDescriptor, F_GETFL)
+        #expect(flags >= 0)
+        #expect(fcntl(readDescriptor, F_SETFL, flags | O_NONBLOCK) == 0)
+        var byte: UInt8 = 0
+        #expect(read(readDescriptor, &byte, 1) == 0)
+    }
+    #endif
+
     @Test
     func `pipe cleanup preserves standard descriptors`() {
         let descriptors = SpawnedProcessGroup.pipeDescriptorsToClose([0, 1, 2, 3, 4, 3])

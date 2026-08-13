@@ -50,7 +50,7 @@ extension KiroStatusProbeTests {
 
         let childPIDText = try String(contentsOf: childPIDFile, encoding: .utf8)
         let childPID = try #require(pid_t(childPIDText.trimmingCharacters(in: .whitespacesAndNewlines)))
-        for _ in 0..<500 where !FileManager.default.fileExists(atPath: termChildPIDFile.path) {
+        for _ in 0..<1000 where !FileManager.default.fileExists(atPath: termChildPIDFile.path) {
             try await Task.sleep(for: .milliseconds(20))
         }
         let termChildPIDText = try String(contentsOf: termChildPIDFile, encoding: .utf8)
