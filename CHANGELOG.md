@@ -6,6 +6,7 @@
 - Terminal picker: offer Ghostty 1.3+ as a default terminal for Open Terminal and provider login commands, falling back to Terminal.app when unavailable (#2830). Thanks @darwinz!
 
 ### Fixed
+- Claude: refresh the detected CLI version after a successful manual CLI usage fetch, so the provider pane no longer shows "not detected" when the gated startup probe could not run `claude --version` (#2899).
 - Token activity: draw the Cumulative running total at the default 30-day history window instead of a blank grid, and keep the week clipped by the scan window (#2893). Thanks @urda!
 - Antigravity: detect Google's renamed Gemini desktop app (`com.google.GeminiMacOS`, `Gemini.app`) for OAuth client discovery and language-server process matching, alongside the legacy Antigravity identifiers (#2836). Thanks @wxomi for the report and diagnostics!
 - Cost history: avoid reporting partial token or cost totals when any daily row lacks that value.
