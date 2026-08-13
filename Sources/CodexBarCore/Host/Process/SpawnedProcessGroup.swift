@@ -1056,6 +1056,7 @@ extension SpawnedProcessGroup {
             preKillDelay: preKillDelay,
             maxLifetime: cleanupMaxLifetime)
         lease.scheduleExpiry()
+        let status = self.abortSynchronously(grace: grace)
         DispatchQueue.global(qos: .utility).async {
             defer { lease.finish() }
             if discoveryDelay > 0 {
@@ -1063,8 +1064,6 @@ extension SpawnedProcessGroup {
             }
             SpawnedProcessGroup.terminateOutputHoldersSynchronously(lease: lease)
         }
-
-        let status = self.abortSynchronously(grace: grace)
         _ = lease.waitForCompletion(timeout: 0.2)
         return status
     }

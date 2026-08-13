@@ -10,14 +10,15 @@ import Glibc
 #if DEBUG
 extension KiroStatusProbeTests {
     @Test
-    func `tty runner bounds hard stop while cleaning a double forked PTY holder`() async throws {
+    func `tty runner bounds hard stop while cleaning root TERM and third generation PTY holders`() async throws {
         let childPIDFile = FileManager.default.temporaryDirectory
             .appendingPathComponent("codexbar-kiro-double-fork-\(UUID().uuidString).pid")
         let termChildPIDFile = childPIDFile.appendingPathExtension("term-child")
         let lateChildPIDFile = childPIDFile.appendingPathExtension("late-child")
+        let rootTermChildPIDFile = childPIDFile.appendingPathExtension("root-term-child")
         let cliURL = try self.makeHardStopCLI()
         defer {
-            for pidFile in [childPIDFile, termChildPIDFile, lateChildPIDFile] {
+            for pidFile in [childPIDFile, termChildPIDFile, lateChildPIDFile, rootTermChildPIDFile] {
                 if let text = try? String(contentsOf: pidFile, encoding: .utf8),
                    let childPID = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines))
                 {
@@ -43,7 +44,12 @@ extension KiroStatusProbeTests {
                         options: .init(
                             timeout: 4,
                             idleTimeout: 0.1,
-                            extraArgs: [childPIDFile.path, termChildPIDFile.path, lateChildPIDFile.path],
+                            extraArgs: [
+                                childPIDFile.path,
+                                termChildPIDFile.path,
+                                lateChildPIDFile.path,
+                                rootTermChildPIDFile.path,
+                            ],
                             initialDelay: 0,
                             settleAfterStop: 0))
                 }
@@ -72,16 +78,24 @@ extension KiroStatusProbeTests {
         }
         let lateChildPIDText = try String(contentsOf: lateChildPIDFile, encoding: .utf8)
         let lateChildPID = try #require(pid_t(lateChildPIDText.trimmingCharacters(in: .whitespacesAndNewlines)))
+        for _ in 0..<1000 where !FileManager.default.fileExists(atPath: rootTermChildPIDFile.path) {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let rootTermChildPIDText = try String(contentsOf: rootTermChildPIDFile, encoding: .utf8)
+        let rootTermChildPID = try #require(
+            pid_t(rootTermChildPIDText.trimmingCharacters(in: .whitespacesAndNewlines)))
 
         let cleanupDeadline = Date().addingTimeInterval(20)
-        while kill(childPID, 0) == 0 || kill(termChildPID, 0) == 0 || kill(lateChildPID, 0) == 0,
-              Date() < cleanupDeadline
+        while kill(childPID, 0) == 0 || kill(termChildPID, 0) == 0 || kill(lateChildPID, 0) == 0
+            || kill(rootTermChildPID, 0) == 0,
+            Date() < cleanupDeadline
         {
             try await Task.sleep(for: .milliseconds(20))
         }
         #expect(kill(childPID, 0) == -1)
         #expect(kill(termChildPID, 0) == -1)
         #expect(kill(lateChildPID, 0) == -1)
+        #expect(kill(rootTermChildPID, 0) == -1)
     }
 
     private func makeHardStopCLI() throws -> URL {
@@ -95,7 +109,25 @@ extension KiroStatusProbeTests {
         import sys
         import time
 
-        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        root_term_handled = False
+        def handle_root_term(_signal, _frame):
+            global root_term_handled
+            if root_term_handled:
+                return
+            root_term_handled = True
+            signal.signal(signal.SIGTERM, signal.SIG_IGN)
+            root_term_child = os.fork()
+            if root_term_child == 0:
+                os.setsid()
+                signal.signal(signal.SIGHUP, signal.SIG_IGN)
+                signal.signal(signal.SIGTERM, signal.SIG_IGN)
+                with open(sys.argv[4], "w") as handle:
+                    handle.write(str(os.getpid()))
+                time.sleep(30)
+                os._exit(0)
+            time.sleep(0.2)
+            os._exit(0)
+        signal.signal(signal.SIGTERM, handle_root_term)
         intermediate = os.fork()
         if intermediate == 0:
             child = os.fork()
@@ -129,6 +161,8 @@ extension KiroStatusProbeTests {
         os.waitpid(intermediate, 0)
         while not os.path.exists(sys.argv[1]):
             time.sleep(0.01)
+        if os.path.exists(sys.argv[4]):
+            raise RuntimeError("root TERM child started before TERM")
         print("Estimated Usage | resets on 2026-06-01 | KIRO FREE", flush=True)
         print("Credits (12.50 of 50 covered in plan)", flush=True)
         print("████████████████████ 25%", flush=True)
