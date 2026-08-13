@@ -29,7 +29,7 @@ extension KiroStatusProbeTests {
         }
 
         let start = Date()
-        let result = try SpawnedProcessGroup.withOutputHolderDiscoveryDelayForTesting(2.5) {
+        let result = try SpawnedProcessGroup.withOutputHolderDiscoveryDelayForTesting(4) {
             try SpawnedProcessGroup.withOutputHolderPreKillDelayForTesting(0.5) {
                 try TTYCommandRunner().run(
                     binary: cliURL.path,
