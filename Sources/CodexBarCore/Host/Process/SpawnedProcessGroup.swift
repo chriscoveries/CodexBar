@@ -12,6 +12,7 @@ private enum SpawnedProcessGroupTestingOverrides {
     @TaskLocal static var outputHolderDiscoveryDelay: TimeInterval?
     @TaskLocal static var outputHolderPreKillDelay: TimeInterval?
     @TaskLocal static var outputHolderCleanupMaxLifetime: TimeInterval?
+    @TaskLocal static var forcePTYPrimaryDescriptorReservationFailure = false
 }
 #endif
 
@@ -322,16 +323,19 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
     private let outputPipes: Set<OutputPipeIdentity>
     private let outputTTYs: Set<OutputTTYIdentity>
     private let rootIdentity: TTYProcessTreeTerminator.ProcessIdentity?
+    private let reservedPTYPrimaryDescriptor: OwnedFileDescriptorState?
 
     private init(
         pid: pid_t,
         outputPipes: Set<OutputPipeIdentity>,
-        outputTTYs: Set<OutputTTYIdentity> = [])
+        outputTTYs: Set<OutputTTYIdentity> = [],
+        reservedPTYPrimaryDescriptor: OwnedFileDescriptorState? = nil)
     {
         self.pid = pid
         self.processGroup = pid
         self.outputPipes = outputPipes
         self.outputTTYs = outputTTYs
+        self.reservedPTYPrimaryDescriptor = reservedPTYPrimaryDescriptor
         self.rootIdentity = TTYProcessTreeTerminator.processIdentity(for: pid)
         self.startWaiter()
     }
@@ -457,6 +461,9 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
         guard let outputTTY = OutputTTYIdentity.resolve(fileDescriptor: secondaryFD) else {
             throw LaunchError.setupFailed("resolve PTY identity")
         }
+        guard let reservedPTYPrimaryDescriptor = Self.reservePTYPrimaryDescriptor(primaryFD) else {
+            throw LaunchError.setupFailed("reserve PTY primary descriptor")
+        }
         #if canImport(Darwin)
         var fileActions: posix_spawn_file_actions_t?
         #else
@@ -545,7 +552,11 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
         guard spawnResult == 0 else {
             throw LaunchError.spawnFailed(String(cString: strerror(spawnResult)))
         }
-        return SpawnedProcessGroup(pid: pid, outputPipes: [], outputTTYs: [outputTTY])
+        return SpawnedProcessGroup(
+            pid: pid,
+            outputPipes: [],
+            outputTTYs: [outputTTY],
+            reservedPTYPrimaryDescriptor: reservedPTYPrimaryDescriptor)
     }
 
     package var isRunning: Bool {
@@ -819,14 +830,6 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
         processIdentities.contains(where: TTYProcessTreeTerminator.isCurrent(_:)) || self.hasResidualProcessGroup
     }
 
-    private func currentOutputHolderIdentities() -> Set<TTYProcessTreeTerminator.ProcessIdentity> {
-        let excludedPIDs: Set<pid_t> = [getpid(), self.pid]
-        return Self.outputHolderIdentities(
-            outputPipes: self.outputPipes,
-            outputTTYs: self.outputTTYs,
-            excludedPIDs: excludedPIDs)
-    }
-
     private func currentProcessGroupMemberIdentities() -> Set<TTYProcessTreeTerminator.ProcessIdentity> {
         if self.termination.hasObservedExit, self.termination.value == nil {
             let identities = Self.processGroupMemberIdentities(
@@ -908,6 +911,42 @@ package final class SpawnedProcessGroup: @unchecked Sendable {
 }
 
 extension SpawnedProcessGroup {
+    private func currentOutputHolderIdentities() -> Set<TTYProcessTreeTerminator.ProcessIdentity> {
+        let excludedPIDs: Set<pid_t> = [getpid(), self.pid]
+        return Self.outputHolderIdentities(
+            outputPipes: self.outputPipes,
+            outputTTYs: self.outputTTYs,
+            excludedPIDs: excludedPIDs)
+    }
+
+    /// Serializes transfer and closure of a descriptor owned by the process group.
+    private final class OwnedFileDescriptorState: @unchecked Sendable {
+        private let lock = NSLock()
+        private var fileDescriptor: Int32?
+
+        init(fileDescriptor: Int32) {
+            self.fileDescriptor = fileDescriptor
+        }
+
+        deinit {
+            self.discard()
+        }
+
+        func take() -> Int32? {
+            self.lock.withLock {
+                defer { self.fileDescriptor = nil }
+                return self.fileDescriptor
+            }
+        }
+
+        @discardableResult
+        func discard() -> Bool {
+            guard let fileDescriptor = self.take() else { return false }
+            _ = close(fileDescriptor)
+            return true
+        }
+    }
+
     /// The lock makes the descriptor/completion transition one-shot across worker and expiry queues.
     private final class OutputHolderCleanupLease: @unchecked Sendable {
         let outputPipes: Set<OutputPipeIdentity>
@@ -993,10 +1032,7 @@ extension SpawnedProcessGroup {
 
     /// Hard-stop a live PTY root without making the caller wait on system-wide holder discovery.
     @discardableResult
-    package func hardStopLivePTYRootSynchronously(
-        primaryFileDescriptor: Int32,
-        grace: TimeInterval = 0.4) -> Int32?
-    {
+    package func hardStopLivePTYRootSynchronously(grace: TimeInterval = 0.4) -> Int32? {
         #if DEBUG
         // Task-local values do not cross a GCD boundary, so capture the test delay before dispatching.
         let discoveryDelay = max(0, SpawnedProcessGroupTestingOverrides.outputHolderDiscoveryDelay ?? 0)
@@ -1007,12 +1043,12 @@ extension SpawnedProcessGroup {
         let preKillDelay: TimeInterval = 0
         let cleanupMaxLifetime: TimeInterval = 15
         #endif
-        guard let duplicatedPrimaryFileDescriptor = Self.duplicateCloseOnExec(primaryFileDescriptor) else {
-            return self.terminateSynchronously(grace: grace)
+        guard let reservedPrimaryFileDescriptor = self.reservedPTYPrimaryDescriptor?.take() else {
+            return self.abortSynchronously(grace: grace)
         }
         // Production caps the lease at 15 seconds; DEBUG fixtures may add their artificial delay separately.
         let lease = OutputHolderCleanupLease(
-            duplicatedPrimaryFileDescriptor: duplicatedPrimaryFileDescriptor,
+            duplicatedPrimaryFileDescriptor: reservedPrimaryFileDescriptor,
             outputPipes: self.outputPipes,
             outputTTYs: self.outputTTYs,
             excludedPIDs: [getpid(), self.pid],
@@ -1033,9 +1069,17 @@ extension SpawnedProcessGroup {
         return status
     }
 
-    private static func duplicateCloseOnExec(_ fileDescriptor: Int32) -> Int32? {
+    private static func reservePTYPrimaryDescriptor(_ fileDescriptor: Int32) -> OwnedFileDescriptorState? {
+        #if DEBUG
+        guard !SpawnedProcessGroupTestingOverrides.forcePTYPrimaryDescriptorReservationFailure else { return nil }
+        #endif
         let duplicate = fcntl(fileDescriptor, F_DUPFD_CLOEXEC, STDERR_FILENO + 1)
-        return duplicate >= 0 ? duplicate : nil
+        guard duplicate >= 0 else { return nil }
+        return OwnedFileDescriptorState(fileDescriptor: duplicate)
+    }
+
+    package func discardReservedPTYPrimaryDescriptor() {
+        self.reservedPTYPrimaryDescriptor?.discard()
     }
 
     private static func outputHolderIdentities(
@@ -1128,6 +1172,33 @@ extension SpawnedProcessGroup {
         try SpawnedProcessGroupTestingOverrides.$outputHolderCleanupMaxLifetime.withValue(
             maxLifetime,
             operation: operation)
+    }
+
+    package static func withPTYPrimaryDescriptorReservationFailureForTesting<T>(
+        _ operation: () throws -> T) rethrows -> T
+    {
+        try SpawnedProcessGroupTestingOverrides.$forcePTYPrimaryDescriptorReservationFailure.withValue(
+            true,
+            operation: operation)
+    }
+
+    package static func _test_ownedDescriptorTakeOnce(
+        ownedFileDescriptor: Int32) -> (first: Int32?, second: Int32?, discardAfterTake: Bool)
+    {
+        let state = OwnedFileDescriptorState(fileDescriptor: ownedFileDescriptor)
+        let first = state.take()
+        return (first, state.take(), state.discard())
+    }
+
+    package static func _test_ownedDescriptorDiscardTwice(
+        ownedFileDescriptor: Int32) -> (first: Bool, second: Bool)
+    {
+        let state = OwnedFileDescriptorState(fileDescriptor: ownedFileDescriptor)
+        return (state.discard(), state.discard())
+    }
+
+    package static func _test_ownedDescriptorDeinit(ownedFileDescriptor: Int32) {
+        _ = OwnedFileDescriptorState(fileDescriptor: ownedFileDescriptor)
     }
 
     package static func _test_outputHolderCleanupLeaseExpiry(
