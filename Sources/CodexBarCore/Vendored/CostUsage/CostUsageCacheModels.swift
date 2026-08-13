@@ -2,7 +2,7 @@ import Foundation
 
 /// In-memory working set for one bounded scan. Codex persists this shape as normalized
 /// `CostUsageStore` rows; Claude and Vertex use their independent compact JSON cache.
-struct CostUsageCache: Codable, @unchecked Sendable {
+struct CostUsageCache: Codable, Equatable, @unchecked Sendable {
     var version: Int = 1
     var lastScanUnixMs: Int64 = 0
     var scanSinceKey: String?
@@ -27,7 +27,7 @@ struct CostUsageCache: Codable, @unchecked Sendable {
     var roots: [String: Int64]?
 }
 
-struct CostUsageCodexActiveLookbackState: Codable {
+struct CostUsageCodexActiveLookbackState: Codable, Equatable {
     var scanSinceKey: String
     var rootPaths: [String]
     var nextDayKeyByRoot: [String: String] = [:]
@@ -43,7 +43,7 @@ struct CostUsageCodexActiveLookbackState: Codable {
     var cacheWideMigrationQueueActive: Bool?
 }
 
-struct CostUsageCodexSessionDiscovery: Codable {
+struct CostUsageCodexSessionDiscovery: Codable, Equatable {
     struct DirectoryStamp: Codable, Equatable {
         var mtimeUnixMs: Int64
         var jsonlFileCount: Int
@@ -55,7 +55,7 @@ struct CostUsageCodexSessionDiscovery: Codable {
         var fileId: String?
     }
 
-    struct HeadScan: Codable {
+    struct HeadScan: Codable, Equatable {
         var path: String
         var offset: Int64
         var resumeState: CostUsageJsonl.ResumeState?
@@ -223,7 +223,7 @@ struct CostUsageCodexPreviousReport: Codable, Equatable {
     }
 }
 
-struct CostUsageFileUsage: Codable {
+struct CostUsageFileUsage: Codable, Equatable {
     var mtimeUnixMs: Int64
     var size: Int64
     var days: [String: [String: [Int]]]
