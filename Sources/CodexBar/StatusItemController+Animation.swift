@@ -9,7 +9,7 @@ extension StatusItemController {
     static let loadingAnimationFPS: Double = 30.0
     static let loadingAnimationPhaseIncrement: Double =
         2.7 / StatusItemController.loadingAnimationFPS
-    private static let loadingAnimationMaxContinuousDuration: TimeInterval = 30.0
+    private nonisolated static let loadingAnimationMaxContinuousDuration: TimeInterval = 30.0
     func needsMenuBarIconAnimation() -> Bool {
         if self.shouldMergeIcons {
             let primaryProvider = self.primaryProviderForUnifiedIcon()
@@ -1536,9 +1536,7 @@ extension StatusItemController {
         #if DEBUG
         guard !self.isReleasedForTesting else { return }
         #endif
-        if let startedAt = self.animationStartedAt,
-           Date().timeIntervalSince(startedAt) > Self.loadingAnimationMaxContinuousDuration
-        {
+        if Self.loadingAnimationHasExceededContinuousCap(startedAt: self.animationStartedAt, now: Date()) {
             self.animationStartedAt = .distantPast
             self.stopLoadingAnimation(resetStart: false)
             return
@@ -1549,6 +1547,14 @@ extension StatusItemController {
         } else {
             UsageProvider.allCases.forEach { self.applyIcon(for: $0, phase: self.animationPhase) }
         }
+    }
+
+    nonisolated static func loadingAnimationHasExceededContinuousCap(
+        startedAt: Date?,
+        now: Date) -> Bool
+    {
+        guard let startedAt, startedAt != .distantPast else { return false }
+        return now.timeIntervalSince(startedAt) > Self.loadingAnimationMaxContinuousDuration
     }
 
     nonisolated static func brandImageWithStatusOverlay(
