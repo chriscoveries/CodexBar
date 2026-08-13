@@ -852,6 +852,24 @@ struct ClaudeBaselineCharacterizationTests {
         }
     }
 
+    private static func makeUsageStatusSnapshot() -> ClaudeStatusSnapshot {
+        ClaudeStatusSnapshot(
+            sessionPercentLeft: 88,
+            weeklyPercentLeft: 60,
+            opusPercentLeft: 95,
+            accountEmail: "user@example.com",
+            accountOrganization: "Example Org",
+            loginMethod: nil,
+            primaryResetDescription: "Resets 11am",
+            secondaryResetDescription: "Resets Nov 21",
+            opusResetDescription: "Resets Nov 21",
+            rawText: "stub")
+    }
+}
+
+// MARK: - Explicit source-mode resolution and token heuristics
+
+extension ClaudeBaselineCharacterizationTests {
     @Test(arguments: [
         (ProviderSourceMode.cli, "claude.cli"),
         (ProviderSourceMode.web, "claude.web"),
@@ -900,19 +918,5 @@ struct ClaudeBaselineCharacterizationTests {
     func `Claude OAuth token heuristics reject cookie shaped inputs`() {
         #expect(!TokenAccountSupportCatalog.isClaudeOAuthToken("sessionKey=sk-ant-session"))
         #expect(!TokenAccountSupportCatalog.isClaudeOAuthToken("Cookie: sessionKey=sk-ant-session; foo=bar"))
-    }
-
-    private static func makeUsageStatusSnapshot() -> ClaudeStatusSnapshot {
-        ClaudeStatusSnapshot(
-            sessionPercentLeft: 88,
-            weeklyPercentLeft: 60,
-            opusPercentLeft: 95,
-            accountEmail: "user@example.com",
-            accountOrganization: "Example Org",
-            loginMethod: nil,
-            primaryResetDescription: "Resets 11am",
-            secondaryResetDescription: "Resets Nov 21",
-            opusResetDescription: "Resets Nov 21",
-            rawText: "stub")
     }
 }
