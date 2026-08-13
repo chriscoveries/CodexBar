@@ -4,6 +4,8 @@
 
 ### Fixed
 - Codex: keep large Usage & Spend history indexing bounded, durable across relaunches, and resumable after appends without replaying completed sessions (#2815, #2849). Thanks @Quicksaver for the fix and @Yoroin, @xiehaibin18, and @Astro-Han for reports and diagnostics!
+- Codex: make Finish now accelerate the full configured cost-history window while retaining the 30-day floor (#2861, #2864). Thanks @thomaschow19 for the report and fix!
+- Codex: detect semantic cost-history progress across bounded passes and stop cyclic catch-up without treating live appends as progress (#2815, #2861, #2844). Thanks @pavbar!
 
 ## 0.49.4 — 2026-08-13
 
