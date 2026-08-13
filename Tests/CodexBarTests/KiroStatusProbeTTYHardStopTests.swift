@@ -7,20 +7,24 @@ import Darwin
 import Glibc
 #endif
 
+#if DEBUG
 extension KiroStatusProbeTests {
     @Test
     func `tty runner bounds hard stop while cleaning a double forked PTY holder`() async throws {
         let childPIDFile = FileManager.default.temporaryDirectory
             .appendingPathComponent("codexbar-kiro-double-fork-\(UUID().uuidString).pid")
+        let termChildPIDFile = childPIDFile.appendingPathExtension("term-child")
         let cliURL = try self.makeHardStopCLI()
         defer {
-            if let text = try? String(contentsOf: childPIDFile, encoding: .utf8),
-               let childPID = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines))
-            {
-                _ = kill(childPID, SIGKILL)
+            for pidFile in [childPIDFile, termChildPIDFile] {
+                if let text = try? String(contentsOf: pidFile, encoding: .utf8),
+                   let childPID = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines))
+                {
+                    _ = kill(childPID, SIGKILL)
+                }
+                try? FileManager.default.removeItem(at: pidFile)
             }
             try? FileManager.default.removeItem(at: cliURL.deletingLastPathComponent())
-            try? FileManager.default.removeItem(at: childPIDFile)
         }
 
         let start = Date()
@@ -31,7 +35,7 @@ extension KiroStatusProbeTests {
                 options: .init(
                     timeout: 4,
                     idleTimeout: 0.1,
-                    extraArgs: [childPIDFile.path],
+                    extraArgs: [childPIDFile.path, termChildPIDFile.path],
                     initialDelay: 0,
                     settleAfterStop: 0))
         }
@@ -46,11 +50,18 @@ extension KiroStatusProbeTests {
 
         let childPIDText = try String(contentsOf: childPIDFile, encoding: .utf8)
         let childPID = try #require(pid_t(childPIDText.trimmingCharacters(in: .whitespacesAndNewlines)))
-        let cleanupDeadline = Date().addingTimeInterval(6)
-        while kill(childPID, 0) == 0, Date() < cleanupDeadline {
+        for _ in 0..<500 where !FileManager.default.fileExists(atPath: termChildPIDFile.path) {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let termChildPIDText = try String(contentsOf: termChildPIDFile, encoding: .utf8)
+        let termChildPID = try #require(pid_t(termChildPIDText.trimmingCharacters(in: .whitespacesAndNewlines)))
+
+        let cleanupDeadline = Date().addingTimeInterval(10)
+        while kill(childPID, 0) == 0 || kill(termChildPID, 0) == 0, Date() < cleanupDeadline {
             try await Task.sleep(for: .milliseconds(20))
         }
         #expect(kill(childPID, 0) == -1)
+        #expect(kill(termChildPID, 0) == -1)
     }
 
     private func makeHardStopCLI() throws -> URL {
@@ -72,7 +83,17 @@ extension KiroStatusProbeTests {
                 os._exit(0)
             os.setsid()
             signal.signal(signal.SIGHUP, signal.SIG_IGN)
-            signal.signal(signal.SIGTERM, signal.SIG_IGN)
+            def handle_term(_signal, _frame):
+                term_child = os.fork()
+                if term_child == 0:
+                    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+                    with open(sys.argv[2], "w") as handle:
+                        handle.write(str(os.getpid()))
+                    time.sleep(30)
+                    os._exit(0)
+                time.sleep(0.2)
+                os._exit(0)
+            signal.signal(signal.SIGTERM, handle_term)
             with open(sys.argv[1], "w") as handle:
                 handle.write(str(os.getpid()))
             time.sleep(30)
@@ -92,3 +113,4 @@ extension KiroStatusProbeTests {
         return cliURL
     }
 }
+#endif

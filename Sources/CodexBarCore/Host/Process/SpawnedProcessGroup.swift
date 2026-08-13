@@ -7,9 +7,11 @@ import Musl
 #endif
 import Foundation
 
+#if DEBUG
 private enum SpawnedProcessGroupTestingOverrides {
     @TaskLocal static var outputHolderDiscoveryDelay: TimeInterval?
 }
+#endif
 
 package final class SpawnedProcessGroup: @unchecked Sendable {
     package enum LaunchError: LocalizedError {
@@ -906,8 +908,12 @@ extension SpawnedProcessGroup {
     /// Hard-stop a live PTY root without making the caller wait on system-wide holder discovery.
     @discardableResult
     package func hardStopLivePTYRootSynchronously(grace: TimeInterval = 0.4) -> Int32? {
+        #if DEBUG
         // Task-local values do not cross a GCD boundary, so capture the test delay before dispatching.
         let discoveryDelay = max(0, SpawnedProcessGroupTestingOverrides.outputHolderDiscoveryDelay ?? 0)
+        #else
+        let discoveryDelay: TimeInterval = 0
+        #endif
         let holderSweep = DispatchGroup()
         holderSweep.enter()
         DispatchQueue.global(qos: .utility).async { [self] in
@@ -925,7 +931,7 @@ extension SpawnedProcessGroup {
 
     private func terminateOutputHoldersSynchronously(grace: TimeInterval) {
         let grace = max(0, grace)
-        let processIdentities = self.currentOutputHolderIdentities()
+        var processIdentities = self.currentOutputHolderIdentities()
         Self.signal(processIdentities: processIdentities, signal: SIGTERM)
 
         let termDeadline = Date().addingTimeInterval(grace)
@@ -935,6 +941,8 @@ extension SpawnedProcessGroup {
             usleep(20000)
         }
 
+        // A TERM handler can fork a new holder, so refresh only this launch's recorded output identities.
+        processIdentities.formUnion(self.currentOutputHolderIdentities())
         Self.signal(processIdentities: processIdentities, signal: SIGKILL)
         let killDeadline = Date().addingTimeInterval(grace)
         while processIdentities.contains(where: TTYProcessTreeTerminator.isCurrent(_:)),
@@ -944,10 +952,12 @@ extension SpawnedProcessGroup {
         }
     }
 
+    #if DEBUG
     package static func withOutputHolderDiscoveryDelayForTesting<T>(
         _ delay: TimeInterval,
         operation: () throws -> T) rethrows -> T
     {
         try SpawnedProcessGroupTestingOverrides.$outputHolderDiscoveryDelay.withValue(delay, operation: operation)
     }
+    #endif
 }
