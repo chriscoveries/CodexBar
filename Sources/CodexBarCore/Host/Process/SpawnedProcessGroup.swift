@@ -10,6 +10,7 @@ import Foundation
 #if DEBUG
 private enum SpawnedProcessGroupTestingOverrides {
     @TaskLocal static var outputHolderDiscoveryDelay: TimeInterval?
+    @TaskLocal static var outputHolderPreKillDelay: TimeInterval?
 }
 #endif
 
@@ -912,6 +913,7 @@ extension SpawnedProcessGroup {
         let outputTTYs: Set<OutputTTYIdentity>
         let excludedPIDs: Set<pid_t>
         let grace: TimeInterval
+        let preKillDelay: TimeInterval
 
         private let deadline: DispatchTime
         private let completion = DispatchGroup()
@@ -925,6 +927,7 @@ extension SpawnedProcessGroup {
             outputTTYs: Set<OutputTTYIdentity>,
             excludedPIDs: Set<pid_t>,
             grace: TimeInterval,
+            preKillDelay: TimeInterval,
             maxLifetime: TimeInterval)
         {
             self.duplicatedPrimaryFileDescriptor = duplicatedPrimaryFileDescriptor
@@ -932,6 +935,7 @@ extension SpawnedProcessGroup {
             self.outputTTYs = outputTTYs
             self.excludedPIDs = excludedPIDs
             self.grace = max(0, grace)
+            self.preKillDelay = max(0, preKillDelay)
             self.deadline = .now() + max(0, maxLifetime)
             self.completion.enter()
         }
@@ -995,8 +999,10 @@ extension SpawnedProcessGroup {
         #if DEBUG
         // Task-local values do not cross a GCD boundary, so capture the test delay before dispatching.
         let discoveryDelay = max(0, SpawnedProcessGroupTestingOverrides.outputHolderDiscoveryDelay ?? 0)
+        let preKillDelay = max(0, SpawnedProcessGroupTestingOverrides.outputHolderPreKillDelay ?? 0)
         #else
         let discoveryDelay: TimeInterval = 0
+        let preKillDelay: TimeInterval = 0
         #endif
         guard let duplicatedPrimaryFileDescriptor = Self.duplicateCloseOnExec(primaryFileDescriptor) else {
             return self.terminateSynchronously(grace: grace)
@@ -1008,6 +1014,7 @@ extension SpawnedProcessGroup {
             outputTTYs: self.outputTTYs,
             excludedPIDs: [getpid(), self.pid],
             grace: grace,
+            preKillDelay: preKillDelay,
             maxLifetime: 15)
         lease.scheduleExpiry()
         DispatchQueue.global(qos: .utility).async {
@@ -1024,7 +1031,7 @@ extension SpawnedProcessGroup {
     }
 
     private static func duplicateCloseOnExec(_ fileDescriptor: Int32) -> Int32? {
-        let duplicate = fcntl(fileDescriptor, F_DUPFD_CLOEXEC, 0)
+        let duplicate = fcntl(fileDescriptor, F_DUPFD_CLOEXEC, STDERR_FILENO + 1)
         return duplicate >= 0 ? duplicate : nil
     }
 
@@ -1040,7 +1047,7 @@ extension SpawnedProcessGroup {
 
     private static func terminateOutputHoldersSynchronously(lease: OutputHolderCleanupLease) {
         guard lease.isActive else { return }
-        var processIdentities = Self.outputHolderIdentities(
+        let processIdentities = Self.outputHolderIdentities(
             outputPipes: lease.outputPipes,
             outputTTYs: lease.outputTTYs,
             excludedPIDs: lease.excludedPIDs)
@@ -1050,16 +1057,21 @@ extension SpawnedProcessGroup {
 
         Self.waitWhileCurrent(processIdentities, until: Date().addingTimeInterval(lease.grace), lease: lease)
 
-        // A TERM handler can fork a new holder, so refresh only this launch's recorded output identities.
-        guard lease.isActive else { return }
-        let rescannedIdentities = Self.outputHolderIdentities(
-            outputPipes: lease.outputPipes,
-            outputTTYs: lease.outputTTYs,
-            excludedPIDs: lease.excludedPIDs)
-        guard lease.isActive else { return }
-        processIdentities.formUnion(rescannedIdentities)
-        guard Self.signal(processIdentities: processIdentities, signal: SIGKILL, lease: lease) else { return }
-        Self.waitWhileCurrent(processIdentities, until: Date().addingTimeInterval(lease.grace), lease: lease)
+        while lease.isActive {
+            let currentIdentities = Self.outputHolderIdentities(
+                outputPipes: lease.outputPipes,
+                outputTTYs: lease.outputTTYs,
+                excludedPIDs: lease.excludedPIDs)
+            guard lease.isActive else { return }
+            guard !currentIdentities.isEmpty else { return }
+            if lease.preKillDelay > 0 {
+                Thread.sleep(forTimeInterval: lease.preKillDelay)
+            }
+            guard lease.isActive,
+                  Self.signal(processIdentities: currentIdentities, signal: SIGKILL, lease: lease)
+            else { return }
+            Self.waitWhileCurrent(currentIdentities, until: Date().addingTimeInterval(lease.grace), lease: lease)
+        }
     }
 
     private static func signal(
@@ -1099,6 +1111,13 @@ extension SpawnedProcessGroup {
         try SpawnedProcessGroupTestingOverrides.$outputHolderDiscoveryDelay.withValue(delay, operation: operation)
     }
 
+    package static func withOutputHolderPreKillDelayForTesting<T>(
+        _ delay: TimeInterval,
+        operation: () throws -> T) rethrows -> T
+    {
+        try SpawnedProcessGroupTestingOverrides.$outputHolderPreKillDelay.withValue(delay, operation: operation)
+    }
+
     package static func _test_outputHolderCleanupLeaseExpiry(
         ownedFileDescriptor: Int32,
         maxLifetime: TimeInterval,
@@ -1110,6 +1129,7 @@ extension SpawnedProcessGroup {
             outputTTYs: [],
             excludedPIDs: [],
             grace: 0,
+            preKillDelay: 0,
             maxLifetime: maxLifetime)
         lease.scheduleExpiry()
         let completed = lease.waitForCompletion(timeout: waitTimeout)
