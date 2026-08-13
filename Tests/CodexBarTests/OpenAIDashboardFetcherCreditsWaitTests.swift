@@ -349,6 +349,67 @@ struct OpenAIDashboardFetcherCreditsWaitTests {
     }
 
     @Test
+    func `api merge prefers the page derived plan over the generic api plan`() {
+        let previous = OpenAIDashboardSnapshot(
+            signedInEmail: "user@example.com",
+            codeReviewRemainingPercent: nil,
+            creditEvents: [],
+            dailyBreakdown: [],
+            usageBreakdown: [],
+            creditsPurchaseURL: nil,
+            accountPlan: "Pro 5x",
+            updatedAt: Date(timeIntervalSince1970: 1))
+        let apiData = OpenAIDashboardFetcher.DashboardAPIData(
+            primaryLimit: RateWindow(usedPercent: 12, windowMinutes: 300, resetsAt: nil, resetDescription: nil),
+            secondaryLimit: nil,
+            extraRateWindows: [],
+            creditsRemaining: nil,
+            codexCreditLimit: nil,
+            accountPlan: "pro")
+
+        let snapshot = OpenAIDashboardFetcher.snapshotByMergingAPI(
+            apiData: apiData,
+            verifiedEmail: "user@example.com",
+            subscription: nil,
+            previous: previous,
+            updatedAt: Date(timeIntervalSince1970: 2))
+
+        #expect(snapshot.accountPlan == "Pro 5x")
+    }
+
+    @Test
+    func `placeholder rows still wait for parsed credit events before extract accepts`() {
+        let now = Date()
+        // rowCount > 0 in the readiness probe skipped the pre-extract wait; the post-extract
+        // guard must still hold while parsed events are empty and the grace window is open.
+        let probe = OpenAIDashboardFetcher.ReadinessProbe(
+            loginRequired: false,
+            workspacePicker: false,
+            cloudflareInterstitial: false,
+            href: "https://chatgpt.com/codex/cloud/settings/analytics#usage",
+            signedInEmail: "user@example.com",
+            authStatus: "logged_in",
+            creditsHeaderPresent: true,
+            creditsHeaderInViewport: true,
+            didScrollToCredits: false,
+            rowCount: 3,
+            usageBreakdownReady: true,
+            hasCodeReviewSignal: false,
+            hasDashboardSignal: true)
+
+        #expect(OpenAIDashboardFetcher.shouldWaitForCreditsHistory(
+            probe: probe,
+            anyDashboardSignalAt: now.addingTimeInterval(-1),
+            creditsHeaderVisibleAt: now.addingTimeInterval(-1),
+            now: now))
+        #expect(!OpenAIDashboardFetcher.shouldWaitForCreditsHistory(
+            probe: probe,
+            anyDashboardSignalAt: now.addingTimeInterval(-10),
+            creditsHeaderVisibleAt: now.addingTimeInterval(-3),
+            now: now))
+    }
+
+    @Test
     func `page scrape is skipped whenever the caller disables it`() {
         #expect(OpenAIDashboardFetcher.shouldSkipPageScrape(allowPageScrape: false))
         #expect(!OpenAIDashboardFetcher.shouldSkipPageScrape(allowPageScrape: true))

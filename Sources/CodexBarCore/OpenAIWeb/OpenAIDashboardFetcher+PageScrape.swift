@@ -110,13 +110,10 @@ extension OpenAIDashboardFetcher {
                     try await Self.sleepForDashboardPoll(.milliseconds(600))
                     continue
                 }
-                if Self.shouldWaitForCreditsHistory(.init(
-                    now: Date(),
+                if Self.shouldWaitForCreditsHistory(
+                    probe: probe,
                     anyDashboardSignalAt: anyDashboardSignalAt,
-                    creditsHeaderVisibleAt: creditsHeaderVisibleAt,
-                    creditsHeaderPresent: probe.creditsHeaderPresent,
-                    creditsHeaderInViewport: probe.creditsHeaderInViewport,
-                    didScrollToCredits: probe.didScrollToCredits))
+                    creditsHeaderVisibleAt: creditsHeaderVisibleAt)
                 {
                     try await Self.sleepForDashboardPoll(.milliseconds(400))
                     continue
@@ -155,29 +152,29 @@ extension OpenAIDashboardFetcher {
                 continue
             }
 
+            // Placeholder rows can make rowCount > 0 before real credit rows hydrate; keep the
+            // pre-extract grace keyed on parsed events like the pre-refactor loop did.
+            if dashboardData.events.isEmpty,
+               Self.shouldWaitForCreditsHistory(
+                   probe: probe,
+                   anyDashboardSignalAt: anyDashboardSignalAt,
+                   creditsHeaderVisibleAt: creditsHeaderVisibleAt)
+            {
+                try await Self.sleepForDashboardPoll(.milliseconds(400))
+                continue
+            }
+
             if dashboardData.hasReturnableData,
                dashboardData.hasDashboardPageSignal || apiHasReturnableData
             {
                 if let purchaseURL = scrape.creditsPurchaseURL {
                     log("credits purchase url: \(purchaseURL)")
                 }
-                return Self.fillingMissingPageFields(
-                    Self.makeDashboardSnapshot(.init(
-                        signedInEmail: dashboardData.signedInEmail,
-                        scrape: scrape,
-                        codeReview: dashboardData.codeReview,
-                        codeReviewLimit: dashboardData.codeReviewLimit,
-                        events: dashboardData.events,
-                        breakdown: dashboardData.breakdown,
-                        usageBreakdown: dashboardData.usageBreakdown,
-                        rateLimits: dashboardData.rateLimits,
-                        extraRateWindows: dashboardData.extraRateWindows,
-                        creditsRemaining: dashboardData.creditsRemaining,
-                        codexCreditLimit: dashboardData.codexCreditLimit,
-                        accountPlan: dashboardData.accountPlan,
-                        subscription: subscription)),
-                    from: previousSnapshot,
-                    subscription: subscription)
+                return Self.makePageSnapshot(
+                    scrape: scrape,
+                    dashboardData: dashboardData,
+                    subscription: subscription,
+                    previousSnapshot: previousSnapshot)
             }
 
             try await Self.sleepForDashboardPoll(.milliseconds(500))
@@ -196,6 +193,46 @@ extension OpenAIDashboardFetcher {
             Self.writeDebugArtifacts(html: html, bodyText: lastBody, logger: log)
         }
         throw FetchError.noDashboardData(body: lastUsageBreakdownError ?? lastBody ?? "")
+    }
+
+    nonisolated static func makePageSnapshot(
+        scrape: ScrapeResult,
+        dashboardData: DashboardScrapeData,
+        subscription: OpenAISubscriptionMetadata?,
+        previousSnapshot: OpenAIDashboardSnapshot?) -> OpenAIDashboardSnapshot
+    {
+        self.fillingMissingPageFields(
+            self.makeDashboardSnapshot(.init(
+                signedInEmail: dashboardData.signedInEmail,
+                scrape: scrape,
+                codeReview: dashboardData.codeReview,
+                codeReviewLimit: dashboardData.codeReviewLimit,
+                events: dashboardData.events,
+                breakdown: dashboardData.breakdown,
+                usageBreakdown: dashboardData.usageBreakdown,
+                rateLimits: dashboardData.rateLimits,
+                extraRateWindows: dashboardData.extraRateWindows,
+                creditsRemaining: dashboardData.creditsRemaining,
+                codexCreditLimit: dashboardData.codexCreditLimit,
+                accountPlan: dashboardData.accountPlan,
+                subscription: subscription)),
+            from: previousSnapshot,
+            subscription: subscription)
+    }
+
+    nonisolated static func shouldWaitForCreditsHistory(
+        probe: ReadinessProbe,
+        anyDashboardSignalAt: Date?,
+        creditsHeaderVisibleAt: Date?,
+        now: Date = Date()) -> Bool
+    {
+        self.shouldWaitForCreditsHistory(.init(
+            now: now,
+            anyDashboardSignalAt: anyDashboardSignalAt,
+            creditsHeaderVisibleAt: creditsHeaderVisibleAt,
+            creditsHeaderPresent: probe.creditsHeaderPresent,
+            creditsHeaderInViewport: probe.creditsHeaderInViewport,
+            didScrollToCredits: probe.didScrollToCredits))
     }
 
     nonisolated static func updateAndShouldWaitForUsageBreakdownRecovery(

@@ -55,7 +55,8 @@ extension OpenAIDashboardFetcher {
                 : apiData.extraRateWindows,
             creditsRemaining: apiData.creditsRemaining ?? previous?.creditsRemaining,
             codexCreditLimit: apiData.codexCreditLimit ?? previous?.codexCreditLimit,
-            accountPlan: apiData.accountPlan ?? previous?.accountPlan,
+            // Prefer the page-derived plan (more specific, e.g. Pro Lite) over the generic API plan_type.
+            accountPlan: previous?.accountPlan ?? apiData.accountPlan,
             subscriptionExpiresAt: subscription == nil
                 ? previous?.subscriptionExpiresAt
                 : subscription?.expiresAt,
