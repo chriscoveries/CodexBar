@@ -678,11 +678,8 @@ public struct TTYCommandRunner {
                 launchedProcess.abortSynchronously()
             } else {
                 if !didTerminateSynchronously {
-                    if launchedProcess.isRunning {
-                        launchedProcess.hardStopLivePTYRootSynchronously()
-                    } else {
-                        launchedProcess.terminateSynchronously()
-                    }
+                    // An early-stopped root may exit during settle while detached PTY holders remain.
+                    launchedProcess.hardStopLivePTYRootSynchronously()
                 }
                 try? primaryHandle.close()
             }
