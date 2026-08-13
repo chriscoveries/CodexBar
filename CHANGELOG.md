@@ -3,6 +3,7 @@
 ## 0.49.4 — Unreleased
 
 ### Fixed
+- PTY probes: bound hard-stop latency while still cleaning session-escaped output holders.
 - Cost history: honor the preferred display currency throughout the detail chart and refresh converted labels when exchange rates change (#2887). Thanks @vAhyThe!
 
 ## 0.49.3 — 2026-08-12
