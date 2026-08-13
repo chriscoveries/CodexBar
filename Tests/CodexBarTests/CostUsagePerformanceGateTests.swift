@@ -11,7 +11,6 @@ import Testing
 @testable import CodexBarCore
 
 // The performance corpus and its fixtures intentionally stay together so timing gates share setup.
-// swiftlint:disable file_length
 
 /// Regression gates for the two cost-usage scan-storm classes that have shipped before:
 /// re-parsing unchanged session files on every refresh (#1387, #1392) and re-running the
