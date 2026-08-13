@@ -436,10 +436,29 @@ struct MenuBarLayoutRendererTests {
             icon: icon,
             options: options)
 
-        #expect(output.leadingIcon != nil)
+        // High contrast keeps the icon inside the attributed title (not surfaced as button.image)
+        // so AppKit dims the whole title together on inactive displays.
+        #expect(output.leadingIcon == nil)
+        #expect(output.attributedTitle.attribute(.attachment, at: 0, effectiveRange: nil) is NSTextAttachment)
         let textIndex = (output.attributedTitle.string as NSString).range(of: "50%").location
         #expect(output.attributedTitle
             .attribute(.foregroundColor, at: textIndex, effectiveRange: nil) as? NSColor == .labelColor)
+    }
+
+    @Test
+    func `extracted leading icon keeps its accessibility description`() {
+        let renderer = MenuBarLayoutRenderer()
+        let icon = NSImage(size: NSSize(width: 16, height: 16))
+        icon.isTemplate = true
+        let output = renderer.render(
+            layout: MenuBarLayout(lines: [[.icon, .percent(window: .automatic)]]),
+            data: self.data(),
+            icon: icon,
+            options: self.options())
+
+        #expect(output.leadingIcon != nil)
+        #expect(output.attributedTitle.attribute(.attachment, at: 0, effectiveRange: nil) == nil)
+        #expect(output.accessibilityLabel.contains(L("%@ icon", "Codex")))
     }
 
     @Test

@@ -234,9 +234,14 @@ final class MenuBarLayoutRenderer {
         attributes[.baselineOffset] = baseBaselineOffset + CGFloat(options.verticalAdjustment)
         let result = NSMutableAttributedString()
         var accessibilityLines: [String] = []
-        // Only surface a leading icon via `button.image` when an actual image is available;
-        // with a missing icon the token still renders its placeholder inside the title.
-        let leadingIcon: NSImage? = if layout.lines.first?.first == .icon, icon != nil {
+        // Only surface a leading icon via `button.image` when an actual image is available and the
+        // high-contrast contract does not require the icon to stay inside the attributed title.
+        // AppKit dims `button.image` on inactive displays, but high-contrast layouts keep icon + text
+        // together in one attributed path so the existing dimming contract is preserved. With a
+        // missing icon the token still renders its placeholder inside the title.
+        let leadingIcon: NSImage? = if options.highContrast {
+            nil
+        } else if layout.lines.first?.first == .icon, icon != nil {
             icon
         } else {
             nil
@@ -249,8 +254,10 @@ final class MenuBarLayoutRenderer {
             var accessibilityParts: [String] = []
             for (tokenIndex, token) in line.enumerated() {
                 // The leading icon is surfaced as `button.image` so AppKit applies the system's
-                // active/inactive display tinting; it is not repeated inside the attributed title.
+                // active/inactive display tinting; it is not repeated inside the attributed title,
+                // but its accessibility description must survive for VoiceOver.
                 if leadingIcon != nil, lineIndex == 0, tokenIndex == 0, token == .icon {
+                    accessibilityParts.append(Self.iconAccessibilityText(data: data))
                     continue
                 }
                 if tokenIndex > 0, token != .space, line[tokenIndex - 1] != .space {
@@ -314,7 +321,7 @@ final class MenuBarLayoutRenderer {
                 height: height)
             let value = NSMutableAttributedString(attachment: attachment)
             value.addAttributes(style.attributes, range: NSRange(location: 0, length: value.length))
-            return (value, L("%@ icon", data.providerName ?? L("Provider")))
+            return (value, Self.iconAccessibilityText(data: data))
         case .providerName:
             return self.optionalTextToken(
                 data.providerName,
@@ -409,6 +416,10 @@ final class MenuBarLayoutRenderer {
         case .space:
             return self.textToken(" ", accessibilityText: nil, attributes: style.attributes)
         }
+    }
+
+    private static func iconAccessibilityText(data: MenuBarLayoutRenderData) -> String {
+        L("%@ icon", data.providerName ?? L("Provider"))
     }
 
     private static func attachmentImage(_ image: NSImage, tint: NSColor) -> NSImage {
