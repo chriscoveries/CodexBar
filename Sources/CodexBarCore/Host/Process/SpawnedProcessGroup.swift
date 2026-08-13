@@ -11,6 +11,7 @@ import Foundation
 private enum SpawnedProcessGroupTestingOverrides {
     @TaskLocal static var outputHolderDiscoveryDelay: TimeInterval?
     @TaskLocal static var outputHolderPreKillDelay: TimeInterval?
+    @TaskLocal static var outputHolderCleanupMaxLifetime: TimeInterval?
 }
 #endif
 
@@ -1000,14 +1001,16 @@ extension SpawnedProcessGroup {
         // Task-local values do not cross a GCD boundary, so capture the test delay before dispatching.
         let discoveryDelay = max(0, SpawnedProcessGroupTestingOverrides.outputHolderDiscoveryDelay ?? 0)
         let preKillDelay = max(0, SpawnedProcessGroupTestingOverrides.outputHolderPreKillDelay ?? 0)
+        let cleanupMaxLifetime = max(0, SpawnedProcessGroupTestingOverrides.outputHolderCleanupMaxLifetime ?? 15)
         #else
         let discoveryDelay: TimeInterval = 0
         let preKillDelay: TimeInterval = 0
+        let cleanupMaxLifetime: TimeInterval = 15
         #endif
         guard let duplicatedPrimaryFileDescriptor = Self.duplicateCloseOnExec(primaryFileDescriptor) else {
             return self.terminateSynchronously(grace: grace)
         }
-        // Allow two loaded system-wide scans plus the 2.5-second regression delay, but cap the PTY lease at 15 seconds.
+        // Production caps the lease at 15 seconds; DEBUG fixtures may add their artificial delay separately.
         let lease = OutputHolderCleanupLease(
             duplicatedPrimaryFileDescriptor: duplicatedPrimaryFileDescriptor,
             outputPipes: self.outputPipes,
@@ -1015,7 +1018,7 @@ extension SpawnedProcessGroup {
             excludedPIDs: [getpid(), self.pid],
             grace: grace,
             preKillDelay: preKillDelay,
-            maxLifetime: 15)
+            maxLifetime: cleanupMaxLifetime)
         lease.scheduleExpiry()
         DispatchQueue.global(qos: .utility).async {
             defer { lease.finish() }
@@ -1116,6 +1119,15 @@ extension SpawnedProcessGroup {
         operation: () throws -> T) rethrows -> T
     {
         try SpawnedProcessGroupTestingOverrides.$outputHolderPreKillDelay.withValue(delay, operation: operation)
+    }
+
+    package static func withOutputHolderCleanupMaxLifetimeForTesting<T>(
+        _ maxLifetime: TimeInterval,
+        operation: () throws -> T) rethrows -> T
+    {
+        try SpawnedProcessGroupTestingOverrides.$outputHolderCleanupMaxLifetime.withValue(
+            maxLifetime,
+            operation: operation)
     }
 
     package static func _test_outputHolderCleanupLeaseExpiry(

@@ -28,18 +28,25 @@ extension KiroStatusProbeTests {
             try? FileManager.default.removeItem(at: cliURL.deletingLastPathComponent())
         }
 
+        let hardStopBudget = 3 * TestTimingBudget.slowdownFactor
+        // Repository wall-clock tests use 3 seconds locally and scale to 9 seconds on loaded CI runners. Keep
+        // sequential discovery beyond that assertion in both environments without consuming the cleanup window.
+        let discoveryDelay = hardStopBudget + 1
+        let cleanupMaxLifetime = discoveryDelay + 15
         let start = Date()
-        let result = try SpawnedProcessGroup.withOutputHolderDiscoveryDelayForTesting(4) {
-            try SpawnedProcessGroup.withOutputHolderPreKillDelayForTesting(0.5) {
-                try TTYCommandRunner().run(
-                    binary: cliURL.path,
-                    send: "",
-                    options: .init(
-                        timeout: 4,
-                        idleTimeout: 0.1,
-                        extraArgs: [childPIDFile.path, termChildPIDFile.path, lateChildPIDFile.path],
-                        initialDelay: 0,
-                        settleAfterStop: 0))
+        let result = try SpawnedProcessGroup.withOutputHolderDiscoveryDelayForTesting(discoveryDelay) {
+            try SpawnedProcessGroup.withOutputHolderCleanupMaxLifetimeForTesting(cleanupMaxLifetime) {
+                try SpawnedProcessGroup.withOutputHolderPreKillDelayForTesting(0.5) {
+                    try TTYCommandRunner().run(
+                        binary: cliURL.path,
+                        send: "",
+                        options: .init(
+                            timeout: 4,
+                            idleTimeout: 0.1,
+                            extraArgs: [childPIDFile.path, termChildPIDFile.path, lateChildPIDFile.path],
+                            initialDelay: 0,
+                            settleAfterStop: 0))
+                }
             }
         }
         let elapsed = Date().timeIntervalSince(start)
@@ -49,7 +56,9 @@ extension KiroStatusProbeTests {
         let snapshot = try KiroStatusProbe().parse(output: result.text)
         #expect(snapshot.planName == "KIRO FREE")
         #expect(snapshot.creditsUsed == 12.50)
-        #expect(elapsed < 3, "Delayed holder discovery should not extend the PTY hard stop, took \(elapsed)s")
+        #expect(
+            elapsed < hardStopBudget,
+            "Delayed holder discovery should not extend the PTY hard stop, took \(elapsed)s")
 
         let childPIDText = try String(contentsOf: childPIDFile, encoding: .utf8)
         let childPID = try #require(pid_t(childPIDText.trimmingCharacters(in: .whitespacesAndNewlines)))
