@@ -7,6 +7,7 @@
 
 ### Fixed
 - Token activity: draw the Cumulative running total at the default 30-day history window instead of a blank grid, and keep the week clipped by the scan window (#2893). Thanks @urda!
+- Antigravity: detect Google's renamed Gemini desktop app (`com.google.GeminiMacOS`, `Gemini.app`) for OAuth client discovery and language-server process matching, alongside the legacy Antigravity identifiers (#2836). Thanks @wxomi for the report and diagnostics!
 - Cost history: avoid reporting partial token or cost totals when any daily row lacks that value.
 - CLI: escalate RPC child teardown (codex app-server, grok agent stdio) from SIGTERM to SIGKILL with a bounded wait and stdin EOF, preventing orphaned children and file-descriptor exhaustion in long-running serve (#2789). Thanks @psl75011 and @simonsteiner!
 - PTY probes: bound hard-stop latency while still cleaning session-escaped output holders.
