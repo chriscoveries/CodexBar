@@ -2,6 +2,9 @@
 
 ## 0.49.5 — Unreleased
 
+### Fixed
+- Grok: restore web billing after grok.com's credits endpoint began requiring a browser-held WKE credential, by reading the weekly credit pool from the Grok CLI billing API with the local grok login token, and clarify the cookie-rejection guidance (#2812). Thanks @wxhnewStar!
+
 ## 0.49.4 — 2026-08-13
 
 ### Added
