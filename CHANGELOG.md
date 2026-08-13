@@ -8,6 +8,7 @@
 ### Fixed
 - Claude: refresh the detected CLI version after a successful manual CLI usage fetch, so the provider pane no longer shows "not detected" when the gated startup probe could not run `claude --version` (#2899).
 - Token activity: draw the Cumulative running total at the default 30-day history window instead of a blank grid, and keep the week clipped by the scan window (#2893). Thanks @urda!
+- LongCat: read live usage from the token-packs summary endpoint, falling back to the legacy token-usage endpoint when no active token lot is available (#2670).
 - Antigravity: detect Google's renamed Gemini desktop app (`com.google.GeminiMacOS`, `Gemini.app`) for OAuth client discovery and language-server process matching, alongside the legacy Antigravity identifiers (#2836). Thanks @wxomi for the report and diagnostics!
 - Cost history: avoid reporting partial token or cost totals when any daily row lacks that value.
 - CLI: escalate RPC child teardown (codex app-server, grok agent stdio) from SIGTERM to SIGKILL with a bounded wait and stdin EOF, preventing orphaned children and file-descriptor exhaustion in long-running serve (#2789). Thanks @psl75011 and @simonsteiner!
