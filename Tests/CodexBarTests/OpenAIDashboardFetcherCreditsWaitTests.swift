@@ -409,6 +409,72 @@ struct OpenAIDashboardFetcherCreditsWaitTests {
     }
 
     @Test
+    func `subscription replacement clears the mutually exclusive previous date`() {
+        let previous = OpenAIDashboardSnapshot(
+            signedInEmail: "user@example.com",
+            codeReviewRemainingPercent: nil,
+            creditEvents: [],
+            dailyBreakdown: [],
+            usageBreakdown: [],
+            creditsPurchaseURL: nil,
+            subscriptionRenewsAt: Date(timeIntervalSince1970: 1_800_000_000),
+            updatedAt: Date(timeIntervalSince1970: 1))
+        let apiData = OpenAIDashboardFetcher.DashboardAPIData(
+            primaryLimit: nil,
+            secondaryLimit: nil,
+            extraRateWindows: [],
+            creditsRemaining: nil,
+            codexCreditLimit: nil,
+            accountPlan: nil)
+        let subscription = OpenAISubscriptionMetadata.parse(
+            activeUntil: "2026-08-20T14:30:07Z",
+            willRenew: false)
+
+        let snapshot = OpenAIDashboardFetcher.snapshotByMergingAPI(
+            apiData: apiData,
+            verifiedEmail: "user@example.com",
+            subscription: subscription,
+            previous: previous,
+            updatedAt: Date(timeIntervalSince1970: 2))
+
+        #expect(snapshot.subscriptionExpiresAt != nil)
+        #expect(snapshot.subscriptionRenewsAt == nil)
+    }
+
+    @Test
+    func `page field subscription replacement clears the mutually exclusive previous date`() {
+        let previous = OpenAIDashboardSnapshot(
+            signedInEmail: "user@example.com",
+            codeReviewRemainingPercent: nil,
+            creditEvents: [],
+            dailyBreakdown: [],
+            usageBreakdown: [],
+            creditsPurchaseURL: nil,
+            subscriptionRenewsAt: Date(timeIntervalSince1970: 1_800_000_000),
+            updatedAt: Date(timeIntervalSince1970: 1))
+        let incoming = OpenAIDashboardSnapshot(
+            signedInEmail: "user@example.com",
+            codeReviewRemainingPercent: nil,
+            creditEvents: [],
+            dailyBreakdown: [],
+            usageBreakdown: [],
+            creditsPurchaseURL: nil,
+            subscriptionExpiresAt: Date(timeIntervalSince1970: 1_900_000_000),
+            updatedAt: Date(timeIntervalSince1970: 2))
+        let subscription = OpenAISubscriptionMetadata.parse(
+            activeUntil: "2026-08-20T14:30:07Z",
+            willRenew: false)
+
+        let snapshot = OpenAIDashboardFetcher.fillingMissingPageFields(
+            incoming,
+            from: previous,
+            subscription: subscription)
+
+        #expect(snapshot.subscriptionExpiresAt != nil)
+        #expect(snapshot.subscriptionRenewsAt == nil)
+    }
+
+    @Test
     func `empty scrape keeps previous page history`() {
         let previous = OpenAIDashboardSnapshot(
             signedInEmail: "keep@example.com",

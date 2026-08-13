@@ -56,16 +56,27 @@ extension OpenAIDashboardFetcher {
             creditsRemaining: apiData.creditsRemaining ?? previous?.creditsRemaining,
             codexCreditLimit: apiData.codexCreditLimit ?? previous?.codexCreditLimit,
             accountPlan: apiData.accountPlan ?? previous?.accountPlan,
-            subscriptionExpiresAt: subscription?.expiresAt ?? previous?.subscriptionExpiresAt,
-            subscriptionRenewsAt: subscription?.renewsAt ?? previous?.subscriptionRenewsAt,
+            subscriptionExpiresAt: subscription == nil
+                ? previous?.subscriptionExpiresAt
+                : subscription?.expiresAt,
+            subscriptionRenewsAt: subscription == nil
+                ? previous?.subscriptionRenewsAt
+                : subscription?.renewsAt,
             updatedAt: updatedAt)
     }
 
     nonisolated static func fillingMissingPageFields(
         _ snapshot: OpenAIDashboardSnapshot,
-        from previous: OpenAIDashboardSnapshot?) -> OpenAIDashboardSnapshot
+        from previous: OpenAIDashboardSnapshot?,
+        subscription: OpenAISubscriptionMetadata? = nil) -> OpenAIDashboardSnapshot
     {
         guard let previous else { return snapshot }
+        let subscriptionExpiresAt = subscription == nil
+            ? snapshot.subscriptionExpiresAt ?? previous.subscriptionExpiresAt
+            : snapshot.subscriptionExpiresAt
+        let subscriptionRenewsAt = subscription == nil
+            ? snapshot.subscriptionRenewsAt ?? previous.subscriptionRenewsAt
+            : snapshot.subscriptionRenewsAt
         return OpenAIDashboardSnapshot(
             signedInEmail: snapshot.signedInEmail ?? previous.signedInEmail,
             codeReviewRemainingPercent: snapshot.codeReviewRemainingPercent
@@ -81,8 +92,8 @@ extension OpenAIDashboardFetcher {
             creditsRemaining: snapshot.creditsRemaining ?? previous.creditsRemaining,
             codexCreditLimit: snapshot.codexCreditLimit ?? previous.codexCreditLimit,
             accountPlan: snapshot.accountPlan ?? previous.accountPlan,
-            subscriptionExpiresAt: snapshot.subscriptionExpiresAt ?? previous.subscriptionExpiresAt,
-            subscriptionRenewsAt: snapshot.subscriptionRenewsAt ?? previous.subscriptionRenewsAt,
+            subscriptionExpiresAt: subscriptionExpiresAt,
+            subscriptionRenewsAt: subscriptionRenewsAt,
             updatedAt: snapshot.updatedAt)
     }
 }

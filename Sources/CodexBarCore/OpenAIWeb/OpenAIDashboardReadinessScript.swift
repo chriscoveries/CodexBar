@@ -1,21 +1,35 @@
 #if os(macOS)
-/// Cheap dashboard readiness probe. Returns flags only — never `document.body.innerText`.
+/// Cheap dashboard readiness probe. Returns flags only and avoids whole-document rendered text.
 let openAIDashboardReadinessScript = """
 
     (() => {
       const textOf = el => {
-        const raw = el && (el.innerText || el.textContent) ? String(el.innerText || el.textContent) : '';
+        const raw = el && typeof el.textContent === 'string' ? el.textContent : '';
         return raw.trim();
+      };
+      const textFrom = selector => {
+        try {
+          return Array.from(document.querySelectorAll(selector))
+            .map(textOf)
+            .filter(Boolean)
+            .join(' ');
+        } catch {
+          return '';
+        }
       };
       const href = window.location ? String(window.location.href || '') : '';
       const title = document.title ? String(document.title || '') : '';
-      const sample = document.body ? String(document.body.innerText || '').slice(0, 2000) : '';
-      const lower = sample.toLowerCase();
-      const workspacePicker = sample.includes('Select a workspace');
+      const semanticText = textFrom(
+        'h1,h2,h3,h4,p,button,a,[role="button"],[role="heading"],[role="alert"],[role="status"],label');
+      const lower = semanticText.toLowerCase();
+      const workspaceText = textFrom('[role="dialog"],[role="listbox"],[role="option"]');
+      const workspacePicker =
+        lower.includes('select a workspace') || workspaceText.toLowerCase().includes('select a workspace');
       const cloudflareInterstitial =
         title.toLowerCase().includes('just a moment') ||
         lower.includes('checking your browser') ||
-        lower.includes('cloudflare');
+        lower.includes('cloudflare') ||
+        !!document.querySelector('#challenge-running,#challenge-stage,.cf-chl-widget,[data-ray]');
       const authSelector = [
         'input[type="email"]',
         'input[type="password"]',
@@ -38,7 +52,7 @@ let openAIDashboardReadinessScript = """
         try {
           const el = document.getElementById(id);
           if (!el) return null;
-          return JSON.parse(el.textContent || el.innerText || '');
+          return JSON.parse(typeof el.textContent === 'string' ? el.textContent : '');
         } catch {
           return null;
         }

@@ -47,6 +47,7 @@ extension OpenAIDashboardFetcher {
         var codeReviewFirstSeenAt: Date?
         var anyDashboardSignalAt: Date?
         var creditsHeaderVisibleAt: Date?
+        var usageBreakdownErrorFirstSeenAt: Date?
         var lastUsageBreakdownError: String?
 
         while Date() < deadline {
@@ -138,11 +139,21 @@ extension OpenAIDashboardFetcher {
             log("dashboard phase=extract elapsed=\(Self.phaseElapsed(since: startedAt))")
             let scrape = try await self.scrape(webView: webView)
             lastBody = scrape.bodyText ?? lastBody
-            lastUsageBreakdownError = scrape.usageBreakdownError ?? lastUsageBreakdownError
             let dashboardData = Self.parseDashboardScrape(
                 scrape,
                 apiData: apiData,
                 verifiedSignedInEmail: verifiedSignedInEmail)
+
+            if Self.updateAndShouldWaitForUsageBreakdownRecovery(
+                usageBreakdown: dashboardData.usageBreakdown,
+                error: scrape.usageBreakdownError,
+                firstSeenAt: &usageBreakdownErrorFirstSeenAt,
+                lastError: &lastUsageBreakdownError,
+                logger: log)
+            {
+                try await Self.sleepForDashboardPoll(.milliseconds(400))
+                continue
+            }
 
             if dashboardData.hasReturnableData,
                dashboardData.hasDashboardPageSignal || apiHasReturnableData
@@ -165,7 +176,8 @@ extension OpenAIDashboardFetcher {
                         codexCreditLimit: dashboardData.codexCreditLimit,
                         accountPlan: dashboardData.accountPlan,
                         subscription: subscription)),
-                    from: previousSnapshot)
+                    from: previousSnapshot,
+                    subscription: subscription)
             }
 
             try await Self.sleepForDashboardPoll(.milliseconds(500))
@@ -184,6 +196,26 @@ extension OpenAIDashboardFetcher {
             Self.writeDebugArtifacts(html: html, bodyText: lastBody, logger: log)
         }
         throw FetchError.noDashboardData(body: lastUsageBreakdownError ?? lastBody ?? "")
+    }
+
+    nonisolated static func updateAndShouldWaitForUsageBreakdownRecovery(
+        usageBreakdown: [OpenAIDashboardDailyBreakdown],
+        error: String?,
+        firstSeenAt: inout Date?,
+        lastError: inout String?,
+        logger: (String) -> Void) -> Bool
+    {
+        updateUsageBreakdownErrorState(
+            usageBreakdown: usageBreakdown,
+            error: error,
+            firstSeenAt: &firstSeenAt,
+            lastError: &lastError,
+            logger: logger)
+
+        guard usageBreakdown.isEmpty, let error, !error.isEmpty else { return false }
+        return Self.shouldWaitForUsageBreakdownRecovery(.init(
+            now: Date(),
+            errorFirstSeenAt: firstSeenAt))
     }
 }
 #endif
