@@ -2,6 +2,9 @@
 
 ## 0.49.6 — Unreleased
 
+### Fixed
+- Codex: preserve the wider retained cost history when Usage & Spend saves a 7- or 30-day projection under cache row/byte pressure, instead of pruning older rows and narrowing the persisted scan window (#2914, #2915). Thanks @thomaschow19!
+
 ## 0.49.5 — 2026-08-13
 
 ### Fixed
