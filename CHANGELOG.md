@@ -4,6 +4,7 @@
 
 ### Fixed
 - Codex: preserve the wider retained cost history when Usage & Spend saves a 7- or 30-day projection under cache row/byte pressure, instead of pruning older rows and narrowing the persisted scan window (#2914, #2915). Thanks @thomaschow19!
+- CLI (Linux): stop creating and invalidating a URLSession per Antigravity localhost request; per-request session teardown exercised a FoundationNetworking/libdispatch socket-lifecycle race that could crash serve daemons and one-shot usage runs with a use-after-free (#2243). Thanks @psl75011 for the crash forensics!
 
 ## 0.49.5 — 2026-08-13
 
