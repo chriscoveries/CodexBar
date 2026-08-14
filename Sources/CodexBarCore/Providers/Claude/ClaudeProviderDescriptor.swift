@@ -1008,6 +1008,22 @@ struct ClaudeCLIFetchStrategy: ProviderFetchStrategy {
     }
 
     func fetch(_ context: ProviderFetchContext) async throws -> ProviderFetchResult {
+        let binary = ClaudeCLIResolver.resolvedBinaryPath(environment: context.env)
+        let throttleKey = binary.flatMap {
+            ClaudeCLIUsageSpawnThrottle.key(
+                binary: $0,
+                environment: context.env,
+                useWebExtras: self.useWebExtras,
+                includePrepaidBalance: self.includePrepaidBalance && context.includeOptionalUsage)
+        }
+        if context.runtime == .app,
+           ProviderInteractionContext.current == .background,
+           !context.claudeOwnerCLIRecoveryOnly,
+           let throttleKey,
+           let cached = ClaudeCLIUsageSpawnThrottle.cachedResult(for: throttleKey)
+        {
+            return cached
+        }
         let keepAlive = context.settings?.debugKeepCLISessionsAlive ?? false
         let fetcher = ClaudeUsageFetcher(
             browserDetection: browserDetection,
@@ -1019,7 +1035,6 @@ struct ClaudeCLIFetchStrategy: ProviderFetchStrategy {
             webExtrasTimeout: context.webTimeout,
             includePrepaidBalance: self.includePrepaidBalance && context.includeOptionalUsage,
             keepCLISessionsAlive: keepAlive)
-        let binary = ClaudeCLIResolver.resolvedBinaryPath(environment: context.env)
         let backgroundAvailabilityMarker = binary.flatMap {
             ClaudeCLIBackgroundAvailability.captureMarker(binary: $0, environment: context.env)
         }
@@ -1041,11 +1056,15 @@ struct ClaudeCLIFetchStrategy: ProviderFetchStrategy {
         {
             ClaudeCLIBackgroundAvailability.establish(backgroundAvailabilityMarker)
         }
-        return self.makeResult(
+        let result = self.makeResult(
             // The PTY /usage panel exposes rendered percentages only, so CLI-sourced data carries an
             // explicit degraded-fidelity marker that the card surfaces as "via Claude CLI".
             usage: ClaudeOAuthFetchStrategy.snapshot(from: usage, dataConfidence: .percentOnly),
             sourceLabel: "claude")
+        if let throttleKey {
+            ClaudeCLIUsageSpawnThrottle.record(result, for: throttleKey)
+        }
+        return result
     }
 
     func shouldFallback(on error: Error, context: ProviderFetchContext) -> Bool {

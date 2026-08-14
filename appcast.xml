@@ -3,6 +3,28 @@
     <channel>
         <title>CodexBar</title>
         <item>
+            <title>0.49.6</title>
+            <pubDate>Fri, 14 Aug 2026 02:28:05 -0700</pubDate>
+            <link>https://raw.githubusercontent.com/steipete/CodexBar/main/appcast.xml</link>
+            <sparkle:version>120</sparkle:version>
+            <sparkle:shortVersionString>0.49.6</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[<h2>CodexBar 0.49.6</h2>
+<h3>Fixed</h3>
+<ul>
+<li>Antigravity: hide untouched model families from compact menu cards and widgets while keeping unknown-usage families visible and preserving every family in provider details and all-untouched states (#2875). Thanks @urda!</li>
+<li>Menu bar layout: show the weekly pace reserve token after 1% of the quota window has elapsed, even when learned history still predicts less than 1% expected usage (#2842, #2853). Thanks @Yuxin-Qiao!</li>
+<li>Amp: support monthly Megawatt and Gigawatt subscription renewals with separate Other and Orb usage pools, and reset the daily free tier at 8:00 PM New York time (#2601). Thanks @3kh0!</li>
+<li>Ollama: allow the <code>auto</code> and <code>web</code> usage sources on Linux when a non-empty manual Cookie header is configured, while keeping automatic browser-cookie imports gated to supported platforms (#2919). Thanks @dhabyx!</li>
+<li>Codex: preserve the wider retained cost history when Usage &amp; Spend saves a 7- or 30-day projection under cache row/byte pressure, instead of pruning older rows and narrowing the persisted scan window (#2914, #2915). Thanks @thomaschow19!</li>
+<li>Claude: reuse the last successful CLI usage result for 15 minutes during background refreshes instead of relaunching the ~280 MB Claude Code binary on every tick, cutting background disk reads and process churn for CLI-sourced usage; manual refreshes still probe immediately (#2916).</li>
+<li>CLI (Linux): stop creating and invalidating a URLSession per Antigravity localhost request; per-request session teardown exercised a FoundationNetworking/libdispatch socket-lifecycle race that could crash serve daemons and one-shot usage runs with a use-after-free (#2243). Thanks @psl75011 for the crash forensics!</li>
+</ul>
+<p><a href="https://github.com/steipete/CodexBar/blob/main/CHANGELOG.md">View full changelog</a></p>
+]]></description>
+            <enclosure url="https://github.com/steipete/CodexBar/releases/download/v0.49.6/CodexBar-macos-universal-0.49.6.zip" length="62968683" type="application/octet-stream" sparkle:edSignature="tQei0CcUIZ7vJnaJYtnHmcvQeURY4EpJDuq88+bnoWwGnK/3CswbMjuwS5aP+Il7XodRW3cofy9cOXfAS4PdCw=="/>
+        </item>
+        <item>
             <title>0.49.5</title>
             <pubDate>Thu, 13 Aug 2026 18:49:22 -0700</pubDate>
             <link>https://raw.githubusercontent.com/steipete/CodexBar/main/appcast.xml</link>
@@ -60,31 +82,6 @@
 <p><a href="https://github.com/steipete/CodexBar/blob/main/CHANGELOG.md">View full changelog</a></p>
 ]]></description>
             <enclosure url="https://github.com/steipete/CodexBar/releases/download/v0.49.4/CodexBar-macos-universal-0.49.4.zip" length="62255578" type="application/octet-stream" sparkle:edSignature="Ko7sTZHV2IA3mmkEgOl8JQHAaZtR4hFXj9n9rmE/ah1NFsWpi0nxItXidvm/QULXYXhvNh4rvi/4pF4Aiv/JDQ=="/>
-        </item>
-        <item>
-            <title>0.49.3</title>
-            <pubDate>Wed, 12 Aug 2026 11:12:32 -0700</pubDate>
-            <link>https://raw.githubusercontent.com/steipete/CodexBar/main/appcast.xml</link>
-            <sparkle:version>117</sparkle:version>
-            <sparkle:shortVersionString>0.49.3</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <description><![CDATA[<h2>CodexBar 0.49.3</h2>
-<h3>Fixed</h3>
-<ul>
-<li>CLI: load bundled provider-plugin resources when <code>codexbar</code> is installed as a symlink to the packaged helper or standalone executable (#2889). Thanks @djbclark for the report!</li>
-<li>Menu bar layout: restore dragging placed chips to reorder or remove them while preserving click and keyboard selection (#2582). Thanks @ikkira!</li>
-<li>Plan history: avoid atomically replacing byte-identical provider history files, reducing unnecessary disk writes (#2495). Thanks @guocity for the report!</li>
-<li>OpenRouter: restore remaining credit balance in saved custom menu-bar layouts and preserve the legacy Automatic display during migration (#2870). Thanks @yuansaysay!</li>
-<li>Claude: distinguish claude-swap account switching from ambient Claude Code sign-in in the menu without changing either action (#2874). Thanks @ynaamane!</li>
-<li>Codex: avoid full SQLite cost-cache rewrites for unchanged scans while preserving retention, freshness, and concurrent saves (#2852). Thanks @Yuxin-Qiao!</li>
-<li>Azure OpenAI: allow enough v1 completion budget for reasoning-capable deployment validation while keeping the probe bounded (#2867). Thanks @yilinxia!</li>
-<li>Codex: preserve request-level pricing tiers while reconciling forked usage, preventing day aggregates from triggering long-context rates (#2858). Thanks @thomaschow19!</li>
-<li>CLI: stop standalone version lookup from walking past the filesystem root and hanging with unbounded memory on affected macOS versions (#2856). Thanks @Manwholikespie!</li>
-<li>Cost store: prevent launch-time executor-assumption crashes on macOS 15 by keeping synchronous SQLite cache bridges on their validated serial queue (#2857). Thanks @Manwholikespie!</li>
-</ul>
-<p><a href="https://github.com/steipete/CodexBar/blob/main/CHANGELOG.md">View full changelog</a></p>
-]]></description>
-            <enclosure url="https://github.com/steipete/CodexBar/releases/download/v0.49.3/CodexBar-macos-universal-0.49.3.zip" length="62069832" type="application/octet-stream" sparkle:edSignature="QyFnhCSeLDZNxxMWL/CBJYEcNJ+WtYbqgfex48iQnXnPPmtGutW/UWWt7seFVkvL4lqGcvT6km4NAq7DgG1/AA=="/>
         </item>
         <item>
             <title>0.14.0</title>

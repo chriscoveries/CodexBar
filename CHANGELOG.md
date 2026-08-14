@@ -1,10 +1,16 @@
 # Changelog
 
-## 0.49.6 — Unreleased
+## 0.49.7 — Unreleased
+
+## 0.49.6 — 2026-08-14
 
 ### Fixed
+- Antigravity: hide untouched model families from compact menu cards and widgets while keeping unknown-usage families visible and preserving every family in provider details and all-untouched states (#2875). Thanks @urda!
+- Menu bar layout: show the weekly pace reserve token after 1% of the quota window has elapsed, even when learned history still predicts less than 1% expected usage (#2842, #2853). Thanks @Yuxin-Qiao!
+- Amp: support monthly Megawatt and Gigawatt subscription renewals with separate Other and Orb usage pools, and reset the daily free tier at 8:00 PM New York time (#2601). Thanks @3kh0!
 - Ollama: allow the `auto` and `web` usage sources on Linux when a non-empty manual Cookie header is configured, while keeping automatic browser-cookie imports gated to supported platforms (#2919). Thanks @dhabyx!
 - Codex: preserve the wider retained cost history when Usage & Spend saves a 7- or 30-day projection under cache row/byte pressure, instead of pruning older rows and narrowing the persisted scan window (#2914, #2915). Thanks @thomaschow19!
+- Claude: reuse the last successful CLI usage result for 15 minutes during background refreshes instead of relaunching the ~280 MB Claude Code binary on every tick, cutting background disk reads and process churn for CLI-sourced usage; manual refreshes still probe immediately (#2916).
 - CLI (Linux): stop creating and invalidating a URLSession per Antigravity localhost request; per-request session teardown exercised a FoundationNetworking/libdispatch socket-lifecycle race that could crash serve daemons and one-shot usage runs with a use-after-free (#2243). Thanks @psl75011 for the crash forensics!
 
 ## 0.49.5 — 2026-08-13
