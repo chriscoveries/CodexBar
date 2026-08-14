@@ -2,6 +2,9 @@
 
 ## 0.49.7 — Unreleased
 
+### Fixed
+- Codex: show Business accounts' monthly credit remaining in the provider switcher when no session or weekly rate-limit window is available, and keep quota indicators visible on the selected provider tab (#2926). Thanks @jey3dayo!
+
 ## 0.49.6 — 2026-08-14
 
 ### Fixed

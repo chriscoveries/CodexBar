@@ -19,6 +19,8 @@ extension StatusItemController {
 
         // Business accounts can expose only a monthly credit limit. Keep the existing
         // rate-limit lanes preferred, then use the projected monthly lane for the switcher bar.
+        // Provider-specific by design: Codex Business accounts report an included monthly credit limit without
+        // rate-limit windows, so only the Codex switcher tab needs this credit fallback.
         guard provider == .codex else { return nil }
         let projection = self.store.codexConsumerProjection(
             surface: .menuBar,
