@@ -2,6 +2,9 @@
 
 ## 0.49.6 — Unreleased
 
+### Fixed
+- Ollama: allow the `auto` and `web` usage sources on Linux when a non-empty manual Cookie header is configured, while keeping automatic browser-cookie imports gated to supported platforms (#2919). Thanks @dhabyx!
+
 ## 0.49.5 — 2026-08-13
 
 ### Fixed

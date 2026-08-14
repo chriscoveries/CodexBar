@@ -20,7 +20,7 @@ struct PlatformGatingTests {
     }
 
     @Test
-    func ollamaManualCookie_allowsAutoAndWebSources() {
+    func `ollama manual cookie allows auto and web sources`() {
         let manualCookieSettings = ProviderSettingsSnapshot.make(
             ollama: .init(cookieSource: .manual, manualCookieHeader: "__Secure-session=manual"))
 
