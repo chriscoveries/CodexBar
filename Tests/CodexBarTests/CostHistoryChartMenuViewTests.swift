@@ -4,6 +4,7 @@ import Testing
 @testable import CodexBar
 
 @MainActor
+// swiftlint:disable:next type_body_length
 struct CostHistoryChartMenuViewTests {
     @Test
     func `partial Codex token history is marked refreshing until coverage completes`() {
