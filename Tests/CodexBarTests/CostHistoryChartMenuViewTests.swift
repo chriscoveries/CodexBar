@@ -6,6 +6,44 @@ import Testing
 @MainActor
 struct CostHistoryChartMenuViewTests {
     @Test
+    func `partial Codex token history is marked refreshing until coverage completes`() {
+        #expect(CostHistoryChartMenuView._showsHistoryRefreshingForTesting(
+            provider: .codex,
+            metric: .tokens,
+            historyCoverageIsEstablished: false))
+        #expect(!CostHistoryChartMenuView._showsHistoryRefreshingForTesting(
+            provider: .codex,
+            metric: .tokens,
+            historyCoverageIsEstablished: true))
+        #expect(!CostHistoryChartMenuView._showsHistoryRefreshingForTesting(
+            provider: .codex,
+            metric: .cost,
+            historyCoverageIsEstablished: false))
+        #expect(!CostHistoryChartMenuView._showsHistoryRefreshingForTesting(
+            provider: .claude,
+            metric: .tokens,
+            historyCoverageIsEstablished: false))
+    }
+
+    @Test
+    func `chart day keys remain on the injected Hong Kong local day`() throws {
+        let hongKong = try #require(TimeZone(identifier: "Asia/Hong_Kong"))
+        var sourceCalendar = Calendar(identifier: .buddhist)
+        sourceCalendar.timeZone = hongKong
+        let date = try #require(CostHistoryChartMenuView._dateFromDayKeyForTesting(
+            "2026-08-14",
+            calendar: sourceCalendar))
+
+        var gregorian = Calendar(identifier: .gregorian)
+        gregorian.timeZone = hongKong
+        #expect(gregorian.dateComponents([.year, .month, .day, .hour], from: date) == DateComponents(
+            year: 2026,
+            month: 8,
+            day: 14,
+            hour: 12))
+    }
+
+    @Test
     func `Codex daily chart defaults to tokens while other providers preserve cost`() {
         let daily = [
             Self.dailyEntry(date: "2026-08-12", totalTokens: 1_250_000, costUSD: 1.25),
@@ -375,6 +413,17 @@ struct CostHistoryChartMenuViewTests {
             provider: .codex)
 
         #expect(before != after)
+    }
+
+    @Test
+    @MainActor
+    func `render fingerprint changes when history coverage completes`() {
+        let partial = Self.makeSnapshot(historyCoverageIsEstablished: false)
+        let complete = Self.makeSnapshot(historyCoverageIsEstablished: true)
+
+        #expect(
+            CostHistoryChartMenuView.renderFingerprint(from: partial, provider: .codex)
+                != CostHistoryChartMenuView.renderFingerprint(from: complete, provider: .codex))
     }
 
     @Test
@@ -808,6 +857,7 @@ struct CostHistoryChartMenuViewTests {
         currencyCode: String = "USD",
         historyDays: Int = 30,
         historyLabel: String? = nil,
+        historyCoverageIsEstablished: Bool = true,
         daily: [CostUsageDailyReport.Entry]? = nil,
         projects: [CostUsageProjectBreakdown]? = nil,
         sessions: [CostUsageSessionBreakdown] = []) -> CostUsageTokenSnapshot
@@ -819,6 +869,7 @@ struct CostHistoryChartMenuViewTests {
             last30DaysCostUSD: totalCostUSD ?? dailyCost,
             currencyCode: currencyCode,
             historyDays: historyDays,
+            historyCoverageIsEstablished: historyCoverageIsEstablished,
             historyLabel: historyLabel,
             daily: daily ?? [
                 CostUsageDailyReport.Entry(

@@ -63,6 +63,7 @@ struct CostHistoryChartMenuView: View {
     /// in the user's preferred currency while chart geometry stays in source values.
     private let costMultiplier: Double
     private let historyDays: Int
+    private let historyCoverageIsEstablished: Bool
     private let windowLabel: String?
     private let projects: [CostUsageProjectBreakdown]
     private let sessions: [CostUsageSessionBreakdown]
@@ -77,6 +78,7 @@ struct CostHistoryChartMenuView: View {
         currencyCode: String = "USD",
         costMultiplier: Double = 1,
         historyDays: Int = 30,
+        historyCoverageIsEstablished: Bool = true,
         windowLabel: String? = nil,
         projects: [CostUsageProjectBreakdown] = [],
         sessions: [CostUsageSessionBreakdown] = [],
@@ -88,6 +90,7 @@ struct CostHistoryChartMenuView: View {
         self.currencyCode = currencyCode
         self.costMultiplier = costMultiplier
         self.historyDays = max(1, min(365, historyDays))
+        self.historyCoverageIsEstablished = historyCoverageIsEstablished
         self.windowLabel = windowLabel
         self.projects = projects
         self.sessions = sessions
@@ -101,6 +104,10 @@ struct CostHistoryChartMenuView: View {
             ? self.metric
             : Self.defaultMetric(provider: self.provider, daily: self.daily)
         let model = Self.makeModel(provider: self.provider, daily: self.daily, metric: activeMetric)
+        let showsHistoryRefreshing = Self.showsHistoryRefreshing(
+            provider: self.provider,
+            metric: activeMetric,
+            historyCoverageIsEstablished: self.historyCoverageIsEstablished)
         let selectedDateKey = self.selectedDateKey.flatMap { model.pointsByDateKey[$0] == nil ? nil : $0 }
             ?? Self.defaultSelectedDateKey(model: model)
         VStack(alignment: .leading, spacing: Self.outerSpacing) {
@@ -110,19 +117,27 @@ struct CostHistoryChartMenuView: View {
                     .foregroundStyle(.secondary)
                     .accessibilityLabel(L("No data available"))
             } else {
-                if availableMetrics.count > 1 {
+                if availableMetrics.count > 1 || showsHistoryRefreshing {
                     HStack {
-                        Spacer(minLength: 0)
-                        Picker(L("Display mode"), selection: self.$metric) {
-                            ForEach(availableMetrics, id: \.self) { metric in
-                                Text(metric.title).tag(metric)
-                            }
+                        if showsHistoryRefreshing {
+                            Text(L("Refreshing"))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .accessibilityLabel(L("Refreshing"))
                         }
-                        .labelsHidden()
-                        .pickerStyle(.segmented)
-                        .controlSize(.small)
-                        .frame(width: Self.metricPickerWidth)
-                        .accessibilityLabel(L("Display mode"))
+                        Spacer(minLength: 0)
+                        if availableMetrics.count > 1 {
+                            Picker(L("Display mode"), selection: self.$metric) {
+                                ForEach(availableMetrics, id: \.self) { metric in
+                                    Text(metric.title).tag(metric)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.segmented)
+                            .controlSize(.small)
+                            .frame(width: Self.metricPickerWidth)
+                            .accessibilityLabel(L("Display mode"))
+                        }
                     }
                     .frame(height: Self.metricPickerHeight)
                 }
@@ -622,21 +637,29 @@ struct CostHistoryChartMenuView: View {
         return Color(red: color.red, green: color.green, blue: color.blue)
     }
 
-    private static func dateFromDayKey(_ key: String) -> Date? {
+    private static func dateFromDayKey(
+        _ key: String,
+        calendar sourceCalendar: Calendar = .autoupdatingCurrent) -> Date?
+    {
         let parts = key.split(separator: "-")
         guard parts.count == 3,
               let year = Int(parts[0]),
               let month = Int(parts[1]),
               let day = Int(parts[2]) else { return nil }
 
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = sourceCalendar.timeZone
         var comps = DateComponents()
-        comps.calendar = Calendar.current
-        comps.timeZone = TimeZone.current
+        comps.calendar = calendar
+        comps.timeZone = calendar.timeZone
         comps.year = year
         comps.month = month
         comps.day = day
         comps.hour = 12
-        return comps.date
+        guard let date = comps.date else { return nil }
+        let resolved = calendar.dateComponents([.year, .month, .day], from: date)
+        guard resolved.year == year, resolved.month == month, resolved.day == day else { return nil }
+        return date
     }
 
     private static func chartPointInput(
@@ -669,6 +692,14 @@ struct CostHistoryChartMenuView: View {
             return .cost
         }
         return available.first ?? .cost
+    }
+
+    private static func showsHistoryRefreshing(
+        provider: UsageProvider,
+        metric: ChartMetric,
+        historyCoverageIsEstablished: Bool) -> Bool
+    {
+        provider == .codex && metric == .tokens && !historyCoverageIsEstablished
     }
 
     private static func peakPoint(model: Model) -> Point? {
@@ -999,6 +1030,7 @@ extension CostHistoryChartMenuView {
         let currencyCode: String
         let costMultiplierBitPattern: UInt64
         let historyDays: Int
+        let historyCoverageIsEstablished: Bool
         let windowLabel: String?
         let totalCostBitPattern: UInt64?
         let hasDailyEntries: Bool
@@ -1064,6 +1096,7 @@ extension CostHistoryChartMenuView {
             currencyCode: displayCurrencyCode ?? snapshot.currencyCode,
             costMultiplierBitPattern: displayCostMultiplier.bitPattern,
             historyDays: snapshot.historyDays,
+            historyCoverageIsEstablished: snapshot.historyCoverageIsEstablished,
             windowLabel: snapshot.historyLabel,
             totalCostBitPattern: snapshot.last30DaysCostUSD.map(\.bitPattern),
             hasDailyEntries: !snapshot.daily.isEmpty,
@@ -1134,6 +1167,21 @@ extension CostHistoryChartMenuView {
             provider: provider,
             daily: daily,
             metric: self.defaultMetric(provider: provider, daily: daily)))
+    }
+
+    static func _showsHistoryRefreshingForTesting(
+        provider: UsageProvider,
+        metric: ChartMetric,
+        historyCoverageIsEstablished: Bool) -> Bool
+    {
+        self.showsHistoryRefreshing(
+            provider: provider,
+            metric: metric,
+            historyCoverageIsEstablished: historyCoverageIsEstablished)
+    }
+
+    static func _dateFromDayKeyForTesting(_ key: String, calendar: Calendar) -> Date? {
+        self.dateFromDayKey(key, calendar: calendar)
     }
 
     static func _axisDatesForTesting(provider: UsageProvider, daily: [DailyEntry]) -> [Date] {
