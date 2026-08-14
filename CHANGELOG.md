@@ -3,6 +3,7 @@
 ## 0.49.5 — Unreleased
 
 ### Fixed
+- OpenCode: show pay-as-you-go monthly spend and prepaid balance instead of failing with HTTP 500 when the workspace has no subscription, without misclassifying subscription accounts after a transient API failure (#2504, fixes #2697). Thanks @epoch-chrono for the fix and @CripWal for the report!
 - Grok: restore web billing after grok.com's credits endpoint began requiring a browser-held WKE credential, by reading the weekly credit pool from the Grok CLI billing API with the local grok login token, and clarify the cookie-rejection guidance (#2812). Thanks @wxhnewStar!
 - Settings: keep the Settings window on the active Stage Manager stage/Space via `.moveToActiveSpace`, and key only newly presented Settings/update dialogs when Dock promotion runs (#2833). Thanks @KGBos!
 - Codex: keep large Usage & Spend history indexing bounded, durable across relaunches, and resumable after appends without replaying completed sessions (#2815, #2849). Thanks @Quicksaver for the fix and @Yoroin, @xiehaibin18, and @Astro-Han for reports and diagnostics!
