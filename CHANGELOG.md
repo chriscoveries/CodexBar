@@ -4,6 +4,7 @@
 
 ### Added
 - Cost history: add a Tokens/Cost switch to daily status-menu charts, defaulting Codex to exact local token totals and marking incomplete local history as refreshing (#2930). Thanks @Carl723000!
+- Menu bar layout: add a compact run-out forecast token that shows only the predicted duration (#2865). Thanks @gnattu!
 
 ### Fixed
 - Grok: label the current weekly credit window near reset instead of falling back to the ambiguous “Credits” title (#2929). Thanks @byteofsam!

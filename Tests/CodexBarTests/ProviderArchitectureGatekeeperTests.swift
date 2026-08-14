@@ -1753,7 +1753,7 @@ struct ProviderArchitectureGatekeeperTests {
             reason: "This exact shared renderer maps provider-owned presentation data into the generic UI model."),
         AllowedProviderConstruct(
             path: "Sources/CodexBar/MenuBarLayout.swift",
-            line: 270,
+            line: 271,
             anchor: "ProviderDescriptorRegistry.descriptor(for: provider ?? .codex).presentation.primarySemanticWindow)",
             expectedProviderIDs: ["codex"],
             expectedReferenceCount: 2,
@@ -1761,7 +1761,7 @@ struct ProviderArchitectureGatekeeperTests {
             reason: "This exact shared construct dispatches a provider-owned capability at the generic integration boundary."),
         AllowedProviderConstruct(
             path: "Sources/CodexBar/MenuBarLayoutEditor.swift",
-            line: 650,
+            line: 654,
             anchor: "let provider = self.provider ?? .codex",
             expectedProviderIDs: ["codex"],
             expectedReferenceCount: 1,
@@ -1769,7 +1769,7 @@ struct ProviderArchitectureGatekeeperTests {
             reason: "This exact shared construct dispatches a provider-owned capability at the generic integration boundary."),
         AllowedProviderConstruct(
             path: "Sources/CodexBar/MenuBarLayoutEditor.swift",
-            line: 676,
+            line: 680,
             anchor: "if provider == .codex,",
             expectedProviderIDs: ["codex"],
             expectedReferenceCount: 1,
