@@ -686,6 +686,7 @@ struct CostHistoryChartMenuView: View {
 
     private static func defaultMetric(provider: UsageProvider, daily: [DailyEntry]) -> ChartMetric {
         let available = self.availableMetrics(provider: provider, daily: daily)
+        // Provider-specific by design: Codex exposes exact local token totals, so its chart defaults to tokens.
         if provider == .codex, available.contains(.tokens) {
             return .tokens
         }
@@ -700,6 +701,7 @@ struct CostHistoryChartMenuView: View {
         metric: ChartMetric,
         historyCoverageIsEstablished: Bool) -> Bool
     {
+        // Provider-specific by design: only Codex exposes incremental local-history coverage for token scans.
         provider == .codex && metric == .tokens && !historyCoverageIsEstablished
     }
 
