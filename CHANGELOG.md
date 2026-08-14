@@ -2,6 +2,9 @@
 
 ## 0.49.7 — Unreleased
 
+### Fixed
+- Gemini: offer the Antigravity provider migration when local OAuth recovery cannot use Gemini CLI and an `agy` or Antigravity installation is available (#2808). Thanks @axisrow!
+
 ## 0.49.6 — 2026-08-14
 
 ### Fixed
