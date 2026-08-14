@@ -3,6 +3,7 @@
 ## 0.49.6 — Unreleased
 
 ### Fixed
+- Menu bar layout: show the weekly pace reserve token after 1% of the quota window has elapsed, even when learned history still predicts less than 1% expected usage (#2842, #2853). Thanks @Yuxin-Qiao!
 - Amp: support monthly Megawatt and Gigawatt subscription renewals with separate Other and Orb usage pools, and reset the daily free tier at 8:00 PM New York time (#2601). Thanks @3kh0!
 - Ollama: allow the `auto` and `web` usage sources on Linux when a non-empty manual Cookie header is configured, while keeping automatic browser-cookie imports gated to supported platforms (#2919). Thanks @dhabyx!
 - Codex: preserve the wider retained cost history when Usage & Spend saves a 7- or 30-day projection under cache row/byte pressure, instead of pruning older rows and narrowing the persisted scan window (#2914, #2915). Thanks @thomaschow19!
