@@ -263,9 +263,22 @@ struct UsageStoreCoverageTests {
             provider: .amp)
 
         let model = ProvidersPane(settings: settings, store: store)._test_menuCardModel(for: .amp)
+        let descriptor = MenuDescriptor.build(
+            provider: .amp,
+            store: store,
+            settings: settings,
+            account: AccountInfo(email: nil, plan: nil),
+            updateReady: false,
+            includeContextualActions: false,
+            now: now)
+        let menuLines = descriptor.sections.flatMap(\.entries).compactMap { entry -> String? in
+            guard case let .text(text, _) = entry else { return nil }
+            return text
+        }
 
         #expect(model.metrics.map(\.title) == ["Other usage", "Orb usage", "Amp Free"])
         #expect(model.planText == "Megawatt")
+        #expect(menuLines.contains { $0.hasPrefix("Amp Free:") })
     }
 
     @Test

@@ -151,7 +151,8 @@ extension AmpUsageSnapshot {
 
     private static func nextFreeTierReset(after date: Date) -> Date? {
         var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: -4 * 60 * 60) ?? .gmt
+        guard let timeZone = TimeZone(identifier: "America/New_York") else { return nil }
+        calendar.timeZone = timeZone
         return calendar.nextDate(
             after: date,
             matching: DateComponents(hour: 20),
