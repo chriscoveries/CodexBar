@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.49.6 — Unreleased
+## 0.49.6 — 2026-08-14
 
 ### Fixed
 - Antigravity: hide untouched model families from compact menu cards and widgets while keeping unknown-usage families visible and preserving every family in provider details and all-untouched states (#2875). Thanks @urda!
