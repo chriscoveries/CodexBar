@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.49.5 — Unreleased
+## 0.49.5 — 2026-08-13
 
 ### Fixed
 - OpenCode: show pay-as-you-go monthly spend and prepaid balance instead of failing with HTTP 500 when the workspace has no subscription, without misclassifying subscription accounts after a transient API failure (#2504, fixes #2697). Thanks @epoch-chrono for the fix and @CripWal for the report!
