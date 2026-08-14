@@ -232,7 +232,7 @@ struct CodexConsumerProjectionTests {
     }
 
     @Test
-    func `monthly credit limit projects as the automatic meter when rate windows are absent`() throws {
+    func `monthly credit limit projects as the automatic meter before usage loads`() throws {
         let store = self.makeStore(suite: "CodexConsumerProjectionTests-monthly-credit-meter")
         let now = Date(timeIntervalSince1970: 1_700_000_000)
         let monthlyLimit = CodexCreditLimitSnapshot(
@@ -242,9 +242,7 @@ struct CodexConsumerProjectionTests {
             resetsAt: now.addingTimeInterval(14 * 24 * 60 * 60),
             updatedAt: now)
 
-        store._setSnapshotForTesting(
-            UsageSnapshot(primary: nil, secondary: nil, updatedAt: now),
-            provider: .codex)
+        store._setSnapshotForTesting(nil, provider: .codex)
         store.credits = CreditsSnapshot(
             remaining: 0,
             events: [],
@@ -263,6 +261,57 @@ struct CodexConsumerProjectionTests {
             windowMinutes: monthly.windowMinutes,
             sessionLabel: "Session",
             weeklyLabel: "Weekly") == "Monthly credit limit")
+    }
+
+    @Test
+    func `monthly credit limit projects when usage has no rate windows`() {
+        let store = self.makeStore(suite: "CodexConsumerProjectionTests-empty-usage-credit-meter")
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+
+        store._setSnapshotForTesting(
+            UsageSnapshot(primary: nil, secondary: nil, updatedAt: now),
+            provider: .codex)
+        store.credits = CreditsSnapshot(
+            remaining: 0,
+            events: [],
+            updatedAt: now,
+            codexCreditLimit: CodexCreditLimitSnapshot(
+                used: 27,
+                limit: 100,
+                remainingPercent: 73,
+                resetsAt: nil,
+                updatedAt: now))
+
+        let projection = store.codexConsumerProjection(surface: .menuBar, now: now)
+
+        #expect(projection.visibleRateLanes == [.monthly])
+        #expect(projection.rateWindow(for: .monthly)?.remainingPercent == 73)
+    }
+
+    @Test
+    func `monthly credit limit remains a credits detail on the live card`() {
+        let store = self.makeStore(suite: "CodexConsumerProjectionTests-live-card-credits")
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+
+        store._setSnapshotForTesting(
+            UsageSnapshot(primary: nil, secondary: nil, updatedAt: now),
+            provider: .codex)
+        store.credits = CreditsSnapshot(
+            remaining: 0,
+            events: [],
+            updatedAt: now,
+            codexCreditLimit: CodexCreditLimitSnapshot(
+                used: 27,
+                limit: 100,
+                remainingPercent: 73,
+                resetsAt: nil,
+                updatedAt: now))
+
+        let projection = store.codexConsumerProjection(surface: .liveCard, now: now)
+
+        #expect(projection.credits != nil)
+        #expect(projection.rateWindow(for: .monthly) == nil)
+        #expect(projection.visibleRateLanes.isEmpty)
     }
 
     @Test
