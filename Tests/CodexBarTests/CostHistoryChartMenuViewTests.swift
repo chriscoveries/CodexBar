@@ -6,6 +6,54 @@ import Testing
 @MainActor
 struct CostHistoryChartMenuViewTests {
     @Test
+    func `Codex daily chart defaults to tokens while other providers preserve cost`() {
+        let daily = [
+            Self.dailyEntry(date: "2026-08-12", totalTokens: 1_250_000, costUSD: 1.25),
+        ]
+
+        #expect(CostHistoryChartMenuView._defaultMetricForTesting(provider: .codex, daily: daily) == .tokens)
+        #expect(CostHistoryChartMenuView._defaultMetricForTesting(provider: .claude, daily: daily) == .cost)
+    }
+
+    @Test
+    func `Codex daily chart falls back to cost when token totals are unavailable`() {
+        let daily = [
+            Self.dailyEntry(date: "2026-08-12", totalTokens: nil, costUSD: 1.25),
+        ]
+
+        #expect(CostHistoryChartMenuView._availableMetricsForTesting(provider: .codex, daily: daily) == [.cost])
+        #expect(CostHistoryChartMenuView._defaultMetricForTesting(provider: .codex, daily: daily) == .cost)
+    }
+
+    @Test
+    func `token chart keeps exact daily totals even when a cost estimate is unavailable`() {
+        let daily = [
+            Self.dailyEntry(date: "2026-08-12", totalTokens: 1_250_000, costUSD: 1.25),
+            Self.dailyEntry(date: "2026-08-13", totalTokens: 2_500_000, costUSD: nil),
+        ]
+
+        #expect(
+            CostHistoryChartMenuView._availableMetricsForTesting(provider: .codex, daily: daily)
+                == [.tokens, .cost])
+        #expect(
+            CostHistoryChartMenuView._chartValuesForTesting(
+                provider: .codex,
+                daily: daily,
+                metric: .tokens) == [1_250_000, 2_500_000])
+        #expect(
+            CostHistoryChartMenuView._chartValuesForTesting(
+                provider: .codex,
+                daily: daily,
+                metric: .cost) == [1.25])
+    }
+
+    @Test
+    func `token axis uses compact token labels instead of currency`() {
+        #expect(CostHistoryChartMenuView._yAxisTokenStringForTesting(1_250_000) == "1.2M")
+        #expect(!CostHistoryChartMenuView._yAxisTokenStringForTesting(1_250_000).contains("$"))
+    }
+
+    @Test
     func `Codex chart explains that its token estimate is not a subscription bill`() {
         #expect(
             CostHistoryChartMenuView.estimateDisclaimer(provider: .codex)
@@ -470,16 +518,16 @@ struct CostHistoryChartMenuViewTests {
 
     @Test
     @MainActor
-    func `render fingerprint excludes invalid daily rows that the chart drops`() {
+    func `render fingerprint excludes rows without a valid token or cost metric`() {
         let invalidRows = [
-            Self.dailyEntry(date: "2026-06-07", costUSD: nil),
-            Self.dailyEntry(date: "2026-06-08", costUSD: -1),
-            Self.dailyEntry(date: "not-a-date", costUSD: 1),
+            Self.dailyEntry(date: "2026-06-07", totalTokens: nil, costUSD: nil),
+            Self.dailyEntry(date: "2026-06-08", totalTokens: -1, costUSD: -1),
+            Self.dailyEntry(date: "not-a-date", totalTokens: 150, costUSD: 1),
         ]
         let differentInvalidRows = [
-            Self.dailyEntry(date: "2026-06-09", costUSD: nil),
-            Self.dailyEntry(date: "2026-06-10", costUSD: -99),
-            Self.dailyEntry(date: "still-not-a-date", costUSD: 99),
+            Self.dailyEntry(date: "2026-06-09", totalTokens: nil, costUSD: nil),
+            Self.dailyEntry(date: "2026-06-10", totalTokens: -99, costUSD: -99),
+            Self.dailyEntry(date: "still-not-a-date", totalTokens: 999, costUSD: 99),
         ]
         let empty = Self.fingerprint(daily: [])
 
@@ -735,11 +783,19 @@ struct CostHistoryChartMenuViewTests {
     }
 
     private static func dailyEntry(date: String, costUSD: Double?) -> CostUsageDailyReport.Entry {
+        self.dailyEntry(date: date, totalTokens: 150, costUSD: costUSD)
+    }
+
+    private static func dailyEntry(
+        date: String,
+        totalTokens: Int?,
+        costUSD: Double?) -> CostUsageDailyReport.Entry
+    {
         CostUsageDailyReport.Entry(
             date: date,
             inputTokens: 100,
             outputTokens: 50,
-            totalTokens: 150,
+            totalTokens: totalTokens,
             costUSD: costUSD,
             modelsUsed: nil,
             modelBreakdowns: nil)
