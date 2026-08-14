@@ -33,6 +33,7 @@ struct CostHistoryChartMenuViewTests {
         sourceCalendar.timeZone = hongKong
         let date = try #require(CostHistoryChartMenuView._dateFromDayKeyForTesting(
             "2026-08-14",
+            provider: .codex,
             calendar: sourceCalendar))
 
         var gregorian = Calendar(identifier: .gregorian)
@@ -41,7 +42,39 @@ struct CostHistoryChartMenuViewTests {
             year: 2026,
             month: 8,
             day: 14,
-            hour: 12))
+            hour: 0))
+    }
+
+    @Test
+    func `chart day keys reject noncanonical and impossible dates`() throws {
+        let hongKong = try #require(TimeZone(identifier: "Asia/Hong_Kong"))
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = hongKong
+
+        #expect(CostHistoryChartMenuView._dateFromDayKeyForTesting(
+            "2026-8-14",
+            provider: .codex,
+            calendar: calendar) == nil)
+        #expect(CostHistoryChartMenuView._dateFromDayKeyForTesting(
+            "2026-02-30",
+            provider: .codex,
+            calendar: calendar) == nil)
+    }
+
+    @Test
+    func `Mistral UTC day keys map to the same local day as spend activity`() throws {
+        let losAngeles = try #require(TimeZone(identifier: "America/Los_Angeles"))
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = losAngeles
+        let date = try #require(CostHistoryChartMenuView._dateFromDayKeyForTesting(
+            "2026-08-14",
+            provider: .mistral,
+            calendar: calendar))
+
+        #expect(calendar.dateComponents([.year, .month, .day], from: date) == DateComponents(
+            year: 2026,
+            month: 8,
+            day: 13))
     }
 
     @Test
@@ -84,6 +117,26 @@ struct CostHistoryChartMenuViewTests {
                 provider: .codex,
                 daily: daily,
                 metric: .cost) == [1.25])
+    }
+
+    @Test
+    func `token chart does not add cached input to the canonical total`() {
+        let daily = [
+            CostUsageDailyReport.Entry(
+                date: "2026-08-12",
+                inputTokens: 100,
+                outputTokens: 50,
+                cacheReadTokens: 80,
+                totalTokens: 150,
+                costUSD: 1.25,
+                modelsUsed: nil,
+                modelBreakdowns: nil),
+        ]
+
+        #expect(CostHistoryChartMenuView._chartValuesForTesting(
+            provider: .codex,
+            daily: daily,
+            metric: .tokens) == [150])
     }
 
     @Test
@@ -218,6 +271,54 @@ struct CostHistoryChartMenuViewTests {
         #expect(compact.rowHeight == 36)
         #expect(expanded.rowHeight == 44)
         #expect(compact.rowCount == expanded.rowCount)
+    }
+
+    @Test
+    func `metric switch reserves one stable detail layout`() {
+        let tokenOnly = CostUsageDailyReport.Entry(
+            date: "2026-06-07",
+            inputTokens: 100,
+            outputTokens: 50,
+            totalTokens: 150,
+            costUSD: nil,
+            modelsUsed: (0..<5).map { "token-model-\($0)" },
+            modelBreakdowns: (0..<5).map {
+                CostUsageDailyReport.ModelBreakdown(
+                    modelName: "token-model-\($0)",
+                    costUSD: nil,
+                    totalTokens: 30,
+                    standardCostUSD: 0.1)
+            })
+        let costOnly = CostUsageDailyReport.Entry(
+            date: "2026-06-08",
+            inputTokens: nil,
+            outputTokens: nil,
+            totalTokens: nil,
+            costUSD: 1,
+            modelsUsed: ["cost-model"],
+            modelBreakdowns: [
+                CostUsageDailyReport.ModelBreakdown(
+                    modelName: "cost-model",
+                    costUSD: 1,
+                    totalTokens: nil),
+            ])
+        let daily = [tokenOnly, costOnly]
+
+        let tokens = CostHistoryChartMenuView._detailViewportConfigurationForTesting(
+            provider: .codex,
+            daily: daily,
+            metric: .tokens)
+        let cost = CostHistoryChartMenuView._detailViewportConfigurationForTesting(
+            provider: .codex,
+            daily: daily,
+            metric: .cost)
+
+        #expect(tokens.rowCount == cost.rowCount)
+        #expect(tokens.hasOverflow == cost.hasOverflow)
+        #expect(tokens.rowHeight == cost.rowHeight)
+        #expect(tokens.rowCount == 4)
+        #expect(tokens.hasOverflow)
+        #expect(tokens.rowHeight == 44)
     }
 
     @Test

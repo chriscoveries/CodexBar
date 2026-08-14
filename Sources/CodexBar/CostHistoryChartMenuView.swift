@@ -56,6 +56,12 @@ struct CostHistoryChartMenuView: View {
         let rows: [DetailRow]
     }
 
+    private struct DetailLayout {
+        let viewportRowCount: Int
+        let hasOverflow: Bool
+        let rowHeight: CGFloat
+    }
+
     private let provider: UsageProvider
     private let daily: [DailyEntry]
     private let totalCostUSD: Double?
@@ -546,6 +552,7 @@ struct CostHistoryChartMenuView: View {
         metric: ChartMetric) -> Model
     {
         let sorted = daily.sorted { lhs, rhs in lhs.date < rhs.date }
+        let detailLayout = self.detailLayout(provider: provider, daily: sorted)
         var points: [Point] = []
         points.reserveCapacity(sorted.count)
 
@@ -560,10 +567,10 @@ struct CostHistoryChartMenuView: View {
 
         var peak: (key: String, value: Double)?
         var maxValue: Double = 0
-        var maxDetailRows = 0
-        var hasModeDetails = false
         for entry in sorted {
-            guard let (value, date) = self.chartPointInput(for: entry, metric: metric) else { continue }
+            guard let (value, date) = self.chartPointInput(for: entry, provider: provider, metric: metric) else {
+                continue
+            }
             let point = Point(
                 date: date,
                 value: value,
@@ -574,9 +581,6 @@ struct CostHistoryChartMenuView: View {
             pointsByKey[entry.date] = point
             entriesByKey[entry.date] = entry
             dateKeys.append((entry.date, date))
-            let modelBreakdowns = entry.modelBreakdowns ?? []
-            maxDetailRows = max(maxDetailRows, modelBreakdowns.count)
-            hasModeDetails = hasModeDetails || modelBreakdowns.contains { Self.hasModeSubtitle($0) }
             if let cur = peak {
                 if value > cur.value {
                     peak = (entry.date, value)
@@ -605,9 +609,9 @@ struct CostHistoryChartMenuView: View {
             barColor: barColor,
             peakKey: maxValue > 0 ? peak?.key : nil,
             maxValue: maxValue,
-            detailViewportRowCount: min(maxDetailRows, self.maxVisibleDetailLines),
-            hasDetailOverflow: maxDetailRows > self.maxVisibleDetailLines,
-            detailRowHeight: hasModeDetails ? self.expandedDetailRowHeight : self.compactDetailRowHeight)
+            detailViewportRowCount: detailLayout.viewportRowCount,
+            hasDetailOverflow: detailLayout.hasOverflow,
+            detailRowHeight: detailLayout.rowHeight)
     }
 
     private static func axisLabelPlacement(for dates: [Date]) -> AxisLabelPlacement {
@@ -640,31 +644,39 @@ struct CostHistoryChartMenuView: View {
 
     private static func dateFromDayKey(
         _ key: String,
+        provider: UsageProvider,
         calendar sourceCalendar: Calendar = .autoupdatingCurrent) -> Date?
     {
+        let bytes = Array(key.utf8)
+        let digitIndices = [0, 1, 2, 3, 5, 6, 8, 9]
+        guard bytes.count == 10,
+              bytes[4] == 45,
+              bytes[7] == 45,
+              digitIndices.allSatisfy({ (48...57).contains(bytes[$0]) })
+        else { return nil }
+
         let parts = key.split(separator: "-")
         guard parts.count == 3,
               let year = Int(parts[0]),
               let month = Int(parts[1]),
               let day = Int(parts[2]) else { return nil }
 
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = sourceCalendar.timeZone
-        var comps = DateComponents()
-        comps.calendar = calendar
-        comps.timeZone = calendar.timeZone
-        comps.year = year
-        comps.month = month
-        comps.day = day
-        comps.hour = 12
-        guard let date = comps.date else { return nil }
-        let resolved = calendar.dateComponents([.year, .month, .day], from: date)
-        guard resolved.year == year, resolved.month == month, resolved.day == day else { return nil }
-        return date
+        let displayCalendar = self.gregorianCalendar(timeZone: sourceCalendar.timeZone)
+        let bucketCalendar = self.bucketCalendar(provider: provider, displayCalendar: displayCalendar)
+        guard let date = bucketCalendar.date(from: DateComponents(year: year, month: month, day: day)) else {
+            return nil
+        }
+        guard bucketCalendar.dateComponents([.year, .month, .day], from: date) == DateComponents(
+            year: year,
+            month: month,
+            day: day)
+        else { return nil }
+        return displayCalendar.startOfDay(for: date)
     }
 
     private static func chartPointInput(
         for entry: DailyEntry,
+        provider: UsageProvider,
         metric: ChartMetric) -> (value: Double, date: Date)?
     {
         let value: Double? = switch metric {
@@ -674,14 +686,42 @@ struct CostHistoryChartMenuView: View {
             entry.costUSD.flatMap { $0 >= 0 ? $0 : nil }
         }
         guard let value else { return nil }
-        guard let date = self.dateFromDayKey(entry.date) else { return nil }
+        guard let date = self.dateFromDayKey(entry.date, provider: provider) else { return nil }
         return (value, date)
     }
 
-    private static func availableMetrics(provider _: UsageProvider, daily: [DailyEntry]) -> [ChartMetric] {
+    private static func availableMetrics(provider: UsageProvider, daily: [DailyEntry]) -> [ChartMetric] {
         ChartMetric.allCases.filter { metric in
-            daily.contains { self.chartPointInput(for: $0, metric: metric) != nil }
+            daily.contains { self.chartPointInput(for: $0, provider: provider, metric: metric) != nil }
         }
+    }
+
+    private static func detailLayout(provider: UsageProvider, daily: [DailyEntry]) -> DetailLayout {
+        let visibleEntries = daily.filter { entry in
+            ChartMetric.allCases.contains {
+                self.chartPointInput(for: entry, provider: provider, metric: $0) != nil
+            }
+        }
+        let breakdowns = visibleEntries.compactMap(\.modelBreakdowns)
+        let maxRows = breakdowns.map(\.count).max() ?? 0
+        let hasModeDetails = breakdowns.joined().contains(where: self.hasModeSubtitle)
+        return DetailLayout(
+            viewportRowCount: min(maxRows, self.maxVisibleDetailLines),
+            hasOverflow: maxRows > self.maxVisibleDetailLines,
+            rowHeight: hasModeDetails ? self.expandedDetailRowHeight : self.compactDetailRowHeight)
+    }
+
+    private static func gregorianCalendar(timeZone: TimeZone) -> Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        return calendar
+    }
+
+    private static func bucketCalendar(provider: UsageProvider, displayCalendar: Calendar) -> Calendar {
+        // Provider-specific by design: Mistral uses UTC day buckets; Codex alone defaults to exact local tokens.
+        guard provider == .mistral else { return displayCalendar }
+        // Mistral day keys are UTC buckets; map their boundary into the matching local display day.
+        return self.gregorianCalendar(timeZone: TimeZone(secondsFromGMT: 0) ?? .gmt)
     }
 
     private static func defaultMetric(provider: UsageProvider, daily: [DailyEntry]) -> ChartMetric {
@@ -900,13 +940,12 @@ struct CostHistoryChartMenuView: View {
 
     private func detailContent(selectedDateKey: String?, model: Model) -> DetailContent {
         guard let key = selectedDateKey,
-              let point = model.pointsByDateKey[key],
-              let date = Self.dateFromDayKey(key)
+              let point = model.pointsByDateKey[key]
         else {
             return DetailContent(primary: L("Hover a bar for details"), rows: [])
         }
 
-        let dayLabel = date.formatted(.dateTime.month(.abbreviated).day())
+        let dayLabel = point.date.formatted(.dateTime.month(.abbreviated).day())
         var parts: [String] = []
         if let cost = point.costUSD {
             parts.append(self.costString(cost))
@@ -1183,8 +1222,12 @@ extension CostHistoryChartMenuView {
             historyCoverageIsEstablished: historyCoverageIsEstablished)
     }
 
-    static func _dateFromDayKeyForTesting(_ key: String, calendar: Calendar) -> Date? {
-        self.dateFromDayKey(key, calendar: calendar)
+    static func _dateFromDayKeyForTesting(
+        _ key: String,
+        provider: UsageProvider,
+        calendar: Calendar) -> Date?
+    {
+        self.dateFromDayKey(key, provider: provider, calendar: calendar)
     }
 
     static func _axisDatesForTesting(provider: UsageProvider, daily: [DailyEntry]) -> [Date] {
@@ -1237,12 +1280,13 @@ extension CostHistoryChartMenuView {
 
     static func _detailViewportConfigurationForTesting(
         provider: UsageProvider,
-        daily: [DailyEntry]) -> (rowCount: Int, hasOverflow: Bool, rowHeight: CGFloat)
+        daily: [DailyEntry],
+        metric: ChartMetric? = nil) -> (rowCount: Int, hasOverflow: Bool, rowHeight: CGFloat)
     {
         let model = self.makeModel(
             provider: provider,
             daily: daily,
-            metric: self.defaultMetric(provider: provider, daily: daily))
+            metric: metric ?? self.defaultMetric(provider: provider, daily: daily))
         return (model.detailViewportRowCount, model.hasDetailOverflow, model.detailRowHeight)
     }
 }
