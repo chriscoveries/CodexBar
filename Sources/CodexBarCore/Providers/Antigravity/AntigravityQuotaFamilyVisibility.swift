@@ -1,8 +1,8 @@
 import Foundation
 
 /// Antigravity reports every model family the plan covers, so an account that only runs Gemini still
-/// receives a Claude/GPT pair pinned at 0%. Display surfaces hide a family once no lane in it reports
-/// known usage above zero. Menu bar and icon selection rank by highest used, so an untouched family
+/// receives a Claude/GPT pair pinned at 0%. Display surfaces hide a family once every lane in it reports
+/// known zero usage. Menu bar and icon selection rank by highest used, so an untouched family
 /// never wins there and this stays a display-only filter.
 public enum AntigravityQuotaFamilyVisibility {
     /// Window IDs that display surfaces should drop. Empty when every family is untouched, so a card
@@ -13,7 +13,7 @@ public enum AntigravityQuotaFamilyVisibility {
         guard !windows.isEmpty else { return [] }
         let families = Dictionary(grouping: windows, by: Self.familyKey)
         let idleFamilies = families.filter { _, lanes in
-            lanes.allSatisfy { !$0.usageKnown || $0.window.usedPercent <= 0 }
+            lanes.allSatisfy { $0.usageKnown && $0.window.usedPercent <= 0 }
         }
         guard idleFamilies.count < families.count else { return [] }
         return Set(idleFamilies.values.flatMap { lanes in lanes.map(\.id) })
