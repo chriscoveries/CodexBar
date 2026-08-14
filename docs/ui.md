@@ -29,7 +29,7 @@ read_when:
 | Usage | Session %, Weekly %, Scoped weekly %, Auto %, Usage bar | Window percentage or a compact three-glyph usage bar |
 | Usage | Session pace, Weekly pace, Auto pace | Signed pace delta for that window |
 | Time | Resets in, Reset at, Runs out | Relative reset, absolute reset, or pace estimate |
-| Money | Cost today, Cost 30d | Local cost estimate for the selected period |
+| Money | Balance, Cost today, Cost 30d | OpenRouter credit balance, or local cost estimate for the selected period |
 | Structure | Separator dot, Space, Line break | Spacing and optional two-line composition |
 
 The pace tokens render the same delta the menu card shows as "in deficit"/"in reserve", in the compact signed form the
@@ -39,7 +39,8 @@ behind it, `0%` on pace. Each pace token reads its own window, so `Weekly pace` 
 unavailable, including the first 3% of a window. The weekly menu-bar pace token may appear after 1% of its weekly
 window has elapsed; session, automatic, and Runs out tokens keep the 3% threshold. See [Pace tracking](#pace-tracking).
 
-Auto % uses the same provider-aware automatic-window resolution as the legacy menu bar metric setting. If a snapshot
+Balance is available only for OpenRouter and renders the same remaining-credit value shown in its menu card. Auto %
+uses the same provider-aware automatic-window resolution as the legacy menu bar metric setting. If a snapshot
 does not provide a token's data, that token renders an en dash while its siblings remain visible. Existing installs
 derive their first layout from the prior style, display mode, metric, and reset settings; those legacy keys remain
 untouched for downgrade safety, while a saved token layout takes precedence.
