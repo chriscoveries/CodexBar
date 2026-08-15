@@ -103,6 +103,23 @@ struct CodexOAuthCredentialReadTests {
     }
 
     @Test
+    func `missing account id skips blank OpenAI organizations`() throws {
+        let accessToken = Self.jwt(payload: [
+            "organizations": [["id": "  "], ["id": "org-later"], ["id": ""]],
+        ])
+        let data = try JSONSerialization.data(withJSONObject: [
+            "tokens": [
+                "access_token": accessToken,
+                "refresh_token": "refresh",
+            ],
+        ])
+
+        let credentials = try CodexOAuthCredentialsStore.parse(data: data)
+
+        #expect(credentials.accountId == "org-later")
+    }
+
+    @Test
     func `open code oauth credentials preserve expiry and remain read only`() throws {
         let expiresAt = Date().addingTimeInterval(3600)
         let payload: [String: Any] = [

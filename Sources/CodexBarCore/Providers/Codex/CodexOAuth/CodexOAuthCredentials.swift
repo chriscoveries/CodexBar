@@ -441,7 +441,9 @@ public enum CodexOAuthCredentialsStore {
                 return accountID
             }
             if let organizations = payload["organizations"] as? [[String: Any]],
-               let accountID = Self.nonEmpty(organizations.first?["id"] as? String)
+               let accountID = organizations
+                   .compactMap({ Self.nonEmpty($0["id"] as? String) })
+                   .first
             {
                 return accountID
             }
