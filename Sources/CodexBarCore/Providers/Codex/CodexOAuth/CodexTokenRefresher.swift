@@ -11,6 +11,8 @@ public enum CodexTokenRefresher {
         case expired
         case revoked
         case reused
+        case generationConflict
+        case lockUnavailable(String)
         case networkError(Error)
         case invalidResponse(String)
 
@@ -22,6 +24,10 @@ public enum CodexTokenRefresher {
                 "Refresh token was revoked. Please run `codex` to log in again."
             case .reused:
                 "Refresh token was already used. Please run `codex` to log in again."
+            case .generationConflict:
+                "Codex credentials changed during refresh; the newer login was kept."
+            case let .lockUnavailable(message):
+                "Could not coordinate Codex credential refresh: \(message)"
             case let .networkError(error):
                 "Network error during token refresh: \(error.localizedDescription)"
             case let .invalidResponse(message):
@@ -32,6 +38,18 @@ public enum CodexTokenRefresher {
 
     public static func refresh(_ credentials: CodexOAuthCredentials) async throws -> CodexOAuthCredentials {
         try await self.refresh(credentials, session: CodexAuthenticatedHTTPTransport.current)
+    }
+
+    /// Refresh and persist a native Codex credential with process-local single-flight,
+    /// cross-process locking, and a generation check before publishing the result.
+    public static func refreshAndPersist(
+        _ credentials: CodexOAuthCredentials,
+        env: [String: String] = ProcessInfo.processInfo.environment) async throws -> CodexOAuthCredentials
+    {
+        try await CodexOAuthRefreshCoordinator.shared.refreshAndPersist(
+            credentials,
+            env: env,
+            transport: CodexAuthenticatedHTTPTransport.current)
     }
 
     static func refresh(
@@ -77,7 +95,8 @@ public enum CodexTokenRefresher {
                 refreshToken: newRefreshToken,
                 idToken: newIdToken,
                 accountId: credentials.accountId,
-                lastRefresh: Date())
+                lastRefresh: Date(),
+                source: credentials.source)
         } catch let error as RefreshError {
             throw error
         } catch {
