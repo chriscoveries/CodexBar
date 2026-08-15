@@ -527,13 +527,13 @@ struct CodexOAuthFetchStrategy: ProviderFetchStrategy {
     }
 
     func fetch(_ context: ProviderFetchContext) async throws -> ProviderFetchResult {
-        var creds = try CodexOAuthCredentialsStore.load()
+        let creds = try CodexOAuthCredentialsStore.loadForUsage(
+            env: context.env,
+            allowExternalSources: context.settings?.codex?.allowExternalOAuthSources == true)
 
-        // Refresh if needed (8+ days old)
-        if creds.needsRefresh && !creds.refreshToken.isEmpty {
-            creds = try await CodexTokenRefresher.refresh(creds)
-            try CodexOAuthCredentialsStore.save(creds)
-        }
+        // The usage path never refreshes or saves credentials. Codex CLI owns the native
+        // auth.json refresh lifecycle; stale native credentials delegate to CLI recovery, while
+        // stale legacy/OpenCode credentials fail closed because those files are read-only.
 
         let usage = try await CodexOAuthUsageFetcher.fetchUsage(
             accessToken: creds.accessToken,
