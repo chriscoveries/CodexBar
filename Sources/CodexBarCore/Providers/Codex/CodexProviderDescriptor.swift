@@ -415,39 +415,32 @@ struct CodexOAuthFetchStrategy: ProviderFetchStrategy {
 
     private static func prepareCredentialsForUsage(
         _ credentials: CodexOAuthCredentials,
-        env: [String: String]) async throws -> CodexOAuthCredentials
+        env _: [String: String]) async throws -> CodexOAuthCredentials
     {
         guard credentials.needsRefresh else { return credentials }
-        guard !credentials.refreshToken.isEmpty else {
-            // A native credential without a refresh token can still be repaired by the Codex CLI.
-            // External sources have no safe writer handoff, so they fail closed.
-            if credentials.source == .codexHome {
-                throw CodexOAuthCredentialsError.nativeRefreshRequired
-            }
-            throw CodexOAuthCredentialsError.readOnlySource
-        }
-
-        let cacheKey = CodexOAuthCredentialsStore.refreshCacheKey(
-            env: env,
-            source: credentials.source,
-            accessToken: credentials.accessToken,
-            refreshToken: credentials.refreshToken)
-        do {
-            return try await CodexOAuthInMemoryRefreshCache.shared.refreshIfNeeded(
-                credentials: credentials,
-                cacheKey: cacheKey,
-                refresh: { try await CodexTokenRefresher.refresh(credentials) })
-        } catch is CodexTokenRefresher.RefreshError where credentials.source == .codexHome {
-            // If the native refresh endpoint rejects the token, retain the existing explicit-OAuth
-            // CLI handoff. The CLI is optional for the normal in-memory refresh path, but remains
-            // the recovery authority for revoked/invalid native credentials.
+        switch credentials.source {
+        case .codexHome:
+            // Codex CLI owns the native auth file and its refresh-token lifecycle. Do not redeem
+            // that shared token in-process: a rotated response would strand the CLI with the old
+            // refresh token because CodexBar deliberately never publishes it back to auth.json.
             throw CodexOAuthCredentialsError.nativeRefreshRequired
+        case .legacyCodexHome, .openCode:
+            // External OAuth files are explicitly read-only and have no safe writer handoff.
+            // Failing closed avoids consuming a refresh token owned by another application.
+            throw CodexOAuthCredentialsError.readOnlySource
         }
     }
 
     private static func shouldFetchResetCredits(_ context: ProviderFetchContext) -> Bool {
-        guard case .cli = context.runtime else { return false }
-        return context.includeCredits
+        switch context.runtime {
+        case .app:
+            // Fetch with the winning in-memory OAuth credentials before UsageStore's generic
+            // enrichment hook runs. Reloading auth.json there can still observe the stale source
+            // snapshot after an in-memory refresh and would silently drop reset-credit inventory.
+            true
+        case .cli:
+            context.includeCredits
+        }
     }
 
     func shouldFallback(on error: Error, context: ProviderFetchContext) -> Bool {
