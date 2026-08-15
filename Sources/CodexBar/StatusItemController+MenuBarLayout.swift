@@ -163,8 +163,11 @@ extension StatusItemController {
         let semanticWindows = MenuBarLayoutSemanticWindowResolver.windows(
             provider: provider,
             snapshot: snapshot)
+        let automaticPreference = provider == .mistral
+            ? self.settings.menuBarMetricPreference(for: provider, snapshot: snapshot)
+            : .automatic
         let automatic = MenuBarMetricWindowResolver.rateWindow(
-            preference: .automatic,
+            preference: automaticPreference,
             provider: provider,
             snapshot: snapshot,
             supportsAverage: self.settings.menuBarMetricSupportsAverage(for: provider),

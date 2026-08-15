@@ -693,8 +693,11 @@ struct MenuBarLayoutPreview: View {
                 snapshot: snapshot)
             session = semanticWindows.session
             weekly = semanticWindows.weekly
+            let automaticPreference = provider == .mistral
+                ? self.settings.menuBarMetricPreference(for: provider, snapshot: snapshot)
+                : .automatic
             rawAutomatic = MenuBarMetricWindowResolver.rateWindow(
-                preference: .automatic,
+                preference: automaticPreference,
                 provider: provider,
                 snapshot: snapshot,
                 supportsAverage: self.settings.menuBarMetricSupportsAverage(for: provider),
