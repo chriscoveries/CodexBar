@@ -34,7 +34,7 @@ public enum CursorProviderDescriptor {
                 displayName: "Cursor",
                 sessionLabel: "Total",
                 weeklyLabel: "Cursor",
-                opusLabel: "Third Party/Other Models",
+                opusLabel: "Third Party",
                 supportsOpus: true,
                 supportsCredits: false,
                 creditsHint: "",

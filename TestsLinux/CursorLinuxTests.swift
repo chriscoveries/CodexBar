@@ -20,11 +20,11 @@ struct CursorLinuxTests {
     }
 
     @Test
-    func `Cursor usage split labels match Cursor and Third Party/Other Models`() {
+    func `Cursor usage split labels match Cursor and Third Party`() {
         let metadata = CursorProviderDescriptor.descriptor.metadata
         #expect(metadata.sessionLabel == "Total")
         #expect(metadata.weeklyLabel == "Cursor")
-        #expect(metadata.opusLabel == "Third Party/Other Models")
+        #expect(metadata.opusLabel == "Third Party")
     }
 
     @Test
