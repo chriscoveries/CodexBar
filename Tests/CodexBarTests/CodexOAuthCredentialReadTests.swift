@@ -50,6 +50,41 @@ struct CodexOAuthCredentialReadTests {
     }
 
     @Test
+    func `missing account id falls back to the OpenAI JWT auth claim`() throws {
+        let idToken = Self.jwt(payload: [
+            "https://api.openai.com/auth": ["chatgpt_account_id": "acct-namespaced"],
+        ])
+        let data = try JSONSerialization.data(withJSONObject: [
+            "tokens": [
+                "access_token": "opaque-access",
+                "refresh_token": "refresh",
+                "id_token": idToken,
+            ],
+        ])
+
+        let credentials = try CodexOAuthCredentialsStore.parse(data: data)
+
+        #expect(credentials.accountId == "acct-namespaced")
+    }
+
+    @Test
+    func `missing account id falls back to the first OpenAI organization`() throws {
+        let accessToken = Self.jwt(payload: [
+            "organizations": [["id": "org-first"], ["id": "org-second"]],
+        ])
+        let data = try JSONSerialization.data(withJSONObject: [
+            "tokens": [
+                "access_token": accessToken,
+                "refresh_token": "refresh",
+            ],
+        ])
+
+        let credentials = try CodexOAuthCredentialsStore.parse(data: data)
+
+        #expect(credentials.accountId == "org-first")
+    }
+
+    @Test
     func `open code oauth credentials preserve expiry and remain read only`() throws {
         let expiresAt = Date().addingTimeInterval(3600)
         let payload: [String: Any] = [
@@ -559,6 +594,18 @@ struct CodexOAuthCredentialReadTests {
             Issue.record("An explicit CODEX_HOME must not borrow an OpenCode credential")
             return
         }
+    }
+
+    private static func jwt(payload: [String: Any]) -> String {
+        let encode: (Data) -> String = { data in
+            data.base64EncodedString()
+                .replacingOccurrences(of: "+", with: "-")
+                .replacingOccurrences(of: "/", with: "_")
+                .replacingOccurrences(of: "=", with: "")
+        }
+        let header = encode(Data(#"{"alg":"none","typ":"JWT"}"#.utf8))
+        let body = (try? JSONSerialization.data(withJSONObject: payload)).map(encode) ?? ""
+        return "\(header).\(body).signature"
     }
 }
 

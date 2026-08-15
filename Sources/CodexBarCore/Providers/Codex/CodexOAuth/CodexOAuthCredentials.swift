@@ -238,6 +238,7 @@ public enum CodexOAuthCredentialsStore {
 
         let idToken = Self.stringValue(in: tokens, snakeCaseKey: "id_token", camelCaseKey: "idToken")
         let accountId = Self.stringValue(in: tokens, snakeCaseKey: "account_id", camelCaseKey: "accountId")
+            ?? Self.accountIDFromJWT(idToken: idToken, accessToken: accessToken)
         let lastRefresh = Self.parseLastRefresh(from: json["last_refresh"])
 
         return CodexOAuthCredentials(
@@ -464,6 +465,38 @@ public enum CodexOAuthCredentialsStore {
         }
         if let value = dictionary[camelCaseKey] as? String, !value.isEmpty {
             return value
+        }
+        return nil
+    }
+
+    /// Codex auth files normally persist `tokens.account_id`, but older and partially migrated
+    /// files can omit it. OpenAI also carries the identity in JWT claims; recover it without
+    /// treating a malformed or opaque token as a credential-read failure.
+    private static func accountIDFromJWT(idToken: String?, accessToken: String?) -> String? {
+        for token in [idToken, accessToken].compactMap(\.self) {
+            let parts = token.split(separator: ".", omittingEmptySubsequences: false)
+            guard parts.count == 3 else { continue }
+            var encoded = String(parts[1])
+                .replacingOccurrences(of: "-", with: "+")
+                .replacingOccurrences(of: "_", with: "/")
+            encoded += String(repeating: "=", count: (4 - encoded.count % 4) % 4)
+            guard let payloadData = Data(base64Encoded: encoded),
+                  let payload = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any]
+            else { continue }
+
+            if let accountID = Self.nonEmpty(payload["chatgpt_account_id"] as? String) {
+                return accountID
+            }
+            if let auth = payload["https://api.openai.com/auth"] as? [String: Any],
+               let accountID = Self.nonEmpty(auth["chatgpt_account_id"] as? String)
+            {
+                return accountID
+            }
+            if let organizations = payload["organizations"] as? [[String: Any]],
+               let accountID = Self.nonEmpty(organizations.first?["id"] as? String)
+            {
+                return accountID
+            }
         }
         return nil
     }
