@@ -87,6 +87,7 @@ extension StatusItemController {
             scopedWeekly: MenuBarLayoutRenderWindow(scopedNamed?.window),
             scopedWeeklyTitle: scopedNamed?.title,
             automatic: automatic,
+            // Provider-specific by design: Mistral uses spend text when its automatic lane has no percentage window.
             automaticText: provider == .mistral && automatic == nil
                 ? Self.mistralSpendDisplayText(snapshot: snapshot)
                 : nil,
@@ -163,6 +164,7 @@ extension StatusItemController {
         let semanticWindows = MenuBarLayoutSemanticWindowResolver.windows(
             provider: provider,
             snapshot: snapshot)
+        // Provider-specific by design: Mistral's automatic lane can explicitly select its Monthly Plan window.
         let automaticPreference = provider == .mistral
             ? self.settings.menuBarMetricPreference(for: provider, snapshot: snapshot)
             : .automatic
