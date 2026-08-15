@@ -1,11 +1,26 @@
 import Foundation
+import SweetCookieKit
 
 public enum LongCatProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+    private static let credentials = ProviderCredentialAdapter(environmentProjections: [
+        .cookieHeader(LongCatSettingsReader.cookieHeaderKey, onlyWhenManual: true),
+    ])
+
+    /// Preserve Chrome-first behavior, then check Firefox without adding another Keychain prompt.
+    private static var browserCookieOrder: BrowserCookieImportOrder? {
+        #if os(macOS)
+        [.chrome, .firefox]
+        #else
+        nil
+        #endif
+    }
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .longcat,
+            settingsSection: .init(LongCatProviderSettingsKey.self, cookieSettings: LongCatProviderSettings.self),
+            credentials: self.credentials,
             metadata: ProviderMetadata(
                 id: .longcat,
                 displayName: "LongCat",
@@ -18,13 +33,14 @@ public enum LongCatProviderDescriptor {
                 toggleTitle: "Show LongCat usage",
                 cliName: "longcat",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
-                browserCookieOrder: ProviderBrowserCookieDefaults.longcatCookieImportOrder,
+                browserCookieOrder: self.browserCookieOrder,
                 dashboardURL: "https://longcat.chat/platform/",
                 statusPageURL: nil),
             branding: ProviderBranding(
-                iconStyle: .longcat,
+                iconStyle: .init(provider: .longcat),
                 iconResourceName: "ProviderIcon-longcat",
                 color: ProviderColor(red: 255 / 255, green: 209 / 255, blue: 0 / 255),
                 confettiPalette: [
@@ -48,7 +64,7 @@ public enum LongCatProviderDescriptor {
 struct LongCatWebFetchStrategy: ProviderFetchStrategy {
     let id: String = "longcat.web"
     let kind: ProviderFetchKind = .web
-    private static let log = CodexBarLog.logger(LogCategories.longcatWeb)
+    private static let log = CodexBarLog.logger(LogCategories.provider(.longcat, scope: "web"))
 
     func isAvailable(_ context: ProviderFetchContext) async -> Bool {
         if LongCatCookieHeader.resolveCookieOverride(context: context) != nil {

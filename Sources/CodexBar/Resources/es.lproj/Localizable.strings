@@ -1,5 +1,28 @@
 /* Spanish localization for CodexBar */
 
+/* iCloud Sync */
+"iCloud Sync" = "iCloud Sync";
+"Sync settings and providers across your Macs via iCloud" = "Sync settings and providers across your Macs via iCloud";
+"Include API keys, cookies, and tokens" = "Include API keys, cookies, and tokens";
+"Sync usage snapshots" = "Sync usage snapshots";
+"Show accounts from other Macs" = "Show accounts from other Macs";
+"Requires a signed release build of CodexBar." = "Requires a signed release build of CodexBar.";
+"Sign in to iCloud in System Settings to enable sync." = "Sign in to iCloud in System Settings to enable sync.";
+"iCloud access is restricted on this Mac." = "iCloud access is restricted on this Mac.";
+"Sync is paused: another Mac uses a newer version of CodexBar. Update to resume." = "Sync is paused: another Mac uses a newer version of CodexBar. Update to resume.";
+"Last successful fetch" = "Last successful fetch";
+"Last successful push" = "Last successful push";
+"Never" = "Never";
+"Macs" = "Macs";
+"No synced Macs yet." = "No synced Macs yet.";
+"Secrets use iCloud end-to-end encryption via encryptedValues. Hooks and machine-local paths never sync." = "Secrets use iCloud end-to-end encryption via encryptedValues. Hooks and machine-local paths never sync.";
+"Last seen %@" = "Last seen %@";
+"This Mac" = "This Mac";
+"another Mac" = "another Mac";
+"%dm ago" = "%dm ago";
+"%dh ago" = "%dh ago";
+"%dd ago" = "%dd ago";
+
 "tab_hooks" = "Hooks";
 "hooks_enable_title" = "Activar hooks";
 "hooks_enable_subtitle" = "Ejecuta comandos externos cuando ocurran eventos de cuota o proveedor.";
@@ -579,7 +602,7 @@
 "show_provider_changelog_links_title" = "Mostrar enlaces al registro de cambios del proveedor";
 "show_provider_changelog_links_subtitle" = "Añade al menú enlaces a las notas de versión de los proveedores compatibles basados en CLI.";
 "show_credits_extra_usage_title" = "Mostrar créditos + uso adicional";
-"show_credits_extra_usage_subtitle" = "Mostrar las secciones de Créditos de Codex y Uso adicional de Claude en el menú.";
+"show_credits_extra_usage_subtitle" = "Muestra créditos y uso adicional para los proveedores compatibles.";
 "multi_account_layout_title" = "Diseño multicuenta";
 "multi_account_layout_subtitle" = "Elige cambio de cuenta segmentado o tarjetas de cuenta apiladas.";
 "multi_account_layout_segmented" = "Segmentado";
@@ -636,6 +659,8 @@
 "copyright" = "© 2026 Peter Steinberger. Licencia MIT.";
 
 /* Debug Pane */
+"use_javascriptcore_plugin_engine" = "Usar JavaScriptCore para los complementos de proveedores";
+"use_javascriptcore_plugin_engine_subtitle" = "Solo para reversión de compatibilidad. Reinicia CodexBar para aplicarlo; CODEXBAR_PLUGIN_ENGINE anula este ajuste.";
 "section_logging" = "Registro";
 "enable_file_logging" = "Activar registro en archivo";
 "enable_file_logging_subtitle" = "Escribir registros en %@ para depuración.";
@@ -1111,7 +1136,7 @@
 "%d%% in deficit" = "%d%% de déficit";
 "%d%% in reserve" = "%d%% de reserva";
 "%dd" = "%d d";
-"≈ %d%% run-out risk" = "≈ %d%% de riesgo de agotamiento";
+"(%d%% risk)" = "(%d%% de riesgo de agotamiento)";
 "About CodexBar" = "Acerca de CodexBar";
 "Add Account..." = "Añadir cuenta...";
 "Add accounts via GitHub OAuth Device Flow on the selected host." = "Añade cuentas mediante el flujo de dispositivo OAuth de GitHub en el host seleccionado.";
@@ -1314,6 +1339,7 @@
 "menu_bar_layout_gap" = "Separación";
 "menu_bar_layout_gap_tight" = "Estrecha";
 "menu_bar_layout_gap_regular" = "Normal";
+"menu_bar_layout_vertical_adjustment" = "Ajuste vertical";
 "menu_bar_layout_keyboard_hint" = "Suprimir quita la ficha seleccionada";
 "menu_bar_layout_sample_account" = "cuenta";
 "menu_bar_layout_sample_runs_out" = "se agota vie.";
@@ -1322,6 +1348,7 @@
 "menu_bar_layout_token_account" = "Cuenta";
 "menu_bar_layout_token_session" = "Sesión %";
 "menu_bar_layout_token_weekly" = "Semanal %";
+"menu_bar_layout_token_scoped_weekly" = "Semanal con ámbito %";
 "menu_bar_layout_token_auto" = "% automático";
 "menu_bar_layout_token_session_pace" = "Ritmo de sesión";
 "menu_bar_layout_token_weekly_pace" = "Ritmo semanal";
@@ -1353,3 +1380,54 @@
 "Resets" = "Reinicios";
 "Finish now" = "Finalizar ahora";
 "Continue in background" = "Continuar en segundo plano";
+
+"Cumulative" = "Acumulado";
+"Token activity" = "Actividad de tokens";
+"View" = "Vista";
+"in the last year" = "en el último año";
+"No activity in the last 12 months" = "Sin actividad en los últimos 12 meses";
+"Each column = 1 week" = "Cada columna = 1 semana";
+"Running total" = "Total acumulado";
+"Less" = "Menos";
+"More" = "Más";
+
+/* Provider Plugins */
+"Install…" = "Instalar…";
+"Install plugin" = "Instalar plugin";
+"Copies a JavaScript or TypeScript file into the plugins directory." = "Copia un archivo JavaScript o TypeScript en el directorio de plugins.";
+"Show in Finder" = "Mostrar en Finder";
+"Plugins directory" = "Directorio de plugins";
+"Provider Plugins" = "Plugins de proveedores";
+"Plugins are local JavaScript or TypeScript files. Network and cookie access require approval." = "Los plugins son archivos locales de JavaScript o TypeScript. El acceso a la red y a las cookies requiere aprobación.";
+"No Plugins Installed" = "No hay plugins instalados";
+"Drop a .js or .ts file into the plugins directory, or choose Install…" = "Suelta un archivo .js o .ts en el directorio de plugins o elige «Instalar…»";
+"Delete Plugin?" = "¿Eliminar el plugin?";
+"Delete" = "Eliminar";
+"This removes the plugin file, transpile cache, approval, saved settings and secrets, and history." = "Esto elimina el archivo del plugin, la caché de transpilación, la aprobación, los ajustes y secretos guardados y el historial.";
+"Plugin Error" = "Error del plugin";
+"Needs approval" = "Requiere aprobación";
+"File" = "Archivo";
+"Origins" = "Orígenes";
+"Configure endpoint settings" = "Configurar ajustes de endpoints";
+"Capabilities" = "Capacidades";
+"Network" = "Red";
+"Cookie domains" = "Dominios de cookies";
+"Approve…" = "Aprobar…";
+"Delete…" = "Eliminar…";
+"Unknown validation error" = "Error de validación desconocido";
+"Approve Plugin" = "Aprobar plugin";
+"Install and Approve Plugin" = "Instalar y aprobar plugin";
+"Network authority" = "Permisos de red";
+"Auth: %@" = "Autenticación: %@";
+"Capabilities: %@" = "Capacidades: %@";
+"network" = "red";
+"Secrets: %@" = "Secretos: %@";
+"none" = "ninguno";
+"Cookie domains: %@" = "Dominios de cookies: %@";
+"Type %@ to confirm" = "Escribe %@ para confirmar";
+"Enter every endpoint setting to review the exact network origins." = "Introduce todos los ajustes de endpoint para revisar los orígenes de red exactos.";
+"Approve" = "Aprobar";
+"Install" = "Instalar";
+"5-hour usage" = "Uso de 5 horas";
+"7-day usage" = "Uso de 7 días";
+"Total usage" = "Uso total";

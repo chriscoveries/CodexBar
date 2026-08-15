@@ -1,5 +1,28 @@
 /* Arabic localization for CodexBar */
 
+/* iCloud Sync */
+"iCloud Sync" = "iCloud Sync";
+"Sync settings and providers across your Macs via iCloud" = "Sync settings and providers across your Macs via iCloud";
+"Include API keys, cookies, and tokens" = "Include API keys, cookies, and tokens";
+"Sync usage snapshots" = "Sync usage snapshots";
+"Show accounts from other Macs" = "Show accounts from other Macs";
+"Requires a signed release build of CodexBar." = "Requires a signed release build of CodexBar.";
+"Sign in to iCloud in System Settings to enable sync." = "Sign in to iCloud in System Settings to enable sync.";
+"iCloud access is restricted on this Mac." = "iCloud access is restricted on this Mac.";
+"Sync is paused: another Mac uses a newer version of CodexBar. Update to resume." = "Sync is paused: another Mac uses a newer version of CodexBar. Update to resume.";
+"Last successful fetch" = "Last successful fetch";
+"Last successful push" = "Last successful push";
+"Never" = "Never";
+"Macs" = "Macs";
+"No synced Macs yet." = "No synced Macs yet.";
+"Secrets use iCloud end-to-end encryption via encryptedValues. Hooks and machine-local paths never sync." = "Secrets use iCloud end-to-end encryption via encryptedValues. Hooks and machine-local paths never sync.";
+"Last seen %@" = "Last seen %@";
+"This Mac" = "This Mac";
+"another Mac" = "another Mac";
+"%dm ago" = "%dm ago";
+"%dh ago" = "%dh ago";
+"%dd ago" = "%dd ago";
+
 "ollama_safari_cookie_access_hint" = "تحتاج ملفات تعريف ارتباط Safari إلى وصول كامل إلى القرص لتطبيق CodexBar (إعدادات النظام > الخصوصية والأمان).";
 "ollama_browser_cookie_decryption_denied" = "تم رفض فك تشفير ملفات تعريف ارتباط %@ في سلسلة المفاتيح. افتح بطاقة موفر الخدمة وانقر على تحديث (⌘R) لطلب الوصول إلى سلسلة المفاتيح مرة أخرى.";
 "ollama_browser_cookie_decryption_disabled" = "فك تشفير ملفات تعريف ارتباط %@ معطل في CodexBar؛ فعّل الوصول إلى سلسلة المفاتيح ثم حدّث.";
@@ -593,7 +616,7 @@
 "show_provider_changelog_links_title" = "اعرض روابط سجل التغييرات لمزود الخدمة";
 "show_provider_changelog_links_subtitle" = "يضيف روابط ملاحظات الإصدار لمزودي الخدمة المدعومين بدعم CLI إلى القائمة.";
 "show_credits_extra_usage_title" = "اعتمادات العرض + الاستخدام الإضافي";
-"show_credits_extra_usage_subtitle" = "عرض أقسام Codex الاعتمادات و Claude الاستخدام الإضافي في القائمة.";
+"show_credits_extra_usage_subtitle" = "عرض الأرصدة والاستخدام الإضافي لموفري الخدمات المدعومين.";
 "multi_account_layout_title" = "تخطيط الحسابات المتعددة";
 "multi_account_layout_subtitle" = "اختر تبديل الحسابات المجزأة أو بطاقات الحساب المكدسة.";
 "multi_account_layout_segmented" = "مقسم";
@@ -649,6 +672,8 @@
 "copyright" = "© 2026 بيتر ستاينبرجر. MIT الرخصة.";
 
 /* Debug Pane */
+"use_javascriptcore_plugin_engine" = "استخدام JavaScriptCore لإضافات المزوّد";
+"use_javascriptcore_plugin_engine_subtitle" = "للرجوع المتوافق فقط. أعد تشغيل CodexBar للتطبيق؛ يتجاوز CODEXBAR_PLUGIN_ENGINE هذا الإعداد.";
 "section_logging" = "قطع الأشجار";
 "enable_file_logging" = "تمكين تسجيل الملفات";
 "enable_file_logging_subtitle" = "اكتب السجلات إلى %@ للتصحيح.";
@@ -822,7 +847,7 @@
 "Pace: %@" = "الوتيرة: %@";
 "Pace: %@ · %@" = "الوتيرة: %@ · %@";
 "%@ · %@" = "%@ · %@";
-"≈ %d%% run-out risk" = "≈ %d%% خطر الانتهاء";
+"(%d%% risk)" = "(%d%% خطر الانتهاء)";
 "%d%% in deficit" = "%d%% في العجز";
 "%d%% in reserve" = "%d%% في الاحتياط";
 "usage_percent_suffix_left" = "متبقٍ";
@@ -1319,6 +1344,7 @@
 "menu_bar_layout_gap" = "المسافة";
 "menu_bar_layout_gap_tight" = "ضيّق";
 "menu_bar_layout_gap_regular" = "عادي";
+"menu_bar_layout_vertical_adjustment" = "الضبط العمودي";
 "menu_bar_layout_keyboard_hint" = "يحذف Delete العنصر المحدد";
 "menu_bar_layout_sample_account" = "حساب";
 "menu_bar_layout_sample_runs_out" = "ينفد الجمعة";
@@ -1327,6 +1353,7 @@
 "menu_bar_layout_token_account" = "الحساب";
 "menu_bar_layout_token_session" = "الجلسة %";
 "menu_bar_layout_token_weekly" = "الأسبوعي %";
+"menu_bar_layout_token_scoped_weekly" = "أسبوعي محدد النطاق %";
 "menu_bar_layout_token_auto" = "نسبة تلقائية";
 "menu_bar_layout_token_session_pace" = "وتيرة الجلسة";
 "menu_bar_layout_token_weekly_pace" = "الوتيرة الأسبوعية";
@@ -1358,3 +1385,54 @@
 "Resets" = "إعادات الضبط";
 "Finish now" = "إنهاء الآن";
 "Continue in background" = "المتابعة في الخلفية";
+
+"Cumulative" = "تراكمي";
+"Token activity" = "نشاط الرموز";
+"View" = "عرض";
+"in the last year" = "في العام الماضي";
+"No activity in the last 12 months" = "لا يوجد نشاط في آخر 12 شهرًا";
+"Each column = 1 week" = "كل عمود = أسبوع واحد";
+"Running total" = "الإجمالي التراكمي";
+"Less" = "أقل";
+"More" = "أكثر";
+
+/* Provider Plugins */
+"Install…" = "تثبيت…";
+"Install plugin" = "تثبيت إضافة";
+"Copies a JavaScript or TypeScript file into the plugins directory." = "ينسخ ملف JavaScript أو TypeScript إلى مجلد الإضافات.";
+"Show in Finder" = "إظهار في Finder";
+"Plugins directory" = "مجلد الإضافات";
+"Provider Plugins" = "إضافات المزوّدين";
+"Plugins are local JavaScript or TypeScript files. Network and cookie access require approval." = "الإضافات هي ملفات JavaScript أو TypeScript محلية. يتطلب الوصول إلى الشبكة وملفات تعريف الارتباط موافقة.";
+"No Plugins Installed" = "لا توجد إضافات مثبتة";
+"Drop a .js or .ts file into the plugins directory, or choose Install…" = "أفلت ملف .js أو .ts في مجلد الإضافات، أو اختر «تثبيت…»";
+"Delete Plugin?" = "هل تريد حذف الإضافة؟";
+"Delete" = "حذف";
+"This removes the plugin file, transpile cache, approval, saved settings and secrets, and history." = "يؤدي هذا إلى حذف ملف الإضافة وذاكرة التخزين المؤقت للتحويل البرمجي والموافقة والإعدادات والأسرار المحفوظة والسجل.";
+"Plugin Error" = "خطأ في الإضافة";
+"Needs approval" = "يتطلب موافقة";
+"File" = "الملف";
+"Origins" = "أصول الشبكة";
+"Configure endpoint settings" = "تهيئة إعدادات نقاط النهاية";
+"Capabilities" = "الإمكانات";
+"Network" = "الشبكة";
+"Cookie domains" = "نطاقات ملفات تعريف الارتباط";
+"Approve…" = "موافقة…";
+"Delete…" = "حذف…";
+"Unknown validation error" = "خطأ تحقق غير معروف";
+"Approve Plugin" = "الموافقة على الإضافة";
+"Install and Approve Plugin" = "تثبيت الإضافة والموافقة عليها";
+"Network authority" = "صلاحيات الشبكة";
+"Auth: %@" = "المصادقة: %@";
+"Capabilities: %@" = "الإمكانات: %@";
+"network" = "الشبكة";
+"Secrets: %@" = "الأسرار: %@";
+"none" = "لا شيء";
+"Cookie domains: %@" = "نطاقات ملفات تعريف الارتباط: %@";
+"Type %@ to confirm" = "اكتب %@ للتأكيد";
+"Enter every endpoint setting to review the exact network origins." = "أدخل جميع إعدادات نقاط النهاية لمراجعة أصول الشبكة الدقيقة.";
+"Approve" = "موافقة";
+"Install" = "تثبيت";
+"5-hour usage" = "الاستخدام خلال 5 ساعات";
+"7-day usage" = "الاستخدام خلال 7 أيام";
+"Total usage" = "إجمالي الاستخدام";

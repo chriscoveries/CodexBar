@@ -1,5 +1,28 @@
 /* Chinese (Simplified) localization for CodexBar */
 
+/* iCloud Sync */
+"iCloud Sync" = "iCloud Sync";
+"Sync settings and providers across your Macs via iCloud" = "Sync settings and providers across your Macs via iCloud";
+"Include API keys, cookies, and tokens" = "Include API keys, cookies, and tokens";
+"Sync usage snapshots" = "Sync usage snapshots";
+"Show accounts from other Macs" = "Show accounts from other Macs";
+"Requires a signed release build of CodexBar." = "Requires a signed release build of CodexBar.";
+"Sign in to iCloud in System Settings to enable sync." = "Sign in to iCloud in System Settings to enable sync.";
+"iCloud access is restricted on this Mac." = "iCloud access is restricted on this Mac.";
+"Sync is paused: another Mac uses a newer version of CodexBar. Update to resume." = "Sync is paused: another Mac uses a newer version of CodexBar. Update to resume.";
+"Last successful fetch" = "Last successful fetch";
+"Last successful push" = "Last successful push";
+"Never" = "Never";
+"Macs" = "Macs";
+"No synced Macs yet." = "No synced Macs yet.";
+"Secrets use iCloud end-to-end encryption via encryptedValues. Hooks and machine-local paths never sync." = "Secrets use iCloud end-to-end encryption via encryptedValues. Hooks and machine-local paths never sync.";
+"Last seen %@" = "Last seen %@";
+"This Mac" = "This Mac";
+"another Mac" = "another Mac";
+"%dm ago" = "%dm ago";
+"%dh ago" = "%dh ago";
+"%dd ago" = "%dd ago";
+
 "tab_hooks" = "钩子";
 "hooks_enable_title" = "启用钩子";
 "hooks_enable_subtitle" = "在配额或提供商事件发生时运行外部命令。";
@@ -566,7 +589,7 @@
 "show_provider_changelog_links_title" = "显示提供商变更日志链接";
 "show_provider_changelog_links_subtitle" = "在菜单中为支持的 CLI 提供商添加发布说明链接。";
 "show_credits_extra_usage_title" = "显示额度 + 额外用量";
-"show_credits_extra_usage_subtitle" = "在菜单中显示 Codex 额度和 Claude 额外用量部分。";
+"show_credits_extra_usage_subtitle" = "显示受支持提供商的额度和额外用量。";
 "multi_account_layout_title" = "多账户布局";
 "multi_account_layout_subtitle" = "选择分段账户切换或堆叠账户卡片。";
 "multi_account_layout_segmented" = "分段";
@@ -616,6 +639,8 @@
 "check_for_updates" = "检查更新…";
 "updates_unavailable" = "此构建中更新不可用。";
 "copyright" = "© 2026 Peter Steinberger。MIT 许可证。";
+"use_javascriptcore_plugin_engine" = "为提供商插件使用 JavaScriptCore";
+"use_javascriptcore_plugin_engine_subtitle" = "仅用于兼容性回退。重启 CodexBar 后生效；CODEXBAR_PLUGIN_ENGINE 会覆盖此设置。";
 "section_logging" = "日志";
 "enable_file_logging" = "启用文件日志";
 "enable_file_logging_subtitle" = "将日志写入 %@ 以进行调试。";
@@ -782,7 +807,7 @@
 "Pace: %@" = "节奏：%@";
 "Pace: %@ · %@" = "节奏：%@ · %@";
 "%@ · %@" = "%@ · %@";
-"≈ %d%% run-out risk" = "≈ %d%% 耗尽风险";
+"(%d%% risk)" = "(%d%% 耗尽风险)";
 "%d%% in deficit" = "超额 %d%%";
 "%d%% in reserve" = "余量 %d%%";
 "usage_percent_suffix_left" = "剩余";
@@ -1294,6 +1319,7 @@
 "menu_bar_layout_gap" = "间距";
 "menu_bar_layout_gap_tight" = "紧凑";
 "menu_bar_layout_gap_regular" = "常规";
+"menu_bar_layout_vertical_adjustment" = "垂直调整";
 "menu_bar_layout_keyboard_hint" = "Delete 键会移除所选项目";
 "menu_bar_layout_sample_account" = "帐户";
 "menu_bar_layout_sample_runs_out" = "周五用尽";
@@ -1302,6 +1328,7 @@
 "menu_bar_layout_token_account" = "账户";
 "menu_bar_layout_token_session" = "会话 %";
 "menu_bar_layout_token_weekly" = "每周 %";
+"menu_bar_layout_token_scoped_weekly" = "范围每周 %";
 "menu_bar_layout_token_auto" = "自动 %";
 "menu_bar_layout_token_session_pace" = "会话节奏";
 "menu_bar_layout_token_weekly_pace" = "每周节奏";
@@ -1333,3 +1360,54 @@
 "Resets" = "重置";
 "Finish now" = "立即完成";
 "Continue in background" = "转为后台运行";
+
+"Cumulative" = "累计";
+"Token activity" = "Token 活动";
+"View" = "视图";
+"in the last year" = "近一年";
+"No activity in the last 12 months" = "近 12 个月暂无活动";
+"Each column = 1 week" = "每列 = 1 周";
+"Running total" = "累计总量";
+"Less" = "少";
+"More" = "多";
+
+/* Provider Plugins */
+"Install…" = "安装…";
+"Install plugin" = "安装插件";
+"Copies a JavaScript or TypeScript file into the plugins directory." = "将 JavaScript 或 TypeScript 文件复制到插件目录。";
+"Show in Finder" = "在“访达”中显示";
+"Plugins directory" = "插件目录";
+"Provider Plugins" = "提供商插件";
+"Plugins are local JavaScript or TypeScript files. Network and cookie access require approval." = "插件是本地 JavaScript 或 TypeScript 文件。网络和 Cookie 访问需要批准。";
+"No Plugins Installed" = "未安装插件";
+"Drop a .js or .ts file into the plugins directory, or choose Install…" = "将 .js 或 .ts 文件拖入插件目录，或选择“安装…”。";
+"Delete Plugin?" = "删除插件？";
+"Delete" = "删除";
+"This removes the plugin file, transpile cache, approval, saved settings and secrets, and history." = "这将删除插件文件、转译缓存、批准记录、已保存的设置和机密数据，以及历史记录。";
+"Plugin Error" = "插件错误";
+"Needs approval" = "需要批准";
+"File" = "文件";
+"Origins" = "网络来源";
+"Configure endpoint settings" = "配置端点";
+"Capabilities" = "功能";
+"Network" = "网络";
+"Cookie domains" = "Cookie 域";
+"Approve…" = "批准…";
+"Delete…" = "删除…";
+"Unknown validation error" = "未知验证错误";
+"Approve Plugin" = "批准插件";
+"Install and Approve Plugin" = "安装并批准插件";
+"Network authority" = "网络权限";
+"Auth: %@" = "认证：%@";
+"Capabilities: %@" = "功能：%@";
+"network" = "网络";
+"Secrets: %@" = "机密数据：%@";
+"none" = "无";
+"Cookie domains: %@" = "Cookie 域：%@";
+"Type %@ to confirm" = "输入 %@ 以确认";
+"Enter every endpoint setting to review the exact network origins." = "请填写所有端点设置，以查看确切的网络来源。";
+"Approve" = "批准";
+"Install" = "安装";
+"5-hour usage" = "5 小时用量";
+"7-day usage" = "7 天用量";
+"Total usage" = "总用量";

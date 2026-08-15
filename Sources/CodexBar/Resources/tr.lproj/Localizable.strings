@@ -1,5 +1,28 @@
 /* Turkish localization for CodexBar */
 
+/* iCloud Sync */
+"iCloud Sync" = "iCloud Sync";
+"Sync settings and providers across your Macs via iCloud" = "Sync settings and providers across your Macs via iCloud";
+"Include API keys, cookies, and tokens" = "Include API keys, cookies, and tokens";
+"Sync usage snapshots" = "Sync usage snapshots";
+"Show accounts from other Macs" = "Show accounts from other Macs";
+"Requires a signed release build of CodexBar." = "Requires a signed release build of CodexBar.";
+"Sign in to iCloud in System Settings to enable sync." = "Sign in to iCloud in System Settings to enable sync.";
+"iCloud access is restricted on this Mac." = "iCloud access is restricted on this Mac.";
+"Sync is paused: another Mac uses a newer version of CodexBar. Update to resume." = "Sync is paused: another Mac uses a newer version of CodexBar. Update to resume.";
+"Last successful fetch" = "Last successful fetch";
+"Last successful push" = "Last successful push";
+"Never" = "Never";
+"Macs" = "Macs";
+"No synced Macs yet." = "No synced Macs yet.";
+"Secrets use iCloud end-to-end encryption via encryptedValues. Hooks and machine-local paths never sync." = "Secrets use iCloud end-to-end encryption via encryptedValues. Hooks and machine-local paths never sync.";
+"Last seen %@" = "Last seen %@";
+"This Mac" = "This Mac";
+"another Mac" = "another Mac";
+"%dm ago" = "%dm ago";
+"%dh ago" = "%dh ago";
+"%dd ago" = "%dd ago";
+
 "ollama_safari_cookie_access_hint" = "Safari çerezleri için CodexBar’a Tam Disk Erişimi gerekir (Sistem Ayarları > Gizlilik ve Güvenlik).";
 "ollama_browser_cookie_decryption_denied" = "%@ çerezlerinin şifresini çözme Anahtar Zinciri’nde reddedildi. Sağlayıcı kartını açın ve Anahtar Zinciri erişimini yeniden istemek için Yenile’ye (⌘R) tıklayın.";
 "ollama_browser_cookie_decryption_disabled" = "%@ çerezlerinin şifresini çözme CodexBar’da devre dışı; Anahtar Zinciri erişimini etkinleştirip yenileyin.";
@@ -593,7 +616,7 @@
 "show_provider_changelog_links_title" = "Sağlayıcı değişiklik günlüğü bağlantılarını göster";
 "show_provider_changelog_links_subtitle" = "Desteklenen CLI destekli sağlayıcılar için menüye sürüm notları bağlantıları ekler.";
 "show_credits_extra_usage_title" = "Krediler + ekstra kullanımı göster";
-"show_credits_extra_usage_subtitle" = "Menüde Codex Kredileri ve Claude Ekstra kullanım bölümlerini göster.";
+"show_credits_extra_usage_subtitle" = "Desteklenen sağlayıcılar için kredileri ve ek kullanımı göster.";
 "multi_account_layout_title" = "Çoklu hesap düzeni";
 "multi_account_layout_subtitle" = "Bölümlü hesap değiştirme veya yığınlı hesap kartları seçin.";
 "multi_account_layout_segmented" = "Bölümlü";
@@ -649,6 +672,8 @@
 "copyright" = "© 2026 Peter Steinberger. MIT Lisansı.";
 
 /* Debug Pane */
+"use_javascriptcore_plugin_engine" = "Sağlayıcı eklentileri için JavaScriptCore kullan";
+"use_javascriptcore_plugin_engine_subtitle" = "Yalnızca uyumluluk geri dönüşü. Uygulamak için CodexBar’ı yeniden başlatın; CODEXBAR_PLUGIN_ENGINE bu ayarı geçersiz kılar.";
 "section_logging" = "Günlükleme";
 "enable_file_logging" = "Dosya günlüğünü etkinleştir";
 "enable_file_logging_subtitle" = "Hata ayıklama için günlükleri %@ konumuna yaz.";
@@ -818,7 +843,7 @@
 "Pace: %@" = "Hız: %@";
 "Pace: %@ · %@" = "Hız: %@ · %@";
 "%@ · %@" = "%@ · %@";
-"≈ %d%% run-out risk" = "≈ %%%d tükenme riski";
+"(%d%% risk)" = "(%d%% tükenme riski)";
 "%d%% in deficit" = "%%%d açıkta";
 "%d%% in reserve" = "%%%d rezervde";
 "usage_percent_suffix_left" = "kaldı";
@@ -1317,6 +1342,7 @@
 "menu_bar_layout_gap" = "Boşluk";
 "menu_bar_layout_gap_tight" = "Dar";
 "menu_bar_layout_gap_regular" = "Normal";
+"menu_bar_layout_vertical_adjustment" = "Dikey Ayar";
 "menu_bar_layout_keyboard_hint" = "Delete seçili belirteci kaldırır";
 "menu_bar_layout_sample_account" = "hesap";
 "menu_bar_layout_sample_runs_out" = "Cum. biter";
@@ -1325,6 +1351,7 @@
 "menu_bar_layout_token_account" = "Hesap";
 "menu_bar_layout_token_session" = "Oturum %";
 "menu_bar_layout_token_weekly" = "Haftalık %";
+"menu_bar_layout_token_scoped_weekly" = "Kapsama göre haftalık %";
 "menu_bar_layout_token_auto" = "Otomatik %";
 "menu_bar_layout_token_session_pace" = "Oturum hızı";
 "menu_bar_layout_token_weekly_pace" = "Haftalık hız";
@@ -1356,3 +1383,54 @@
 "Resets" = "Sıfırlamalar";
 "Finish now" = "Şimdi tamamla";
 "Continue in background" = "Arka planda devam et";
+
+"Cumulative" = "Kümülatif";
+"Token activity" = "Token etkinliği";
+"View" = "Görünüm";
+"in the last year" = "son yılda";
+"No activity in the last 12 months" = "Son 12 ayda etkinlik yok";
+"Each column = 1 week" = "Her sütun = 1 hafta";
+"Running total" = "Birikimli toplam";
+"Less" = "Az";
+"More" = "Çok";
+
+/* Provider Plugins */
+"Install…" = "Yükle…";
+"Install plugin" = "Eklenti yükle";
+"Copies a JavaScript or TypeScript file into the plugins directory." = "Bir JavaScript veya TypeScript dosyasını eklentiler dizinine kopyalar.";
+"Show in Finder" = "Finder'da Göster";
+"Plugins directory" = "Eklentiler dizini";
+"Provider Plugins" = "Sağlayıcı Eklentileri";
+"Plugins are local JavaScript or TypeScript files. Network and cookie access require approval." = "Eklentiler yerel JavaScript veya TypeScript dosyalarıdır. Ağ ve çerez erişimi onay gerektirir.";
+"No Plugins Installed" = "Yüklü Eklenti Yok";
+"Drop a .js or .ts file into the plugins directory, or choose Install…" = "Bir .js veya .ts dosyasını eklentiler dizinine bırakın ya da Yükle… seçeneğini kullanın.";
+"Delete Plugin?" = "Eklenti Silinsin mi?";
+"Delete" = "Sil";
+"This removes the plugin file, transpile cache, approval, saved settings and secrets, and history." = "Bu işlem eklenti dosyasını, kod dönüştürme önbelleğini, onay kaydını, kaydedilmiş ayarları ve gizli bilgileri, ayrıca geçmişi siler.";
+"Plugin Error" = "Eklenti Hatası";
+"Needs approval" = "Onay gerekiyor";
+"File" = "Dosya";
+"Origins" = "Ağ kaynakları";
+"Configure endpoint settings" = "Uç nokta ayarlarını yapılandırın";
+"Capabilities" = "Yetenekler";
+"Network" = "Ağ";
+"Cookie domains" = "Çerez alan adları";
+"Approve…" = "Onayla…";
+"Delete…" = "Sil…";
+"Unknown validation error" = "Bilinmeyen doğrulama hatası";
+"Approve Plugin" = "Eklentiyi Onayla";
+"Install and Approve Plugin" = "Eklentiyi Yükle ve Onayla";
+"Network authority" = "Ağ yetkisi";
+"Auth: %@" = "Kimlik doğrulama: %@";
+"Capabilities: %@" = "Yetenekler: %@";
+"network" = "ağ";
+"Secrets: %@" = "Gizli bilgiler: %@";
+"none" = "yok";
+"Cookie domains: %@" = "Çerez alan adları: %@";
+"Type %@ to confirm" = "Onaylamak için %@ yazın";
+"Enter every endpoint setting to review the exact network origins." = "Kullanılacak ağ kaynaklarını tam olarak incelemek için tüm uç nokta ayarlarını girin.";
+"Approve" = "Onayla";
+"Install" = "Yükle";
+"5-hour usage" = "5 saatlik kullanım";
+"7-day usage" = "7 günlük kullanım";
+"Total usage" = "Toplam kullanım";

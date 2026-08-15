@@ -40,6 +40,7 @@ struct SettingsDefaultsState {
     var menuBarLayoutOverridesRaw: [String: MenuBarLayout]
     var menuBarLayoutSizeRaw: String
     var menuBarLayoutGapRaw: String
+    var menuBarLayoutVerticalAdjustment: Int
     var copilotBudgetExtrasEnabled: Bool
     var copilotIconSecondaryWindowIDRaw: String
     var costUsageEnabled: Bool
@@ -54,6 +55,7 @@ struct SettingsDefaultsState {
     var menuBarShowsHighestUsage: Bool
     var claudeOAuthKeychainPromptModeRaw: String?
     var claudeOAuthKeychainReadStrategyRaw: String?
+    var claudeOAuthDirectKeychainReadAllowed: Bool
     var claudeWebExtrasEnabledRaw: Bool
     var showOptionalCreditsAndExtraUsage: Bool
     var claudeDailyRoutinesUsageVisible: Bool
@@ -76,4 +78,9 @@ struct SettingsDefaultsState {
     var agentSessionLabelStyleRaw: String
     var agentSessionsManualHosts: String
     var preferredCurrencyCode: String
+    var iCloudSyncEnabled: Bool
+    var iCloudSyncIncludeSecrets: Bool
+    var iCloudSyncSnapshotsEnabled: Bool
+    var iCloudSyncShowFleetAccounts: Bool
+    var iCloudSyncDeviceID: String
 }

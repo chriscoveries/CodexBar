@@ -475,11 +475,20 @@ struct CursorStatusProbeTests {
     @Test
     func `formats membership types`() {
         let testCases: [(input: String, expected: String)] = [
-            ("pro", "Cursor Pro"),
-            ("hobby", "Cursor Hobby"),
             ("enterprise", "Cursor Enterprise"),
+            ("express", "Cursor Start"),
+            ("free", "Cursor Free"),
+            ("free_trial", "Cursor Pro Trial"),
+            ("hobby", "Cursor Hobby"),
+            ("pro", "Cursor Pro"),
+            ("pro_plus", "Cursor Pro+"),
+            ("pro_student", "Cursor Pro"),
             ("team", "Cursor Team"),
-            ("custom", "Cursor Custom"),
+            ("ultra", "Cursor Ultra"),
+            ("custom", "Cursor custom"),
+            ("custom_plan", "Cursor custom_plan"),
+            ("custom-tier", "Cursor custom-tier"),
+            ("Custom_Plan", "Cursor Custom_Plan"),
         ]
 
         for testCase in testCases {
@@ -554,11 +563,7 @@ struct CursorStatusProbeTests {
 
         let usageSnapshot = snapshot.toUsageSnapshot()
 
-        #expect(usageSnapshot.cursorRequests != nil)
-        #expect(usageSnapshot.cursorRequests?.used == 500)
-        #expect(usageSnapshot.cursorRequests?.limit == 500)
-        #expect(usageSnapshot.cursorRequests?.usedPercent == 100.0)
-        #expect(usageSnapshot.cursorRequests?.remainingPercent == 0.0)
+        #expect(usageSnapshot.detailRow(label: "Request quota")?.value == "500 / 500")
 
         // Primary RateWindow should use request-based percentage for legacy plans
         #expect(usageSnapshot.primary?.usedPercent == 100.0)
@@ -589,7 +594,7 @@ struct CursorStatusProbeTests {
 
         // Primary should reflect request usage (50%), not dollar usage (0%)
         #expect(usageSnapshot.primary?.usedPercent == 50.0)
-        #expect(usageSnapshot.cursorRequests?.usedPercent == 50.0)
+        #expect(usageSnapshot.detailRow(label: "Request quota")?.value == "250 / 500")
     }
 
     @Test
@@ -644,7 +649,7 @@ struct CursorStatusProbeTests {
         #expect(snapshot.requestsLimit == nil)
 
         let usageSnapshot = snapshot.toUsageSnapshot()
-        #expect(usageSnapshot.cursorRequests == nil)
+        #expect(usageSnapshot.detailRow(label: "Request quota") == nil)
     }
 
     // MARK: - Session Store Serialization
@@ -739,22 +744,6 @@ struct CursorStatusProbeTests {
         let hasSession = await store.hasValidSession()
         #expect(hasSession)
 
-        await store.clearCookies()
-    }
-
-    @Test
-    func `session store persists Cursor app auth with source and expiry metadata`() async throws {
-        let store = CursorSessionStore.shared
-        await store.clearCookies()
-        let token = try makeCursorAppAuthToken(expiration: Date(timeIntervalSinceNow: 3600))
-
-        await store.persistAppSession(CursorAppAuthSession(accessToken: token))
-        await store.resetForTesting(clearDisk: false)
-        let cookie = try #require(await (store.getCookies()).first)
-
-        #expect(cookie.value.contains(token))
-        #expect(CursorAppAuthSession.isPersistedCookie(cookie))
-        #expect(cookie.expiresDate != nil)
         await store.clearCookies()
     }
 }
@@ -855,29 +844,6 @@ extension CursorStatusProbeTests {
         #expect(session.accessToken == "wal-token")
         #expect(!FileManager.default.fileExists(atPath: walURL.path))
         #expect(!FileManager.default.fileExists(atPath: sharedMemoryURL.path))
-    }
-
-    @Test
-    func `app auth store reads uncheckpointed active WAL state`() throws {
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cursor-app-auth-active-wal-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: directory) }
-
-        let dbURL = directory.appendingPathComponent("state.vscdb")
-        var db: OpaquePointer?
-        try #require(sqlite3_open(dbURL.path, &db) == SQLITE_OK)
-        let sql = """
-        CREATE TABLE ItemTable(key TEXT PRIMARY KEY, value BLOB);
-        PRAGMA journal_mode = WAL;
-        INSERT INTO ItemTable VALUES('cursorAuth/accessToken', 'active-wal-token');
-        """
-        try #require(sqlite3_exec(db, sql, nil, nil, nil) == SQLITE_OK)
-        defer { sqlite3_close(db) }
-
-        #expect(FileManager.default.fileExists(atPath: dbURL.path + "-wal"))
-        let session = try #require(try CursorAppAuthStore(dbPath: dbURL.path).loadSession())
-        #expect(session.accessToken == "active-wal-token")
     }
 
     @Test
@@ -1555,7 +1521,7 @@ extension CursorStatusProbeTests {
     }
 }
 
-private func makeCursorAppAuthToken(
+func makeCursorAppAuthToken(
     subject: String = "auth0|user_test",
     email: String? = nil,
     expiration: Date = Date(timeIntervalSinceNow: 3600)) throws -> String
@@ -1590,7 +1556,7 @@ private final class CursorStringRecorder: @unchecked Sendable {
     }
 }
 
-private final class CursorAppSessionRecorder: @unchecked Sendable {
+final class CursorAppSessionRecorder: @unchecked Sendable {
     private let lock = NSLock()
     private var values: [CursorAppAuthSession] = []
 
@@ -1607,7 +1573,7 @@ private final class CursorAppSessionRecorder: @unchecked Sendable {
     }
 }
 
-private struct CursorAppAuthSessionProviderStub: CursorAppAuthSessionProviding {
+struct CursorAppAuthSessionProviderStub: CursorAppAuthSessionProviding {
     let session: CursorAppAuthSession?
 
     func loadSession() throws -> CursorAppAuthSession? {

@@ -2,10 +2,23 @@ import Foundation
 
 public enum LLMProxyProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
+    private static let credentials = ProviderCredentialAdapter.apiKey(
+        environmentKey: LLMProxySettingsReader.apiKeyEnvironmentKey,
+        additionalProjections: [.enterpriseHost(LLMProxySettingsReader.baseURLEnvironmentKey)],
+        resolve: LLMProxySettingsReader.apiKey,
+        tokenAccountSupport: TokenAccountSupport(
+            title: "API keys",
+            subtitle: "Store multiple LLM Proxy API keys.",
+            placeholder: "Paste proxy API key…",
+            injection: .environment(key: LLMProxySettingsReader.apiKeyEnvironmentKey),
+            requiresManualCookieSource: false,
+            cookieName: nil))
 
     static func makeDescriptor() -> ProviderDescriptor {
         ProviderDescriptor(
             id: .llmproxy,
+            credentials: self.credentials,
+            config: ProviderConfigCapabilities(supportsEnterpriseHost: true),
             metadata: ProviderMetadata(
                 id: .llmproxy,
                 displayName: "LLM Proxy",
@@ -18,13 +31,15 @@ public enum LLMProxyProviderDescriptor {
                 toggleTitle: "Show LLM Proxy usage",
                 cliName: "llmproxy",
                 defaultEnabled: false,
+                widgetSelectable: false,
                 isPrimaryProvider: false,
                 usesAccountFallback: false,
+                debugLogUnavailableMessage: "LLM Proxy debug log not yet implemented",
                 browserCookieOrder: nil,
                 dashboardURL: nil,
                 statusPageURL: nil),
             branding: ProviderBranding(
-                iconStyle: .llmproxy,
+                iconStyle: .init(provider: .llmproxy),
                 iconResourceName: "ProviderIcon-llmproxy",
                 color: ProviderColor(red: 36 / 255, green: 180 / 255, blue: 126 / 255),
                 confettiPalette: [
@@ -50,12 +65,12 @@ struct LLMProxyAPIFetchStrategy: ProviderFetchStrategy {
     let kind: ProviderFetchKind = .apiToken
 
     func isAvailable(_ context: ProviderFetchContext) async -> Bool {
-        ProviderTokenResolver.llmProxyToken(environment: context.env) != nil &&
+        ProviderTokenResolver.token(for: .llmproxy, environment: context.env) != nil &&
             LLMProxySettingsReader.hasBaseURLOverride(environment: context.env)
     }
 
     func fetch(_ context: ProviderFetchContext) async throws -> ProviderFetchResult {
-        guard let apiKey = ProviderTokenResolver.llmProxyToken(environment: context.env) else {
+        guard let apiKey = ProviderTokenResolver.token(for: .llmproxy, environment: context.env) else {
             throw LLMProxyUsageError.missingCredentials
         }
         guard let baseURL = LLMProxySettingsReader.baseURL(environment: context.env) else {

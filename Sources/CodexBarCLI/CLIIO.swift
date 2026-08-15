@@ -33,6 +33,8 @@ extension CodexBarCLI {
             print(Self.costHelp(version: version))
         case "sessions", "focus":
             print(Self.sessionsHelp(version: version))
+        case "dashboard":
+            print(Self.dashboardHelp(version: version))
         case "serve":
             print(Self.serveHelp(version: version))
         case "config", "validate", "dump":
@@ -47,6 +49,8 @@ extension CodexBarCLI {
             print(Self.diagnoseHelp(version: version))
         case "guard":
             print(Self.guardHelp(version: version))
+        case "plugins":
+            print(Self.pluginsHelp(version: version))
         default:
             print(Self.rootHelp(version: version))
         }
@@ -102,10 +106,11 @@ extension CodexBarCLI {
     }
 
     static func containingAppVersion(for executableURL: URL) -> String? {
-        var currentURL = executableURL.deletingLastPathComponent()
+        var currentURL = executableURL
         let fileManager = FileManager.default
 
-        while currentURL.path != currentURL.deletingLastPathComponent().path {
+        while let ancestorURL = Self.nextAncestor(from: currentURL) {
+            currentURL = ancestorURL
             if currentURL.pathExtension == "app" {
                 let infoURL = currentURL
                     .appendingPathComponent("Contents")
@@ -115,10 +120,17 @@ extension CodexBarCLI {
                 else { return nil }
                 return Self.normalizedBundleVersion(plist["CFBundleShortVersionString"] as? String)
             }
-            currentURL.deleteLastPathComponent()
         }
 
         return nil
+    }
+
+    static func nextAncestor(
+        from url: URL,
+        parentProvider: (URL) -> URL = { $0.deletingLastPathComponent() }) -> URL?
+    {
+        let parent = parentProvider(url)
+        return parent.pathComponents.count < url.pathComponents.count ? parent : nil
     }
 
     static func adjacentVersionFileVersion(for executableURL: URL) -> String? {

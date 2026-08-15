@@ -1,5 +1,28 @@
 /* Dutch localization for CodexBar */
 
+/* iCloud Sync */
+"iCloud Sync" = "iCloud Sync";
+"Sync settings and providers across your Macs via iCloud" = "Sync settings and providers across your Macs via iCloud";
+"Include API keys, cookies, and tokens" = "Include API keys, cookies, and tokens";
+"Sync usage snapshots" = "Sync usage snapshots";
+"Show accounts from other Macs" = "Show accounts from other Macs";
+"Requires a signed release build of CodexBar." = "Requires a signed release build of CodexBar.";
+"Sign in to iCloud in System Settings to enable sync." = "Sign in to iCloud in System Settings to enable sync.";
+"iCloud access is restricted on this Mac." = "iCloud access is restricted on this Mac.";
+"Sync is paused: another Mac uses a newer version of CodexBar. Update to resume." = "Sync is paused: another Mac uses a newer version of CodexBar. Update to resume.";
+"Last successful fetch" = "Last successful fetch";
+"Last successful push" = "Last successful push";
+"Never" = "Never";
+"Macs" = "Macs";
+"No synced Macs yet." = "No synced Macs yet.";
+"Secrets use iCloud end-to-end encryption via encryptedValues. Hooks and machine-local paths never sync." = "Secrets use iCloud end-to-end encryption via encryptedValues. Hooks and machine-local paths never sync.";
+"Last seen %@" = "Last seen %@";
+"This Mac" = "This Mac";
+"another Mac" = "another Mac";
+"%dm ago" = "%dm ago";
+"%dh ago" = "%dh ago";
+"%dd ago" = "%dd ago";
+
 "tab_hooks" = "Hooks";
 "hooks_enable_title" = "Hooks inschakelen";
 "hooks_enable_subtitle" = "Voer externe opdrachten uit bij quota- of providergebeurtenissen.";
@@ -587,7 +610,7 @@
 "show_provider_changelog_links_title" = "Toon provider changelog-links";
 "show_provider_changelog_links_subtitle" = "Voegt koppelingen naar release-opmerkingen voor ondersteunde CLI-ondersteunde providers toe aan het menu.";
 "show_credits_extra_usage_title" = "Toon credits + extra gebruik";
-"show_credits_extra_usage_subtitle" = "Toon Codex Credits en Claude Extra gebruikssecties in het menu.";
+"show_credits_extra_usage_subtitle" = "Toon tegoeden en extra gebruik voor ondersteunde providers.";
 "multi_account_layout_title" = "Indeling voor meerdere accounts";
 "multi_account_layout_subtitle" = "Kies voor gesegmenteerd wisselen tussen accounts of gestapelde accountkaarten.";
 "multi_account_layout_segmented" = "Gesegmenteerd";
@@ -643,6 +666,8 @@
 "copyright" = "© 2026 Peter Steinberger. MIT-licentie.";
 
 /* Debug Pane */
+"use_javascriptcore_plugin_engine" = "JavaScriptCore gebruiken voor providerplug-ins";
+"use_javascriptcore_plugin_engine_subtitle" = "Alleen als compatibiliteitsterugval. Start CodexBar opnieuw; CODEXBAR_PLUGIN_ENGINE overschrijft deze instelling.";
 "section_logging" = "Loggen";
 "enable_file_logging" = "Bestandsregistratie inschakelen";
 "enable_file_logging_subtitle" = "Schrijf logboeken naar %@ voor foutopsporing.";
@@ -816,7 +841,7 @@
 "Pace: %@" = "Tempo: %@";
 "Pace: %@ · %@" = "Tempo: %@ · %@";
 "%@ · %@" = "%@ · %@";
-"≈ %d%% run-out risk" = "≈ %d%% uitlooprisico";
+"(%d%% risk)" = "(%d%% uitlooprisico)";
 "%d%% in deficit" = "%d%% tekort";
 "%d%% in reserve" = "%d%% in reserve";
 "usage_percent_suffix_left" = "over";
@@ -1315,6 +1340,7 @@
 "menu_bar_layout_gap" = "Tussenruimte";
 "menu_bar_layout_gap_tight" = "Krap";
 "menu_bar_layout_gap_regular" = "Normaal";
+"menu_bar_layout_vertical_adjustment" = "Verticale aanpassing";
 "menu_bar_layout_keyboard_hint" = "Delete verwijdert het geselecteerde token";
 "menu_bar_layout_sample_account" = "account";
 "menu_bar_layout_sample_runs_out" = "op vr.";
@@ -1323,6 +1349,7 @@
 "menu_bar_layout_token_account" = "Account";
 "menu_bar_layout_token_session" = "Sessie %";
 "menu_bar_layout_token_weekly" = "Wekelijks %";
+"menu_bar_layout_token_scoped_weekly" = "Wekelijks per bereik %";
 "menu_bar_layout_token_auto" = "Automatisch %";
 "menu_bar_layout_token_session_pace" = "Sessietempo";
 "menu_bar_layout_token_weekly_pace" = "Weektempo";
@@ -1354,3 +1381,54 @@
 "Resets" = "Resets";
 "Finish now" = "Nu voltooien";
 "Continue in background" = "Doorgaan op de achtergrond";
+
+"Cumulative" = "Cumulatief";
+"Token activity" = "Token-activiteit";
+"View" = "Weergave";
+"in the last year" = "in het afgelopen jaar";
+"No activity in the last 12 months" = "Geen activiteit in de afgelopen 12 maanden";
+"Each column = 1 week" = "Elke kolom = 1 week";
+"Running total" = "Lopend totaal";
+"Less" = "Minder";
+"More" = "Meer";
+
+/* Provider Plugins */
+"Install…" = "Installeren…";
+"Install plugin" = "Plug-in installeren";
+"Copies a JavaScript or TypeScript file into the plugins directory." = "Kopieert een JavaScript- of TypeScript-bestand naar de map met plug-ins.";
+"Show in Finder" = "Toon in Finder";
+"Plugins directory" = "Map met plug-ins";
+"Provider Plugins" = "Providerplug-ins";
+"Plugins are local JavaScript or TypeScript files. Network and cookie access require approval." = "Plug-ins zijn lokale JavaScript- of TypeScript-bestanden. Toegang tot het netwerk en cookies vereist goedkeuring.";
+"No Plugins Installed" = "Geen plug-ins geïnstalleerd";
+"Drop a .js or .ts file into the plugins directory, or choose Install…" = "Sleep een .js- of .ts-bestand naar de map met plug-ins of kies Installeren…";
+"Delete Plugin?" = "Plug-in verwijderen?";
+"Delete" = "Verwijderen";
+"This removes the plugin file, transpile cache, approval, saved settings and secrets, and history." = "Hiermee worden het plug-inbestand, de transpilatiecache, de goedkeuring en alle opgeslagen instellingen, geheimen en geschiedenis verwijderd.";
+"Plugin Error" = "Plug-infout";
+"Needs approval" = "Goedkeuring vereist";
+"File" = "Bestand";
+"Origins" = "Herkomsten";
+"Configure endpoint settings" = "Eindpuntinstellingen configureren";
+"Capabilities" = "Mogelijkheden";
+"Network" = "Netwerk";
+"Cookie domains" = "Cookie-domeinen";
+"Approve…" = "Goedkeuren…";
+"Delete…" = "Verwijderen…";
+"Unknown validation error" = "Onbekende validatiefout";
+"Approve Plugin" = "Plug-in goedkeuren";
+"Install and Approve Plugin" = "Plug-in installeren en goedkeuren";
+"Network authority" = "Netwerktoegang";
+"Auth: %@" = "Authenticatie: %@";
+"Capabilities: %@" = "Mogelijkheden: %@";
+"network" = "netwerk";
+"Secrets: %@" = "Geheimen: %@";
+"none" = "geen";
+"Cookie domains: %@" = "Cookie-domeinen: %@";
+"Type %@ to confirm" = "Typ %@ om te bevestigen";
+"Enter every endpoint setting to review the exact network origins." = "Vul alle eindpuntinstellingen in om de exacte netwerkherkomsten te controleren.";
+"Approve" = "Goedkeuren";
+"Install" = "Installeren";
+"5-hour usage" = "5-uursgebruik";
+"7-day usage" = "7-dagengebruik";
+"Total usage" = "Totaal gebruik";

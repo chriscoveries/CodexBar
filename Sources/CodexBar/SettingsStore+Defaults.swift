@@ -471,6 +471,17 @@ extension SettingsStore {
         }
     }
 
+    /// User-tunable vertical nudge for the menu bar title, clamped to -20...20.
+    /// Positive moves content up, negative moves it down; 0 keeps the optical default.
+    var menuBarLayoutVerticalAdjustment: Int {
+        get { self.defaultsState.menuBarLayoutVerticalAdjustment }
+        set {
+            let clamped = max(-20, min(20, newValue))
+            self.defaultsState.menuBarLayoutVerticalAdjustment = clamped
+            self.userDefaults.set(clamped, forKey: "menuBarLayoutVerticalAdjustment")
+        }
+    }
+
     private func persistMenuBarLayout(_ layout: MenuBarLayout, key: String) {
         guard let data = try? JSONEncoder().encode(layout) else { return }
         self.userDefaults.set(data, forKey: key)
@@ -609,6 +620,30 @@ extension SettingsStore {
         set {
             self.defaultsState.claudeOAuthKeychainReadStrategyRaw = newValue.rawValue
             self.userDefaults.set(newValue.rawValue, forKey: "claudeOAuthKeychainReadStrategy")
+            self.noteBackgroundWorkSettingsChanged()
+        }
+    }
+
+    /// Explicit opt-in for reading Claude Code's own Keychain item (#2634). Feeds
+    /// `ClaudeOAuthDirectKeychainReadConsent`, the single consent source behind
+    /// `ClaudeOAuthCredentialsStore.keychainAccessAllowed`.
+    var claudeOAuthDirectKeychainReadAllowed: Bool {
+        get { self.defaultsState.claudeOAuthDirectKeychainReadAllowed }
+        set {
+            let wasAllowed = self.defaultsState.claudeOAuthDirectKeychainReadAllowed
+            self.defaultsState.claudeOAuthDirectKeychainReadAllowed = newValue
+            self.userDefaults.set(newValue, forKey: ClaudeOAuthDirectKeychainReadConsent.userDefaultsKey)
+            CodexBarLog.logger(LogCategories.settings).info(
+                "Claude direct Keychain read consent updated",
+                metadata: ["allowed": newValue ? "1" : "0"])
+            if wasAllowed, !newValue {
+                // Revoking consent must also revoke what consent obtained: credentials copied from Claude
+                // Code's Keychain while consent was on live in CodexBar's memory and Keychain caches, and
+                // those caches are consulted before the direct-read gate. Advance the global revocation epoch
+                // before dropping the active cache so previously used profile caches also fail closed on lookup
+                // (CodexBar-owned state only — Claude Code's item is untouched).
+                ClaudeOAuthCredentialsStore.revokeDirectKeychainReadConsent()
+            }
             self.noteBackgroundWorkSettingsChanged()
         }
     }
@@ -784,8 +819,8 @@ extension SettingsStore {
         }
     }
 
-    var selectedMenuProvider: UsageProvider? {
-        get { self.selectedMenuProviderRaw.flatMap(UsageProvider.init(rawValue:)) }
+    var selectedMenuProvider: ProviderInstanceID? {
+        get { self.selectedMenuProviderRaw.flatMap(ProviderInstanceID.init(rawValue:)) }
         set {
             self.selectedMenuProviderRaw = newValue?.rawValue
         }

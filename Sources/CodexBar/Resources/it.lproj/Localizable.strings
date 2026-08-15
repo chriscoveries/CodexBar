@@ -1,5 +1,28 @@
 /* Italian localization for CodexBar */
 
+/* iCloud Sync */
+"iCloud Sync" = "Sincronizzazione iCloud";
+"Sync settings and providers across your Macs via iCloud" = "Sincronizza impostazioni e provider sui tuoi Mac tramite iCloud";
+"Include API keys, cookies, and tokens" = "Includi chiavi API, cookie e token";
+"Sync usage snapshots" = "Sincronizza istantanee di utilizzo";
+"Show accounts from other Macs" = "Mostra account da altri Mac";
+"Requires a signed release build of CodexBar." = "Richiede una build di rilascio firmata di CodexBar.";
+"Sign in to iCloud in System Settings to enable sync." = "Accedi a iCloud in Impostazioni di Sistema per abilitare la sincronizzazione.";
+"iCloud access is restricted on this Mac." = "L’accesso a iCloud è limitato su questo Mac.";
+"Sync is paused: another Mac uses a newer version of CodexBar. Update to resume." = "La sincronizzazione è in pausa: un altro Mac usa una versione più recente di CodexBar. Aggiorna per riprendere.";
+"Last successful fetch" = "Ultimo recupero riuscito";
+"Last successful push" = "Ultimo invio riuscito";
+"Never" = "Mai";
+"Macs" = "Computer Mac";
+"No synced Macs yet." = "Nessun Mac sincronizzato.";
+"Secrets use iCloud end-to-end encryption via encryptedValues. Hooks and machine-local paths never sync." = "I segreti usano la crittografia end-to-end di iCloud tramite encryptedValues. Gli hook e i percorsi locali non vengono mai sincronizzati.";
+"Last seen %@" = "Ultima attività: %@";
+"This Mac" = "Questo Mac";
+"another Mac" = "un altro Mac";
+"%dm ago" = "%dm fa";
+"%dh ago" = "%dh fa";
+"%dd ago" = "%dg fa";
+
 "ollama_safari_cookie_access_hint" = "I cookie di Safari richiedono l’accesso completo al disco per CodexBar (Impostazioni di Sistema > Privacy e sicurezza).";
 "ollama_browser_cookie_decryption_denied" = "La decrittografia dei cookie di %@ è stata rifiutata nel Portachiavi. Apri la scheda del provider e fai clic su Aggiorna (⌘R) per richiedere di nuovo l’accesso al Portachiavi.";
 "ollama_browser_cookie_decryption_disabled" = "La decrittografia dei cookie di %@ è disabilitata in CodexBar; abilita l’accesso al Portachiavi e aggiorna.";
@@ -595,7 +618,7 @@
 "show_provider_changelog_links_title" = "Mostra link changelog provider";
 "show_provider_changelog_links_subtitle" = "Aggiunge link alle note di rilascio per i provider CLI supportati.";
 "show_credits_extra_usage_title" = "Mostra crediti + uso extra";
-"show_credits_extra_usage_subtitle" = "Mostra nel menu le sezioni Crediti Codex e Uso extra Claude.";
+"show_credits_extra_usage_subtitle" = "Mostra crediti e utilizzo extra per i provider supportati.";
 "multi_account_layout_title" = "Layout multi-account";
 "multi_account_layout_subtitle" = "Scegli tra selezione segmentata o schede account impilate.";
 "multi_account_layout_segmented" = "Segmentato";
@@ -651,6 +674,8 @@
 "copyright" = "© 2026 Peter Steinberger. Licenza MIT.";
 
 /* Debug Pane */
+"use_javascriptcore_plugin_engine" = "Usa JavaScriptCore per i plugin dei provider";
+"use_javascriptcore_plugin_engine_subtitle" = "Solo ripristino di compatibilità. Riavvia CodexBar per applicarlo; CODEXBAR_PLUGIN_ENGINE sostituisce questa impostazione.";
 "section_logging" = "Log";
 "enable_file_logging" = "Abilita log su file";
 "enable_file_logging_subtitle" = "Scrive i log in %@ per il debug.";
@@ -824,7 +849,7 @@
 "Pace: %@" = "Andamento: %@";
 "Pace: %@ · %@" = "Andamento: %@ · %@";
 "%@ · %@" = "%@ • %@";
-"≈ %d%% run-out risk" = "≈ %d%% rischio di esaurimento";
+"(%d%% risk)" = "(%d%% rischio di esaurimento)";
 "%d%% in deficit" = "deficit del %d%%";
 "%d%% in reserve" = "%d%% di riserva";
 "usage_percent_suffix_left" = "rimasto";
@@ -1319,6 +1344,7 @@
 "menu_bar_layout_gap" = "Spaziatura";
 "menu_bar_layout_gap_tight" = "Stretta";
 "menu_bar_layout_gap_regular" = "Normale";
+"menu_bar_layout_vertical_adjustment" = "Regolazione verticale";
 "menu_bar_layout_keyboard_hint" = "Canc rimuove il token selezionato";
 "menu_bar_layout_sample_account" = "account";
 "menu_bar_layout_sample_runs_out" = "termina ven.";
@@ -1327,6 +1353,7 @@
 "menu_bar_layout_token_account" = "Account";
 "menu_bar_layout_token_session" = "Sessione %";
 "menu_bar_layout_token_weekly" = "Settimanale %";
+"menu_bar_layout_token_scoped_weekly" = "Settimanale con ambito %";
 "menu_bar_layout_token_auto" = "% automatica";
 "menu_bar_layout_token_session_pace" = "Ritmo sessione";
 "menu_bar_layout_token_weekly_pace" = "Ritmo settimanale";
@@ -1358,3 +1385,54 @@
 "Resets" = "Ripristini";
 "Finish now" = "Completa ora";
 "Continue in background" = "Continua in background";
+
+"Cumulative" = "Cumulativo";
+"Token activity" = "Attività token";
+"View" = "Vista";
+"in the last year" = "nell'ultimo anno";
+"No activity in the last 12 months" = "Nessuna attività negli ultimi 12 mesi";
+"Each column = 1 week" = "Ogni colonna = 1 settimana";
+"Running total" = "Totale progressivo";
+"Less" = "Meno";
+"More" = "Più";
+
+/* Provider Plugins */
+"Install…" = "Installa…";
+"Install plugin" = "Installa plugin";
+"Copies a JavaScript or TypeScript file into the plugins directory." = "Copia un file JavaScript o TypeScript nella cartella dei plugin.";
+"Show in Finder" = "Mostra nel Finder";
+"Plugins directory" = "Cartella dei plugin";
+"Provider Plugins" = "Plugin dei provider";
+"Plugins are local JavaScript or TypeScript files. Network and cookie access require approval." = "I plugin sono file JavaScript o TypeScript locali. L'accesso alla rete e ai cookie richiede approvazione.";
+"No Plugins Installed" = "Nessun plugin installato";
+"Drop a .js or .ts file into the plugins directory, or choose Install…" = "Trascina un file .js o .ts nella cartella dei plugin oppure scegli Installa…";
+"Delete Plugin?" = "Eliminare il plugin?";
+"Delete" = "Elimina";
+"This removes the plugin file, transpile cache, approval, saved settings and secrets, and history." = "Questa operazione rimuove il file del plugin, la cache di transpilazione, l'approvazione, le impostazioni salvate, i segreti e la cronologia.";
+"Plugin Error" = "Errore del plugin";
+"Needs approval" = "Approvazione richiesta";
+"File" = "File";
+"Origins" = "Origini";
+"Configure endpoint settings" = "Configura le impostazioni degli endpoint";
+"Capabilities" = "Funzionalità";
+"Network" = "Rete";
+"Cookie domains" = "Domini dei cookie";
+"Approve…" = "Approva…";
+"Delete…" = "Elimina…";
+"Unknown validation error" = "Errore di convalida sconosciuto";
+"Approve Plugin" = "Approva plugin";
+"Install and Approve Plugin" = "Installa e approva plugin";
+"Network authority" = "Accesso alla rete";
+"Auth: %@" = "Autenticazione: %@";
+"Capabilities: %@" = "Funzionalità: %@";
+"network" = "rete";
+"Secrets: %@" = "Segreti: %@";
+"none" = "nessuno";
+"Cookie domains: %@" = "Domini dei cookie: %@";
+"Type %@ to confirm" = "Digita %@ per confermare";
+"Enter every endpoint setting to review the exact network origins." = "Inserisci tutte le impostazioni degli endpoint per verificare le origini di rete esatte.";
+"Approve" = "Approva";
+"Install" = "Installa";
+"5-hour usage" = "Utilizzo di 5 ore";
+"7-day usage" = "Utilizzo di 7 giorni";
+"Total usage" = "Utilizzo totale";

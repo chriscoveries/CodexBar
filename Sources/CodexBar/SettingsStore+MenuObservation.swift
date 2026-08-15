@@ -40,6 +40,7 @@ extension SettingsStore {
         _ = self.menuBarLayoutOverrides
         _ = self.menuBarLayoutSize
         _ = self.menuBarLayoutGap
+        _ = self.menuBarLayoutVerticalAdjustment
         _ = self.copilotIconSecondaryWindowIDRaw
         _ = self.costUsageEnabled
         _ = self.codexLocalSessionCostLedgerEnabled
@@ -52,6 +53,7 @@ extension SettingsStore {
         _ = self.confettiOnSessionLimitResetsEnabled
         _ = self.confettiOnWeeklyLimitResetsEnabled
         _ = self.claudeOAuthKeychainPromptMode
+        _ = self.claudeOAuthDirectKeychainReadAllowed
         _ = self.claudeOAuthKeychainReadStrategy
         _ = self.claudeWebExtrasEnabled
         _ = self.copilotBudgetExtrasEnabled
@@ -65,6 +67,9 @@ extension SettingsStore {
         _ = self.agentSessionsEnabled
         _ = self.agentSessionLabelStyle
         _ = self.agentSessionsManualHosts
+        _ = self.iCloudSyncEnabled
+        _ = self.iCloudSyncSnapshotsEnabled
+        _ = self.iCloudSyncShowFleetAccounts
         _ = self.codexUsageDataSource
         _ = self.codexActiveSource
         _ = self.claudeUsageDataSource
@@ -88,7 +93,7 @@ extension SettingsStore {
         _ = self.switcherShowsIcons
         _ = self.mergedOverviewSelectedProviders
         _ = self.zaiAPIToken
-        _ = self.syntheticAPIToken
+        _ = self[providerConfig: .synthetic, field: .apiKey]
         _ = self.codexCookieHeader
         _ = self.claudeCookieHeader
         _ = self.cursorCookieHeader
@@ -107,7 +112,7 @@ extension SettingsStore {
         _ = self.zoomMateCookieHeader
         _ = self.ollamaCookieHeader
         _ = self.copilotAPIToken
-        _ = self.warpAPIToken
+        _ = self[providerConfig: .warp, field: .apiKey]
         _ = self.tokenAccountsByProvider
         _ = self.debugLoadingPattern
         _ = self.configRevision

@@ -1,5 +1,28 @@
 /* Galician localization for CodexBar */
 
+/* iCloud Sync */
+"iCloud Sync" = "iCloud Sync";
+"Sync settings and providers across your Macs via iCloud" = "Sync settings and providers across your Macs via iCloud";
+"Include API keys, cookies, and tokens" = "Include API keys, cookies, and tokens";
+"Sync usage snapshots" = "Sync usage snapshots";
+"Show accounts from other Macs" = "Show accounts from other Macs";
+"Requires a signed release build of CodexBar." = "Requires a signed release build of CodexBar.";
+"Sign in to iCloud in System Settings to enable sync." = "Sign in to iCloud in System Settings to enable sync.";
+"iCloud access is restricted on this Mac." = "iCloud access is restricted on this Mac.";
+"Sync is paused: another Mac uses a newer version of CodexBar. Update to resume." = "Sync is paused: another Mac uses a newer version of CodexBar. Update to resume.";
+"Last successful fetch" = "Last successful fetch";
+"Last successful push" = "Last successful push";
+"Never" = "Never";
+"Macs" = "Macs";
+"No synced Macs yet." = "No synced Macs yet.";
+"Secrets use iCloud end-to-end encryption via encryptedValues. Hooks and machine-local paths never sync." = "Secrets use iCloud end-to-end encryption via encryptedValues. Hooks and machine-local paths never sync.";
+"Last seen %@" = "Last seen %@";
+"This Mac" = "This Mac";
+"another Mac" = "another Mac";
+"%dm ago" = "%dm ago";
+"%dh ago" = "%dh ago";
+"%dd ago" = "%dd ago";
+
 "ollama_safari_cookie_access_hint" = "As cookies de Safari precisan acceso total ao disco para CodexBar (Axustes do Sistema > Privacidade e seguridade).";
 "ollama_browser_cookie_decryption_denied" = "Rexeitouse no Chaveiro o descifrado das cookies de %@. Abre a tarxeta do provedor e preme Actualizar (⌘R) para solicitar de novo acceso ao Chaveiro.";
 "ollama_browser_cookie_decryption_disabled" = "O descifrado das cookies de %@ está desactivado en CodexBar; activa o acceso ao Chaveiro e actualiza.";
@@ -566,7 +589,7 @@
 "show_provider_changelog_links_title" = "Amosar as ligazóns ao rexistro de cambios do provedor";
 "show_provider_changelog_links_subtitle" = "Engade ao menú enlaces ás notas de versión dos provedores compatibles baseados en CLI.";
 "show_credits_extra_usage_title" = "Amosar créditos + uso adicional";
-"show_credits_extra_usage_subtitle" = "Amosa as seccións de Créditos de Codex e Uso adicional de Claude no menú.";
+"show_credits_extra_usage_subtitle" = "Amosa créditos e uso adicional para os provedores compatibles.";
 "multi_account_layout_title" = "Disposición multiconta";
 "multi_account_layout_subtitle" = "Escolle o cambio de conta segmentado ou tarxetas de conta apiladas.";
 "multi_account_layout_segmented" = "Segmentado";
@@ -622,6 +645,8 @@
 "copyright" = "© 2026 Peter Steinberger. Licenza MIT.";
 
 /* Debug Pane */
+"use_javascriptcore_plugin_engine" = "Usar JavaScriptCore para os complementos de provedores";
+"use_javascriptcore_plugin_engine_subtitle" = "Só como reversión de compatibilidade. Reinicia CodexBar para aplicalo; CODEXBAR_PLUGIN_ENGINE substitúe este axuste.";
 "section_logging" = "Rexistro";
 "enable_file_logging" = "Activar o rexistro en ficheiro";
 "enable_file_logging_subtitle" = "Escribe os rexistros en %@ para depuración.";
@@ -1229,7 +1254,7 @@
 "usage_percent_suffix_left" = "restante";
 "usage_percent_suffix_used" = "usado";
 "z.ai API token not found. Set apiKey in ~/.codexbar/config.json or Z_AI_API_KEY." = "Non se atopou o token da API de z.ai. Define apiKey en ~/.codexbar/config.json ou Z_AI_API_KEY.";
-"≈ %d%% run-out risk" = "≈ %d%% de risco de esgotamento";
+"(%d%% risk)" = "(%d%% de risco de esgotamento)";
 "Show Codex Spark usage" = "Amosar o uso de Codex Spark";
 "Shows Codex Spark quota rows in the menu and provider preview. Requires optional credits and extra usage in Display settings." = "Amosa as filas de cota de Codex Spark no menú e na previsualización do provedor. Require activar «Amosar créditos + uso adicional» nos axustes de Pantalla.";
 "Show Daily Routines usage" = "Amosar o uso de Rutinas diarias";
@@ -1315,6 +1340,7 @@
 "menu_bar_layout_gap" = "Separación";
 "menu_bar_layout_gap_tight" = "Estreita";
 "menu_bar_layout_gap_regular" = "Normal";
+"menu_bar_layout_vertical_adjustment" = "Axuste vertical";
 "menu_bar_layout_keyboard_hint" = "Suprimir retira a ficha seleccionada";
 "menu_bar_layout_sample_account" = "conta";
 "menu_bar_layout_sample_runs_out" = "esgótase ven.";
@@ -1323,6 +1349,7 @@
 "menu_bar_layout_token_account" = "Conta";
 "menu_bar_layout_token_session" = "Sesión %";
 "menu_bar_layout_token_weekly" = "Semanal %";
+"menu_bar_layout_token_scoped_weekly" = "Semanal con ámbito %";
 "menu_bar_layout_token_auto" = "% automática";
 "menu_bar_layout_token_session_pace" = "Ritmo de sesión";
 "menu_bar_layout_token_weekly_pace" = "Ritmo semanal";
@@ -1354,3 +1381,54 @@
 "Resets" = "Reinicios";
 "Finish now" = "Rematar agora";
 "Continue in background" = "Continuar en segundo plano";
+
+"Cumulative" = "Acumulado";
+"Token activity" = "Actividade de tokens";
+"View" = "Vista";
+"in the last year" = "no último ano";
+"No activity in the last 12 months" = "Sen actividade nos últimos 12 meses";
+"Each column = 1 week" = "Cada columna = 1 semana";
+"Running total" = "Total acumulado";
+"Less" = "Menos";
+"More" = "Máis";
+
+/* Provider Plugins */
+"Install…" = "Instalar…";
+"Install plugin" = "Instalar complemento";
+"Copies a JavaScript or TypeScript file into the plugins directory." = "Copia un ficheiro JavaScript ou TypeScript no directorio de complementos.";
+"Show in Finder" = "Amosar no Finder";
+"Plugins directory" = "Directorio de complementos";
+"Provider Plugins" = "Complementos de provedores";
+"Plugins are local JavaScript or TypeScript files. Network and cookie access require approval." = "Os complementos son ficheiros locais JavaScript ou TypeScript. O acceso á rede e ás cookies require aprobación.";
+"No Plugins Installed" = "Non hai complementos instalados";
+"Drop a .js or .ts file into the plugins directory, or choose Install…" = "Solta un ficheiro .js ou .ts no directorio de complementos ou escolle Instalar…";
+"Delete Plugin?" = "Queres eliminar o complemento?";
+"Delete" = "Eliminar";
+"This removes the plugin file, transpile cache, approval, saved settings and secrets, and history." = "Isto elimina o ficheiro do complemento, a caché de transpilación, a aprobación, os axustes e segredos gardados e o historial.";
+"Plugin Error" = "Erro do complemento";
+"Needs approval" = "Precisa aprobación";
+"File" = "Ficheiro";
+"Origins" = "Orixes";
+"Configure endpoint settings" = "Configurar os axustes dos puntos de conexión";
+"Capabilities" = "Capacidades";
+"Network" = "Rede";
+"Cookie domains" = "Dominios das cookies";
+"Approve…" = "Aprobar…";
+"Delete…" = "Eliminar…";
+"Unknown validation error" = "Erro de validación descoñecido";
+"Approve Plugin" = "Aprobar o complemento";
+"Install and Approve Plugin" = "Instalar e aprobar o complemento";
+"Network authority" = "Autorización de rede";
+"Auth: %@" = "Autenticación: %@";
+"Capabilities: %@" = "Capacidades: %@";
+"network" = "rede";
+"Secrets: %@" = "Segredos: %@";
+"none" = "ningún";
+"Cookie domains: %@" = "Dominios das cookies: %@";
+"Type %@ to confirm" = "Escribe %@ para confirmar";
+"Enter every endpoint setting to review the exact network origins." = "Introduce todos os axustes dos puntos de conexión para revisar as orixes de rede exactas.";
+"Approve" = "Aprobar";
+"Install" = "Instalar";
+"5-hour usage" = "Uso de 5 horas";
+"7-day usage" = "Uso de 7 días";
+"Total usage" = "Uso total";

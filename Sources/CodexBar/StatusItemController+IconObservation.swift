@@ -35,7 +35,7 @@ extension StatusItemController {
     }
 
     private func providerStoreIconObservationSignature(for provider: UsageProvider, showBrandPercent: Bool) -> String {
-        let snapshot = self.store.snapshot(for: provider)
+        let snapshot = self.store.menuBarSnapshot(for: provider.instanceID)
         let style = self.store.style(for: provider)
         let resolved = self.resolvedMenuBarIconPercents(
             provider: provider,
@@ -43,6 +43,7 @@ extension StatusItemController {
             style: style,
             showUsed: self.settings.usageBarsShowUsed)
         let creditsRemaining = self.menuBarCreditsRemainingForIcon(provider: provider, snapshot: snapshot)
+        let scopedWeekly = MenuBarLayoutSemanticWindowResolver.scopedWeeklyNamedWindow(snapshot: snapshot)
         let displayText = showBrandPercent ? self.menuBarDisplayText(for: provider, snapshot: snapshot) : nil
         let layoutCostSignature = showBrandPercent
             ? self.storedMenuBarLayoutCostSignature(for: provider)
@@ -53,21 +54,27 @@ extension StatusItemController {
         let layoutPaceSignature = showBrandPercent
             ? self.storedMenuBarLayoutPaceSignature(for: provider, snapshot: snapshot)
             : nil
+        let layoutBalanceSignature = showBrandPercent
+            ? self.storedMenuBarLayoutBalanceSignature(for: provider, snapshot: snapshot)
+            : nil
 
         return [
             provider.rawValue,
             "style=\(style.rawValue)",
             "primary=\(Self.iconSignatureValue(resolved?.primary))",
             "weekly=\(Self.iconSignatureValue(resolved?.secondary))",
+            "scopedWeekly=\(Self.iconSignatureValue(scopedWeekly?.window.usedPercent))",
+            "scopedTitle=\(scopedWeekly?.title ?? "nil")",
             "credits=\(Self.iconSignatureValue(creditsRemaining))",
             "stale=\(self.store.isStale(provider: provider) ? "1" : "0")",
             "status=\(self.store.statusIndicator(for: provider).rawValue)",
             "anim=\(self.shouldAnimate(provider: provider) ? "1" : "0")",
-            "refreshing=\(self.store.refreshingProviders.contains(provider) ? "1" : "0")",
+            "refreshing=\(self.store.refreshingProviders.contains(provider.instanceID) ? "1" : "0")",
             "text=\(displayText ?? "nil")",
             "layoutCost=\(layoutCostSignature ?? "nil")",
             "layoutAccount=\(layoutAccountSignature ?? "nil")",
             "layoutPace=\(layoutPaceSignature ?? "nil")",
+            "layoutBalance=\(layoutBalanceSignature ?? "nil")",
         ].joined(separator: "|")
     }
 
@@ -103,6 +110,18 @@ extension StatusItemController {
         ].joined(separator: ",")
     }
 
+    private func storedMenuBarLayoutBalanceSignature(
+        for provider: UsageProvider,
+        snapshot: UsageSnapshot?)
+        -> String?
+    {
+        let resolution = self.settings.menuBarLayoutResolution(for: provider)
+        guard !resolution.usesLegacyRendering,
+              resolution.layout.lines.joined().contains(.balance)
+        else { return nil }
+        return MenuBarLayoutBalanceResolver.balance(provider: provider, snapshot: snapshot)
+    }
+
     /// Pace tokens change with the historical dataset, the work-day setting, and the clock — none of
     /// which move the percent fields above. Without this contribution a `historicalPaceRevision` bump
     /// wakes the observer but leaves the signature unchanged, so a custom pace token would keep its
@@ -128,9 +147,13 @@ extension StatusItemController {
                 let window: RateWindow? = switch percentWindow {
                 case .session: windows.session
                 case .weekly: windows.weekly
+                case .scopedWeekly: nil
                 case .automatic: windows.automatic
                 }
-                let pace = self.store.menuBarLayoutPaceText(provider: provider, window: window)
+                let pace = self.store.menuBarLayoutPaceText(
+                    provider: provider,
+                    window: window,
+                    minimumElapsedPercent: percentWindow == .weekly ? 1 : nil)
                 return "\(percentWindow.rawValue)=\(pace ?? "nil")"
             }
             .joined(separator: ",")

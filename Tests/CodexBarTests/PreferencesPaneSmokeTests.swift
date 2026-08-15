@@ -12,6 +12,7 @@ struct PreferencesPaneSmokeTests {
         let store = Self.makeUsageStore(settings: settings)
 
         _ = GeneralPane(settings: settings).body
+        _ = ICloudSyncPane(settings: settings, state: CloudSyncState()).body
         _ = NotificationsPane(settings: settings).body
         _ = MenuBarPane(settings: settings, store: store).body
         _ = MenuPane(settings: settings, store: store).body
@@ -45,6 +46,7 @@ struct PreferencesPaneSmokeTests {
         store._setErrorForTesting("Example error", provider: .codex)
 
         _ = GeneralPane(settings: settings).body
+        _ = ICloudSyncPane(settings: settings, state: CloudSyncState()).body
         _ = NotificationsPane(settings: settings).body
         _ = MenuBarPane(settings: settings, store: store).body
         _ = MenuPane(settings: settings, store: store).body
@@ -206,6 +208,24 @@ struct PreferencesPaneSmokeTests {
         #expect(!CostHistoryDaysEditor.title(days: 365).contains("%d"))
 
         _ = CostHistoryDaysEditor(settings: settings).body
+    }
+
+    @Test
+    func `agent session hosts editor builds for empty disabled and populated states`() {
+        let suite = "PreferencesPaneSmokeTests-agent-session-hosts"
+        let settings = Self.makeSettingsStore(suite: suite)
+
+        settings.agentSessionsEnabled = false
+        settings.agentSessionsManualHosts = ""
+        _ = AgentSessionHostsEditor(settings: settings).body
+        #expect(AgentSessionHostsEditor.inputFormatHint == "user@host, user@host")
+
+        settings.agentSessionsEnabled = true
+        settings.agentSessionsManualHosts = "developer@example-host"
+        _ = AgentSessionHostsEditor(settings: settings).body
+
+        let reloaded = Self.makeSettingsStore(suite: suite, reset: false)
+        #expect(reloaded.agentSessionsManualHosts == "developer@example-host")
     }
 
     @Test

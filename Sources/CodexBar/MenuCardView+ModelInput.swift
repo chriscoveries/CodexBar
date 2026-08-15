@@ -22,6 +22,7 @@ extension UsageMenuCardView.Model {
         let usageBarsShowUsed: Bool
         let resetTimeDisplayStyle: ResetTimeDisplayStyle
         let tokenCostUsageEnabled: Bool
+        let tokenCostIsRefreshing: Bool
         let codexLocalSessionCostLedgerEnabled: Bool
         let tokenCostInlineDashboardEnabled: Bool
         let tokenCostMenuSectionEnabled: Bool
@@ -30,7 +31,11 @@ extension UsageMenuCardView.Model {
         let claudeDailyRoutinesUsageVisible: Bool
         let codexSparkUsageVisible: Bool
         let copilotBudgetExtrasEnabled: Bool
+        /// Provider details is the diagnostic surface and lists every usage lane a provider reports.
+        /// The menu and widgets stay curated and may drop lanes that carry no information.
+        let showsAllUsageLanes: Bool
         let sourceLabel: String?
+        let subtitleOverride: String?
         let kiloAutoMode: Bool
         let hidePersonalInfo: Bool
         let weeklyPace: UsagePace?
@@ -61,6 +66,7 @@ extension UsageMenuCardView.Model {
             usageBarsShowUsed: Bool,
             resetTimeDisplayStyle: ResetTimeDisplayStyle,
             tokenCostUsageEnabled: Bool,
+            tokenCostIsRefreshing: Bool = false,
             codexLocalSessionCostLedgerEnabled: Bool = false,
             tokenCostInlineDashboardEnabled: Bool? = nil,
             tokenCostMenuSectionEnabled: Bool? = nil,
@@ -69,7 +75,9 @@ extension UsageMenuCardView.Model {
             claudeDailyRoutinesUsageVisible: Bool = true,
             codexSparkUsageVisible: Bool = true,
             copilotBudgetExtrasEnabled: Bool = false,
+            showsAllUsageLanes: Bool = false,
             sourceLabel: String? = nil,
+            subtitleOverride: String? = nil,
             kiloAutoMode: Bool = false,
             hidePersonalInfo: Bool,
             weeklyPace: UsagePace? = nil,
@@ -99,6 +107,7 @@ extension UsageMenuCardView.Model {
             self.usageBarsShowUsed = usageBarsShowUsed
             self.resetTimeDisplayStyle = resetTimeDisplayStyle
             self.tokenCostUsageEnabled = tokenCostUsageEnabled
+            self.tokenCostIsRefreshing = tokenCostIsRefreshing
             self.codexLocalSessionCostLedgerEnabled = codexLocalSessionCostLedgerEnabled
             self.tokenCostInlineDashboardEnabled = tokenCostInlineDashboardEnabled ?? tokenCostUsageEnabled
             self.tokenCostMenuSectionEnabled = tokenCostMenuSectionEnabled ?? tokenCostUsageEnabled
@@ -107,7 +116,9 @@ extension UsageMenuCardView.Model {
             self.claudeDailyRoutinesUsageVisible = claudeDailyRoutinesUsageVisible
             self.codexSparkUsageVisible = codexSparkUsageVisible
             self.copilotBudgetExtrasEnabled = copilotBudgetExtrasEnabled
+            self.showsAllUsageLanes = showsAllUsageLanes
             self.sourceLabel = sourceLabel
+            self.subtitleOverride = subtitleOverride
             self.kiloAutoMode = kiloAutoMode
             self.hidePersonalInfo = hidePersonalInfo
             self.weeklyPace = weeklyPace

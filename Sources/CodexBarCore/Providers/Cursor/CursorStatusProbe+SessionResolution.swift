@@ -46,14 +46,18 @@ extension CursorStatusProbe {
         }
 
         // A browser fallback started by this refresh must not overwrite a concurrently committed login.
-        var cacheObservation = CookieHeaderCache.observeForConditionalMutation(provider: .cursor)
+        var cacheObservation = CookieHeaderCache.observeForConditionalMutation(
+            provider: .cursor,
+            coordinator: self.conditionalMutationCoordinator)
         let cachedEntry = allowCachedSessions ? CookieHeaderCache.load(provider: .cursor) : nil
         var storedCookies = allowCachedSessions ? await CursorSessionStore.shared.getCookies() : []
         if !allowAppAuthFallback {
             storedCookies.removeAll(where: CursorAppAuthSession.isPersistedCookie)
         }
 
-        if allowAppAuthFallback {
+        let hasExplicitBrowserSelection = cachedEntry?.sourceLabel != Self.appAuthSourceLabel &&
+            cachedEntry?.authenticationFailurePolicy == .stopFallback
+        if allowAppAuthFallback, !hasExplicitBrowserSelection {
             let context = AppSessionFetchContext(
                 cachedEntry: cachedEntry,
                 storedCookies: storedCookies,
@@ -221,7 +225,7 @@ extension CursorStatusProbe {
             if loadedAppSession != nil {
                 context.log("Cursor.app local auth is expired or invalid; falling back to browser cookies")
             }
-            let storedCookies = Self.removingAppSession(appSession, from: context.storedCookies)
+            let storedCookies = Self.removingPersistedAppSessions(from: context.storedCookies)
             await CursorSessionStore.shared.setCookies(storedCookies)
             return .resumeFallback(storedCookies: storedCookies)
         }
@@ -252,7 +256,7 @@ extension CursorStatusProbe {
         } catch let error as CursorStatusProbeError {
             guard case .notLoggedIn = error else { throw error }
             context.log("Cursor.app local auth was rejected; falling back to browser cookies")
-            let storedCookies = Self.removingAppSession(appSession, from: context.storedCookies)
+            let storedCookies = Self.removingPersistedAppSessions(from: context.storedCookies)
             await CursorSessionStore.shared.setCookies(storedCookies)
             return .resumeFallback(storedCookies: storedCookies)
         } catch {
@@ -277,15 +281,8 @@ extension CursorStatusProbe {
         return CursorAppAuthSession.from(cookieHeader: storedHeader)
     }
 
-    private static func removingAppSession(
-        _ appSession: CursorAppAuthSession,
-        from cookies: [HTTPCookie]) -> [HTTPCookie]
-    {
-        cookies.filter { cookie in
-            guard CursorAppAuthSession.isPersistedCookie(cookie) else { return true }
-            let value = cookie.value.removingPercentEncoding ?? cookie.value
-            return value.components(separatedBy: "::").last != appSession.accessToken
-        }
+    private static func removingPersistedAppSessions(from cookies: [HTTPCookie]) -> [HTTPCookie] {
+        cookies.filter { !CursorAppAuthSession.isPersistedCookie($0) }
     }
 
     private static func logIdentityMismatchIfNeeded(
@@ -311,7 +308,7 @@ extension CursorStatusProbe {
         let browserLabel = browserIdentity.displayLabel ?? "unknown account"
         let message = "Cursor.app account \(appLabel) differs from browser session \(browserLabel); "
             + "using Cursor.app account \(appLabel)"
-        CodexBarLog.logger(LogCategories.cursor).warning(message)
+        CodexBarLog.logger(LogCategories.provider(.cursor)).warning(message)
         log(message)
     }
 
