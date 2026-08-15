@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 #if os(macOS) || os(Linux)
 extension CursorStatusProbe {
@@ -15,6 +18,7 @@ extension CursorStatusProbe {
         case resumeFallback
     }
 
+    #if os(macOS)
     private struct AppSessionFetchContext<Value: Sendable> {
         let cachedEntry: CookieHeaderCache.Entry?
         let storedCookies: [HTTPCookie]
@@ -27,6 +31,7 @@ extension CursorStatusProbe {
         case succeeded(Value)
         case resumeFallback(storedCookies: [HTTPCookie])
     }
+    #endif
 
     /// Resolve a working Cursor session, preserving selected-account and cache-ownership rules.
     func resolveSession<Value: Sendable>(
@@ -51,6 +56,7 @@ extension CursorStatusProbe {
             coordinator: self.conditionalMutationCoordinator)
         let cachedEntry = allowCachedSessions ? CookieHeaderCache.load(provider: .cursor) : nil
         var storedCookies = allowCachedSessions ? await CursorSessionStore.shared.getCookies() : []
+        #if os(macOS)
         if !allowAppAuthFallback {
             storedCookies.removeAll(where: CursorAppAuthSession.isPersistedCookie)
         }
@@ -71,16 +77,16 @@ extension CursorStatusProbe {
                 storedCookies = updatedStoredCookies
             }
         }
+        #endif
 
         if allowCachedSessions,
            let cached = cachedEntry,
            !cached.cookieHeader.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         {
+            #if os(macOS)
             if cached.sourceLabel == Self.appAuthSourceLabel {
                 if CookieHeaderCache.clearIfCurrent(provider: .cursor, expected: cached) {
-                    #if os(macOS)
                     cacheObservation = cacheObservation.afterOwnedClear()
-                    #endif
                 }
             } else {
                 let context = CachedSessionFetchContext(
@@ -93,11 +99,23 @@ extension CursorStatusProbe {
                 case let .succeeded(value):
                     return value
                 case .resumeFallback:
-                    #if os(macOS)
                     cacheObservation = cacheObservation.afterOwnedClear()
-                    #endif
                 }
             }
+            #else
+            let context = CachedSessionFetchContext(
+                cookieHeaderOverride: cookieHeaderOverride,
+                allowAppAuthFallback: allowAppAuthFallback,
+                logger: logger,
+                log: log,
+                perform: perform)
+            switch try await self.fetchCachedSession(cached, context: context) {
+            case let .succeeded(value):
+                return value
+            case .resumeFallback:
+                break
+            }
+            #endif
         }
 
         #if os(macOS)
@@ -198,6 +216,7 @@ extension CursorStatusProbe {
         #endif
     }
 
+    #if os(macOS)
     private static let appAuthSourceLabel = "Cursor.app local auth"
 
     private func fetchPreferredAppSession<Value: Sendable>(
@@ -241,7 +260,6 @@ extension CursorStatusProbe {
         do {
             let value = try await context.perform(cookieHeader, appIdentity)
             await self.persistAppAuthSession(appSession)
-            #if os(macOS)
             let reconciliation = ResolvedSessionReconciliationContext(
                 cookieHeader: cookieHeader,
                 sourceLabel: Self.appAuthSourceLabel,
@@ -250,9 +268,6 @@ extension CursorStatusProbe {
                 log: context.log)
             let reconciled = try await self.reconcileResolvedSession(value: value, context: reconciliation)
             return .succeeded(reconciled)
-            #else
-            return .succeeded(value)
-            #endif
         } catch let error as CursorStatusProbeError {
             guard case .notLoggedIn = error else { throw error }
             context.log("Cursor.app local auth was rejected; falling back to browser cookies")
@@ -311,6 +326,7 @@ extension CursorStatusProbe {
         CodexBarLog.logger(LogCategories.provider(.cursor)).warning(message)
         log(message)
     }
+    #endif
 
     private func fetchCachedSession<Value: Sendable>(
         _ cached: CookieHeaderCache.Entry,

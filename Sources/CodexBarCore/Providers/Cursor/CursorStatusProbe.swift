@@ -627,8 +627,8 @@ public enum CursorStatusProbeError: LocalizedError, Sendable {
             #if os(macOS)
             "Not logged in to Cursor. Please log in via the CodexBar menu."
             #else
-            "Not logged in to Cursor. Sign in to the Cursor app on this machine or paste a Cookie header copied "
-                + "from cursor.com into ~/.config/codexbar/config.json (legacy: ~/.codexbar/config.json)."
+            "Not logged in to Cursor. Paste a Cookie header copied from cursor.com into "
+                + "~/.config/codexbar/config.json (legacy: ~/.codexbar/config.json)."
             #endif
         case let .networkError(msg):
             "Cursor API error: \(msg)"
@@ -640,8 +640,8 @@ public enum CursorStatusProbeError: LocalizedError, Sendable {
                 + "Please log in to cursor.com in \(cursorCookieImportOrder.loginHint). "
                 + "You can also sign in to Cursor from the CodexBar menu (Add / switch account)."
             #else
-            "No Cursor session found. Sign in to the Cursor app on this machine or paste a Cookie header copied "
-                + "from cursor.com into ~/.config/codexbar/config.json (legacy: ~/.codexbar/config.json)."
+            "No Cursor session found. Paste a Cookie header copied from cursor.com into "
+                + "~/.config/codexbar/config.json (legacy: ~/.codexbar/config.json)."
             #endif
         }
     }
@@ -674,10 +674,12 @@ public actor CursorSessionStore {
         self.saveToDisk()
     }
 
+    #if os(macOS)
     func persistAppSession(_ session: CursorAppAuthSession) {
         guard let cookie = try? session.makeCookie() else { return }
         self.setCookies([cookie])
     }
+    #endif
 
     public func getCookies() -> [HTTPCookie] {
         self.loadFromDiskIfNeeded()
@@ -826,8 +828,10 @@ public struct CursorStatusProbe: Sendable {
     let browserDetection: BrowserDetection
     let browserCookieImportOrder: BrowserCookieImportOrder
     private let urlSession: any ProviderHTTPTransport
+    #if os(macOS)
     let appAuthStore: any CursorAppAuthSessionProviding
     let persistAppAuthSession: @Sendable (CursorAppAuthSession) async -> Void
+    #endif
     let conditionalMutationCoordinator: CookieHeaderCache.ConditionalMutationCoordinator
 
     public init(
@@ -836,6 +840,7 @@ public struct CursorStatusProbe: Sendable {
         browserDetection: BrowserDetection,
         urlSession: any ProviderHTTPTransport = ProviderHTTPClient.shared)
     {
+        #if os(macOS)
         self.init(
             baseURL: baseURL,
             timeout: timeout,
@@ -847,6 +852,15 @@ public struct CursorStatusProbe: Sendable {
                 await CursorSessionStore.shared.persistAppSession(session)
             },
             conditionalMutationCoordinator: .shared)
+        #else
+        self.init(
+            baseURL: baseURL,
+            timeout: timeout,
+            browserDetection: browserDetection,
+            browserCookieImportOrder: Self.defaultBrowserCookieImportOrder,
+            urlSession: urlSession,
+            conditionalMutationCoordinator: .shared)
+        #endif
     }
 
     package init(
@@ -856,6 +870,7 @@ public struct CursorStatusProbe: Sendable {
         urlSession: any ProviderHTTPTransport = ProviderHTTPClient.shared,
         conditionalMutationCoordinator: CookieHeaderCache.ConditionalMutationCoordinator)
     {
+        #if os(macOS)
         self.init(
             baseURL: baseURL,
             timeout: timeout,
@@ -867,8 +882,18 @@ public struct CursorStatusProbe: Sendable {
                 await CursorSessionStore.shared.persistAppSession(session)
             },
             conditionalMutationCoordinator: conditionalMutationCoordinator)
+        #else
+        self.init(
+            baseURL: baseURL,
+            timeout: timeout,
+            browserDetection: browserDetection,
+            browserCookieImportOrder: Self.defaultBrowserCookieImportOrder,
+            urlSession: urlSession,
+            conditionalMutationCoordinator: conditionalMutationCoordinator)
+        #endif
     }
 
+    #if os(macOS)
     init(
         baseURL: URL = URL(string: "https://cursor.com")!,
         timeout: TimeInterval = 15.0,
@@ -895,6 +920,23 @@ public struct CursorStatusProbe: Sendable {
             session.cookieHeader(),
             identityFallback: session.identity)
     }
+    #else
+    init(
+        baseURL: URL = URL(string: "https://cursor.com")!,
+        timeout: TimeInterval = 15.0,
+        browserDetection: BrowserDetection,
+        browserCookieImportOrder: BrowserCookieImportOrder = Self.defaultBrowserCookieImportOrder,
+        urlSession: any ProviderHTTPTransport = ProviderHTTPClient.shared,
+        conditionalMutationCoordinator: CookieHeaderCache.ConditionalMutationCoordinator = .shared)
+    {
+        self.baseURL = baseURL
+        self.timeout = timeout
+        self.browserDetection = browserDetection
+        self.browserCookieImportOrder = browserCookieImportOrder
+        self.urlSession = urlSession
+        self.conditionalMutationCoordinator = conditionalMutationCoordinator
+    }
+    #endif
 
     /// Fetch Cursor usage with manual cookie header (for debugging).
     public func fetchWithManualCookies(_ cookieHeader: String) async throws -> CursorStatusSnapshot {

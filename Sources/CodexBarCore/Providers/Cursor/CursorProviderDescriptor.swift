@@ -94,7 +94,7 @@ public enum CursorProviderDescriptor {
                 supportsCostCommand: self.supportsCostCommand,
                 browserSupportExemption: { _, _, settings in
                     #if os(Linux)
-                    // Linux uses Cursor app auth and manual cookies; browser import remains macOS-only.
+                    // Linux supports manual cookies; browser and Cursor.app imports remain macOS-only.
                     settings?.cursor?.cookieSource != .off
                     #else
                     false

@@ -8,7 +8,7 @@ read_when:
 
 # Cursor provider
 
-Cursor can reuse Cursor.app's local session or a cursor.com browser session. Automatic mode prefers a usable
+On macOS, Cursor can reuse Cursor.app's local session or a cursor.com browser session. Automatic mode prefers a usable
 Cursor.app session and falls back to cookies when the app token is missing, expired, invalid, or rejected.
 
 ## Data sources + fallback order
@@ -18,7 +18,6 @@ Cursor.app session and falls back to cookies when the app token is missing, expi
    - Files consulted by SQLite:
      - macOS main DB: `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`
      - Active WAL sidecars when present: `state.vscdb-wal` and `state.vscdb-shm`
-     - Linux main DB: `$XDG_CONFIG_HOME/Cursor/User/globalStorage/state.vscdb` (default `~/.config/Cursor/...`)
    - The database is opened read-only. Active WAL state is read normally; an idle WAL-mode main file with no
      sidecars uses SQLite immutable mode so CodexBar does not recreate files in Cursor's directory.
    - The token is used only while its JWT expiry is more than 60 seconds away. CodexBar never refreshes it.
@@ -43,7 +42,7 @@ Cursor.app session and falls back to cookies when the app token is missing, expi
    - Legacy sessions captured by older CodexBar releases remain readable.
    - Stored at: `~/Library/Application Support/CodexBar/cursor-session.json`.
 
-Explicit `--source web` skips Cursor.app local auth and uses only the cookie ladder. A configured Manual cookie
+On macOS, explicit `--source web` skips Cursor.app local auth and uses only the cookie ladder. A configured Manual cookie
 header remains an explicit override. `codexbar usage --provider cursor --source auto --verbose` prints the selected
 automatic path and is the quickest live-read check after Cursor login.
 
@@ -77,8 +76,7 @@ Manual option:
 - Firefox: `~/Library/Application Support/Firefox/Profiles/*/cookies.sqlite`
 
 ## Linux CLI
-- `codexbar usage --provider cursor` reads the signed-in Cursor app's access token from the Linux global state DB and reuses the same `cursor.com` usage endpoints as macOS.
-- Automatic browser cookie import and the external-browser Add/Switch flow are macOS app features.
+- Cursor.app session import, automatic browser cookie import, and the external-browser Add/Switch flow are macOS app features.
 - Manual cookie headers from `~/.config/codexbar/config.json` (or legacy `~/.codexbar/config.json`) work on Linux.
 
 ## Local storage footprint

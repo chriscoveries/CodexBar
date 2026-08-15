@@ -1,11 +1,9 @@
 import Foundation
-#if canImport(FoundationNetworking)
-import FoundationNetworking
-#endif
+
+#if os(macOS)
 #if canImport(SQLite3)
 import SQLite3
-#elseif canImport(CSQLite3)
-import CSQLite3
+#endif
 #endif
 
 #if os(macOS) || os(Linux)
@@ -102,7 +100,9 @@ struct CursorSessionIdentity: Equatable, Sendable {
         return value.lowercased()
     }
 }
+#endif
 
+#if os(macOS)
 struct CursorAppAuthSession: Equatable, Sendable {
     static let persistedCookieMarker = "CodexBar Cursor.app local auth"
 
