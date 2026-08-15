@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.50.1 — Unreleased
+
+### Added
+- Usage bars: make workday tick marks configurable with hidden, subtle, and high-contrast appearances.
+
 ## 0.50.0 — 2026-08-15
 
 ### Added
