@@ -421,6 +421,20 @@ enum CostUsagePricing {
     ]
 
     private static let codexModelsDevProviderID = "openai"
+    /// Provider IDs emitted by Codex-compatible clients that have matching entries in models.dev.
+    ///
+    /// The route prefix is part of the model identity for local usage estimates. Keep both the
+    /// client-facing aliases and their models.dev provider IDs here so pricing-cache fingerprints
+    /// invalidate when any supported route's rates change.
+    static let codexModelsDevProviderIDs: Set<String> = [
+        "deepseek",
+        "kimi-coding",
+        "kimi-for-coding",
+        "openai",
+        "opencode",
+        "opencode-free",
+        "opencode-go",
+    ]
     private static let claudeModelsDevProviderID = "anthropic"
 
     static func normalizeCodexModel(_ raw: String) -> String {
@@ -541,18 +555,12 @@ enum CostUsagePricing {
     {
         let key = self.normalizeCodexModel(model)
         guard key != self.codexUnattributedModel else { return nil }
-        let modelsDevLookup = self.modelsDevLookup(
-            providerID: self.codexModelsDevProviderID,
+        let modelsDevLookup = self.codexModelsDevLookup(
             model: model,
             catalog: modelsDevCatalog,
             cacheRoot: modelsDevCacheRoot)
-            ?? (model == key ? nil : self.modelsDevLookup(
-                providerID: self.codexModelsDevProviderID,
-                model: key,
-                catalog: modelsDevCatalog,
-                cacheRoot: modelsDevCacheRoot))
         if let lookup = modelsDevLookup {
-            let bundled = self.codex[key]
+            let bundled = lookup.pricing.providerID == self.codexModelsDevProviderID ? self.codex[key] : nil
             // A missing catalog context block means models.dev has no long-context opinion, so use
             // the bundled tuple. Once the block exists, preserve its omissions and normal fallback
             // semantics instead of filling individual fields from a different pricing source.
@@ -588,6 +596,59 @@ enum CostUsagePricing {
 
         guard let pricing = self.codex[key] else { return nil }
         return pricing
+    }
+
+    /// Resolves the provider-qualified model IDs written by Codex-compatible clients without
+    /// falling back to OpenAI pricing for an unrelated route. Unqualified model IDs retain the
+    /// historical OpenAI behavior, including the gpt-5.6 alias lookup.
+    private static func codexModelsDevLookup(
+        model rawModel: String,
+        catalog: ModelsDevCatalog?,
+        cacheRoot: URL?) -> ModelsDevPricingLookup?
+    {
+        let trimmed = rawModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        let candidates: [(providerID: String, modelID: String)]
+        if let slash = trimmed.firstIndex(of: "/") {
+            let routeID = String(trimmed[..<slash]).lowercased()
+            let modelID = String(trimmed[trimmed.index(after: slash)...])
+            guard !routeID.isEmpty, !modelID.isEmpty,
+                  self.codexModelsDevProviderIDs.contains(routeID)
+            else { return nil }
+
+            var providerIDs = [routeID]
+            switch routeID {
+            case "kimi-coding":
+                providerIDs.append("kimi-for-coding")
+            case "opencode-free":
+                providerIDs.append("opencode")
+            default:
+                break
+            }
+            candidates = providerIDs.map { ($0, modelID) }
+        } else {
+            candidates = [(self.codexModelsDevProviderID, trimmed)]
+        }
+
+        for candidate in candidates {
+            var modelIDs = [candidate.modelID]
+            if candidate.providerID == self.codexModelsDevProviderID {
+                let normalized = self.normalizeCodexModel(candidate.modelID)
+                if normalized != candidate.modelID {
+                    modelIDs.append(normalized)
+                }
+            }
+            for modelID in modelIDs {
+                if let lookup = self.modelsDevLookup(
+                    providerID: candidate.providerID,
+                    model: modelID,
+                    catalog: catalog,
+                    cacheRoot: cacheRoot)
+                {
+                    return lookup
+                }
+            }
+        }
+        return nil
     }
 
     static func codexPriorityCostUSD(
