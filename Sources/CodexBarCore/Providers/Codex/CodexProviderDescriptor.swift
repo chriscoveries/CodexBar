@@ -1,6 +1,13 @@
 import Foundation
 import SweetCookieKit
 
+extension ProviderFetchContext {
+    /// The managed Codex workspace identity is app metadata, not a mutation of Codex's auth file.
+    public var codexWorkspaceID: String? {
+        self.settings?.codex?.managedWorkspaceAccountID
+    }
+}
+
 public enum CodexProviderDescriptor {
     public static let descriptor: ProviderDescriptor = Self.makeDescriptor()
 
@@ -317,10 +324,19 @@ struct CodexCLIUsageStrategy: ProviderFetchStrategy {
 struct CodexOAuthNativeRefreshCLIStrategy: ProviderFetchStrategy {
     let id: String = "codex.oauth-native-refresh-cli"
     let kind: ProviderFetchKind = .cli
+    private let binaryResolver: @Sendable (ProviderFetchContext) -> String?
+
+    init(
+        binaryResolver: @escaping @Sendable (ProviderFetchContext) -> String? = {
+            CodexCLIUsageStrategy.resolvedBinary(env: $0.env)
+        })
+    {
+        self.binaryResolver = binaryResolver
+    }
 
     func isAvailable(_ context: ProviderFetchContext) async -> Bool {
         guard context.sourceMode == .oauth,
-              CodexCLIUsageStrategy.resolvedBinary(env: context.env) != nil,
+              self.binaryResolver(context) != nil,
               let credentials = try? CodexOAuthCredentialsStore.loadForUsage(
                   env: context.env,
                   allowExternalSources: context.settings?.codex?.allowExternalOAuthSources == true)
@@ -358,7 +374,22 @@ struct CodexOAuthFetchStrategy: ProviderFetchStrategy {
         context: ProviderFetchContext,
         credentials initialCredentials: CodexOAuthCredentials) async throws -> ProviderFetchResult
     {
-        let credentials = try Self.prepareCredentialsForUsage(initialCredentials)
+        var credentials = try await Self.prepareCredentialsForUsage(
+            initialCredentials,
+            env: context.env)
+        if let managedWorkspaceAccountID = context.settings?.codex?.managedWorkspaceAccountID,
+           !managedWorkspaceAccountID.isEmpty
+        {
+            credentials = CodexOAuthCredentials(
+                accessToken: credentials.accessToken,
+                refreshToken: credentials.refreshToken,
+                idToken: credentials.idToken,
+                accountId: managedWorkspaceAccountID,
+                lastRefresh: credentials.lastRefresh,
+                expiresAt: credentials.expiresAt,
+                source: credentials.source,
+                isAPIKey: credentials.isAPIKey)
+        }
 
         let usage = try await CodexOAuthUsageFetcher.fetchUsage(
             accessToken: credentials.accessToken,
@@ -383,19 +414,35 @@ struct CodexOAuthFetchStrategy: ProviderFetchStrategy {
     }
 
     private static func prepareCredentialsForUsage(
-        _ credentials: CodexOAuthCredentials) throws -> CodexOAuthCredentials
+        _ credentials: CodexOAuthCredentials,
+        env: [String: String]) async throws -> CodexOAuthCredentials
     {
-        guard !credentials.needsRefresh else {
-            // auth.json is owned by Codex CLI and may be replaced by a login at any time. Without
-            // a cross-writer compare-and-swap contract, CodexBar must not refresh and publish new
-            // OAuth token material into this shared file. The CLI owns the recovery path for
-            // native credentials; external sources remain strictly read-only.
+        guard credentials.needsRefresh else { return credentials }
+        guard !credentials.refreshToken.isEmpty else {
+            // A native credential without a refresh token can still be repaired by the Codex CLI.
+            // External sources have no safe writer handoff, so they fail closed.
             if credentials.source == .codexHome {
                 throw CodexOAuthCredentialsError.nativeRefreshRequired
             }
             throw CodexOAuthCredentialsError.readOnlySource
         }
-        return credentials
+
+        let cacheKey = CodexOAuthCredentialsStore.refreshCacheKey(
+            env: env,
+            source: credentials.source,
+            accessToken: credentials.accessToken,
+            refreshToken: credentials.refreshToken)
+        do {
+            return try await CodexOAuthInMemoryRefreshCache.shared.refreshIfNeeded(
+                credentials: credentials,
+                cacheKey: cacheKey,
+                refresh: { try await CodexTokenRefresher.refresh(credentials) })
+        } catch is CodexTokenRefresher.RefreshError where credentials.source == .codexHome {
+            // If the native refresh endpoint rejects the token, retain the existing explicit-OAuth
+            // CLI handoff. The CLI is optional for the normal in-memory refresh path, but remains
+            // the recovery authority for revoked/invalid native credentials.
+            throw CodexOAuthCredentialsError.nativeRefreshRequired
+        }
     }
 
     private static func shouldFetchResetCredits(_ context: ProviderFetchContext) -> Bool {
@@ -703,9 +750,10 @@ extension CodexOAuthFetchStrategy {
     }
 
     static func _prepareCredentialsForTesting(
-        _ credentials: CodexOAuthCredentials) throws -> CodexOAuthCredentials
+        _ credentials: CodexOAuthCredentials,
+        env: [String: String] = [:]) async throws -> CodexOAuthCredentials
     {
-        try self.prepareCredentialsForUsage(credentials)
+        try await self.prepareCredentialsForUsage(credentials, env: env)
     }
 
     static func _applySpendControlsMonthlyLimitForTesting(

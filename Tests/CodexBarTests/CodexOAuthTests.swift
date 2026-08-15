@@ -832,7 +832,8 @@ struct CodexOAuthTests {
             claudeFetcher: context.claudeFetcher,
             browserDetection: context.browserDetection)
 
-        let isAvailable = await CodexOAuthNativeRefreshCLIStrategy().isAvailable(context)
+        let isAvailable = await CodexOAuthNativeRefreshCLIStrategy(binaryResolver: { _ in nil })
+            .isAvailable(context)
         #expect(!isAvailable)
     }
 

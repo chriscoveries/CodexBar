@@ -80,6 +80,13 @@ public enum CodexProviderSettingsBuilder {
         case let .profileHome(path):
             snapshot.profileHomeAccount(path: path) == nil
         }
+        let managedWorkspaceAccountID: String? = switch input.resolvedActiveSource.resolvedSource {
+        case .liveSystem, .profileHome:
+            nil
+        case .managedAccount:
+            input.reconciliationSnapshot.activeStoredAccount?.workspaceAccountID
+                ?? input.reconciliationSnapshot.activeStoredAccount?.providerAccountID
+        }
 
         return ProviderSettingsSnapshot.CodexProviderSettings(
             usageDataSource: input.usageDataSource,
@@ -92,6 +99,7 @@ public enum CodexProviderSettingsBuilder {
             profileAccountTargetUnavailable: profileAccountTargetUnavailable,
             openAIWebCacheScope: openAIWebCacheScope,
             dashboardAuthorityKnownOwners: CodexKnownOwnerCatalog.candidates(from: snapshot),
-            allowExternalOAuthSources: input.allowExternalOAuthSources)
+            allowExternalOAuthSources: input.allowExternalOAuthSources,
+            managedWorkspaceAccountID: managedWorkspaceAccountID)
     }
 }

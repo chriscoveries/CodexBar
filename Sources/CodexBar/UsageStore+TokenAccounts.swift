@@ -180,6 +180,7 @@ private struct CodexAccountFetchRequest {
     let limitResetOwnerKey: CodexLimitResetOwnerKey?
     let descriptor: ProviderDescriptor
     let context: ProviderFetchContext
+    let resetCreditsFetcher: UsageStore.CodexResetCreditsFetcher
 }
 
 private struct CodexManagedVisibleAccountRuntimeState {
@@ -740,7 +741,7 @@ extension UsageStore {
         return await Self.attachingCodexResetCreditsIfNeeded(
             to: outcome,
             env: context.env,
-            fetcher: self.codexResetCreditsFetcher())
+            fetcher: self.codexResetCreditsFetcher(workspaceAccountID: context.codexWorkspaceID))
     }
 
     private func fetchTokenAccountOutcomes(
@@ -817,7 +818,6 @@ extension UsageStore {
         priorSnapshots: [CodexAccountUsageSnapshot],
         activeVisibleAccountID: String?) async
     -> [CodexAccountFetchResult] {
-        let resetCreditsFetcher = self.codexResetCreditsFetcher()
         let requests: [CodexAccountFetchRequest] = accounts.enumerated().map { index, account in
             let descriptor = self.providerSpecs[.codex]?.descriptor ?? ProviderDescriptorRegistry
                 .descriptor(for: .codex)
@@ -845,7 +845,8 @@ extension UsageStore {
                 missingWindowBackfillSnapshot: missingWindowBackfillSnapshot,
                 limitResetOwnerKey: limitResetOwnerKey,
                 descriptor: descriptor,
-                context: context)
+                context: context,
+                resetCreditsFetcher: self.codexResetCreditsFetcher(workspaceAccountID: context.codexWorkspaceID))
         }
 
         return await withTaskGroup(
@@ -859,7 +860,7 @@ extension UsageStore {
                         return await Self.attachingCodexResetCreditsIfNeeded(
                             to: baseOutcome,
                             env: request.context.env,
-                            fetcher: resetCreditsFetcher)
+                            fetcher: request.resetCreditsFetcher)
                     }
                     let initialOutcome = await fetchOutcome()
                     let outcome: ProviderFetchOutcome? = if Self.codexUsageOutcomeMatchesVisibleAccount(

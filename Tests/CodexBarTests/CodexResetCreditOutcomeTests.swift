@@ -39,6 +39,22 @@ struct CodexResetCreditOutcomeTests {
     }
 
     @Test
+    func `supplemental inventory uses the selected managed workspace identity`() async throws {
+        let recorder = ResetCreditRequestRecorder()
+        let result = try await UsageStore._fetchCodexResetCreditsForTesting(
+            credentials: Self.credentials(lastRefresh: Date()),
+            env: ["CODEX_HOME": "/tmp/account-a"],
+            workspaceAccountID: "workspace-team",
+            request: { accessToken, accountID, environment in
+                await recorder.record(accessToken: accessToken, accountID: accountID, environment: environment)
+                return Self.resetSnapshot(id: "workspace-team", now: Date())
+            })
+
+        #expect(result != nil)
+        #expect(await recorder.lastAccountID() == "workspace-team")
+    }
+
+    @Test
     func `embedded OAuth inventory prevents a duplicate supplemental GET`() async throws {
         let now = Date(timeIntervalSince1970: 1_781_726_400)
         let embedded = Self.resetSnapshot(id: "embedded", now: now)

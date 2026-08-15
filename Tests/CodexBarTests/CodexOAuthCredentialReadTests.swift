@@ -150,7 +150,7 @@ struct CodexOAuthCredentialReadTests {
     }
 
     @Test
-    func `expired read-only oauth credentials fail before refresh`() throws {
+    func `expired read-only oauth credentials refresh in memory`() async throws {
         let credentials = CodexOAuthCredentials(
             accessToken: "expired-access",
             refreshToken: "external-refresh",
@@ -159,18 +159,31 @@ struct CodexOAuthCredentialReadTests {
             lastRefresh: nil,
             expiresAt: Date().addingTimeInterval(-1),
             source: .openCode)
+        let transport = ProviderHTTPTransportStub { request in
+            #expect(request.url?.absoluteString == "https://auth.openai.com/oauth/token")
+            guard let url = request.url,
+                  let response = HTTPURLResponse(
+                      url: url,
+                      statusCode: 200,
+                      httpVersion: nil,
+                      headerFields: nil)
+            else { throw URLError(.badURL) }
+            return (Data(#"{"access_token":"refreshed-access","refresh_token":"refreshed-refresh"}"#.utf8), response)
+        }
 
-        let error = #expect(throws: CodexOAuthCredentialsError.self) {
-            try CodexOAuthFetchStrategy._prepareCredentialsForTesting(credentials)
+        let resolved = try await CodexAuthenticatedHTTPTransport.$overrideForTesting.withValue(transport) {
+            try await CodexOAuthFetchStrategy._prepareCredentialsForTesting(
+                credentials,
+                env: ["XDG_DATA_HOME": FileManager.default.temporaryDirectory.path])
         }
-        guard case .readOnlySource = error else {
-            Issue.record("Expired external credentials must fail before refresh")
-            return
-        }
+
+        #expect(resolved.accessToken == "refreshed-access")
+        #expect(resolved.refreshToken == "refreshed-refresh")
+        #expect(resolved.source == .openCode)
     }
 
     @Test
-    func `expired read-only oauth credentials without a refresh token are rejected`() throws {
+    func `expired read-only oauth credentials without a refresh token are rejected`() async throws {
         let credentials = CodexOAuthCredentials(
             accessToken: "expired-access",
             refreshToken: "",
@@ -180,8 +193,8 @@ struct CodexOAuthCredentialReadTests {
             expiresAt: Date().addingTimeInterval(-1),
             source: .legacyCodexHome)
 
-        let error = #expect(throws: CodexOAuthCredentialsError.self) {
-            try CodexOAuthFetchStrategy._prepareCredentialsForTesting(credentials)
+        let error = await #expect(throws: CodexOAuthCredentialsError.self) {
+            try await CodexOAuthFetchStrategy._prepareCredentialsForTesting(credentials)
         }
         guard case .readOnlySource = error else {
             Issue.record("Expired external credentials without a refresh token must fail closed")
@@ -190,7 +203,22 @@ struct CodexOAuthCredentialReadTests {
     }
 
     @Test
-    func `expired read-only oauth credentials fail before the fetch sends a request`() async throws {
+    func `expired external oauth fetch refreshes without mutating its source`() async throws {
+        let home = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-oauth-stale-fetch-home-\(UUID().uuidString)", isDirectory: true)
+        let dataHome = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-oauth-stale-fetch-data-\(UUID().uuidString)", isDirectory: true)
+        defer {
+            try? FileManager.default.removeItem(at: home)
+            try? FileManager.default.removeItem(at: dataHome)
+        }
+        let openCodeDirectory = dataHome.appendingPathComponent("opencode", isDirectory: true)
+        try FileManager.default.createDirectory(at: openCodeDirectory, withIntermediateDirectories: true)
+        let authData = Data(
+            #"{"openai":{"type":"oauth","access":"expired-access","refresh":"external-refresh","expires":1}}"#
+                .utf8)
+        let authURL = openCodeDirectory.appendingPathComponent("auth.json")
+        try authData.write(to: authURL)
         let credentials = CodexOAuthCredentials(
             accessToken: "expired-access",
             refreshToken: "external-refresh",
@@ -199,28 +227,52 @@ struct CodexOAuthCredentialReadTests {
             lastRefresh: nil,
             expiresAt: Date().addingTimeInterval(-1),
             source: .openCode)
-        let requests = RefreshInvocationRecorder()
-        let transport = ProviderHTTPTransportStub { _ in
-            await requests.record()
-            throw URLError(.badServerResponse)
+        let settings = ProviderSettingsSnapshot.make(codex: CodexProviderSettings(
+            usageDataSource: .oauth,
+            cookieSource: .off,
+            manualCookieHeader: nil,
+            allowExternalOAuthSources: true))
+        let transport = ProviderHTTPTransportStub { request in
+            if request.url?.absoluteString == "https://auth.openai.com/oauth/token" {
+                guard let url = request.url,
+                      let response = HTTPURLResponse(
+                          url: url,
+                          statusCode: 200,
+                          httpVersion: nil,
+                          headerFields: nil)
+                else { throw URLError(.badURL) }
+                return (
+                    Data(#"{"access_token":"refreshed-access","refresh_token":"refreshed-refresh"}"#.utf8),
+                    response)
+            }
+            #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer refreshed-access")
+            guard let url = request.url,
+                  let response = HTTPURLResponse(
+                      url: url,
+                      statusCode: 200,
+                      httpVersion: nil,
+                      headerFields: nil)
+            else { throw URLError(.badURL) }
+            let body = #"""
+            {"rate_limit":{"primary_window":{"used_percent":12,"reset_at":1786161204,"limit_window_seconds":18000}}}
+            """#
+            return (Data(body.utf8), response)
         }
 
-        let error = await #expect(throws: CodexOAuthCredentialsError.self) {
-            try await CodexAuthenticatedHTTPTransport.$overrideForTesting.withValue(transport) {
-                try await CodexOAuthFetchStrategy._fetchForTesting(
-                    context: Self.context(),
-                    credentials: credentials)
-            }
+        let result = try await CodexAuthenticatedHTTPTransport.$overrideForTesting.withValue(transport) {
+            try await CodexOAuthFetchStrategy._fetchForTesting(
+                context: Self.context(
+                    env: ["XDG_DATA_HOME": dataHome.path],
+                    settings: settings),
+                credentials: credentials)
         }
-        guard case .readOnlySource = error else {
-            Issue.record("The fetch path must reject expired external credentials before transport")
-            return
-        }
-        #expect(await requests.count() == 0)
+
+        #expect(result.usage.primary?.usedPercent == 12)
+        #expect(try Data(contentsOf: authURL) == authData)
     }
 
     @Test
-    func `valid read-only oauth credentials pass through without refresh`() throws {
+    func `valid read-only oauth credentials pass through without refresh`() async throws {
         let credentials = CodexOAuthCredentials(
             accessToken: "valid-access",
             refreshToken: "external-refresh",
@@ -229,14 +281,52 @@ struct CodexOAuthCredentialReadTests {
             lastRefresh: Date(),
             expiresAt: Date().addingTimeInterval(3600),
             source: .openCode)
-        let resolved = try CodexOAuthFetchStrategy._prepareCredentialsForTesting(credentials)
+        let resolved = try await CodexOAuthFetchStrategy._prepareCredentialsForTesting(credentials)
 
         #expect(resolved.accessToken == "valid-access")
         #expect(resolved.source == .openCode)
     }
 
     @Test
-    func `expired native oauth credentials delegate refresh to the CLI before shared publication`() throws {
+    func `managed workspace metadata supplies the account header without rewriting auth`() async throws {
+        let credentials = CodexOAuthCredentials(
+            accessToken: "valid-access",
+            refreshToken: "refresh",
+            idToken: nil,
+            accountId: "auth-account",
+            lastRefresh: Date(),
+            source: .codexHome)
+        let settings = ProviderSettingsSnapshot.make(codex: CodexProviderSettings(
+            usageDataSource: .oauth,
+            cookieSource: .off,
+            manualCookieHeader: nil,
+            managedWorkspaceAccountID: "workspace-team"))
+        let transport = ProviderHTTPTransportStub { request in
+            #expect(request.value(forHTTPHeaderField: "ChatGPT-Account-Id") == "workspace-team")
+            guard let url = request.url,
+                  let response = HTTPURLResponse(
+                      url: url,
+                      statusCode: 200,
+                      httpVersion: nil,
+                      headerFields: nil)
+            else { throw URLError(.badURL) }
+            let body = #"""
+            {"rate_limit":{"primary_window":{"used_percent":4,"reset_at":1786161204,"limit_window_seconds":18000}}}
+            """#
+            return (Data(body.utf8), response)
+        }
+
+        let result = try await CodexAuthenticatedHTTPTransport.$overrideForTesting.withValue(transport) {
+            try await CodexOAuthFetchStrategy._fetchForTesting(
+                context: Self.context(settings: settings),
+                credentials: credentials)
+        }
+
+        #expect(result.usage.primary?.usedPercent == 4)
+    }
+
+    @Test
+    func `expired native oauth credentials refresh in memory before shared publication`() async throws {
         let credentials = CodexOAuthCredentials(
             accessToken: "expired-access",
             refreshToken: "native-refresh",
@@ -244,14 +334,123 @@ struct CodexOAuthCredentialReadTests {
             accountId: nil,
             lastRefresh: Date(timeIntervalSince1970: 0),
             source: .codexHome)
+        let transport = ProviderHTTPTransportStub { request in
+            #expect(request.url?.absoluteString == "https://auth.openai.com/oauth/token")
+            guard let url = request.url,
+                  let response = HTTPURLResponse(
+                      url: url,
+                      statusCode: 200,
+                      httpVersion: nil,
+                      headerFields: nil)
+            else { throw URLError(.badURL) }
+            return (Data(#"{"access_token":"native-refreshed","refresh_token":"native-refresh-next"}"#.utf8), response)
+        }
 
-        let error = #expect(throws: CodexOAuthCredentialsError.self) {
-            try CodexOAuthFetchStrategy._prepareCredentialsForTesting(credentials)
+        let resolved = try await CodexAuthenticatedHTTPTransport.$overrideForTesting.withValue(transport) {
+            try await CodexOAuthFetchStrategy._prepareCredentialsForTesting(
+                credentials,
+                env: ["CODEX_HOME": "/tmp/codexbar-native-refresh-memory"])
         }
-        guard case .nativeRefreshRequired = error else {
-            Issue.record("Stale native credentials must delegate refresh without publishing to Codex auth.json")
-            return
+
+        #expect(resolved.accessToken == "native-refreshed")
+        #expect(resolved.refreshToken == "native-refresh-next")
+        #expect(resolved.source == .codexHome)
+    }
+
+    @Test
+    func `concurrent stale native probes share one in-memory refresh`() async throws {
+        let credentials = CodexOAuthCredentials(
+            accessToken: "expired-access",
+            refreshToken: "native-refresh-concurrent",
+            idToken: nil,
+            accountId: nil,
+            lastRefresh: Date(timeIntervalSince1970: 0),
+            source: .codexHome)
+        let home = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-oauth-concurrent-\(UUID().uuidString)", isDirectory: true)
+        let recorder = RefreshInvocationRecorder()
+        let transport = ProviderHTTPTransportStub { request in
+            await recorder.record()
+            try await Task.sleep(for: .milliseconds(50))
+            guard let url = request.url,
+                  let response = HTTPURLResponse(
+                      url: url,
+                      statusCode: 200,
+                      httpVersion: nil,
+                      headerFields: nil)
+            else { throw URLError(.badURL) }
+            return (Data(#"{"access_token":"concurrent-access","refresh_token":"concurrent-refresh"}"#.utf8), response)
         }
+
+        let values = try await CodexAuthenticatedHTTPTransport.$overrideForTesting.withValue(transport) {
+            try await withThrowingTaskGroup(
+                of: CodexOAuthCredentials.self,
+                returning: [CodexOAuthCredentials].self)
+            { group in
+                for _ in 0..<2 {
+                    group.addTask {
+                        try await CodexOAuthFetchStrategy._prepareCredentialsForTesting(
+                            credentials,
+                            env: ["CODEX_HOME": home.path])
+                    }
+                }
+                var values: [CodexOAuthCredentials] = []
+                for try await value in group {
+                    values.append(value)
+                }
+                return values
+            }
+        }
+
+        #expect(values.count == 2)
+        #expect(values.allSatisfy { $0.accessToken == "concurrent-access" })
+        #expect(await recorder.count() == 1)
+    }
+
+    @Test
+    func `new source access token bypasses an older cached rotation`() async throws {
+        let env = [
+            "CODEX_HOME": FileManager.default.temporaryDirectory
+                .appendingPathComponent("codex-oauth-access-rotation-\(UUID().uuidString)").path,
+        ]
+        let firstCredentials = CodexOAuthCredentials(
+            accessToken: "expired-access-before-login",
+            refreshToken: "same-refresh-token",
+            idToken: nil,
+            accountId: nil,
+            lastRefresh: Date(timeIntervalSince1970: 0),
+            source: .codexHome)
+        let secondCredentials = CodexOAuthCredentials(
+            accessToken: "expired-access-after-login",
+            refreshToken: "same-refresh-token",
+            idToken: nil,
+            accountId: nil,
+            lastRefresh: Date(timeIntervalSince1970: 0),
+            source: .codexHome)
+        let recorder = RefreshInvocationRecorder()
+        let transport = ProviderHTTPTransportStub { request in
+            await recorder.record()
+            guard let url = request.url,
+                  let response = HTTPURLResponse(
+                      url: url,
+                      statusCode: 200,
+                      httpVersion: nil,
+                      headerFields: nil)
+            else { throw URLError(.badURL) }
+            let count = await recorder.count()
+            let accessToken = count == 1 ? "rotated-before-login" : "rotated-after-login"
+            return (
+                Data(#"{"access_token":"\#(accessToken)","refresh_token":"same-refresh-token"}"#.utf8),
+                response)
+        }
+
+        let resolved = try await CodexAuthenticatedHTTPTransport.$overrideForTesting.withValue(transport) {
+            _ = try await CodexOAuthFetchStrategy._prepareCredentialsForTesting(firstCredentials, env: env)
+            return try await CodexOAuthFetchStrategy._prepareCredentialsForTesting(secondCredentials, env: env)
+        }
+
+        #expect(resolved.accessToken == "rotated-after-login")
+        #expect(await recorder.count() == 2)
     }
 
     @Test
@@ -328,6 +527,28 @@ struct CodexOAuthCredentialReadTests {
             Issue.record("OpenCode API-key entries must not be treated as OAuth credentials")
             return
         }
+    }
+
+    @Test
+    func `credential save preserves the supplied refresh timestamp`() throws {
+        let home = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codex-oauth-save-timestamp-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: home) }
+        let timestamp = Date(timeIntervalSince1970: 1_700_000_000)
+        try CodexOAuthCredentialsStore.save(
+            CodexOAuthCredentials(
+                accessToken: "access",
+                refreshToken: "refresh",
+                idToken: nil,
+                accountId: "account",
+                lastRefresh: timestamp),
+            env: ["CODEX_HOME": home.path])
+
+        let data = try Data(contentsOf: home.appendingPathComponent("auth.json"))
+        let json = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let rawTimestamp = try #require(json["last_refresh"] as? String)
+        let parsed = try #require(ISO8601DateFormatter().date(from: rawTimestamp))
+        #expect(abs(parsed.timeIntervalSince(timestamp)) < 0.001)
     }
 
     private static func context(

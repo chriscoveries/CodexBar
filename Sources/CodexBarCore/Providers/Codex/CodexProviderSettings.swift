@@ -10,6 +10,9 @@ public struct CodexProviderSettings: Sendable {
     public let openAIWebCacheScope: CookieHeaderCache.Scope?
     public let dashboardAuthorityKnownOwners: [CodexDashboardKnownOwnerCandidate]
     public let allowExternalOAuthSources: Bool
+    /// Selected workspace identity stored in CodexBar's managed-account metadata. It is sent as
+    /// an account header without rewriting the Codex-owned auth.json.
+    public let managedWorkspaceAccountID: String?
 
     public init(
         usageDataSource: CodexUsageDataSource,
@@ -20,7 +23,8 @@ public struct CodexProviderSettings: Sendable {
         profileAccountTargetUnavailable: Bool = false,
         openAIWebCacheScope: CookieHeaderCache.Scope? = nil,
         dashboardAuthorityKnownOwners: [CodexDashboardKnownOwnerCandidate] = [],
-        allowExternalOAuthSources: Bool = false)
+        allowExternalOAuthSources: Bool = false,
+        managedWorkspaceAccountID: String? = nil)
     {
         self.usageDataSource = usageDataSource
         self.cookieSource = cookieSource
@@ -31,6 +35,7 @@ public struct CodexProviderSettings: Sendable {
         self.openAIWebCacheScope = openAIWebCacheScope
         self.dashboardAuthorityKnownOwners = dashboardAuthorityKnownOwners
         self.allowExternalOAuthSources = allowExternalOAuthSources
+        self.managedWorkspaceAccountID = managedWorkspaceAccountID
     }
 }
 

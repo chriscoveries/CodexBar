@@ -5,6 +5,7 @@ import Glibc
 #elseif canImport(Musl)
 import Musl
 #endif
+import CryptoKit
 import Foundation
 
 public enum CodexOAuthCredentialSource: String, Equatable, Sendable {
@@ -289,12 +290,60 @@ public enum CodexOAuthCredentialsStore {
         }
 
         json["tokens"] = tokens
-        json["last_refresh"] = ISO8601DateFormatter().string(from: Date())
+        // Persist the timestamp that belongs to the credential material. A metadata-only caller
+        // must not make an old access token look freshly rotated by stamping the current time.
+        if let lastRefresh = credentials.lastRefresh {
+            json["last_refresh"] = ISO8601DateFormatter().string(from: lastRefresh)
+        }
 
         let data = try JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys])
         let directory = url.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try CredentialFileWriter.writePrivate(data, to: url)
+    }
+
+    /// Stable, non-secret identity for the in-memory refresh cache.
+    ///
+    /// The refresh token is hashed so the cache key cannot disclose token material if it is ever
+    /// surfaced by diagnostics. Both token values identify the source snapshot: a CLI login may
+    /// rotate the access token while retaining the same refresh token, and that new source read
+    /// must not reuse an older in-memory rotation.
+    static func refreshCacheKey(
+        env: [String: String],
+        source: CodexOAuthCredentialSource,
+        accessToken: String,
+        refreshToken: String) -> String
+    {
+        let sourceURL: URL = {
+            switch source {
+            case .codexHome:
+                return self.authFilePath(env: env)
+            case .legacyCodexHome:
+                return (FileManager.default.homeDirectoryForCurrentUser)
+                    .appendingPathComponent(".config", isDirectory: true)
+                    .appendingPathComponent("codex", isDirectory: true)
+                    .appendingPathComponent("auth.json")
+            case .openCode:
+                let root = if let configured = self.nonEmpty(env["XDG_DATA_HOME"]) {
+                    URL(fileURLWithPath: configured, isDirectory: true)
+                } else {
+                    FileManager.default.homeDirectoryForCurrentUser
+                        .appendingPathComponent(".local", isDirectory: true)
+                        .appendingPathComponent("share", isDirectory: true)
+                }
+                // Provider-specific by design: OpenCode's auth.json lives under its own data directory.
+                return root
+                    .appendingPathComponent("opencode", isDirectory: true)
+                    .appendingPathComponent("auth.json")
+            }
+        }()
+        var fingerprint = Data(accessToken.utf8)
+        fingerprint.append(0)
+        fingerprint.append(contentsOf: Data(refreshToken.utf8))
+        let digest = SHA256.hash(data: fingerprint)
+            .map { String(format: "%02x", $0) }
+            .joined()
+        return "\(source.rawValue)|\(sourceURL.standardizedFileURL.path)|\(digest)"
     }
 
     private static func shouldTryExternalFallback(
