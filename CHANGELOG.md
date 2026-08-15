@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.49.7 — Unreleased
+## 0.50.0 — 2026-08-14
 
 ### Added
 - Cursor: on macOS, prefer Cursor.app's read-only local session in Automatic mode, persist validated sessions securely, and surface account mismatches before falling back to browser cookies (#2398). Thanks @markmay for the direction!
