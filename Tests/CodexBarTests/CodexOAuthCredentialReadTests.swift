@@ -68,6 +68,24 @@ struct CodexOAuthCredentialReadTests {
     }
 
     @Test
+    func `missing account id falls back to the direct OpenAI JWT claim`() throws {
+        let idToken = Self.jwt(payload: [
+            "chatgpt_account_id": "acct-direct",
+        ])
+        let data = try JSONSerialization.data(withJSONObject: [
+            "tokens": [
+                "access_token": "opaque-access",
+                "refresh_token": "refresh",
+                "id_token": idToken,
+            ],
+        ])
+
+        let credentials = try CodexOAuthCredentialsStore.parse(data: data)
+
+        #expect(credentials.accountId == "acct-direct")
+    }
+
+    @Test
     func `missing account id falls back to the first OpenAI organization`() throws {
         let accessToken = Self.jwt(payload: [
             "organizations": [["id": "org-first"], ["id": "org-second"]],
