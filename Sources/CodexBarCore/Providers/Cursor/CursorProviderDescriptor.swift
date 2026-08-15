@@ -95,7 +95,8 @@ public enum CursorProviderDescriptor {
                 browserSupportExemption: { _, _, settings in
                     #if os(Linux)
                     // Linux supports manual cookies; browser and Cursor.app imports remain macOS-only.
-                    settings?.cursor?.cookieSource != .off
+                    settings?.cursor?.cookieSource == .manual &&
+                        CookieHeaderNormalizer.normalize(settings?.cursor?.manualCookieHeader) != nil
                     #else
                     false
                     #endif
