@@ -229,7 +229,8 @@ public enum CodexOAuthCredentialsStore {
         }
 
         let idToken = Self.stringValue(in: tokens, snakeCaseKey: "id_token", camelCaseKey: "idToken")
-        let accountId = Self.stringValue(in: tokens, snakeCaseKey: "account_id", camelCaseKey: "accountId")
+        let accountId = Self.nonEmpty(
+            Self.stringValue(in: tokens, snakeCaseKey: "account_id", camelCaseKey: "accountId"))
             ?? Self.accountIDFromJWT(idToken: idToken, accessToken: accessToken)
         let lastRefresh = Self.parseLastRefresh(from: json["last_refresh"])
 

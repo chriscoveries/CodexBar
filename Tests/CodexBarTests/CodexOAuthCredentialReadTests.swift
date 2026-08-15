@@ -86,6 +86,24 @@ struct CodexOAuthCredentialReadTests {
     }
 
     @Test
+    func `whitespace account id falls back to the OpenAI JWT claim`() throws {
+        let accessToken = Self.jwt(payload: [
+            "organizations": [["id": "org-from-jwt"]],
+        ])
+        let data = try JSONSerialization.data(withJSONObject: [
+            "tokens": [
+                "access_token": accessToken,
+                "refresh_token": "refresh",
+                "account_id": "  \n",
+            ],
+        ])
+
+        let credentials = try CodexOAuthCredentialsStore.parse(data: data)
+
+        #expect(credentials.accountId == "org-from-jwt")
+    }
+
+    @Test
     func `missing account id falls back to the first OpenAI organization`() throws {
         let accessToken = Self.jwt(payload: [
             "organizations": [["id": "org-first"], ["id": "org-second"]],
