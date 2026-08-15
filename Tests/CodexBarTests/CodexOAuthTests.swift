@@ -784,13 +784,22 @@ struct CodexOAuthTests {
     }
 
     @Test
-    func `explicit O auth mode never falls back to CLI`() {
+    func `explicit O auth mode only falls back to CLI for native refresh recovery`() {
         let strategy = CodexOAuthFetchStrategy()
         let context = self.makeContext(sourceMode: .oauth)
 
         #expect(!strategy.shouldFallback(on: CodexOAuthFetchError.unauthorized, context: context))
+        #expect(strategy.shouldFallback(on: CodexOAuthCredentialsError.nativeRefreshRequired, context: context))
         #expect(!strategy.shouldFallback(on: CodexOAuthCredentialsError.readOnlySource, context: context))
         #expect(!strategy.shouldFallback(on: CodexTokenRefresher.RefreshError.expired, context: context))
+    }
+
+    @Test
+    func `explicit O auth mode includes CLI recovery after native credentials expire`() async {
+        let context = self.makeContext(sourceMode: .oauth)
+        let strategies = await CodexProviderDescriptor.descriptor.fetchPlan.pipeline.resolveStrategies(context)
+
+        #expect(strategies.map(\.id) == ["codex.oauth", "codex.oauth-native-refresh-cli"])
     }
 
     @Test

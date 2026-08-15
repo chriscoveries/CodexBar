@@ -127,7 +127,7 @@ public enum CodexProviderDescriptor {
         case .cli:
             switch context.sourceMode {
             case .oauth:
-                return [oauth]
+                return [oauth, CodexOAuthNativeRefreshCLIStrategy()]
             case .web:
                 return [web]
             case .cli:
@@ -140,7 +140,7 @@ public enum CodexProviderDescriptor {
         case .app:
             switch context.sourceMode {
             case .oauth:
-                return [oauth]
+                return [oauth, CodexOAuthNativeRefreshCLIStrategy()]
             case .cli:
                 return [cli]
             case .web:
@@ -312,6 +312,30 @@ struct CodexCLIUsageStrategy: ProviderFetchStrategy {
     }
 }
 
+/// Explicit OAuth may recover stale native credentials through the Codex CLI, without allowing
+/// missing or external credentials to silently switch sources.
+struct CodexOAuthNativeRefreshCLIStrategy: ProviderFetchStrategy {
+    let id: String = "codex.oauth-native-refresh-cli"
+    let kind: ProviderFetchKind = .cli
+
+    func isAvailable(_ context: ProviderFetchContext) async -> Bool {
+        guard context.sourceMode == .oauth,
+              let credentials = try? CodexOAuthCredentialsStore.loadForUsage(
+                  env: context.env,
+                  allowExternalSources: context.settings?.codex?.allowExternalOAuthSources == true)
+        else { return false }
+        return credentials.source == .codexHome && credentials.needsRefresh
+    }
+
+    func fetch(_ context: ProviderFetchContext) async throws -> ProviderFetchResult {
+        try await CodexCLIUsageStrategy().fetch(context)
+    }
+
+    func shouldFallback(on _: Error, context _: ProviderFetchContext) -> Bool {
+        false
+    }
+}
+
 struct CodexOAuthFetchStrategy: ProviderFetchStrategy {
     let id: String = "codex.oauth"
     let kind: ProviderFetchKind = .oauth
@@ -363,7 +387,11 @@ struct CodexOAuthFetchStrategy: ProviderFetchStrategy {
         guard !credentials.needsRefresh else {
             // auth.json is owned by Codex CLI and may be replaced by a login at any time. Without
             // a cross-writer compare-and-swap contract, CodexBar must not refresh and publish new
-            // OAuth token material into this shared file. Automatic mode can continue with CLI.
+            // OAuth token material into this shared file. The CLI owns the recovery path for
+            // native credentials; external sources remain strictly read-only.
+            if credentials.source == .codexHome {
+                throw CodexOAuthCredentialsError.nativeRefreshRequired
+            }
             throw CodexOAuthCredentialsError.readOnlySource
         }
         return credentials
@@ -375,7 +403,16 @@ struct CodexOAuthFetchStrategy: ProviderFetchStrategy {
     }
 
     func shouldFallback(on error: Error, context: ProviderFetchContext) -> Bool {
-        guard context.sourceMode == .auto else { return false }
+        let isExplicitNativeRefresh = if let credentialsError = error as? CodexOAuthCredentialsError,
+                                         case .nativeRefreshRequired = credentialsError
+        {
+            true
+        } else {
+            false
+        }
+        guard context.sourceMode == .auto || (context.sourceMode == .oauth && isExplicitNativeRefresh) else {
+            return false
+        }
         // Auto mode may launch the CLI as the next strategy. Keep that fallback
         // limited to OAuth states the CLI can actually repair, otherwise
         // transient API or decode failures can spawn `codex app-server`
@@ -390,7 +427,7 @@ struct CodexOAuthFetchStrategy: ProviderFetchStrategy {
         }
         if let credentialsError = error as? CodexOAuthCredentialsError {
             switch credentialsError {
-            case .notFound, .unreadable, .missingTokens, .readOnlySource:
+            case .notFound, .unreadable, .missingTokens, .nativeRefreshRequired, .readOnlySource:
                 return true
             case .decodeFailed:
                 return false

@@ -236,7 +236,7 @@ struct CodexOAuthCredentialReadTests {
     }
 
     @Test
-    func `expired native oauth credentials fail closed before shared auth publication`() throws {
+    func `expired native oauth credentials delegate refresh to the CLI before shared publication`() throws {
         let credentials = CodexOAuthCredentials(
             accessToken: "expired-access",
             refreshToken: "native-refresh",
@@ -248,8 +248,8 @@ struct CodexOAuthCredentialReadTests {
         let error = #expect(throws: CodexOAuthCredentialsError.self) {
             try CodexOAuthFetchStrategy._prepareCredentialsForTesting(credentials)
         }
-        guard case .readOnlySource = error else {
-            Issue.record("Stale native credentials must not be published back to Codex auth.json")
+        guard case .nativeRefreshRequired = error else {
+            Issue.record("Stale native credentials must delegate refresh without publishing to Codex auth.json")
             return
         }
     }

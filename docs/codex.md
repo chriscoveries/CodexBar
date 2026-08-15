@@ -29,7 +29,9 @@ Usage source picker:
 
 ### OAuth API (preferred for the app)
 - Reads OAuth tokens from `~/.codex/auth.json` (or `$CODEX_HOME/auth.json`).
-- Refreshes access tokens when `last_refresh` is older than 8 days.
+- CodexBar never publishes refreshed native tokens into `auth.json`; when native credentials are stale,
+  the explicit OAuth path delegates recovery to the Codex CLI, which owns that file. If the CLI is unavailable,
+  the OAuth error is surfaced instead of mutating the shared file.
 - Calls `GET https://chatgpt.com/backend-api/wham/usage` (default) with `Authorization: Bearer <token>`.
 - The app reads reset-credit inventory once per refresh with a best-effort
   `GET https://chatgpt.com/backend-api/wham/rate-limit-reset-credits` using the same account-scoped OAuth context;
@@ -51,8 +53,9 @@ Usage source picker:
 - An explicit `$CODEX_HOME` remains isolated; it never borrows credentials from those external locations.
 - External fallbacks accept OAuth token structures only; API-key entries are ignored. Usage probes never refresh or
   publish OAuth token material into a shared `auth.json` without a cross-writer publication contract. In Automatic
-  mode a stale credential lets the existing CLI fallback run; explicit OAuth mode reports the read-only error
-  instead. Explicit managed-account workspace selection may still update its `account_id` metadata.
+  mode a stale credential lets the existing CLI fallback run; explicit OAuth mode delegates only stale native
+  credentials to the same CLI recovery path, while stale external credentials remain read-only errors. Explicit
+  managed-account workspace selection may still update its `account_id` metadata.
 
 ### Advanced profile-home accounts
 - Managed Codex accounts remain the default multi-account path.

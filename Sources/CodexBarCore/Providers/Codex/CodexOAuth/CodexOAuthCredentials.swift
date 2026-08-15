@@ -63,6 +63,7 @@ public enum CodexOAuthCredentialsError: LocalizedError, Sendable {
     case unreadable
     case decodeFailed(String)
     case missingTokens
+    case nativeRefreshRequired
     case readOnlySource
 
     public var errorDescription: String? {
@@ -75,6 +76,8 @@ public enum CodexOAuthCredentialsError: LocalizedError, Sendable {
             "Failed to decode Codex credentials: \(message)"
         case .missingTokens:
             "Codex auth.json exists but contains no tokens."
+        case .nativeRefreshRequired:
+            "Codex auth.json needs refresh; retrying through the Codex CLI without writing from CodexBar."
         case .readOnlySource:
             "This Codex credential source is read-only and cannot be refreshed in place."
         }
@@ -304,7 +307,7 @@ public enum CodexOAuthCredentialsStore {
         // invitation to silently substitute another application's session.
         case .notFound:
             return true
-        case .unreadable, .decodeFailed, .missingTokens, .readOnlySource:
+        case .unreadable, .decodeFailed, .missingTokens, .nativeRefreshRequired, .readOnlySource:
             return false
         }
     }
