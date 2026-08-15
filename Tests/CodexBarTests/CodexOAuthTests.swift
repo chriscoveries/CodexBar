@@ -803,6 +803,40 @@ struct CodexOAuthTests {
     }
 
     @Test
+    func `native refresh recovery is unavailable when Codex CLI is missing`() async throws {
+        let home = FileManager.default.temporaryDirectory
+            .appendingPathComponent("codexbar-native-refresh-no-cli-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: home) }
+        try CodexOAuthCredentialsStore.save(
+            CodexOAuthCredentials(
+                accessToken: "access-token",
+                refreshToken: "refresh-token",
+                idToken: nil,
+                accountId: "account-id",
+                lastRefresh: Date(timeIntervalSinceNow: -(9 * 24 * 60 * 60))),
+            env: ["CODEX_HOME": home.path])
+
+        var context = self.makeContext(sourceMode: .oauth)
+        context = ProviderFetchContext(
+            runtime: context.runtime,
+            sourceMode: context.sourceMode,
+            includeCredits: context.includeCredits,
+            includeOptionalUsage: context.includeOptionalUsage,
+            webTimeout: context.webTimeout,
+            webDebugDumpHTML: context.webDebugDumpHTML,
+            verbose: context.verbose,
+            env: ["CODEX_HOME": home.path, "CODEX_CLI_PATH": "/missing/codex"],
+            settings: context.settings,
+            fetcher: context.fetcher,
+            claudeFetcher: context.claudeFetcher,
+            browserDetection: context.browserDetection)
+
+        let isAvailable = await CodexOAuthNativeRefreshCLIStrategy().isAvailable(context)
+        #expect(!isAvailable)
+    }
+
+    @Test
     func `resolves chat GPT usage URL from config`() {
         let config = "chatgpt_base_url = \"https://chatgpt.com/backend-api/\"\n"
         let url = CodexOAuthUsageFetcher._resolveUsageURLForTesting(configContents: config)

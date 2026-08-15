@@ -320,6 +320,7 @@ struct CodexOAuthNativeRefreshCLIStrategy: ProviderFetchStrategy {
 
     func isAvailable(_ context: ProviderFetchContext) async -> Bool {
         guard context.sourceMode == .oauth,
+              CodexCLIUsageStrategy.resolvedBinary(env: context.env) != nil,
               let credentials = try? CodexOAuthCredentialsStore.loadForUsage(
                   env: context.env,
                   allowExternalSources: context.settings?.codex?.allowExternalOAuthSources == true)
