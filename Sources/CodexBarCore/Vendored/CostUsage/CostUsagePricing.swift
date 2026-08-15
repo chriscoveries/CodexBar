@@ -437,6 +437,46 @@ enum CostUsagePricing {
     ]
     private static let claudeModelsDevProviderID = "anthropic"
 
+    /// Returns the provider/model identities that may price a Codex model. Keep this mapping
+    /// shared by direct lookup and unknown-price refresh so a newly downloaded catalog is checked
+    /// under the same identity that was used to resolve the model.
+    static func codexModelsDevPricingTargets(for rawModel: String) -> [(providerID: String, modelID: String)] {
+        let trimmed = rawModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        if let slash = trimmed.firstIndex(of: "/") {
+            let routeID = String(trimmed[..<slash]).lowercased()
+            let modelID = String(trimmed[trimmed.index(after: slash)...])
+            guard !routeID.isEmpty, !modelID.isEmpty,
+                  self.codexModelsDevProviderIDs.contains(routeID)
+            else { return [] }
+
+            var providerIDs = [routeID]
+            switch routeID {
+            case "kimi-coding":
+                providerIDs.append("kimi-for-coding")
+            case "opencode-free":
+                providerIDs.append("opencode")
+            default:
+                break
+            }
+            var targets = providerIDs.map { ($0, modelID) }
+            if routeID == self.codexModelsDevProviderID {
+                let normalized = self.normalizeCodexModel(modelID)
+                if normalized != modelID {
+                    targets.append((self.codexModelsDevProviderID, normalized))
+                }
+            }
+            return targets
+        }
+
+        let normalized = self.normalizeCodexModel(trimmed)
+        var targets = [(self.codexModelsDevProviderID, trimmed)]
+        if normalized != trimmed {
+            targets.append((self.codexModelsDevProviderID, normalized))
+        }
+        return targets
+    }
+
     static func normalizeCodexModel(_ raw: String) -> String {
         var trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.hasPrefix("openai/") {
@@ -606,46 +646,14 @@ enum CostUsagePricing {
         catalog: ModelsDevCatalog?,
         cacheRoot: URL?) -> ModelsDevPricingLookup?
     {
-        let trimmed = rawModel.trimmingCharacters(in: .whitespacesAndNewlines)
-        let candidates: [(providerID: String, modelID: String)]
-        if let slash = trimmed.firstIndex(of: "/") {
-            let routeID = String(trimmed[..<slash]).lowercased()
-            let modelID = String(trimmed[trimmed.index(after: slash)...])
-            guard !routeID.isEmpty, !modelID.isEmpty,
-                  self.codexModelsDevProviderIDs.contains(routeID)
-            else { return nil }
-
-            var providerIDs = [routeID]
-            switch routeID {
-            case "kimi-coding":
-                providerIDs.append("kimi-for-coding")
-            case "opencode-free":
-                providerIDs.append("opencode")
-            default:
-                break
-            }
-            candidates = providerIDs.map { ($0, modelID) }
-        } else {
-            candidates = [(self.codexModelsDevProviderID, trimmed)]
-        }
-
-        for candidate in candidates {
-            var modelIDs = [candidate.modelID]
-            if candidate.providerID == self.codexModelsDevProviderID {
-                let normalized = self.normalizeCodexModel(candidate.modelID)
-                if normalized != candidate.modelID {
-                    modelIDs.append(normalized)
-                }
-            }
-            for modelID in modelIDs {
-                if let lookup = self.modelsDevLookup(
-                    providerID: candidate.providerID,
-                    model: modelID,
-                    catalog: catalog,
-                    cacheRoot: cacheRoot)
-                {
-                    return lookup
-                }
+        for target in self.codexModelsDevPricingTargets(for: rawModel) {
+            if let lookup = self.modelsDevLookup(
+                providerID: target.providerID,
+                model: target.modelID,
+                catalog: catalog,
+                cacheRoot: cacheRoot)
+            {
+                return lookup
             }
         }
         return nil
