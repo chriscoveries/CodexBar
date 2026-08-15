@@ -487,118 +487,23 @@ public enum CodexTokenRefresher {
 
 ### Step 4: Update CodexProviderDescriptor.swift
 
-Add OAuth to `sourceModes` and create new strategy:
+The production strategy is source-aware. Keep the following flow in sync with the provider
+implementation instead of copying an OAuth-only fetch example:
 
-```swift
-// In makeDescriptor(), update fetchPlan:
-fetchPlan: ProviderFetchPlan(
-    sourceModes: [.auto, .oauth, .web, .cli],  // Add .oauth
-    pipeline: ProviderFetchPipeline(resolveStrategies: self.resolveStrategies)),
+1. `CodexOAuthCredentialsStore.loadForUsage` reads the ambient `CODEX_HOME` first. Legacy Codex
+   and OpenCode files are considered only when the explicit external-source setting is enabled.
+2. `CodexOAuthFetchStrategy` uses that credential snapshot for the usage and reset-credit
+   requests. It never redeems or saves a refresh token from the usage path.
+3. A stale native snapshot throws `CodexOAuthCredentialsError.nativeRefreshRequired`; the explicit
+   OAuth plan routes that state to `CodexOAuthNativeRefreshCLIStrategy`, which delegates recovery
+   to Codex CLI. A stale legacy/OpenCode snapshot throws `.readOnlySource` and fails closed because
+   there is no safe writer handoff.
+4. Auto mode falls back to the CLI only for recoverable OAuth or credential errors. Transient API,
+   decode, and network failures remain visible instead of launching an unrelated CLI recovery.
 
-// Update resolveStrategies:
-private static func resolveStrategies(context: ProviderFetchContext) async -> [any ProviderFetchStrategy] {
-    let oauth = CodexOAuthFetchStrategy()
-    let cli = CodexCLIUsageStrategy()
-    let web = CodexWebDashboardStrategy()
-
-    switch context.sourceMode {
-    case .oauth:
-        return [oauth]
-    case .web:
-        return [web]
-    case .cli:
-        return [cli]
-    case .auto:
-        // OAuth first (fast), CLI fallback
-        if context.runtime == .cli {
-            return [web, cli]
-        }
-        return [oauth, cli]
-    }
-}
-
-// Add new strategy:
-struct CodexOAuthFetchStrategy: ProviderFetchStrategy {
-    let id: String = "codex.oauth"
-    let kind: ProviderFetchKind = .oauth
-
-    func isAvailable(_ context: ProviderFetchContext) async -> Bool {
-        (try? CodexOAuthCredentialsStore.load()) != nil
-    }
-
-    func fetch(_ context: ProviderFetchContext) async throws -> ProviderFetchResult {
-        let creds = try CodexOAuthCredentialsStore.loadForUsage(
-            env: context.env,
-            allowExternalSources: context.settings?.codex?.allowExternalOAuthSources == true)
-
-        // The usage path never refreshes or saves credentials. Codex CLI owns the native
-        // auth.json refresh lifecycle; stale native credentials delegate to CLI recovery, while
-        // stale legacy/OpenCode credentials fail closed because those files are read-only.
-
-        let usage = try await CodexOAuthUsageFetcher.fetchUsage(
-            accessToken: creds.accessToken,
-            accountId: creds.accountId)
-
-        return makeResult(
-            usage: Self.mapUsage(usage),
-            credits: Self.mapCredits(usage.credits),
-            sourceLabel: "oauth")
-    }
-
-    func shouldFallback(on error: Error, context: ProviderFetchContext) -> Bool {
-        // Fallback to CLI on auth errors
-        if let fetchError = error as? CodexOAuthFetchError {
-            switch fetchError {
-            case .unauthorized: return true
-            default: return false
-            }
-        }
-        if error is CodexOAuthCredentialsError { return true }
-        if error is CodexTokenRefresher.RefreshError { return true }
-        return false
-    }
-
-    private static func mapUsage(_ response: CodexUsageResponse) -> UsageSnapshot {
-        let primary: RateWindow? = response.rateLimit?.primaryWindow.map { window in
-            RateWindow(
-                usedPercent: Double(window.usedPercent),
-                windowMinutes: window.limitWindowSeconds / 60,
-                resetsAt: Date(timeIntervalSince1970: TimeInterval(window.resetAt)),
-                resetDescription: nil)
-        }
-
-        let secondary: RateWindow? = response.rateLimit?.secondaryWindow.map { window in
-            RateWindow(
-                usedPercent: Double(window.usedPercent),
-                windowMinutes: window.limitWindowSeconds / 60,
-                resetsAt: Date(timeIntervalSince1970: TimeInterval(window.resetAt)),
-                resetDescription: nil)
-        }
-
-        let identity = ProviderIdentitySnapshot(
-            providerID: .codex,
-            accountEmail: nil,
-            accountOrganization: nil,
-            loginMethod: response.planType.rawValue)
-
-        return UsageSnapshot(
-            primary: primary ?? RateWindow(usedPercent: 0, windowMinutes: nil, resetsAt: nil, resetDescription: nil),
-            secondary: secondary,
-            tertiary: nil,
-            providerCost: nil,
-            updatedAt: Date(),
-            identity: identity)
-    }
-
-    private static func mapCredits(_ credits: CodexUsageResponse.CreditDetails?) -> CreditsSnapshot? {
-        guard let credits else { return nil }
-        return CreditsSnapshot(
-            hasCredits: credits.hasCredits,
-            unlimited: credits.unlimited,
-            balance: credits.balance)
-    }
-}
-```
+The key invariant is that the credential snapshot used for the usage request is also passed to
+reset-credit enrichment; reloading `auth.json` after a refresh would reintroduce the shared-file
+race this design is intended to avoid.
 
 ---
 
