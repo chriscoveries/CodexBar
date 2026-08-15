@@ -81,6 +81,8 @@ struct CodexOAuthTests {
         #expect(creds.refreshToken.isEmpty)
         #expect(creds.idToken == nil)
         #expect(creds.accountId == nil)
+        #expect(creds.isAPIKey)
+        #expect(!creds.needsRefresh)
     }
 
     @Test

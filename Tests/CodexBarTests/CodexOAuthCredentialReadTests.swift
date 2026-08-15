@@ -150,7 +150,7 @@ struct CodexOAuthCredentialReadTests {
     }
 
     @Test
-    func `expired read-only oauth credentials never invoke refresh`() async throws {
+    func `expired read-only oauth credentials fail before refresh`() throws {
         let credentials = CodexOAuthCredentials(
             accessToken: "expired-access",
             refreshToken: "external-refresh",
@@ -159,23 +159,18 @@ struct CodexOAuthCredentialReadTests {
             lastRefresh: nil,
             expiresAt: Date().addingTimeInterval(-1),
             source: .openCode)
-        let recorder = RefreshInvocationRecorder()
 
-        let error = await #expect(throws: CodexOAuthCredentialsError.self) {
-            try await CodexOAuthFetchStrategy._prepareCredentialsForTesting(credentials) { _ in
-                await recorder.record()
-                return credentials
-            }
+        let error = #expect(throws: CodexOAuthCredentialsError.self) {
+            try CodexOAuthFetchStrategy._prepareCredentialsForTesting(credentials)
         }
         guard case .readOnlySource = error else {
             Issue.record("Expired external credentials must fail before refresh")
             return
         }
-        #expect(await recorder.count() == 0)
     }
 
     @Test
-    func `expired read-only oauth credentials without a refresh token are rejected`() async throws {
+    func `expired read-only oauth credentials without a refresh token are rejected`() throws {
         let credentials = CodexOAuthCredentials(
             accessToken: "expired-access",
             refreshToken: "",
@@ -185,11 +180,8 @@ struct CodexOAuthCredentialReadTests {
             expiresAt: Date().addingTimeInterval(-1),
             source: .legacyCodexHome)
 
-        let error = await #expect(throws: CodexOAuthCredentialsError.self) {
-            try await CodexOAuthFetchStrategy._prepareCredentialsForTesting(credentials) { _ in
-                Issue.record("An expired read-only credential must not reach a refresh closure")
-                return credentials
-            }
+        let error = #expect(throws: CodexOAuthCredentialsError.self) {
+            try CodexOAuthFetchStrategy._prepareCredentialsForTesting(credentials)
         }
         guard case .readOnlySource = error else {
             Issue.record("Expired external credentials without a refresh token must fail closed")
@@ -228,7 +220,7 @@ struct CodexOAuthCredentialReadTests {
     }
 
     @Test
-    func `valid read-only oauth credentials pass through without refresh`() async throws {
+    func `valid read-only oauth credentials pass through without refresh`() throws {
         let credentials = CodexOAuthCredentials(
             accessToken: "valid-access",
             refreshToken: "external-refresh",
@@ -237,16 +229,29 @@ struct CodexOAuthCredentialReadTests {
             lastRefresh: Date(),
             expiresAt: Date().addingTimeInterval(3600),
             source: .openCode)
-        let recorder = RefreshInvocationRecorder()
-
-        let resolved = try await CodexOAuthFetchStrategy._prepareCredentialsForTesting(credentials) { _ in
-            await recorder.record()
-            return credentials
-        }
+        let resolved = try CodexOAuthFetchStrategy._prepareCredentialsForTesting(credentials)
 
         #expect(resolved.accessToken == "valid-access")
         #expect(resolved.source == .openCode)
-        #expect(await recorder.count() == 0)
+    }
+
+    @Test
+    func `expired native oauth credentials fail closed before shared auth publication`() throws {
+        let credentials = CodexOAuthCredentials(
+            accessToken: "expired-access",
+            refreshToken: "native-refresh",
+            idToken: nil,
+            accountId: nil,
+            lastRefresh: Date(timeIntervalSince1970: 0),
+            source: .codexHome)
+
+        let error = #expect(throws: CodexOAuthCredentialsError.self) {
+            try CodexOAuthFetchStrategy._prepareCredentialsForTesting(credentials)
+        }
+        guard case .readOnlySource = error else {
+            Issue.record("Stale native credentials must not be published back to Codex auth.json")
+            return
+        }
     }
 
     @Test

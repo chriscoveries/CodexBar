@@ -5,7 +5,6 @@ import Glibc
 #elseif canImport(Musl)
 import Musl
 #endif
-import Crypto
 import Foundation
 
 public enum CodexOAuthCredentialSource: String, Equatable, Sendable {
@@ -26,6 +25,7 @@ public struct CodexOAuthCredentials: Equatable, Sendable {
     public let lastRefresh: Date?
     public let expiresAt: Date?
     public let source: CodexOAuthCredentialSource
+    public let isAPIKey: Bool
 
     public init(
         accessToken: String,
@@ -34,7 +34,8 @@ public struct CodexOAuthCredentials: Equatable, Sendable {
         accountId: String?,
         lastRefresh: Date?,
         expiresAt: Date? = nil,
-        source: CodexOAuthCredentialSource = .codexHome)
+        source: CodexOAuthCredentialSource = .codexHome,
+        isAPIKey: Bool = false)
     {
         self.accessToken = accessToken
         self.refreshToken = refreshToken
@@ -43,9 +44,11 @@ public struct CodexOAuthCredentials: Equatable, Sendable {
         self.lastRefresh = lastRefresh
         self.expiresAt = expiresAt
         self.source = source
+        self.isAPIKey = isAPIKey
     }
 
     public var needsRefresh: Bool {
+        if self.isAPIKey { return false }
         if let expiresAt {
             return expiresAt.timeIntervalSinceNow <= 60
         }
@@ -53,11 +56,6 @@ public struct CodexOAuthCredentials: Equatable, Sendable {
         let eightDays: TimeInterval = 8 * 24 * 60 * 60
         return Date().timeIntervalSince(lastRefresh) > eightDays
     }
-}
-
-struct CodexOAuthNativeSnapshot: Sendable {
-    let credentials: CodexOAuthCredentials
-    let rawData: Data
 }
 
 public enum CodexOAuthCredentialsError: LocalizedError, Sendable {
@@ -153,15 +151,6 @@ public enum CodexOAuthCredentialsStore {
     {
         let data = try self.readAuthData(env: env, homeDirectory: homeDirectory)
         return try self.parse(data: data, source: .codexHome)
-    }
-
-    static func loadNativeSnapshot(
-        env: [String: String] = ProcessInfo.processInfo.environment) throws -> CodexOAuthNativeSnapshot
-    {
-        let data = try self.readAuthData(env: env)
-        return try CodexOAuthNativeSnapshot(
-            credentials: self.parse(data: data, source: .codexHome),
-            rawData: data)
     }
 
     private static func parse(
@@ -265,7 +254,8 @@ public enum CodexOAuthCredentialsStore {
             idToken: nil,
             accountId: nil,
             lastRefresh: nil,
-            source: source)
+            source: source,
+            isAPIKey: true)
     }
 
     public static func save(
@@ -302,55 +292,6 @@ public enum CodexOAuthCredentialsStore {
         let directory = url.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try CredentialFileWriter.writePrivate(data, to: url)
-    }
-
-    /// Persist a refreshed native credential only if the token material read before refresh is
-    /// still the token material on disk. Callers should hold the native refresh lock while using
-    /// this precondition so another CodexBar process cannot win the same read-modify-write cycle.
-    @discardableResult
-    static func saveIfCurrent(
-        _ credentials: CodexOAuthCredentials,
-        expected: CodexOAuthCredentials,
-        env: [String: String] = ProcessInfo.processInfo.environment) throws -> Bool
-    {
-        guard credentials.source == .codexHome, expected.source == .codexHome else {
-            throw CodexOAuthCredentialsError.readOnlySource
-        }
-        let current = try self.loadNativeSnapshot(env: env).credentials
-        guard self.tokenMaterialMatches(current, expected) else { return false }
-        try self.save(credentials, env: env)
-        return true
-    }
-
-    static func refreshLockURL(
-        env: [String: String] = ProcessInfo.processInfo.environment) -> URL
-    {
-        self.authFilePath(env: env)
-            .deletingLastPathComponent()
-            .appendingPathComponent(".auth.json.codexbar-refresh.lock", isDirectory: false)
-    }
-
-    public static func credentialGeneration(_ credentials: CodexOAuthCredentials) -> String {
-        let material = [
-            credentials.accessToken,
-            credentials.refreshToken,
-            credentials.idToken ?? "",
-            credentials.accountId ?? "",
-        ].joined(separator: "\u{0}")
-        return SHA256.hash(data: Data(material.utf8))
-            .map { String(format: "%02x", $0) }
-            .joined()
-    }
-
-    static func tokenMaterialMatches(
-        _ lhs: CodexOAuthCredentials,
-        _ rhs: CodexOAuthCredentials) -> Bool
-    {
-        lhs.accessToken == rhs.accessToken
-            && lhs.refreshToken == rhs.refreshToken
-            && lhs.idToken == rhs.idToken
-            && lhs.accountId == rhs.accountId
-            && lhs.source == rhs.source
     }
 
     private static func shouldTryExternalFallback(

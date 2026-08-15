@@ -49,9 +49,10 @@ Usage source picker:
 - Without an explicit `$CODEX_HOME`, native Codex auth wins first, followed by legacy `~/.config/codex/auth.json`,
   then OpenCode's `~/.local/share/opencode/auth.json` (or the equivalent `XDG_DATA_HOME` path).
 - An explicit `$CODEX_HOME` remains isolated; it never borrows credentials from those external locations.
-- External fallbacks accept OAuth token structures only; API-key entries are ignored. External credentials are
-  read-only: CodexBar never refreshes or writes them back. In Automatic mode an expired external credential lets
-  the existing CLI fallback run; explicit OAuth mode reports the read-only error instead.
+- External fallbacks accept OAuth token structures only; API-key entries are ignored. Usage probes never refresh or
+  publish OAuth token material into a shared `auth.json` without a cross-writer publication contract. In Automatic
+  mode a stale credential lets the existing CLI fallback run; explicit OAuth mode reports the read-only error
+  instead. Explicit managed-account workspace selection may still update its `account_id` metadata.
 
 ### Advanced profile-home accounts
 - Managed Codex accounts remain the default multi-account path.
