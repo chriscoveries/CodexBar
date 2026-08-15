@@ -8,6 +8,7 @@
 - Menu bar layout: add a compact run-out forecast token that shows only the predicted duration (#2865). Thanks @gnattu!
 
 ### Fixed
+- Mistral: show current-month API spend in saved Icon and Percent menu-bar layouts instead of an unavailable placeholder (#2821). Thanks @selfagency for the report!
 - Codex: replace OpenAI login instructions with accurate rate-limit guidance when the CLI uses Amazon Bedrock or another custom backend without ChatGPT authentication (#2679). Thanks @italo-drm!
 - Widgets: let macOS desktop styling remove the Burn Down widgets' gradient container background (#2367). Thanks @FrancisKa!
 - Grok: label the current weekly credit window near reset instead of falling back to the ambiguous “Credits” title (#2929). Thanks @byteofsam!

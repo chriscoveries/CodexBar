@@ -75,6 +75,7 @@ extension StatusItemController {
         let costStrings = self.menuBarLayoutCostStrings(provider: provider, now: now)
         let providerName = L(self.store.metadata(for: provider).displayName)
         let accountLabel = self.menuBarLayoutAccountLabel(provider: provider, snapshot: snapshot)
+        let automatic = MenuBarLayoutRenderWindow(windows.automatic)
 
         return MenuBarLayoutRenderData(
             provider: provider,
@@ -85,7 +86,10 @@ extension StatusItemController {
             weekly: MenuBarLayoutRenderWindow(windows.weekly),
             scopedWeekly: MenuBarLayoutRenderWindow(scopedNamed?.window),
             scopedWeeklyTitle: scopedNamed?.title,
-            automatic: MenuBarLayoutRenderWindow(windows.automatic),
+            automatic: automatic,
+            automaticText: provider == .mistral && automatic == nil
+                ? Self.mistralSpendDisplayText(snapshot: snapshot)
+                : nil,
             sessionPace: self.store.menuBarLayoutPaceText(
                 provider: provider,
                 window: windows.session,

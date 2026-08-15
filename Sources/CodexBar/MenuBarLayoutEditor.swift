@@ -717,6 +717,7 @@ struct MenuBarLayoutPreview: View {
             .flatMap { UsagePaceText.weeklyDetail(provider: provider, pace: $0, now: now).rightLabel }
         let cost = self.store.tokenSnapshotForCurrentProviderConfig(for: provider)?.snapshot
         let costToday = MenuBarLayoutCostResolver.todayCostUSD(snapshot: cost, now: now)
+        let automaticRenderWindow = MenuBarLayoutRenderWindow(automatic)
         return MenuBarLayoutRenderData(
             provider: provider,
             iconKey: provider.rawValue,
@@ -726,7 +727,10 @@ struct MenuBarLayoutPreview: View {
             weekly: MenuBarLayoutRenderWindow(weekly),
             scopedWeekly: MenuBarLayoutRenderWindow(scopedNamed?.window),
             scopedWeeklyTitle: scopedNamed?.title,
-            automatic: MenuBarLayoutRenderWindow(automatic),
+            automatic: automaticRenderWindow,
+            automaticText: provider == .mistral && automaticRenderWindow == nil
+                ? StatusItemController.mistralSpendDisplayText(snapshot: snapshot)
+                : nil,
             sessionPace: self.store.menuBarLayoutPaceText(
                 provider: provider,
                 window: session,
@@ -782,6 +786,7 @@ struct MenuBarLayoutPreview: View {
             scopedWeekly: MenuBarLayoutRenderWindow(scopedWeekly),
             scopedWeeklyTitle: "Fable only",
             automatic: MenuBarLayoutRenderWindow(session),
+            automaticText: nil,
             sessionPace: samplePace(session),
             weeklyPace: samplePace(weekly),
             automaticPace: samplePace(session),
