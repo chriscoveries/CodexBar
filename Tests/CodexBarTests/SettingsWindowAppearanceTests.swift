@@ -168,6 +168,15 @@ struct SettingsWindowAppearanceTests {
     }
 
     @Test
+    func `presenting settings restores a miniaturized window`() {
+        let window = MiniaturizedWindowSpy()
+
+        SettingsWindowStageBehavior.present(window)
+
+        #expect(window.wasDeminiaturized)
+    }
+
+    @Test
     func `bridge applies active-space collection behavior for Stage Manager`() {
         let bridge = SettingsWindowAppearanceView()
         let window = NSWindow(
@@ -257,6 +266,24 @@ struct SettingsWindowAppearanceTests {
 @MainActor
 private final class ResetCapture {
     var actions: [SettingsWindowAppearance.ResetAction] = []
+}
+
+@MainActor
+private final class MiniaturizedWindowSpy: NSWindow {
+    var wasDeminiaturized = false
+
+    override var isMiniaturized: Bool {
+        !self.wasDeminiaturized
+    }
+
+    override func deminiaturize(_ sender: Any?) {
+        _ = sender
+        self.wasDeminiaturized = true
+    }
+
+    override func makeKeyAndOrderFront(_ sender: Any?) {
+        _ = sender
+    }
 }
 
 extension NSEvent {

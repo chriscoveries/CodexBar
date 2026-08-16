@@ -45,7 +45,9 @@ struct DockIconWindowDescriptor: Equatable, Sendable {
 
 enum DockIconPolicyDecision {
     static func shouldUseRegularActivationPolicy(windows: [DockIconWindowDescriptor]) -> Bool {
-        windows.contains(where: \.isRealWindow)
+        windows.contains { window in
+            window.isRealWindow || (window.isSettingsWindow && window.isMiniaturized)
+        }
     }
 
     static func shouldPromoteForPresentedWindow(_ window: DockIconWindowDescriptor) -> Bool {
@@ -104,6 +106,13 @@ final class DockIconController: NSObject {
     func promote() {
         self.isAwaitingPresentedWindow = true
         self.ensureRegularPolicy(activate: true)
+    }
+
+    func prepareToOpenSettings() {
+        self.promote()
+        if let settingsWindow, settingsWindow.isMiniaturized {
+            SettingsWindowStageBehavior.present(settingsWindow)
+        }
     }
 
     func registerSettingsWindow(_ window: NSWindow) {
