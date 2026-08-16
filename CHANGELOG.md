@@ -14,6 +14,7 @@
 - CLI: keep Codex app-server notifications and child diagnostics behind verbose logging instead of writing them to stderr on every probe (#2952). Thanks @urda!
 - Ollama: strip copied `Cookie:` and cURL syntax before sending manual WorkOS session headers when another cookie appears first (#2949). Thanks @Skythrill256!
 - Antigravity: render one lane per quota bucket on the serve dashboard and in `codexbar dashboard`, instead of repeating two buckets as extra "Gemini Models" and "Claude and GPT" rows (#2963). Thanks @urda!
+- Serve: follow the app's "Hide personal information" setting on the web dashboard when no `--identity` flag is given, resolving the mode per request so the toggle applies without a serve restart (#2960). Thanks @urda!
 
 ## 0.50.0 — 2026-08-15
 
