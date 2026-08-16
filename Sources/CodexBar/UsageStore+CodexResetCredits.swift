@@ -37,6 +37,14 @@ extension UsageStore {
         if result.usage.codexResetCredits != nil {
             return outcome
         }
+        if result.codexResetCreditsAttempted {
+            // OAuth already tried the winning in-memory credential snapshot. Never reload
+            // auth.json here: a concurrent CLI login could attach another account's credits.
+            if requiresResetCreditRescue {
+                return outcome.replacingResult(with: .failure(UsageError.noRateLimitsFound))
+            }
+            return outcome
+        }
 
         do {
             try Task.checkCancellation()
@@ -127,6 +135,7 @@ extension ProviderFetchOutcome {
                 sourceLabel: result.sourceLabel,
                 strategyID: result.strategyID,
                 strategyKind: result.strategyKind,
+                codexResetCreditsAttempted: result.codexResetCreditsAttempted,
                 diagnostic: result.diagnostic,
                 claudeOAuthKeychainPersistentRefHash: result.claudeOAuthKeychainPersistentRefHash,
                 claudeOAuthHistoryOwnerIdentifier: result.claudeOAuthHistoryOwnerIdentifier,

@@ -395,6 +395,7 @@ struct CodexOAuthFetchStrategy: ProviderFetchStrategy {
             accessToken: credentials.accessToken,
             accountId: credentials.accountId,
             env: context.env)
+        let resetCreditsAttempted = Self.shouldFetchResetCredits(context)
         let resetCredits = try await Self.fetchResetCreditsIfRequested(
             context: context,
             credentials: credentials)
@@ -404,7 +405,8 @@ struct CodexOAuthFetchStrategy: ProviderFetchStrategy {
             resetCredits: resetCredits,
             credentials: credentials,
             updatedAt: updatedAt,
-            allowEmptyUsageForResetCreditEnrichment: Self.defersResetCreditFetchToApp(context))
+            allowEmptyUsageForResetCreditEnrichment: Self.defersResetCreditFetchToApp(context),
+            codexResetCreditsAttempted: resetCreditsAttempted)
         let spendControlsResult = try await Self.applyingSpendControlsMonthlyLimit(
             oauthResult,
             usage: usage,
@@ -501,7 +503,8 @@ struct CodexOAuthFetchStrategy: ProviderFetchStrategy {
         resetCredits: CodexRateLimitResetCreditsSnapshot? = nil,
         credentials: CodexOAuthCredentials,
         updatedAt: Date,
-        allowEmptyUsageForResetCreditEnrichment: Bool = false) throws -> ProviderFetchResult
+        allowEmptyUsageForResetCreditEnrichment: Bool = false,
+        codexResetCreditsAttempted: Bool = false) throws -> ProviderFetchResult
     {
         let credits = Self.mapCredits(response: usageResponse, updatedAt: updatedAt)
         let reconciled = CodexReconciledState.fromOAuth(
@@ -514,12 +517,13 @@ struct CodexOAuthFetchStrategy: ProviderFetchStrategy {
                 || usageResponse.additionalRateLimitsDecodeFailed
                 ? .unknown
                 : .exact
-            return CodexOAuthFetchStrategy().makeResult(
+            let result = CodexOAuthFetchStrategy().makeResult(
                 usage: reconciled.toUsageSnapshot()
                     .withCodexResetCredits(resetCredits)
                     .withDataConfidence(dataConfidence),
                 credits: credits,
                 sourceLabel: "oauth")
+            return Self.markResetCreditsAttempted(result, attempted: codexResetCreditsAttempted)
         }
 
         guard credits != nil
@@ -531,7 +535,7 @@ struct CodexOAuthFetchStrategy: ProviderFetchStrategy {
 
         // Credit balances and manual resets remain useful when OAuth omits
         // rate-limit windows. Keep the partial result instead of discarding it.
-        return CodexOAuthFetchStrategy().makeResult(
+        let result = CodexOAuthFetchStrategy().makeResult(
             usage: UsageSnapshot(
                 primary: nil,
                 secondary: nil,
@@ -543,6 +547,29 @@ struct CodexOAuthFetchStrategy: ProviderFetchStrategy {
                     credentials: credentials)),
             credits: credits,
             sourceLabel: "oauth")
+        return Self.markResetCreditsAttempted(result, attempted: codexResetCreditsAttempted)
+    }
+
+    private static func markResetCreditsAttempted(
+        _ result: ProviderFetchResult,
+        attempted: Bool) -> ProviderFetchResult
+    {
+        guard attempted else { return result }
+        return ProviderFetchResult(
+            usage: result.usage,
+            credits: result.credits,
+            dashboard: result.dashboard,
+            sourceLabel: result.sourceLabel,
+            strategyID: result.strategyID,
+            strategyKind: result.strategyKind,
+            codexResetCreditsAttempted: true,
+            diagnostic: result.diagnostic,
+            claudeOAuthKeychainPersistentRefHash: result.claudeOAuthKeychainPersistentRefHash,
+            claudeOAuthHistoryOwnerIdentifier: result.claudeOAuthHistoryOwnerIdentifier,
+            claudeOAuthCredentialOwner: result.claudeOAuthCredentialOwner,
+            claudeOAuthKeychainCredentialMismatch: result.claudeOAuthKeychainCredentialMismatch,
+            claudeOAuthKeychainCredentialAbsent: result.claudeOAuthKeychainCredentialAbsent,
+            claudeOAuthKeychainCredentialUnavailable: result.claudeOAuthKeychainCredentialUnavailable)
     }
 
     private static func replacingWithCLIMonthlyLimitIfAvailable(
@@ -579,6 +606,7 @@ struct CodexOAuthFetchStrategy: ProviderFetchStrategy {
             sourceLabel: oauthResult.sourceLabel,
             strategyID: oauthResult.strategyID,
             strategyKind: oauthResult.strategyKind,
+            codexResetCreditsAttempted: oauthResult.codexResetCreditsAttempted,
             diagnostic: oauthResult.diagnostic)
     }
 
@@ -658,6 +686,7 @@ struct CodexOAuthFetchStrategy: ProviderFetchStrategy {
             sourceLabel: result.sourceLabel,
             strategyID: result.strategyID,
             strategyKind: result.strategyKind,
+            codexResetCreditsAttempted: result.codexResetCreditsAttempted,
             diagnostic: result.diagnostic,
             claudeOAuthKeychainPersistentRefHash: result.claudeOAuthKeychainPersistentRefHash,
             claudeOAuthHistoryOwnerIdentifier: result.claudeOAuthHistoryOwnerIdentifier,

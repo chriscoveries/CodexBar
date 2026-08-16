@@ -118,11 +118,16 @@ struct CodexResetCreditOutcomeTests {
     }
 
     @Test
-    func `single failed GET restores failure for reset-credit-only O auth usage`() async {
+    func `OAuth reset-credit-only usage fails without rereading auth after its snapshot attempt`() async {
         let now = Date(timeIntervalSince1970: 1_781_726_400)
         let recorder = ResetCreditFetchRecorder()
         let outcome = await UsageStore.attachingCodexResetCreditsIfNeeded(
-            to: Self.outcome(resetCredits: nil, now: now, primary: nil, strategyID: "codex.oauth"),
+            to: Self.outcome(
+                resetCredits: nil,
+                now: now,
+                primary: nil,
+                strategyID: "codex.oauth",
+                codexResetCreditsAttempted: true),
             env: ["CODEX_HOME": "/tmp/account-a"],
             fetcher: { env in
                 await recorder.record(env)
@@ -134,7 +139,33 @@ struct CodexResetCreditOutcomeTests {
             return
         }
         #expect(error is UsageError)
-        #expect(await recorder.environments().count == 1)
+        #expect(await recorder.environments().isEmpty)
+    }
+
+    @Test
+    func `OAuth reset-credit failure never triggers a generic auth reload`() async throws {
+        let now = Date(timeIntervalSince1970: 1_781_726_400)
+        let recorder = ResetCreditFetchRecorder()
+        let primary = RateWindow(
+            usedPercent: 25,
+            windowMinutes: 300,
+            resetsAt: now.addingTimeInterval(3600),
+            resetDescription: nil)
+        let outcome = await UsageStore.attachingCodexResetCreditsIfNeeded(
+            to: Self.outcome(
+                resetCredits: nil,
+                now: now,
+                primary: primary,
+                strategyID: "codex.oauth",
+                codexResetCreditsAttempted: true),
+            env: ["CODEX_HOME": "/tmp/account-a"],
+            fetcher: { env in
+                await recorder.record(env)
+                throw ResetCreditFetchTestError.failed
+            })
+
+        #expect(try Self.usage(from: outcome).codexResetCredits == nil)
+        #expect(await recorder.environments().isEmpty)
     }
 
     @Test
@@ -189,7 +220,8 @@ struct CodexResetCreditOutcomeTests {
         resetCredits: CodexRateLimitResetCreditsSnapshot?,
         now: Date,
         primary: RateWindow? = nil,
-        strategyID: String = "test") -> ProviderFetchOutcome
+        strategyID: String = "test",
+        codexResetCreditsAttempted: Bool = false) -> ProviderFetchOutcome
     {
         let resolvedPrimary = strategyID == "codex.oauth" ? primary : primary ?? RateWindow(
             usedPercent: 25,
@@ -207,7 +239,8 @@ struct CodexResetCreditOutcomeTests {
                 dashboard: nil,
                 sourceLabel: "test",
                 strategyID: strategyID,
-                strategyKind: .cli)),
+                strategyKind: .cli,
+                codexResetCreditsAttempted: codexResetCreditsAttempted)),
             attempts: [])
     }
 
