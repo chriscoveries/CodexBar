@@ -2,6 +2,9 @@
 
 ## 0.50.1 — Unreleased
 
+### Fixed
+- Usage & Spend: keep safely priced Codex totals visible after completed history scans when request-tier uncertainty leaves some days unpriced (#2948). Thanks @Atopoz for the report!
+
 ## 0.50.0 — 2026-08-15
 
 ### Added
