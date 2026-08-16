@@ -4,6 +4,7 @@
 
 ### Fixed
 - Vertex AI: match Cloud Monitoring quota usage without a `limit_name` to its unambiguous same-metric, same-location limit, restoring quota percentages (#2958). Thanks @MachApple!
+- Antigravity: render one lane per quota bucket on the serve dashboard and in `codexbar dashboard`, instead of repeating two buckets as extra "Gemini Models" and "Claude and GPT" rows.
 
 ## 0.50.0 — 2026-08-15
 
