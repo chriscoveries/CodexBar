@@ -55,7 +55,8 @@ Usage source picker:
   publish OAuth token material into a shared `auth.json` without a cross-writer publication contract. In Automatic
   mode a stale credential lets the existing CLI fallback run; explicit OAuth mode delegates only stale native
   credentials to the same CLI recovery path, while stale external credentials remain read-only errors. Explicit
-  managed-account workspace selection may still update its `account_id` metadata.
+  managed-account workspace selection is stored in CodexBar's private managed-account metadata; it never edits the
+  source `auth.json` or publishes an `account_id` change back to another application's credential file.
 
 ### Advanced profile-home accounts
 - Managed Codex accounts remain the default multi-account path.
