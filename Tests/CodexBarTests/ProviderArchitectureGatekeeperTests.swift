@@ -1148,49 +1148,49 @@ struct ProviderArchitectureGatekeeperTests {
             reason: "This provider-specific app branch passes its already-selected identity to a shared helper."),
         SuppressedProviderReference(
             path: "Sources/CodexBar/UsageStore+TokenAccounts.swift",
-            line: 1291,
+            line: 1292,
             anchor: "let scoped = result.usage.scoped(to: .codex)",
             expectedProviderIDs: ["codex"],
             reason: "This provider-specific app branch passes its already-selected identity to a shared helper."),
         SuppressedProviderReference(
             path: "Sources/CodexBar/UsageStore+TokenAccounts.swift",
-            line: 1379,
+            line: 1380,
             anchor: "provider: .codex,",
             expectedProviderIDs: ["codex"],
             reason: "This provider-specific app branch passes its already-selected identity to a shared helper."),
         SuppressedProviderReference(
             path: "Sources/CodexBar/UsageStore+TokenAccounts.swift",
-            line: 1383,
+            line: 1384,
             anchor: "provider: .codex,",
             expectedProviderIDs: ["codex"],
             reason: "This provider-specific app branch passes its already-selected identity to a shared helper."),
         SuppressedProviderReference(
             path: "Sources/CodexBar/UsageStore+TokenAccounts.swift",
-            line: 1386,
+            line: 1387,
             anchor: "self.handlePredictivePaceWarningTransitions(provider: .codex, snapshot: snapshot)",
             expectedProviderIDs: ["codex"],
             reason: "This provider-specific app branch passes its already-selected identity to a shared helper."),
         SuppressedProviderReference(
             path: "Sources/CodexBar/UsageStore+TokenAccounts.swift",
-            line: 1396,
+            line: 1397,
             anchor: "self.rememberLiveSystemCodexEmailIfNeeded(snapshot.accountEmail(for: .codex))",
             expectedProviderIDs: ["codex"],
             reason: "This provider-specific app branch passes its already-selected identity to a shared helper."),
         SuppressedProviderReference(
             path: "Sources/CodexBar/UsageStore+TokenAccounts.swift",
-            line: 1399,
+            line: 1400,
             anchor: "provider: .codex,",
             expectedProviderIDs: ["codex"],
             reason: "This provider-specific app branch passes its already-selected identity to a shared helper."),
         SuppressedProviderReference(
             path: "Sources/CodexBar/UsageStore+TokenAccounts.swift",
-            line: 1419,
+            line: 1420,
             anchor: "self.snapshots.removeValue(forKey: .codex)",
             expectedProviderIDs: ["codex"],
             reason: "This provider-specific app branch passes its already-selected identity to a shared helper."),
         SuppressedProviderReference(
             path: "Sources/CodexBar/UsageStore+TokenAccounts.swift",
-            line: 1453,
+            line: 1454,
             anchor: "from: self.presentationSnapshot(for: .deepseek))",
             expectedProviderIDs: ["deepseek"],
             reason: "This provider-specific app branch passes its already-selected identity to a shared helper."),
@@ -2281,7 +2281,7 @@ struct ProviderArchitectureGatekeeperTests {
             reason: "This exact app-runtime bridge coordinates provider-owned state through the shared controller."),
         AllowedProviderConstruct(
             path: "Sources/CodexBar/SettingsStore.swift",
-            line: 1048,
+            line: 1054,
             anchor: "if !seen.contains(.factory), let zaiIndex = ordered.firstIndex(of: .zai) {",
             expectedProviderIDs: ["factory", "minimax", "zai"],
             expectedReferenceCount: 8,
@@ -2923,7 +2923,7 @@ struct ProviderArchitectureGatekeeperTests {
             reason: "This exact app-runtime bridge coordinates provider-owned state through the shared controller."),
         AllowedProviderConstruct(
             path: "Sources/CodexBar/UsageStore+TokenAccounts.swift",
-            line: 318,
+            line: 319,
             anchor: "self.snapshots[.codex] = snapshot",
             expectedProviderIDs: ["codex"],
             expectedReferenceCount: 2,
@@ -2931,7 +2931,7 @@ struct ProviderArchitectureGatekeeperTests {
             reason: "This exact app-runtime bridge coordinates provider-owned state through the shared controller."),
         AllowedProviderConstruct(
             path: "Sources/CodexBar/UsageStore+TokenAccounts.swift",
-            line: 739,
+            line: 740,
             anchor: "guard provider == .codex else { return outcome }",
             expectedProviderIDs: ["codex"],
             expectedReferenceCount: 1,
@@ -2947,7 +2947,7 @@ struct ProviderArchitectureGatekeeperTests {
             reason: "This exact app-runtime bridge coordinates provider-owned state through the shared controller."),
         AllowedProviderConstruct(
             path: "Sources/CodexBar/UsageStore+TokenAccounts.swift",
-            line: 927,
+            line: 928,
             anchor: "let originalManualToken = provider == .stepfun ? self.settings.stepfunToken : nil",
             expectedProviderIDs: ["stepfun"],
             expectedReferenceCount: 1,
@@ -2955,7 +2955,7 @@ struct ProviderArchitectureGatekeeperTests {
             reason: "This exact app-runtime bridge coordinates provider-owned state through the shared controller."),
         AllowedProviderConstruct(
             path: "Sources/CodexBar/UsageStore+TokenAccounts.swift",
-            line: 969,
+            line: 970,
             anchor: "guard let self, provider == .stepfun,",
             expectedProviderIDs: ["stepfun"],
             expectedReferenceCount: 1,
@@ -2963,7 +2963,7 @@ struct ProviderArchitectureGatekeeperTests {
             reason: "This exact app-runtime bridge coordinates provider-owned state through the shared controller."),
         AllowedProviderConstruct(
             path: "Sources/CodexBar/UsageStore+TokenAccounts.swift",
-            line: 1069,
+            line: 1070,
             anchor: "guard let snapshot = self.lastKnownResetSnapshots[.codex],",
             expectedProviderIDs: ["codex"],
             expectedReferenceCount: 1,
@@ -2971,7 +2971,7 @@ struct ProviderArchitectureGatekeeperTests {
             reason: "This exact app-runtime bridge coordinates provider-owned state through the shared controller."),
         AllowedProviderConstruct(
             path: "Sources/CodexBar/UsageStore+TokenAccounts.swift",
-            line: 1085,
+            line: 1086,
             anchor: "return self.lastKnownResetSnapshots[.codex]",
             expectedProviderIDs: ["codex"],
             expectedReferenceCount: 2,
@@ -2979,7 +2979,7 @@ struct ProviderArchitectureGatekeeperTests {
             reason: "This exact app-runtime bridge coordinates provider-owned state through the shared controller."),
         AllowedProviderConstruct(
             path: "Sources/CodexBar/UsageStore+TokenAccounts.swift",
-            line: 1292,
+            line: 1293,
             anchor: "if let resultEmail = CodexIdentityResolver.normalizeEmail(scoped.accountEmail(for: .codex)),",
             expectedProviderIDs: ["codex"],
             expectedReferenceCount: 1,
@@ -2987,7 +2987,7 @@ struct ProviderArchitectureGatekeeperTests {
             reason: "This exact app-runtime bridge coordinates provider-owned state through the shared controller."),
         AllowedProviderConstruct(
             path: "Sources/CodexBar/UsageStore+TokenAccounts.swift",
-            line: 1370,
+            line: 1371,
             anchor: "guard self.isCurrentProviderRefreshGeneration(.codex, generation: generation) else { return }",
             expectedProviderIDs: ["codex"],
             expectedReferenceCount: 9,
@@ -3005,7 +3005,7 @@ struct ProviderArchitectureGatekeeperTests {
             reason: "This exact app-runtime bridge coordinates provider-owned state through the shared controller."),
         AllowedProviderConstruct(
             path: "Sources/CodexBar/UsageStore+TokenAccounts.swift",
-            line: 1412,
+            line: 1413,
             anchor: "self.lastFetchAttempts[.codex] = outcome.attempts",
             expectedProviderIDs: ["codex"],
             expectedReferenceCount: 5,
@@ -3013,7 +3013,7 @@ struct ProviderArchitectureGatekeeperTests {
             reason: "This exact app-runtime bridge coordinates provider-owned state through the shared controller."),
         AllowedProviderConstruct(
             path: "Sources/CodexBar/UsageStore+TokenAccounts.swift",
-            line: 1451,
+            line: 1452,
             anchor: "let profileStable = provider == .deepseek",
             expectedProviderIDs: ["deepseek"],
             expectedReferenceCount: 1,
@@ -3021,7 +3021,7 @@ struct ProviderArchitectureGatekeeperTests {
             reason: "This exact app-runtime bridge coordinates provider-owned state through the shared controller."),
         AllowedProviderConstruct(
             path: "Sources/CodexBar/UsageStore+TokenAccounts.swift",
-            line: 1466,
+            line: 1467,
             anchor: "accountDiscriminatorOverride: provider == .claude ? warningAccountDiscriminator : nil)",
             expectedProviderIDs: ["claude", "deepseek"],
             expectedReferenceCount: 2,
@@ -3029,7 +3029,7 @@ struct ProviderArchitectureGatekeeperTests {
             reason: "This exact app-runtime bridge coordinates provider-owned state through the shared controller."),
         AllowedProviderConstruct(
             path: "Sources/CodexBar/UsageStore+TokenAccounts.swift",
-            line: 1487,
+            line: 1488,
             anchor: "if provider == .claude,",
             expectedProviderIDs: ["claude"],
             expectedReferenceCount: 1,
@@ -3037,7 +3037,7 @@ struct ProviderArchitectureGatekeeperTests {
             reason: "This exact app-runtime bridge coordinates provider-owned state through the shared controller."),
         AllowedProviderConstruct(
             path: "Sources/CodexBar/UsageStore+TokenAccounts.swift",
-            line: 1512,
+            line: 1513,
             anchor: "if provider == .deepseek {",
             expectedProviderIDs: ["deepseek"],
             expectedReferenceCount: 1,
@@ -3572,7 +3572,7 @@ struct ProviderArchitectureGatekeeperTests {
             reason: "This exact shared provider integration dispatches a capability owned by the provider descriptor or adapter."),
         AllowedProviderConstruct(
             path: "Sources/CodexBarCore/Providers/ProviderFetchPlan.swift",
-            line: 194,
+            line: 200,
             anchor: "if provider == .kiro {",
             expectedProviderIDs: ["kiro"],
             expectedReferenceCount: 1,
