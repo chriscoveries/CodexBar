@@ -335,7 +335,12 @@ struct CodexOAuthNativeRefreshCLIStrategy: ProviderFetchStrategy {
     }
 
     func isAvailable(_ context: ProviderFetchContext) async -> Bool {
-        guard context.sourceMode == .oauth,
+        // The Codex CLI app-server has no supported way to receive CodexBar's selected managed
+        // workspace account header. Falling back to it would therefore report the auth.json
+        // workspace under a different selected workspace. Keep this path unavailable until the
+        // owner CLI can carry that scope explicitly.
+        guard context.codexWorkspaceID == nil,
+              context.sourceMode == .oauth,
               self.binaryResolver(context) != nil,
               let credentials = try? CodexOAuthCredentialsStore.loadForUsage(
                   env: context.env,
