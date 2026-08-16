@@ -5,6 +5,9 @@
 ### Fixed
 - Usage & Spend: keep safely priced Codex totals visible after completed history scans when request-tier uncertainty leaves some days unpriced (#2948). Thanks @Atopoz for the report!
 - Vertex AI: match Cloud Monitoring quota usage without a `limit_name` to its unambiguous same-metric, same-location limit, restoring quota percentages (#2958). Thanks @MachApple!
+- Cursor: rename the included-usage split to Cursor and Third Party across menu, widgets, and menu-bar windows, matching Cursor's dashboard labels (#2951). Thanks @baanish!
+- OpenCode Go: report pace for the 5-hour and weekly usage windows in CLI text and JSON output (#2957). Thanks @kentoku24!
+- Mistral: show current-month API spend in Icon and Percent menu-bar layouts when pay-as-you-go accounts have no rate window (#2821, #2947). Thanks @kiranmagic7!
 
 ## 0.50.0 — 2026-08-15
 
