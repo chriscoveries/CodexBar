@@ -2,6 +2,9 @@
 
 ## 0.50.1 — Unreleased
 
+### Fixed
+- Vertex AI: match Cloud Monitoring quota usage without a `limit_name` to its unambiguous same-metric, same-location limit, restoring quota percentages (#2958). Thanks @MachApple!
+
 ## 0.50.0 — 2026-08-15
 
 ### Added
