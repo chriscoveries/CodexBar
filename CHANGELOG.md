@@ -4,6 +4,7 @@
 
 ### Fixed
 - Vertex AI: match Cloud Monitoring quota usage without a `limit_name` to its unambiguous same-metric, same-location limit, restoring quota percentages (#2958). Thanks @MachApple!
+- Serve: follow the app's "Hide personal information" setting on the web dashboard when no `--identity` flag is given, resolving the mode per request so the toggle applies without a serve restart.
 
 ## 0.50.0 — 2026-08-15
 
