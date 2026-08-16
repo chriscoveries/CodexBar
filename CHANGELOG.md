@@ -6,6 +6,7 @@
 - Usage bars: make workday tick marks configurable with hidden, subtle, and high-contrast appearances (#2904, #2950). Thanks @dstier-git!
 
 ### Fixed
+- Codex: keep CLI-owned `auth.json` read-only during usage refresh, delegate stale native credentials to CLI recovery, and fail closed for stale external OAuth files (#2944). Thanks @Yuxin-Qiao!
 - Usage & Spend: keep safely priced Codex totals visible after completed history scans when request-tier uncertainty leaves some days unpriced (#2948). Thanks @Atopoz for the report!
 - Vertex AI: match Cloud Monitoring quota usage without a `limit_name` to its unambiguous same-metric, same-location limit, restoring quota percentages (#2958). Thanks @MachApple!
 - Cursor: rename the included-usage split to Cursor and Third Party across menu, widgets, and menu-bar windows, matching Cursor's dashboard labels (#2951). Thanks @baanish!

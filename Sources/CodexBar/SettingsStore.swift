@@ -534,6 +534,11 @@ extension SettingsStore {
         if Self.isRunningTests, codexSparkUsageVisibleDefault == nil {
             userDefaults.set(true, forKey: "codexSparkUsageVisible")
         }
+        let codexExternalOAuthSourcesAllowed = userDefaults.object(
+            forKey: "codexExternalOAuthSourcesAllowed") as? Bool ?? false
+        if Self.isRunningTests, userDefaults.object(forKey: "codexExternalOAuthSourcesAllowed") == nil {
+            userDefaults.set(false, forKey: "codexExternalOAuthSourcesAllowed")
+        }
         let openAIWebAccessDefault = userDefaults.object(forKey: "openAIWebAccessEnabled") as? Bool
         let openAIWebAccessEnabled = openAIWebAccessDefault ?? false
         if Self.isRunningTests, openAIWebAccessDefault == nil {
@@ -637,6 +642,7 @@ extension SettingsStore {
             showOptionalCreditsAndExtraUsage: showOptionalCreditsAndExtraUsage,
             claudeDailyRoutinesUsageVisible: claudeDailyRoutinesUsageVisible,
             codexSparkUsageVisible: codexSparkUsageVisible,
+            codexExternalOAuthSourcesAllowed: codexExternalOAuthSourcesAllowed,
             openAIWebAccessEnabled: openAIWebAccessEnabled,
             openAIWebBatterySaverEnabled: openAIWebBatterySaverEnabled,
             backgroundWorkLowPowerModeEnabled: backgroundWorkLowPowerModeEnabled,
