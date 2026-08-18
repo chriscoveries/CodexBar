@@ -2,6 +2,8 @@
 
 ## 0.53.1 — Unreleased
 
+- Fixed: cost chart hover highlight now aligns with the bar under the cursor (#3040).
+
 ## 0.53.0 — 2026-08-18
 
 ### Highlights
