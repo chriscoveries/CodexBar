@@ -2,6 +2,7 @@
 
 ## 0.53.1 — Unreleased
 
+- Fixed: Amp CLI parsing follows the new `Amp <plan> Subscription:` line format so Megawatt usage windows show again (#3050).
 - Usage & Spend: chart OpenCodex spend by request hour when proxy logs are enabled, without inventing hourly totals from native Codex session timestamps.
 - Added direct primary/secondary/tertiary usage lane tokens to provider-specific menu bar layouts, so Cursor layouts can pin `Total %`, `Cursor %`, or `Third Party %` (#3038, #3039). Thanks @giuseppebisemi!
 - Fixed the cost, credits, and usage-breakdown charts so the hover highlight aligns with the bar under the cursor instead of sitting half a day off (#3040, #3049).
