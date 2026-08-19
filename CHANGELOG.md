@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.54.1 — Unreleased
+
+### Fixed
+- Fixed Codex cost catch-up getting stuck when recently touched session files contain only out-of-window usage (#3071).
+
 ## 0.54.0 — 2026-08-18
 
 ### Highlights
