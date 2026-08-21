@@ -87,6 +87,45 @@ enum CloudSyncBatchRecordProvider {
     }
 }
 
+enum CloudSyncSnapshotPruner {
+    private struct SnapshotScope: Hashable {
+        let provider: ProviderInstanceID
+        let deviceID: String
+    }
+
+    static func recordNamesToDelete(
+        persisted: [String: AccountSnapshotSyncPayload],
+        desired: [AccountSnapshotSyncPayload]) -> Set<String>
+    {
+        let desiredScopes = Set(desired.map { SnapshotScope(provider: $0.provider, deviceID: $0.deviceID) })
+        let desiredRecordNames = Set(desired.map(\.recordName))
+
+        return Set(persisted.compactMap { recordName, payload in
+            let scope = SnapshotScope(provider: payload.provider, deviceID: payload.deviceID)
+            guard desiredScopes.contains(scope), !desiredRecordNames.contains(recordName) else { return nil }
+            return recordName
+        })
+    }
+
+    static func removeRecordNames(
+        _ recordNames: some Sequence<String>,
+        from envelope: inout CloudSyncPersistence.Envelope)
+    {
+        for recordName in recordNames {
+            envelope.encodedSystemFields.removeValue(forKey: recordName)
+            envelope.recordMetadata.removeValue(forKey: recordName)
+            envelope.fleetSnapshots.removeValue(forKey: recordName)
+        }
+    }
+
+    @MainActor
+    static func removeRecordNames(_ recordNames: some Sequence<String>, from state: CloudSyncState) {
+        for recordName in recordNames {
+            state.fleetSnapshots.removeValue(forKey: recordName)
+        }
+    }
+}
+
 enum CloudSyncDirtyState {
     private static let providerIntentPrefix = "intent-"
 
@@ -545,6 +584,14 @@ actor CloudSyncEngine: CKSyncEngineDelegate {
                 self.persistenceEnvelope.fleetSnapshots[payload.recordName] = payload
                 engine.state.add(pendingRecordZoneChanges: [.saveRecord(recordID)])
             }
+            let staleRecordNames = CloudSyncSnapshotPruner.recordNamesToDelete(
+                persisted: self.persistenceEnvelope.fleetSnapshots, desired: self.pendingSnapshots)
+            for recordName in staleRecordNames {
+                engine.state.add(pendingRecordZoneChanges: [.deleteRecord(self.recordID(named: recordName))])
+                self.lastSnapshotHashes.removeValue(forKey: recordName)
+            }
+            CloudSyncSnapshotPruner.removeRecordNames(staleRecordNames, from: &self.persistenceEnvelope)
+            await MainActor.run { CloudSyncSnapshotPruner.removeRecordNames(staleRecordNames, from: self.state) }
             self.pendingSnapshots = []
             self.lastSnapshotPushAt = Date()
             self.persistEnvelope()
@@ -578,11 +625,9 @@ actor CloudSyncEngine: CKSyncEngineDelegate {
         case let .fetchedRecordZoneChanges(changes):
             await self.applyFetchedRecords(changes.modifications.map(\.record))
             let deletedRecordNames = changes.deletions.map(\.recordID.recordName)
+            CloudSyncSnapshotPruner.removeRecordNames(deletedRecordNames, from: &self.persistenceEnvelope)
             for deletion in changes.deletions {
-                self.persistenceEnvelope.encodedSystemFields.removeValue(forKey: deletion.recordID.recordName)
-                self.persistenceEnvelope.recordMetadata.removeValue(forKey: deletion.recordID.recordName)
                 self.persistenceEnvelope.fleetDevices.removeValue(forKey: deletion.recordID.recordName)
-                self.persistenceEnvelope.fleetSnapshots.removeValue(forKey: deletion.recordID.recordName)
             }
             await MainActor.run {
                 for recordName in deletedRecordNames {
@@ -600,6 +645,9 @@ actor CloudSyncEngine: CKSyncEngineDelegate {
                 self.cacheSystemFields(record)
                 self.desiredRecords.removeValue(forKey: record.recordID)
             }
+            let deletedRecordNames = changes.deletedRecordIDs.map(\.recordName)
+            CloudSyncSnapshotPruner.removeRecordNames(deletedRecordNames, from: &self.persistenceEnvelope)
+            await MainActor.run { CloudSyncSnapshotPruner.removeRecordNames(deletedRecordNames, from: self.state) }
             CloudSyncDirtyState.clearSavedRecords(
                 changes.savedRecords.map(\.recordID.recordName),
                 envelope: &self.persistenceEnvelope)

@@ -177,6 +177,75 @@ struct SyncModelTests {
     }
 
     @Test
+    func `snapshot pruner deletes replaced account keys for the same provider and device`() {
+        let oldSnapshot = self.snapshot(provider: .claude, deviceID: "device-with-dashes", accountKey: "old-key")
+        let newSnapshot = self.snapshot(provider: .claude, deviceID: "device-with-dashes", accountKey: "new-key")
+
+        let recordNames = CloudSyncSnapshotPruner.recordNamesToDelete(
+            persisted: [oldSnapshot.recordName: oldSnapshot, newSnapshot.recordName: newSnapshot],
+            desired: [newSnapshot])
+
+        #expect(recordNames == [oldSnapshot.recordName])
+    }
+
+    @Test
+    func `snapshot pruner never deletes records belonging to another device`() {
+        let remoteSnapshot = self.snapshot(provider: .claude, deviceID: "other-device", accountKey: "old-key")
+        let localSnapshot = self.snapshot(provider: .claude, deviceID: "local-device", accountKey: "new-key")
+
+        let recordNames = CloudSyncSnapshotPruner.recordNamesToDelete(
+            persisted: [remoteSnapshot.recordName: remoteSnapshot],
+            desired: [localSnapshot])
+
+        #expect(recordNames.isEmpty)
+    }
+
+    @Test
+    func `snapshot pruner preserves providers absent from the current push`() {
+        let absentProviderSnapshot = self.snapshot(provider: .codex, deviceID: "shared-device", accountKey: "old-key")
+        let desiredSnapshot = self.snapshot(provider: .claude, deviceID: "shared-device", accountKey: "new-key")
+
+        let recordNames = CloudSyncSnapshotPruner.recordNamesToDelete(
+            persisted: [absentProviderSnapshot.recordName: absentProviderSnapshot],
+            desired: [desiredSnapshot])
+
+        #expect(recordNames.isEmpty)
+    }
+
+    @Test
+    func `snapshot pruner scopes multiple providers independently`() {
+        let oldClaudeSnapshot = self.snapshot(provider: .claude, deviceID: "shared-device", accountKey: "old-claude")
+        let newClaudeSnapshot = self.snapshot(provider: .claude, deviceID: "shared-device", accountKey: "new-claude")
+        let oldCodexSnapshot = self.snapshot(provider: .codex, deviceID: "shared-device", accountKey: "old-codex")
+        let newCodexSnapshot = self.snapshot(provider: .codex, deviceID: "shared-device", accountKey: "new-codex")
+        let untouchedSnapshot = self.snapshot(provider: .codex, deviceID: "other-device", accountKey: "remote-codex")
+
+        let recordNames = CloudSyncSnapshotPruner.recordNamesToDelete(
+            persisted: [
+                oldClaudeSnapshot.recordName: oldClaudeSnapshot,
+                newClaudeSnapshot.recordName: newClaudeSnapshot,
+                oldCodexSnapshot.recordName: oldCodexSnapshot,
+                newCodexSnapshot.recordName: newCodexSnapshot,
+                untouchedSnapshot.recordName: untouchedSnapshot,
+            ],
+            desired: [newClaudeSnapshot, newCodexSnapshot])
+
+        #expect(recordNames == [oldClaudeSnapshot.recordName, oldCodexSnapshot.recordName])
+    }
+
+    @Test
+    func `snapshot pruner leaves unchanged record names untouched`() {
+        let claudeSnapshot = self.snapshot(provider: .claude, deviceID: "shared-device", accountKey: "claude-key")
+        let codexSnapshot = self.snapshot(provider: .codex, deviceID: "shared-device", accountKey: "codex-key")
+
+        let recordNames = CloudSyncSnapshotPruner.recordNamesToDelete(
+            persisted: [claudeSnapshot.recordName: claudeSnapshot, codexSnapshot.recordName: codexSnapshot],
+            desired: [claudeSnapshot, codexSnapshot])
+
+        #expect(recordNames.isEmpty)
+    }
+
+    @Test
     func `account snapshot ignores retired provider payload keys`() throws {
         let legacy = #"""
         {
@@ -218,6 +287,21 @@ struct SyncModelTests {
         #expect(decoded.provider == .openrouter)
         #expect(decoded.usage.details.isEmpty)
         #expect(decoded.usage.updatedAt == decoded.fetchedAt)
+    }
+
+    private func snapshot(
+        provider: ProviderInstanceID,
+        deviceID: String,
+        accountKey: String) -> AccountSnapshotSyncPayload
+    {
+        let updatedAt = Date(timeIntervalSince1970: 100)
+        return AccountSnapshotSyncPayload(
+            provider: provider,
+            deviceID: deviceID,
+            accountKey: accountKey,
+            fetchedAt: updatedAt,
+            displayLabel: accountKey,
+            usage: UsageSnapshot(primary: nil, secondary: nil, updatedAt: updatedAt))
     }
 }
 
