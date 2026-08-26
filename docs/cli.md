@@ -13,8 +13,13 @@ Use it when you need usage numbers in scripts, CI, or dashboards without UI.
 
 ## Install
 - In the app: **Preferences → Advanced → Install CLI**. This symlinks `CodexBarCLI` to `/usr/local/bin/codexbar` and `/opt/homebrew/bin/codexbar`.
-- From the repo, after installing `CodexBar.app` in `/Applications`: `./bin/install-codexbar-cli.sh` (same symlink targets).
+- From the repo, after installing `CodexBar.app` in `/Applications`: `./bin/install-codexbar-cli.sh` (same symlink targets; requires macOS administrator approval).
 - Manual: `ln -sf "/Applications/CodexBar.app/Contents/Helpers/CodexBarCLI" /usr/local/bin/codexbar`.
+
+The repo installer requires an executable `/Applications/CodexBar.app/Contents/Helpers/CodexBarCLI`; a missing
+helper is an error. It uses the system POSIX shell and absolute system tools, clears the inherited environment
+before requesting approval, and stops on installation failure. Caller shell startup hooks and exported shell
+functions are not passed to the administrator command. The in-app installer is separate and uses Foundation symlinks.
 
 ### Release tarball install (macOS/Linux)
 - Homebrew formula (Linux today): `brew install steipete/tap/codexbar`.
