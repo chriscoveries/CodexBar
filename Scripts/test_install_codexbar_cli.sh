@@ -18,7 +18,7 @@ assert sys.platform == "darwin", "The installer regression test requires macOS A
 assert os.geteuid() != 0, "Run installer regression tests as a non-root user."
 source = Path(sys.argv[1]).read_text()
 temp = Path(sys.argv[2]).resolve()
-assert source.startswith("#!/bin/sh\nset -eu\n")
+assert source.startswith("#!/bin/sh -p\n")
 app_line = 'APP="/Applications/CodexBar.app"'
 assert source.count(app_line) == 1
 assert source.count("/usr/bin/osascript") == 1
@@ -53,10 +53,54 @@ fixture.write_text(source.replace(app_line, "APP=" + shlex.quote(str(app)))
 fixture.chmod(0o755)
 environment = {"PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "HOME": str(temp)}
 
-def run_installer(env):
-    return subprocess.run([str(fixture)], env=env, capture_output=True, text=True)
+hook = temp / "startup-hook"
+hook.write_text("/bin/echo startup-hook-ran >&2\nexit 97\n")
+startup_hooks = {"BASH_ENV": str(hook), "ENV": str(hook), "PATH": str(temp)}
+function_returns = {name: 98 for name in (
+    "bash", "env", "osascript", "mkdir", "ln", "dirname", "echo", "printf",
+)}
+# Each override models a distinct way to bypass validation or fail-fast behavior.
+function_returns.update({"[": 1, "set": 0, "exit": 0})
 
-baseline = run_installer(environment)
+def run_command(command, functions=(), inherited=None):
+    if functions or inherited:
+        # Let the system Bash choose its actual function-export format. Inject hooks
+        # only after this exporter starts, so they reach the installer, not the test.
+        exports = "".join(
+            f"{name}() {{ /bin/echo inherited-function-ran:{name} >&2; "
+            f"return {function_returns[name]}; }}\nexport -f {shlex.quote(name)}\n"
+            for name in functions
+        )
+        launch = shlex.join(["/usr/bin/env"] + [
+            f"{key}={value}" for key, value in (inherited or {}).items()
+        ]) + ' "$@"'
+        command = ["/bin/bash", "--noprofile", "--norc", "-c", exports + launch,
+                   "installer-test", *command]
+    return subprocess.run(command, env=environment, capture_output=True, text=True)
+
+def run_installer(functions=(), inherited=None):
+    return run_command([str(fixture)], functions, inherited)
+
+# Prove these are genuinely inherited functions on this host, without invoking them.
+imported = run_command(["/bin/sh", "-c", "type -t '[' set exit"], ("[", "set", "exit"))
+assert imported.returncode == 0, imported.stderr
+assert imported.stdout.splitlines() == ["function"] * 3
+hook_probe = run_command(["/bin/bash", "--noprofile", "--norc", "-c", ":"], inherited=startup_hooks)
+assert hook_probe.returncode == 97
+assert hook_probe.stderr == "startup-hook-ran\n"
+
+cases = [
+    ("normal", (), {}),
+    ("test function", ("[",), {}),
+    ("set function", ("set",), {}),
+    ("exit function", ("exit",), {}),
+    ("all functions", tuple(function_returns), {}),
+    ("startup hooks", (), startup_hooks),
+    ("shell options", (), {"SHELLOPTS": "noexec"}),
+    ("all contamination", tuple(function_returns), dict(startup_hooks, SHELLOPTS="noexec")),
+]
+
+baseline = run_installer()
 assert baseline.returncode == 0, baseline.stderr
 assert "CodexBar CLI installed." in baseline.stdout
 expected_capture = json.loads(capture.read_text())
@@ -67,23 +111,23 @@ assert set(expected_capture["environment"]) <= {
     "PATH", "LC_CTYPE", "__CF_USER_TEXT_ENCODING",
 }, sorted(expected_capture["environment"])
 
-hook = temp / "startup-hook"
-hook.write_text("/bin/echo startup-hook-ran >&2\nexit 97\n")
-inherited = dict(environment, BASH_ENV=str(hook), ENV=str(hook), PATH=str(temp))
-for name in ("bash", "env", "osascript", "mkdir", "ln", "dirname", "echo", "printf", "set"):
-    for suffix in ("%%", "()"):
-        inherited[f"BASH_FUNC_{name}{suffix}"] = "() { /bin/echo inherited-function-ran >&2; return 98; }"
-contaminated = run_installer(inherited)
-assert contaminated.returncode == 0, contaminated.stderr
-assert contaminated.stdout == baseline.stdout
-assert contaminated.stderr == baseline.stderr
-assert json.loads(capture.read_text()) == expected_capture
+for label, functions, inherited in cases:
+    capture.unlink()
+    completed = run_installer(functions, inherited)
+    assert completed.returncode == 0, (label, completed.stderr)
+    assert completed.stdout == baseline.stdout, label
+    assert completed.stderr == baseline.stderr, label
+    assert json.loads(capture.read_text()) == expected_capture, label
 
 # An approval/installation error must propagate without a success banner.
 (temp / "exit-code").write_text("23")
-failed = run_installer(environment)
-assert failed.returncode == 23
-assert "installed" not in failed.stdout
+for label, functions, inherited in cases:
+    capture.unlink()
+    failed = run_installer(functions, inherited)
+    assert failed.returncode == 23, (label, failed.stderr)
+    assert failed.stdout == "", label
+    assert failed.stderr == "", label
+    assert json.loads(capture.read_text()) == expected_capture, label
 (temp / "exit-code").write_text("0")
 
 # Neither an absent nor a non-executable helper may request approval.
@@ -93,12 +137,14 @@ for missing in (False, True):
         helper.unlink()
     else:
         helper.chmod(0o644)
-    failed = run_installer(environment)
-    assert failed.returncode != 0
-    assert "helper not found" in failed.stderr
-    assert str(helper) in failed.stderr
-    assert "installed" not in failed.stdout
-    assert not capture.exists()
+    for label, functions, inherited in cases:
+        failed = run_installer(functions, inherited)
+        assert failed.returncode == 1, (label, failed.stderr)
+        assert failed.stderr == (
+            f"CodexBarCLI helper not found at {helper}. Please reinstall CodexBar.\n"
+        ), label
+        assert failed.stdout == "", label
+        assert not capture.exists(), label
 helper.write_text("#!/bin/sh\nexit 0\n")
 helper.chmod(0o755)
 

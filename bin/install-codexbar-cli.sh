@@ -1,4 +1,5 @@
-#!/bin/sh
+#!/bin/sh -p
+# -p blocks inherited functions and startup hooks before validation; it does not elevate privileges.
 set -eu
 
 APP="/Applications/CodexBar.app"

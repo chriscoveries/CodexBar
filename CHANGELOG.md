@@ -3,7 +3,7 @@
 ## 0.55.2 — Unreleased
 
 ### Fixed
-- CLI install: remove inherited Bash startup hooks from the repository installer by using the system POSIX shell, absolute tools, and a clean environment while retaining administrator approval and both existing symlink destinations (#3205).
+- CLI install: block inherited shell functions and startup hooks before helper validation and failure handling, and use absolute tools and a clean administrator-command environment while retaining approval and both existing symlink destinations (#3205, #3217).
 
 ## 0.55.1 — 2026-08-25
 
