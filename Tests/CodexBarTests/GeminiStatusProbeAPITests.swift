@@ -300,8 +300,7 @@ struct GeminiStatusProbeAPITests {
             geminiPackageJSONPath: packageJSONPath.path)
 
         let previousPath = ProcessInfo.processInfo.environment["PATH"]
-        let fakeBinDir = env.homeURL.appendingPathComponent("bin").path
-        setenv("PATH", "\(fakeBinDir):\(binURL.deletingLastPathComponent().path)", 1)
+        setenv("PATH", env.fnmFixturePath(geminiBinary: binURL, inheritedPath: previousPath), 1)
 
         let previousGeminiPath = ProcessInfo.processInfo.environment["GEMINI_CLI_PATH"]
         setenv("GEMINI_CLI_PATH", binURL.path, 1)
