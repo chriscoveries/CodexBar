@@ -182,6 +182,14 @@ reads after setup has closed each file. This avoids per-file atomic publication 
 without changing corpus contents or scan budgets. The shared atomic fixture writer remains available
 for replacement and publication tests.
 
+### Adaptive refresh fixtures
+
+Heuristics and timer tests seed disabled providers through `testSettingsStore(config:)`, which saves the
+file-backed config before settings initialization. They do not replay a synchronous config write for each
+provider toggle during setup. The seed preserves provider defaults and explicitly keeps OpenAI web access
+off; an existing config would otherwise enable it. Reset-boundary tests then enable only the stubbed Codex
+provider. Timer intervals, polling deadlines, and production persistence behavior remain unchanged.
+
 ### Claude session fixtures
 
 Profile/reuse and overlapping-capture tests wait for the fixture's expected `Account:` response with idle
