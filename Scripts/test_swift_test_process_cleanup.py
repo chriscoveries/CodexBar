@@ -33,23 +33,47 @@ def wait_until(predicate, timeout=3):
         time.sleep(0.05)
 
 
-def fixture(mode, directory):
+def publish_fixture_identity(root):
+    info = runner.test_process(os.getpid())
+    assert info is not None
+    (root / "pid").write_text(str(info.pid))
+    ready = root / "ready.tmp"
+    ready.write_text(json.dumps(dict(pid=info.pid, birth=info.birth)))
+    ready.replace(root / "ready")
+
+
+def release_observed_fixture(root, owned, include_grandchild=False):
+    paths = [root, root / "grandchild"] if include_grandchild else [root]
+    for path in paths:
+        try:
+            identity = json.loads((path / "ready").read_text())
+        except FileNotFoundError:
+            return False
+        info = owned.get(identity["pid"])
+        if info is None or info.birth != tuple(identity["birth"]):
+            return False
+    (root / "observed").touch()
+    return True
+
+
+def fixture(mode, directory, ready_delay=0):
     root = Path(directory)
     if mode == "session-leader":
-        (root / "pid").write_text(str(os.getpid()))
+        publish_fixture_identity(root)
         grandchild = root / "grandchild"
         grandchild.mkdir()
         subprocess.Popen([sys.executable, __file__, "--fixture", "child", str(grandchild)])
         deadline = time.monotonic() + 20
         while time.monotonic() < deadline and not (root / "stop").exists():
             time.sleep(0.05)
+        (grandchild / "stop").touch()
         return
     if mode in ("child", "stubborn", "sentinel"):
         if os.getpgrp() != os.getpid():
             os.setpgid(0, 0)
         if mode == "stubborn":
             signal.signal(signal.SIGTERM, signal.SIG_IGN)
-        (root / "pid").write_text(str(os.getpid()))
+        publish_fixture_identity(root)
         # Self-expiry and the stop file also contain pre-fix failures without fuzzy process kills.
         deadline = time.monotonic() + 20
         while time.monotonic() < deadline and not (root / "stop").exists():
@@ -60,14 +84,20 @@ def fixture(mode, directory):
     if mode == "success-session-tree":
         child_mode = "session-leader"
     (root / "parent-pid").write_text(str(os.getpid()))
+    signal.signal(signal.SIGTERM, lambda *_: os._exit(0))
+    if ready_delay:
+        ready_at = time.monotonic() + ready_delay
+        wait_until(lambda: time.monotonic() >= ready_at or (root / "stop").exists())
+        if (root / "stop").exists():
+            return
     subprocess.Popen(
         [sys.executable, __file__, "--fixture", child_mode, str(root)],
         start_new_session=mode in ("timeout-session", "success-session", "success-session-tree"),
     )
-    signal.signal(signal.SIGTERM, lambda *_: os._exit(0))
-    wait_until(lambda: (root / "pid").exists())
-    # Keep the ancestry visible before success/failure/interrupt or timeout.
-    time.sleep(1.2)
+    # Preserve ancestry until the real ownership refresh has observed the ready identities.
+    wait_until(lambda: (root / "observed").exists() or (root / "stop").exists())
+    if (root / "stop").exists():
+        return
     if mode in ("success", "success-session", "success-session-tree"):
         return
     if mode == "failure":
@@ -78,7 +108,7 @@ def fixture(mode, directory):
 
 
 class ProcessCleanupTests(unittest.TestCase):
-    def exercise(self, mode, expected, interrupt=False):
+    def exercise(self, mode, expected, interrupt=False, ready_delay=0):
         with tempfile.TemporaryDirectory(prefix="codexbar-process-cleanup-") as directory:
             root = Path(directory)
             child_root = root / "child"
@@ -96,12 +126,26 @@ class ProcessCleanupTests(unittest.TestCase):
                     timer = threading.Timer(2, lambda: os.kill(os.getpid(), signal.SIGINT))
                     timer.start()
                 started = time.monotonic()
-                command = [sys.executable, __file__, "--fixture", mode, str(child_root)]
+                command = [sys.executable, __file__, "--fixture", mode, str(child_root), str(ready_delay)]
+                original_refresh = runner.TestProcessOwnership.refresh
                 original_drain = runner.TestProcessOwnership.drain
+                acknowledged = False
+                draining = False
+                def refresh(ownership):
+                    nonlocal acknowledged
+                    owned = original_refresh(ownership)
+                    if not acknowledged and not draining:
+                        acknowledged = release_observed_fixture(
+                            child_root, owned, include_grandchild=mode == "success-session-tree")
+                    return owned
                 def drain(ownership, process):
+                    nonlocal draining
+                    draining = True
                     try:
                         self.assertIsNone(process.returncode, "root was reaped before cleanup")
                         first = runner.unreaped_exit_code(process)
+                        if expected in (0, 23):
+                            self.assertEqual(first, expected, "fixture must exit before drain begins")
                         if first is not None:
                             self.assertEqual(runner.unreaped_exit_code(process), first)
                         else:
@@ -111,13 +155,15 @@ class ProcessCleanupTests(unittest.TestCase):
                     finally:
                         original_drain(ownership, process)
                     self.assertIsNotNone(process.returncode, "root was not reaped after cleanup")
-                with patch.object(runner.TestProcessOwnership, "drain", drain):
+                with patch.object(runner.TestProcessOwnership, "refresh", refresh), \
+                        patch.object(runner.TestProcessOwnership, "drain", drain):
                     if interrupt:
                         with self.assertRaises(KeyboardInterrupt):
                             runner.run_command(command, timeout=8)
                     else:
                         self.assertEqual(runner.run_command(command, timeout=2), expected)
                 elapsed = time.monotonic() - started
+                self.assertTrue(acknowledged, "fixture identities were not observed before drain")
                 child = int((child_root / "pid").read_text())
                 self.assertFalse(running(child), f"owned child {child} survived command completion")
                 for pid_file in child_root.rglob("pid"):
@@ -125,7 +171,8 @@ class ProcessCleanupTests(unittest.TestCase):
                 self.assertFalse(running(int((child_root / "parent-pid").read_text())))
                 self.assertIsNone(sentinel.poll(), "unrelated sentinel was terminated")
                 self.assertLess(elapsed, 9, "cleanup exceeded bounded grace")
-                print(json.dumps(dict(mode=mode, elapsed=round(elapsed, 3), child_terminated=True,
+                print(json.dumps(dict(mode=mode, ready_delay=ready_delay, elapsed=round(elapsed, 3),
+                                      observed_before_drain=acknowledged, child_terminated=True,
                                       unrelated_sentinel_alive=True)), flush=True)
             finally:
                 if timer is not None:
@@ -154,6 +201,10 @@ class ProcessCleanupTests(unittest.TestCase):
 
     def test_success_drains_lingering_child_without_touching_sentinel(self):
         self.exercise("success", 0)
+
+    def test_success_after_delayed_readiness_keeps_the_two_second_budget(self):
+        # One second of startup plus the former 1.2-second ancestry sleep exceeds the command budget.
+        self.exercise("success", 0, ready_delay=1)
 
     def test_success_allows_and_drains_a_separate_session(self):
         self.exercise("success-session", 0)
@@ -782,6 +833,12 @@ class AnchorSemanticsTests(unittest.TestCase):
             process = subprocess.Popen([sys.executable, __file__, "--fixture", "success", directory],
                                        start_new_session=True)
             try:
+                wait_until(lambda: (root / "ready").exists())
+                self.assertIsNone(runner.unreaped_exit_code(process))
+                identity = runner.test_process(process.pid)
+                self.assertIsNotNone(identity)
+                ownership = runner.TestProcessOwnership(identity, process)
+                wait_until(lambda: release_observed_fixture(root, ownership.refresh()))
                 options = os.WEXITED | os.WNOHANG | os.WNOWAIT
                 wait_until(lambda: os.waitid(os.P_PID, process.pid, options) is not None)
                 first = os.waitid(os.P_PID, process.pid, options)
@@ -806,6 +863,9 @@ class AnchorSemanticsTests(unittest.TestCase):
                 except subprocess.TimeoutExpired:
                     process.kill()
                     process.wait(timeout=2)
+                if (root / "pid").exists():
+                    child = int((root / "pid").read_text())
+                    wait_until(lambda: not running(child))
 
 
 class SessionOwnershipTests(unittest.TestCase):
@@ -930,6 +990,6 @@ int main(int argc, char **argv) {
 
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--fixture":
-        fixture(sys.argv[2], sys.argv[3])
+        fixture(sys.argv[2], sys.argv[3], float(sys.argv[4]) if len(sys.argv) > 4 else 0)
     else:
         unittest.main()

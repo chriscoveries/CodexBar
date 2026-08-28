@@ -171,10 +171,24 @@ macOS also runs native audit-token fixtures: deliberately wrong generations leav
 matching identities TERM/KILL and reap them, and unrelated sentinels survive. These fixtures use stop
 files and self-expiry, with final cleanup restricted to their unreaped direct children.
 
+Process-cleanup fixtures keep ancestry alive until the real ownership refresh observes matching ready
+child identities (and the session-tree grandchild), then acknowledges a private fixture gate before drain.
+The direct `waitid` fixture uses the same handshake without reaping its root. Immediate cases and a controlled
+one-second readiness delay retain the two-second command budget; startup no longer adds a fixed 1.2-second
+ancestry sleep. Gate waits are bounded and stop-file aware; helper self-expiry remains 20 seconds.
+
 Cost performance and fair-scheduling corpora use exclusive initial fixture creation: the scanner only
 reads after setup has closed each file. This avoids per-file atomic publication and durability work
 without changing corpus contents or scan budgets. The shared atomic fixture writer remains available
 for replacement and publication tests.
+
+### Claude session fixtures
+
+Profile/reuse and overlapping-capture tests wait for the fixture's expected `Account:` response with idle
+completion disabled; PTY command echo alone is not functional completion. The profile/reuse test keeps both
+immediate responses and a controlled 0.5-second response delay, beyond the former 0.1-second idle window.
+Capture budgets remain two seconds for profile/reuse and five seconds for overlap. Account, environment,
+launch-count, isolation, and stale-artifact assertions remain independent of the completion condition.
 
 ### Codex credential fixtures
 
