@@ -104,20 +104,63 @@ if sys.platform == "darwin":
             (name, ctypes.c_uint32) for name in ("files", "group", "jobc", "tdev", "tpgid", "nice")
         ] + [("seconds", ctypes.c_uint64), ("microseconds", ctypes.c_uint64)]
 
+    class ProcUniqueIdentifierInfo(ctypes.Structure):
+        # sys/proc_info_private.h: 56-byte API layout, including unused reserved fields.
+        _fields_ = [
+            ("uuid", ctypes.c_uint8 * 16), ("uniqueid", ctypes.c_uint64),
+            ("parent_uniqueid", ctypes.c_uint64), ("pidversion", ctypes.c_int32),
+            ("reserved", ctypes.c_uint32), ("reserved2", ctypes.c_uint64), ("reserved3", ctypes.c_uint64),
+        ]
+
+    class ProcBSDInfoWithUniqueID(ctypes.Structure):
+        _fields_ = [("bsd", ProcBSDInfo), ("unique", ProcUniqueIdentifierInfo)]
+
+    class AuditToken(ctypes.Structure):
+        _fields_ = [("val", ctypes.c_uint32 * 8)]
+
     _libproc = ctypes.CDLL("/usr/lib/libproc.dylib", use_errno=True)
     _libproc.proc_pidinfo.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_uint64, ctypes.c_void_p, ctypes.c_int]
     _libproc.proc_pidinfo.restype = ctypes.c_int
+    _proc_signal_with_audittoken = getattr(_libproc, "proc_signal_with_audittoken", None)
+    if _proc_signal_with_audittoken is not None:
+        _proc_signal_with_audittoken.argtypes = [ctypes.POINTER(AuditToken), ctypes.c_int]
+        _proc_signal_with_audittoken.restype = ctypes.c_int
+
+
+def darwin_pidinfo(pid: int, flavor: int, info):
+    ctypes.set_errno(0)
+    size = _libproc.proc_pidinfo(pid, flavor, 0, ctypes.byref(info), ctypes.sizeof(info))
+    if size != ctypes.sizeof(info):
+        error = ctypes.get_errno() if size <= 0 else errno.EIO
+        raise OSError(error or errno.EIO, f"Cannot read process metadata for PID {pid}")
+    return info
+
+
+def darwin_signal_process(info: TestProcess, sig: signal.Signals) -> None:
+    if _proc_signal_with_audittoken is None:
+        raise OSError(errno.ENOSYS, "Darwin process cleanup requires proc_signal_with_audittoken")
+    try:
+        # PROC_PIDT_BSDINFOWITHUNIQID reads birth and generation from one held proc.
+        current = darwin_pidinfo(info.pid, 18, ProcBSDInfoWithUniqueID())
+    except (FileNotFoundError, ProcessLookupError):
+        return
+    if current.bsd.pid != info.pid or (current.bsd.seconds, current.bsd.microseconds) != info.birth:
+        return
+    # Only target PID/pidversion are used; these are not caller credentials. XNU
+    # checks the real caller's permissions and binds the signal to this generation.
+    token = AuditToken()
+    token.val[5], token.val[7] = info.pid, current.unique.pidversion
+    error = _proc_signal_with_audittoken(ctypes.byref(token), sig)
+    # libproc returns errno directly, not -1/errno. An exec can stale this token;
+    # a later cleanup attempt obtains a fresh generation only after matching birth.
+    if error and error != errno.ESRCH:
+        raise OSError(error, f"Cannot signal process identity for PID {info.pid}")
 
 
 def test_process(pid: int) -> TestProcess | None:
     try:
         if sys.platform == "darwin":
-            info = ProcBSDInfo()
-            ctypes.set_errno(0)
-            size = _libproc.proc_pidinfo(pid, 3, 0, ctypes.byref(info), ctypes.sizeof(info))
-            if size != ctypes.sizeof(info):
-                error = ctypes.get_errno() if size <= 0 else errno.EIO
-                raise OSError(error or errno.EIO, f"Cannot read process metadata for PID {pid}")
+            info = darwin_pidinfo(pid, 3, ProcBSDInfo())
             zombie = info.state == 5
             try:
                 session = 0 if zombie else os.getsid(pid)
@@ -237,6 +280,8 @@ class TestProcessOwnership:
                 return
             if descriptor is not None:
                 signal.pidfd_send_signal(descriptor, sig)
+            elif sys.platform == "darwin":
+                darwin_signal_process(info, sig)
             else:
                 os.kill(info.pid, sig)
         except ProcessLookupError:

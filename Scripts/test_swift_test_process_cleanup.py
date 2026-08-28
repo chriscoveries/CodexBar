@@ -261,6 +261,191 @@ class ProcessIdentityTests(unittest.TestCase):
         stop.assert_called_once_with(process)
 
 
+@unittest.skipUnless(sys.platform == "darwin", "requires Darwin audit-token signaling")
+class DarwinSignalTests(unittest.TestCase):
+    child = runner.TestProcess(20, 10, 20, (101, 123))
+
+    def setUp(self):
+        self.ownership = runner.TestProcessOwnership(runner.TestProcess(10, 1, 10, (100, 0)))
+        self.ownership.known[self.child.pid] = self.child.birth
+        self.generation = 41
+
+    def metadata(self, pid, flavor, offset, pointer, size):
+        self.assertEqual((pid, flavor, offset, size), (20, 18, 0, 192))
+        info = pointer._obj
+        info.bsd.pid, info.bsd.parent = pid, self.child.parent
+        info.bsd.seconds, info.bsd.microseconds = self.child.birth
+        info.unique.pidversion = self.generation
+        return size
+
+    def send_with_native(self, native, metadata=None):
+        # Fake PIDs never reach any real signal API, including the pre-fix numeric path.
+        with patch.object(runner, "test_process", return_value=self.child), \
+                patch.object(runner._libproc, "proc_pidinfo", side_effect=metadata or self.metadata), \
+                patch.object(runner, "_proc_signal_with_audittoken", native, create=True), \
+                patch.object(runner.os, "kill") as kill:
+            try:
+                self.ownership.send(self.child, signal.SIGTERM)
+            finally:
+                kill.assert_not_called()
+
+    def test_generation_change_between_metadata_and_signal_never_signals_replacement(self):
+        delivered = []
+        captured = []
+        def native(pointer, sig):
+            token = pointer._obj
+            captured.append((token.val[5], token.val[7], sig))
+            self.generation += 1  # deterministic replacement after the combined read
+            if token.val[7] != self.generation:
+                return errno.ESRCH
+            delivered.append(token.val[5])
+            return 0
+        self.send_with_native(native)
+        self.assertEqual(captured, [(20, 41, signal.SIGTERM)])
+        self.assertEqual(delivered, [])
+
+    def test_same_birth_exec_refreshes_generation_on_later_attempt(self):
+        tokens = []
+        def native(pointer, sig):
+            tokens.append(pointer._obj.val[7])
+            if len(tokens) == 1:
+                self.generation += 1
+                return errno.ESRCH
+            return 0
+        self.send_with_native(native)
+        self.send_with_native(native)
+        self.assertEqual(tokens, [41, 42])
+
+    def test_success_uses_return_value_not_stale_errno_or_numeric_pid(self):
+        def native(pointer, sig):
+            self.assertEqual(list(pointer._obj.val), [0, 0, 0, 0, 0, 20, 0, 41])
+            ctypes.set_errno(errno.EPERM)
+            return 0
+        send = Mock(side_effect=native)
+        self.send_with_native(send)
+        send.assert_called_once()
+
+    def test_native_errno_is_preserved_without_numeric_fallback(self):
+        for error in (errno.EPERM, errno.EACCES, errno.EIO, errno.EINVAL, errno.ENOSYS, errno.ENOENT):
+            with self.subTest(errno=error):
+                ctypes.set_errno(errno.ESRCH)
+                with self.assertRaises(OSError) as raised:
+                    self.send_with_native(Mock(return_value=error))
+                self.assertEqual(raised.exception.errno, error)
+
+    def test_missing_native_api_fails_closed(self):
+        with self.assertRaises(OSError) as raised:
+            self.send_with_native(None)
+        self.assertEqual(raised.exception.errno, errno.ENOSYS)
+
+    def test_combined_birth_mismatch_never_sends(self):
+        def metadata(*args):
+            size = self.metadata(*args)
+            args[3]._obj.bsd.microseconds += 1
+            return size
+        send = Mock(return_value=0)
+        self.send_with_native(send, metadata)
+        send.assert_not_called()
+
+    def test_combined_metadata_errors_do_not_become_success(self):
+        for error in (errno.ESRCH, errno.ENOENT, errno.EPERM, errno.EACCES, errno.EIO, errno.EINVAL, 0):
+            def metadata(*_):
+                ctypes.set_errno(error)
+                return 0
+            send = Mock(return_value=0)
+            with self.subTest(errno=error):
+                if error in (errno.ESRCH, errno.ENOENT):
+                    self.send_with_native(send, metadata)
+                else:
+                    with self.assertRaises(OSError) as raised:
+                        self.send_with_native(send, metadata)
+                    self.assertEqual(raised.exception.errno, error or errno.EIO)
+                send.assert_not_called()
+
+    def test_partial_combined_metadata_is_io_error_even_with_stale_esrch(self):
+        def metadata(*_):
+            ctypes.set_errno(errno.ESRCH)
+            return 136
+        with self.assertRaises(OSError) as raised:
+            self.send_with_native(Mock(return_value=0), metadata)
+        self.assertEqual(raised.exception.errno, errno.EIO)
+
+
+@unittest.skipUnless(sys.platform == "darwin", "requires native Darwin audit-token signaling")
+class DarwinNativeSignalTests(unittest.TestCase):
+    def exercise(self, sig):
+        self.assertEqual(ctypes.sizeof(runner.ProcBSDInfo), 136)
+        self.assertEqual(ctypes.sizeof(runner.ProcUniqueIdentifierInfo), 56)
+        self.assertEqual(runner.ProcUniqueIdentifierInfo.pidversion.offset, 32)
+        self.assertEqual(runner.ProcBSDInfoWithUniqueID.unique.offset, 136)
+        self.assertEqual(ctypes.sizeof(runner.ProcBSDInfoWithUniqueID), 192)
+        self.assertEqual(ctypes.sizeof(runner.AuditToken), 32)
+        native = runner._proc_signal_with_audittoken
+        self.assertIsNotNone(native, "native signal API must be available on supported macOS")
+        with tempfile.TemporaryDirectory(prefix="codexbar-audit-signal-") as directory:
+            root = Path(directory)
+            processes = []
+            def start(name, mode):
+                path = root / name
+                path.mkdir()
+                process = subprocess.Popen([sys.executable, __file__, "--fixture", mode, str(path)],
+                                           start_new_session=True)
+                processes.append(process)
+                wait_until(lambda: (path / "pid").exists())
+                return process
+            def identity(pid):
+                info = runner.darwin_pidinfo(pid, 18, runner.ProcBSDInfoWithUniqueID())
+                return (info.bsd.pid, info.bsd.parent, info.bsd.seconds, info.bsd.microseconds,
+                        info.unique.pidversion & 0xFFFFFFFF)
+            try:
+                sentinel = start("sentinel", "sentinel")
+                child = start("child", "child" if sig == signal.SIGTERM else "stubborn")
+                before, sentinel_before = identity(child.pid), identity(sentinel.pid)
+                tracked = runner.test_process(child.pid)
+                self.assertEqual(before[:4], (child.pid, os.getpid(), *tracked.birth))
+                ownership = runner.TestProcessOwnership(runner.test_process(os.getpid()))
+                ownership.known[child.pid] = tracked.birth
+                wrong = runner.AuditToken()
+                wrong.val[5], wrong.val[7] = child.pid, before[4] ^ 1
+                wrong_result = native(ctypes.byref(wrong), sig)
+                self.assertEqual(wrong_result, errno.ESRCH)
+                time.sleep(0.1)
+                after_wrong = identity(child.pid)
+                self.assertEqual(after_wrong, before)
+                self.assertIsNone(runner.unreaped_exit_code(child), "wrong generation signaled the live fixture")
+                self.assertIsNone(child.returncode, "fixture must remain wait-owned until matching signal")
+                results = []
+                def matching(pointer, requested):
+                    self.assertEqual((pointer._obj.val[5], pointer._obj.val[7], requested),
+                                     (child.pid, before[4], sig))
+                    result = native(pointer, requested)
+                    results.append(result)
+                    return result
+                with patch.object(runner, "_proc_signal_with_audittoken", side_effect=matching), \
+                        patch.object(runner.os, "kill") as kill:
+                    ownership.send(tracked, sig)
+                    kill.assert_not_called()
+                self.assertEqual(results, [0])
+                self.assertEqual(child.wait(timeout=3), -sig)
+                self.assertEqual(identity(sentinel.pid), sentinel_before)
+                self.assertIsNone(runner.unreaped_exit_code(sentinel), "unrelated sentinel was signaled")
+                print(json.dumps(dict(signal=sig.name, before=before, after_wrong=after_wrong,
+                                      wrong_pidversion=wrong.val[7], wrong_result=wrong_result,
+                                      matching_results=results, reaped_status=child.returncode,
+                                      unrelated_sentinel_alive=True)), flush=True)
+            finally:
+                for path in root.iterdir():
+                    (path / "stop").touch()
+                for process in processes:
+                    runner.stop_unreaped_child(process)
+
+    def test_wrong_generation_survives_then_matching_identity_terms_and_reaps(self):
+        self.exercise(signal.SIGTERM)
+
+    def test_wrong_generation_survives_then_matching_identity_kills_and_reaps(self):
+        self.exercise(signal.SIGKILL)
+
+
 class ReviewRegressionTests(unittest.TestCase):
     def test_recycled_sid_without_replacement_leader_is_not_adopted(self):
         root = runner.TestProcess(10, 1, 10, (100, 0))

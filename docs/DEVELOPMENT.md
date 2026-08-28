@@ -154,7 +154,11 @@ owned set to drain within five seconds. Error paths make a final bounded attempt
 identities and reap the direct child, then propagate failure instead of starting another suite/retry.
 Initialization failures similarly TERM/KILL/reap the still-owned direct child. Linux treats a zombie
 leader with other threads as running. Other PIDs require birth checks before signals, with pidfds used
-on Linux when available. macOS birth checking and signaling remain separate system calls.
+on Linux when available. macOS descendant signals use `proc_signal_with_audittoken`: a combined native
+BSD/unique-identity read must match the tracked birth, then the kernel binds the signal to that PID's
+generation while checking the caller's normal signal permissions. A stale generation (including an
+exec race) is not signaled; later cleanup attempts can refresh it after matching birth again. Missing
+native signal support, permission failures, and I/O errors fail cleanup without a numeric-PID fallback.
 
 This is a bounded metadata polling tracker, not a daemon sandbox. A new session whose leader and attached
 ancestry both disappear entirely between observations cannot be discovered reliably. Snapshot enumeration
@@ -163,6 +167,9 @@ discovery/build path is unchanged; the 180-second bound applies to each suite/gr
 startup. `Scripts/test_swift_test_sharding.sh` includes synthetic containment tests; they do not launch
 Swift, the app, or provider probes. Its native pthread regression runs only on Linux and uses the system C
 compiler; macOS runs the corresponding metadata unit tests and reports the native case as skipped.
+macOS also runs native audit-token fixtures: deliberately wrong generations leave owned children alive,
+matching identities TERM/KILL and reap them, and unrelated sentinels survive. These fixtures use stop
+files and self-expiry, with final cleanup restricted to their unreaped direct children.
 
 Cost performance and fair-scheduling corpora use exclusive initial fixture creation: the scanner only
 reads after setup has closed each file. This avoids per-file atomic publication and durability work
