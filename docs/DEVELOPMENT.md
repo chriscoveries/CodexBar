@@ -132,6 +132,43 @@ See the canonical [provider authoring guide](provider.md#adding-a-new-provider) 
 make test
 ```
 
+Suite commands retain the default 180-second deadline, including SwiftPM startup and discovery.
+The runner reports elapsed time and owned PIDs every 30 seconds even when test output is buffered.
+It tracks process birth identities and descendants, including helpers that create separate process
+groups or sessions, and drains them before retrying. Separate sessions are allowed: the shell runner
+uses them to protect controlling-terminal ownership. The direct command remains unreaped until cleanup
+finishes (`waitid` with `WNOWAIT`), preventing reuse of its PID/session. Observed descendant session
+leaders can establish ownership of orphaned session members only while a matching live or unreaped
+birth identity still anchors that session. Known descendants retain their identities after reparenting;
+empty completed sessions retire. If an observed session loses its anchor while unaccounted live members
+remain, cleanup fails without adopting or signaling those uncertain PIDs. Unavailable metadata for a
+known identity also fails cleanup; an unreadable unrelated peer does not abort enumeration.
+For the direct child, confirmed metadata absence (ESRCH/ENOENT) can precede a waitable exit on
+Darwin. Its unreaped wait handle retains ownership while ordinary polling continues within the
+original command deadline. Pending wait status is not completion; permission and I/O errors still
+fail. Direct-child cleanup signals require retained wait ownership, even if no birth metadata was
+captured. Other PIDs continue to require verified birth identities.
+
+Cleanup sends TERM to verified individual identities, escalates after three seconds, and requires the
+owned set to drain within five seconds. Error paths make a final bounded attempt against readable known
+identities and reap the direct child, then propagate failure instead of starting another suite/retry.
+Initialization failures similarly TERM/KILL/reap the still-owned direct child. Linux treats a zombie
+leader with other threads as running. Other PIDs require birth checks before signals, with pidfds used
+on Linux when available. macOS birth checking and signaling remain separate system calls.
+
+This is a bounded metadata polling tracker, not a daemon sandbox. A new session whose leader and attached
+ancestry both disappear entirely between observations cannot be discovered reliably. Snapshot enumeration
+is not atomic, and unreadable, never-observed descendants cannot be attributed. The initial `swift test list`
+discovery/build path is unchanged; the 180-second bound applies to each suite/group command, including its
+startup. `Scripts/test_swift_test_sharding.sh` includes synthetic containment tests; they do not launch
+Swift, the app, or provider probes. Its native pthread regression runs only on Linux and uses the system C
+compiler; macOS runs the corresponding metadata unit tests and reports the native case as skipped.
+
+Cost performance and fair-scheduling corpora use exclusive initial fixture creation: the scanner only
+reads after setup has closed each file. This avoids per-file atomic publication and durability work
+without changing corpus contents or scan budgets. The shared atomic fixture writer remains available
+for replacement and publication tests.
+
 ### Codex credential fixtures
 
 Ordinary tests deny Codex credential-file access at the Codex-owned I/O boundaries, before reads,
