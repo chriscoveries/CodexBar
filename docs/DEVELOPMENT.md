@@ -165,6 +165,15 @@ compiles the actual policy and detector with optimization and without `DEBUG`, t
 scoped-child, and non-test decisions against synthetic temporary files. It does not build or exercise
 the complete release CLI, refresh a real account, or establish isolation for other providers.
 
+### WebView ownership regressions
+
+`OpenAIDashboardWebViewCacheTests` uses explicit nonpersistent stores and a DEBUG preparation seam to suspend
+acquisitions without navigation. Controlled continuations exercise eviction/replacement, stale completion, timeout
+retry, store-scoped invalidation, and lease cleanup after cache loss. Host assertions check one cleanup request and
+registration with `WebKitTeardown`; they do not establish WebContent process termination or diagnose CPU/RSS incidents.
+The existing headless CI guards remain in place for these AppKit tests. The suite also contains older persistent-store
+factory tests; exclude those when running a nonpersistent-only focused check.
+
 ### CI Aggregate Contract
 
 The `lint-build-test` check in `.github/workflows/ci.yml` keeps its existing name and requires successful lint,
