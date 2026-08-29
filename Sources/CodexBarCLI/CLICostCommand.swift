@@ -223,7 +223,7 @@ extension CodexBarCLI {
         let lines: [String?] = [
             header,
             "Today: \(today)",
-            "\(historyLabel): \(total)",
+            snapshot.historyDays == 1 ? nil : "\(historyLabel): \(total)",
             snapshot.daily.isEmpty ? "No token usage found in the selected period." : nil,
             hint,
         ]

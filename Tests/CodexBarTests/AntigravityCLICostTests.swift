@@ -4,6 +4,23 @@ import Testing
 @testable import CodexBarCLI
 
 struct AntigravityCLICostTests {
+    @Test(arguments: [1, 30])
+    func `local token history shows each selected window once`(historyDays: Int) {
+        let snapshot = CostUsageTokenSnapshot(
+            sessionTokens: 198,
+            sessionCostUSD: nil,
+            last30DaysTokens: 198,
+            last30DaysCostUSD: nil,
+            historyDays: historyDays,
+            daily: [],
+            updatedAt: Date(timeIntervalSince1970: 1_700_000_000))
+        let text = CodexBarCLI.renderCostText(provider: .antigravity, snapshot: snapshot, useColor: false)
+        let lines = text.split(separator: "\n")
+        #expect(lines.filter { $0.hasPrefix("Today:") } == ["Today: 198 tokens"])
+        #expect(lines.contains("Last 30 days: 198 tokens") == (historyDays == 30))
+        #expect(text.contains("dollar costs unavailable"))
+    }
+
     @Test
     func `local Antigravity history participates in explicit and combined cost selections`() {
         #expect(CodexBarCLI.costProviders(from: .single(.antigravity)) == [.antigravity])
