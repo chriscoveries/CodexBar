@@ -91,9 +91,9 @@ struct CostUsageClaudeKimiAliasTests {
             .contains { $0.modelID == "k3" })
     }
 
-    @Test
-    func `unknown alias requests one catalog refresh and reprices persisted tokens`() async throws {
-        let fixture = try AliasFixture(model: "k3[1m]")
+    @Test(arguments: Self.aliases)
+    func `unknown alias requests one catalog refresh and reprices persisted tokens`(model: String) async throws {
+        let fixture = try AliasFixture(model: model)
         defer { fixture.environment.cleanup() }
         let old = try Self.catalog(["kimi-for-coding": ["kimi-test-old": Self.rates]])
         #expect(ModelsDevCache.save(
@@ -114,7 +114,7 @@ struct CostUsageClaudeKimiAliasTests {
             modelsDevClient: ModelsDevClient(transport: transport))
 
         let row = try #require(snapshot.daily.first?.modelBreakdowns?.first)
-        #expect(row.modelName == "k3[1m]")
+        #expect(row.modelName == model)
         #expect(row.totalTokens == 160)
         #expect(try abs(#require(row.costUSD) - 0.000385) < 1e-12)
         #expect(await transport.requestCount == 1)
