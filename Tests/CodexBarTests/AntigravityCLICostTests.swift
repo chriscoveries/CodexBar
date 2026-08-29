@@ -12,12 +12,14 @@ struct AntigravityCLICostTests {
         #expect(CodexBarCLI.costSupportedProviderNames().contains("Antigravity"))
     }
 
-    @Test(arguments: ["valid", "absent", "corrupt", "unsupported-time"])
+    @Test(arguments: ["valid", "empty", "absent", "corrupt", "unsupported-time"])
     func `local cost transports preserve tokens unknown dollars and unavailable history`(source: String) async throws {
         let fixture = try AntigravityLocalFixture()
         switch source {
         case "valid":
             try fixture.database(blobs: [AntigravityLocalFixture.blob()])
+        case "empty":
+            try fixture.database()
         case "corrupt":
             let url = try fixture.database()
             try Data("not a database".utf8).write(to: url)
@@ -46,17 +48,25 @@ struct AntigravityCLICostTests {
         #expect(payloads.count == 1)
         #expect(payload.provider == "antigravity")
         #expect(payload.source == "local")
-        #expect(payload.historyCoverageIsEstablished == (source == "valid"))
-        #expect(payload.last30DaysTokens == (source == "valid" ? 198 : nil))
-        #expect(payload.last30DaysCostUSD == nil)
+        let established = source == "valid" || source == "empty"
+        let expectedTokens: Int? = source == "empty" ? 0 : (source == "valid" ? 198 : nil)
+        let expectedCost: Double? = source == "empty" ? 0 : nil
+        #expect(payload.historyCoverageIsEstablished == established)
+        #expect(payload.last30DaysTokens == expectedTokens)
+        #expect(payload.last30DaysCostUSD == expectedCost)
         #expect(payload.provenance == "unknown")
         #expect(payload.error == nil)
 
         let json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(payload)) as? [String: Any])
-        #expect(json["last30DaysTokens"] as? Int == (source == "valid" ? 198 : nil))
-        #expect(json["last30DaysCostUSD"] == nil)
+        #expect(json["last30DaysTokens"] as? Int == expectedTokens)
+        #expect(json["last30DaysCostUSD"] as? Double == expectedCost)
         let text = CodexBarCLI.renderCostText(provider: .antigravity, snapshot: snapshot, useColor: false)
         #expect(!text.contains("$0"))
+        #expect(text.contains("Antigravity Token History"))
+        #expect(!text.contains("API-rate estimate"))
+        #expect(text.contains("dollar costs unavailable"))
+        #expect(text.contains("Local token history is unavailable or incomplete.") == !established)
+        #expect(text.contains("No token usage found in the selected period.") == (source == "empty"))
         if source == "valid" { #expect(text.contains("198")) }
     }
 }
