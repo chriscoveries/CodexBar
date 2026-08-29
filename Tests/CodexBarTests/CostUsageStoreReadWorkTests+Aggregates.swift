@@ -2,8 +2,7 @@ import Foundation
 import Testing
 @testable import CodexBarCore
 
-@Suite(.serialized)
-struct CostUsageStoreAggregateWorkTests {
+extension CostUsageStoreReadWorkTests {
     @Test(arguments: [1, 32])
     func `aggregate grouping visits rows independently of key count`(keyCount: Int) async throws {
         let fixture = try ReadWorkFixture(fileCount: 2, rowsPerFile: 128)
