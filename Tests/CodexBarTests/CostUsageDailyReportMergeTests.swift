@@ -201,6 +201,48 @@ struct CostUsageDailyReportMergeTests {
             pricedRequestCount: priced)
     }
 
+    @Test(arguments: [false, true])
+    func `unrepresentable merged coverage retains row fallback without trapping`(_ acrossCategories: Bool) throws {
+        let first = Self.coverageEntry(cost: 1, requests: nil, priced: Int.max)
+        let second = Self.coverageEntry(
+            cost: 1,
+            requests: nil,
+            unmetered: acrossCategories ? 1 : nil,
+            priced: acrossCategories ? 0 : 1)
+        let later = Self.coverageEntry(cost: 1, requests: nil, priced: 1)
+        let merged = CostUsageDailyReport.merged([
+            .init(data: [first], summary: nil),
+            .init(data: [second], summary: nil),
+            .init(data: [later], summary: nil),
+        ])
+        let entry = try #require(merged.data.first)
+        #expect(entry.pricedRequestCount == nil)
+        #expect(entry.unpricedRequestCount == nil)
+        #expect(entry.unmeteredRequestCount == nil)
+        #expect(entry.estimatedRequestCount == nil)
+        #expect(entry.requestCount == nil)
+        #expect(entry.costUSD == 3)
+        #expect(entry.coverageCounts == CostUsageCoverageCounts(priced: 1))
+        #expect(entry.coverageCounts.total == 1)
+        #expect(entry.coverageCounts.coverageRatio == 1)
+    }
+
+    @Test(arguments: [nil, 7] as [Int?])
+    func `unrepresentable source coverage retains inferred fallback without trapping`(_ requests: Int?) throws {
+        let source = Self.coverageEntry(cost: 1, requests: requests, unpriced: Int.max, unmetered: 1)
+        let merged = CostUsageDailyReport.merged([.init(data: [source], summary: nil)])
+        let entry = try #require(merged.data.first)
+        #expect(entry.pricedRequestCount == nil)
+        #expect(entry.unpricedRequestCount == nil)
+        #expect(entry.unmeteredRequestCount == nil)
+        #expect(entry.estimatedRequestCount == nil)
+        #expect(entry.requestCount == requests)
+        #expect(entry.costUSD == 1)
+        #expect(entry.coverageCounts == CostUsageCoverageCounts(priced: requests ?? 1))
+        #expect(entry.coverageCounts.total == requests ?? 1)
+        #expect(entry.coverageCounts.coverageRatio == 1)
+    }
+
     @Test
     func `merged report sums overlapping day totals and model breakdowns`() {
         let native = CostUsageDailyReport(
