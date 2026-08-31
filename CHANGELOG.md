@@ -1,9 +1,13 @@
 # Changelog
 
-## 0.56.2 — 2026-08-31
+## 0.56.3 — Unreleased
 
 ### Performance
 - Claude and Vertex AI: reuse model normalization and pricing lookups within each local scan, including unknown models, while preserving per-request dated and context-tier pricing.
+
+## 0.56.2 — 2026-08-31
+
+### Performance
 - Local costs: reduce background CPU spent parsing native session timestamps and validating appended Codex history, preserving timestamp precision, daily totals, and fork accounting.
 - Codex: reduce repeated decoding of cached cost history during scans, while preserving stored totals and checking for database and filesystem changes.
 - Claude and Vertex AI: reduce CPU spent reading local transcript metadata, preserving provider detection, Unicode handling, and token/cost totals.
