@@ -240,14 +240,16 @@ extension UsageStore {
                 self.spendDashboardCodexCostCatchUpPassIsRunning = true
                 let nextStatus: CostUsageFetcher.CodexScanCatchUpStatus
                 do {
+                    defer {
+                        // A cancelled pass can finish after its replacement has started.
+                        if self.spendDashboardCodexCostCatchUpToken == context.token {
+                            self.spendDashboardCodexCostCatchUpPassIsRunning = false
+                        }
+                    }
                     nextStatus = try await self.advanceSpendDashboardCodexCostCatchUp(
                         account: account,
                         now: Date(),
                         historyDays: context.historyDays)
-                    self.spendDashboardCodexCostCatchUpPassIsRunning = false
-                } catch {
-                    self.spendDashboardCodexCostCatchUpPassIsRunning = false
-                    throw error
                 }
                 previousActiveDuration = Self.spendDashboardCodexCatchUpDuration(
                     since: passStartedAt)
@@ -279,6 +281,7 @@ extension UsageStore {
             } catch is CancellationError {
                 return
             } catch {
+                guard self.spendDashboardCodexCostCatchUpContextIsCurrent(context) else { return }
                 self.publishSpendDashboardCodexCostCatchUpActivity(
                     statuses: statuses,
                     context: context,

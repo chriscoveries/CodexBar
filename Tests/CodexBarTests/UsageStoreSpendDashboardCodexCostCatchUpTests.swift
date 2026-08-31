@@ -539,6 +539,107 @@ struct UsageStoreSpendDashboardCodexCostCatchUpTests {
         #expect(!store.spendDashboardCodexCostCatchUpStopRequested)
     }
 
+    @Test(arguments: [false, true])
+    func `superseded pass completion cannot clear the replacement pass ownership`(
+        cancelled: Bool) async throws
+    {
+        let store = try Self.makeStore(suite: "superseded-pass-\(cancelled)")
+        let oldGate = SpendDashboardPendingLoads<CostUsageFetcher.CodexScanCatchUpStatus>()
+        let replacementGate = SpendDashboardPendingLoads<CostUsageFetcher.CodexScanCatchUpStatus>()
+        defer {
+            store.cancelSpendDashboardCodexCostCatchUp()
+            oldGate.close()
+            replacementGate.close()
+        }
+        store._test_spendDashboardCodexCostCatchUpStatusOverride = { _ in
+            Self.status(pending: true, key: "pending", processedBytes: 25)
+        }
+        store._test_spendDashboardCodexCostCatchUpAdvanceOverride = { account, _, _ in
+            if account.id == "old" {
+                let result = try await oldGate.load()
+                if cancelled { throw CancellationError() }
+                return result
+            }
+            return try await replacementGate.load()
+        }
+        store._test_spendDashboardCodexCostCatchUpSleepOverride = { _ in await Task.yield() }
+        store._test_spendDashboardCodexCostCatchUpResourceStateOverride = { (.ac, false, .nominal) }
+
+        store.startSpendDashboardCodexCostCatchUpIfNeeded(
+            accounts: [Self.account(id: "old", cacheIdentity: "cache-old")], mode: .accelerated)
+        let oldTask = try #require(store.spendDashboardCodexCostCatchUpTask)
+        try await oldGate.waitForPendingCount(1)
+        store.startSpendDashboardCodexCostCatchUpIfNeeded(
+            accounts: [Self.account(id: "replacement", cacheIdentity: "cache-replacement")], mode: .accelerated)
+        let replacementTask = try #require(store.spendDashboardCodexCostCatchUpTask)
+        let replacementToken = try #require(store.spendDashboardCodexCostCatchUpToken)
+        try await replacementGate.waitForPendingCount(1)
+        #expect(store.spendDashboardCodexCostCatchUpPassIsRunning)
+
+        oldGate.resume(returning: Self.status(pending: false, key: "old-complete", processedBytes: 100))
+        await oldTask.value
+
+        #expect(store.spendDashboardCodexCostCatchUpToken == replacementToken)
+        #expect(store.spendDashboardCodexCostCatchUpPassIsRunning)
+        store.stopSpendDashboardCodexCostCatchUp()
+        #expect(store.spendDashboardCodexCostCatchUpTask != nil)
+        #expect(store.spendDashboardCodexCostCatchUpToken == replacementToken)
+        replacementGate.resume(returning: Self.status(pending: false, key: "complete", processedBytes: 100))
+        await replacementTask.value
+        #expect(store.spendDashboardCodexCostCatchUpTask == nil)
+        #expect(!store.spendDashboardCodexCostCatchUpPassIsRunning)
+        #expect(store.spendDashboardCodexCostCatchUpActivity?.pauseReason == .user)
+    }
+
+    @Test
+    func `an error completed before replacement cannot publish the obsolete revision`() async throws {
+        let store = try Self.makeStore(suite: "superseded-error-revision")
+        let oldGate = SpendDashboardPendingLoads<Result<CostUsageFetcher.CodexScanCatchUpStatus, any Error>>()
+        let replacementGate = SpendDashboardPendingLoads<CostUsageFetcher.CodexScanCatchUpStatus>()
+        defer {
+            store.cancelSpendDashboardCodexCostCatchUp()
+            oldGate.close()
+            replacementGate.close()
+        }
+        var oldAdvanceCount = 0
+        store._test_spendDashboardCodexCostCatchUpStatusOverride = { _ in
+            Self.status(pending: true, key: "pending", processedBytes: 25)
+        }
+        store._test_spendDashboardCodexCostCatchUpAdvanceOverride = { account, _, _ in
+            guard account.id == "old" else { return try await replacementGate.load() }
+            oldAdvanceCount += 1
+            if oldAdvanceCount == 1 {
+                return Self.status(pending: true, key: "progress", processedBytes: 50)
+            }
+            return try await oldGate.load().get()
+        }
+        store._test_spendDashboardCodexCostCatchUpSleepOverride = { _ in await Task.yield() }
+        store._test_spendDashboardCodexCostCatchUpResourceStateOverride = { (.ac, false, .nominal) }
+
+        store.startSpendDashboardCodexCostCatchUpIfNeeded(
+            accounts: [Self.account(id: "old", cacheIdentity: "cache-old")], mode: .accelerated)
+        let oldTask = try #require(store.spendDashboardCodexCostCatchUpTask)
+        try await oldGate.waitForPendingCount(1)
+        #expect(oldAdvanceCount == 2)
+        let revision = store.spendDashboardCodexCostCatchUpRevision
+        // The executor can finish before cancellation while its MainActor continuation is still queued.
+        oldGate.resume(returning: .failure(NSError(domain: "SyntheticCatchUp", code: 2)))
+        store.startSpendDashboardCodexCostCatchUpIfNeeded(
+            accounts: [Self.account(id: "replacement", cacheIdentity: "cache-replacement")], mode: .accelerated)
+        let replacementTask = try #require(store.spendDashboardCodexCostCatchUpTask)
+        let replacementToken = try #require(store.spendDashboardCodexCostCatchUpToken)
+        await oldTask.value
+        try await replacementGate.waitForPendingCount(1)
+
+        #expect(store.spendDashboardCodexCostCatchUpRevision == revision)
+        #expect(store.spendDashboardCodexCostCatchUpToken == replacementToken)
+        #expect(store.spendDashboardCodexCostCatchUpActivity?.pauseReason == nil)
+        #expect(store.spendDashboardCodexCostCatchUpPassIsRunning)
+        replacementGate.resume(returning: Self.status(pending: false, key: "complete", processedBytes: 100))
+        await replacementTask.value
+        #expect(store.spendDashboardCodexCostCatchUpRevision == revision + 1)
+    }
+
     private static func makeStore(suite: String) throws -> UsageStore {
         let settings = testSettingsStore(
             suiteName: "UsageStoreSpendDashboardCodexCostCatchUpTests-\(suite)")
