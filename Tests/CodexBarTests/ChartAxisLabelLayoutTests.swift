@@ -1,8 +1,52 @@
+import AppKit
 import Foundation
+import SwiftUI
 import Testing
 @testable import CodexBar
 
 struct ChartAxisLabelLayoutTests {
+    @Test(arguments: ["de_CH", "en_US", "fr_FR", "ja_JP", "ar", "hi_IN", "ru_RU"], Array(1...12))
+    @MainActor
+    func `plot edge padding fits localized caption dates`(localeIdentifier: String, month: Int) throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .gmt
+        let date = try #require(calendar.date(from: DateComponents(year: 2026, month: month, day: 22)))
+        let natural = Self.labelSize(date: date, localeIdentifier: localeIdentifier, proposedWidth: nil)
+
+        #expect(natural.width > 0)
+        #expect(natural.width <= ChartAxisLabelLayout.dateLabelEdgePadding * 2)
+    }
+
+    @Test(arguments: ["de_CH", "en_US"], [8, 9])
+    @MainActor
+    func `date labels keep their full width under narrow endpoint proposals`(
+        localeIdentifier: String,
+        month: Int) throws
+    {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .gmt
+        let date = try #require(calendar.date(from: DateComponents(year: 2026, month: month, day: 22)))
+        let natural = Self.labelSize(date: date, localeIdentifier: localeIdentifier, proposedWidth: nil)
+        let narrow = Self.labelSize(date: date, localeIdentifier: localeIdentifier, proposedWidth: 8)
+
+        #expect(natural.width > 8)
+        #expect(abs(narrow.width - natural.width) < 0.5)
+        #expect(abs(narrow.height - natural.height) < 0.5)
+    }
+
+    @MainActor
+    private static func labelSize(date: Date, localeIdentifier: String, proposedWidth: CGFloat?) -> CGSize {
+        let root = LabelWidthProposal(width: proposedWidth) {
+            ChartAxisLabelLayout.dateLabel(Text(date, format: .dateTime.month(.abbreviated).day()))
+        }
+        .environment(\.locale, Locale(identifier: localeIdentifier))
+        .environment(\.timeZone, .gmt)
+        let hosting = NSHostingView(rootView: root)
+        hosting.frame = NSRect(x: 0, y: 0, width: 160, height: 40)
+        hosting.layoutSubtreeIfNeeded()
+        return hosting.fittingSize
+    }
+
     @Test
     func `first date label center matches first bar center`() throws {
         let barCenter = try #require(ChartAxisLabelLayout.barCenterX(
@@ -29,5 +73,20 @@ struct ChartAxisLabelLayoutTests {
             anchor: ChartAxisLabelLayout.barCenteredAnchor)
 
         #expect(abs(labelCenter - barCenter) < 0.0001)
+    }
+}
+
+private struct LabelWidthProposal: Layout {
+    let width: CGFloat?
+
+    func sizeThatFits(proposal _: ProposedViewSize, subviews: Subviews, cache _: inout ()) -> CGSize {
+        subviews[0].sizeThatFits(ProposedViewSize(width: self.width, height: nil))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal _: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
+        subviews[0].place(
+            at: bounds.origin,
+            anchor: .topLeading,
+            proposal: ProposedViewSize(width: self.width, height: nil))
     }
 }
