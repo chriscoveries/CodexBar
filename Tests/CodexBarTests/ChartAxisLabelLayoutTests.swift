@@ -26,18 +26,36 @@ struct ChartAxisLabelLayoutTests {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = .gmt
         let date = try #require(calendar.date(from: DateComponents(year: 2026, month: month, day: 22)))
-        let natural = Self.labelSize(date: date, localeIdentifier: localeIdentifier, proposedWidth: nil)
-        let narrow = Self.labelSize(date: date, localeIdentifier: localeIdentifier, proposedWidth: 8)
+        for preformatted in [false, true] {
+            let natural = Self.labelSize(
+                date: date, localeIdentifier: localeIdentifier, proposedWidth: nil, preformatted: preformatted)
+            let narrow = Self.labelSize(
+                date: date, localeIdentifier: localeIdentifier, proposedWidth: 8, preformatted: preformatted)
 
-        #expect(natural.width > 8)
-        #expect(abs(narrow.width - natural.width) < 0.5)
-        #expect(abs(narrow.height - natural.height) < 0.5)
+            #expect(natural.width > 8)
+            #expect(abs(narrow.width - natural.width) < 0.5)
+            #expect(abs(narrow.height - natural.height) < 0.5)
+        }
     }
 
     @MainActor
-    private static func labelSize(date: Date, localeIdentifier: String, proposedWidth: CGFloat?) -> CGSize {
+    private static func labelSize(
+        date: Date,
+        localeIdentifier: String,
+        proposedWidth: CGFloat?,
+        preformatted: Bool = false) -> CGSize
+    {
+        let text: Text
+        if preformatted {
+            var format: Date.FormatStyle = .dateTime.month(.abbreviated).day()
+            format.locale = Locale(identifier: localeIdentifier)
+            format.timeZone = .gmt
+            text = Text(date.formatted(format))
+        } else {
+            text = Text(date, format: .dateTime.month(.abbreviated).day())
+        }
         let root = LabelWidthProposal(width: proposedWidth) {
-            ChartAxisLabelLayout.dateLabel(Text(date, format: .dateTime.month(.abbreviated).day()))
+            ChartAxisLabelLayout.dateLabel(text)
         }
         .environment(\.locale, Locale(identifier: localeIdentifier))
         .environment(\.timeZone, .gmt)
