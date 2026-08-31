@@ -192,10 +192,10 @@ public struct CostUsageTokenSnapshot: Sendable, Equatable {
         let tokens = entries.compactMap(\.totalTokens)
         let requests = entries.compactMap(\.requestCount)
         var mix = CostUsageTokenMix()
-        var coverage = CostUsageCoverageCounts()
+        var coverage = CostUsageCoverageAccumulator()
         for entry in entries {
             mix.merge(.from(entry: entry))
-            coverage.merge(entry.coverageCounts)
+            coverage.add(entry)
         }
         let coversFullHistory = days >= self.historyDays
         let windowMetered = coversFullHistory ? self.meteredCostUSD : nil
@@ -226,7 +226,7 @@ public struct CostUsageTokenSnapshot: Sendable, Equatable {
             totalRequests: totalRequests,
             entryCount: entries.count,
             tokenMix: mix,
-            coverage: coverage,
+            coverage: coverage.counts,
             provenance: CostProvenance.forWindow(
                 snapshot: self.costProvenance,
                 hasWindowCosts: !costs.isEmpty,
@@ -466,17 +466,21 @@ public struct CostUsageDailyReport: Sendable, Decodable {
         public let estimatedRequestCount: Int?
 
         public var coverageCounts: CostUsageCoverageCounts {
-            let unpriced = max(0, self.unpricedRequestCount ?? 0)
-            let unmetered = max(0, self.unmeteredRequestCount ?? 0)
-            let estimated = max(0, self.estimatedRequestCount ?? 0)
-            if let priced = self.pricedRequestCount {
+            self.coverageCounts(detail: .exact)
+        }
+
+        package func coverageCounts(detail: CostUsageCoverageDetail) -> CostUsageCoverageCounts {
+            let unpriced = detail == .exact ? max(0, self.unpricedRequestCount ?? 0) : 0
+            let unmetered = detail == .exact ? max(0, self.unmeteredRequestCount ?? 0) : 0
+            let estimated = detail == .exact ? max(0, self.estimatedRequestCount ?? 0) : 0
+            if detail == .exact, let priced = self.pricedRequestCount {
                 return CostUsageCoverageCounts(
                     priced: max(0, priced),
                     unpriced: unpriced,
                     unmetered: unmetered,
                     estimated: estimated)
             }
-            if let requests = self.requestCount, requests > 0 {
+            if detail != .rows, let requests = self.requestCount, requests > 0 {
                 let priced = if self.costUSD != nil {
                     max(0, requests - unpriced - unmetered - estimated)
                 } else {
@@ -726,45 +730,6 @@ extension CostUsageDailyReport {
         }
     }
 
-    private struct CoverageAccumulator {
-        private(set) var value: CostUsageCoverageCounts? = .init()
-
-        mutating func add(_ entry: Entry) {
-            guard let value = self.value else { return }
-            let explicit = CostUsageCoverageCounts(
-                priced: entry.pricedRequestCount ?? 0,
-                unpriced: entry.unpricedRequestCount ?? 0,
-                unmetered: entry.unmeteredRequestCount ?? 0,
-                estimated: entry.estimatedRequestCount ?? 0)
-            // Validate raw categories before coverageCounts performs inference arithmetic.
-            guard Self.adding(.init(), explicit) != nil else {
-                self.value = nil
-                return
-            }
-            self.value = Self.adding(value, entry.coverageCounts)
-        }
-
-        private static func adding(
-            _ lhs: CostUsageCoverageCounts,
-            _ rhs: CostUsageCoverageCounts) -> CostUsageCoverageCounts?
-        {
-            let priced = lhs.priced.addingReportingOverflow(rhs.priced)
-            let unpriced = lhs.unpriced.addingReportingOverflow(rhs.unpriced)
-            let unmetered = lhs.unmetered.addingReportingOverflow(rhs.unmetered)
-            let estimated = lhs.estimated.addingReportingOverflow(rhs.estimated)
-            guard !priced.overflow, !unpriced.overflow, !unmetered.overflow, !estimated.overflow else { return nil }
-            let first = priced.partialValue.addingReportingOverflow(unpriced.partialValue)
-            let second = first.partialValue.addingReportingOverflow(unmetered.partialValue)
-            let total = second.partialValue.addingReportingOverflow(estimated.partialValue)
-            guard !first.overflow, !second.overflow, !total.overflow else { return nil }
-            return CostUsageCoverageCounts(
-                priced: priced.partialValue,
-                unpriced: unpriced.partialValue,
-                unmetered: unmetered.partialValue,
-                estimated: estimated.partialValue)
-        }
-    }
-
     private struct BreakdownAccumulator {
         var tokenMix = CostUsageTokenMix()
         var requestCount = OptionalCountAccumulator()
@@ -836,7 +801,7 @@ extension CostUsageDailyReport {
     private struct EntryAccumulator {
         var reasoningTokens = OptionalCountAccumulator()
         var requestCount = OptionalCountAccumulator()
-        var coverage = CoverageAccumulator()
+        var coverage = CostUsageCoverageAccumulator()
         var entryCount = 0
         var hasExplicitCoverage = false
         var inputTokens: Int = 0
@@ -941,10 +906,10 @@ extension CostUsageDailyReport {
                 costUSD: self.sawCost ? self.costUSD : nil,
                 modelsUsed: modelsUsed,
                 modelBreakdowns: modelBreakdowns,
-                unpricedRequestCount: includeCoverage ? self.coverage.value?.unpriced : nil,
-                unmeteredRequestCount: includeCoverage ? self.coverage.value?.unmetered : nil,
-                estimatedRequestCount: includeCoverage ? self.coverage.value?.estimated : nil,
-                pricedRequestCount: includeCoverage ? self.coverage.value?.priced : nil)
+                unpricedRequestCount: includeCoverage ? self.coverage.exact?.unpriced : nil,
+                unmeteredRequestCount: includeCoverage ? self.coverage.exact?.unmetered : nil,
+                estimatedRequestCount: includeCoverage ? self.coverage.exact?.estimated : nil,
+                pricedRequestCount: includeCoverage ? self.coverage.exact?.priced : nil)
         }
     }
 
