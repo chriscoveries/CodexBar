@@ -238,6 +238,67 @@ struct UsageStoreSpendDashboardCodexCostCatchUpTests {
         #expect(store.spendDashboardCodexCostCatchUpActivity?.phase == .complete)
     }
 
+    @Test(arguments: [CodexCostCatchUpPauseReason.user, .noProgress, .error("Synthetic failure")])
+    func `dashboard toolbar refresh explicitly resumes terminal catch-up pauses`(
+        reason: CodexCostCatchUpPauseReason) async throws
+    {
+        let store = try Self.makeStore(suite: "toolbar-resume-\(reason)")
+        defer { store.stopSharedSpendDashboardPublication() }
+        let accounts = [Self.account(id: "account", cacheIdentity: "cache-account")]
+        let configuration = SpendDashboardConfiguration(
+            costUsageEnabled: true,
+            providerIDs: [UsageProvider.codex.rawValue],
+            codexAccountIdentities: ["account|cache-account"])
+        var requestedModes: [SpendDashboardRequestBuildMode] = []
+        let controller = SpendDashboardController(
+            requestBuilder: { mode in
+                requestedModes.append(mode)
+                return SpendDashboardLoadRequest(
+                    configuration: configuration,
+                    capturedInputs: [],
+                    unavailableSourceIDs: [],
+                    codexRequests: [],
+                    now: Date(),
+                    force: mode.forcesLoader)
+            },
+            loader: { _ in .init(inputs: [], failedSourceIDs: []) })
+        store.sharedSpendDashboardControllerStorage = controller
+        controller.update(configuration: configuration)
+        await Self.waitUntil { !controller.isRefreshing }
+        requestedModes.removeAll()
+        store.spendDashboardCodexCostCatchUpActivity = Self.pausedActivity(reason: reason)
+        store.spendDashboardCodexCostCatchUpStopRequested = reason == .user
+        var statusAccounts: [String] = []
+        store._test_spendDashboardCodexCostCatchUpStatusOverride = { account in
+            statusAccounts.append(account.id)
+            return Self.status(pending: false, key: "complete", processedBytes: 100)
+        }
+
+        store.refreshSpendDashboard(accounts: accounts)
+
+        try #require(store.spendDashboardCodexCostCatchUpTask != nil)
+        #expect(!store.spendDashboardCodexCostCatchUpStopRequested)
+        await Self.waitUntil { store.spendDashboardCodexCostCatchUpTask == nil && !controller.isRefreshing }
+        #expect(store.spendDashboardCodexCostCatchUpActivity?.phase == .complete)
+        #expect(requestedModes.count(where: { $0 == .forceRefresh }) == 1)
+        #expect(statusAccounts == ["account"])
+    }
+
+    @Test
+    func `dashboard toolbar refresh does not change an active catch-up worker`() throws {
+        let store = try Self.makeStore(suite: "toolbar-active-worker")
+        defer { store.stopSharedSpendDashboardPublication() }
+        let accounts = [Self.account(id: "account", cacheIdentity: "cache-account")]
+        store.startSpendDashboardCodexCostCatchUpIfNeeded(accounts: accounts, mode: .accelerated)
+        let token = try #require(store.spendDashboardCodexCostCatchUpToken)
+
+        store.refreshSpendDashboard(accounts: accounts)
+
+        #expect(store.spendDashboardCodexCostCatchUpToken == token)
+        #expect(store.spendDashboardCodexCostCatchUpMode == .accelerated)
+        #expect(!store.spendDashboardCodexCostCatchUpRestartRequested)
+    }
+
     @Test(arguments: [false, true])
     func `terminal pauses discard a synchronization queued during the pass`(throwsError: Bool) async throws {
         let store = try Self.makeStore(suite: "terminal-queued-restart-\(throwsError)")

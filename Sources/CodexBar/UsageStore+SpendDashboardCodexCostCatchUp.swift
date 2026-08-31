@@ -11,6 +11,12 @@ private struct SpendDashboardCodexCostCatchUpContext {
 }
 
 extension UsageStore {
+    func refreshSpendDashboard(accounts: [CodexSpendScanRequest]) {
+        self.sharedSpendDashboardController().refresh()
+        guard self.spendDashboardCodexCostCatchUpRequiresExplicitResume else { return }
+        self.startSpendDashboardCodexCostCatchUpIfNeeded(accounts: accounts, mode: .automatic)
+    }
+
     func synchronizeSpendDashboardCodexCostCatchUp(
         accounts: [CodexSpendScanRequest],
         preferredMode: CodexCostCatchUpMode? = nil)
