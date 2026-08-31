@@ -4,6 +4,22 @@ import SwiftUI
 
 @MainActor
 struct PlanUtilizationHistoryChartMenuView: View {
+    private enum DisplayMode: String, CaseIterable, Identifiable {
+        case pace
+        case history
+
+        var id: Self {
+            self
+        }
+
+        var title: String {
+            switch self {
+            case .pace: L("Pace")
+            case .history: L("History")
+            }
+        }
+    }
+
     private enum Layout {
         static let chartHeight: CGFloat = 130
         static let detailHeight: CGFloat = 16
@@ -66,11 +82,14 @@ struct PlanUtilizationHistoryChartMenuView: View {
     private let provider: UsageProvider
     private let visibleSeries: [VisibleSeries]
     private let modelsBySeriesID: [String: Model]
+    private let paceModelsBySeriesID: [String: PlanUtilizationPaceChartModel]
     private let emptyModel: Model
+    private let referenceDate: Date
     private let width: CGFloat
 
     @State private var selectedSeriesID: String?
     @State private var selectedPointID: Date?
+    @State private var displayMode: DisplayMode = .pace
 
     init(
         provider: UsageProvider,
@@ -88,7 +107,26 @@ struct PlanUtilizationHistoryChartMenuView: View {
         self.modelsBySeriesID = Dictionary(uniqueKeysWithValues: visibleSeries.map {
             ($0.id, Self.makeModel(history: $0.history, provider: provider, referenceDate: referenceDate))
         })
+        self.paceModelsBySeriesID = Dictionary(uniqueKeysWithValues: visibleSeries.compactMap { series in
+            guard let currentWindow = Self.currentWindow(
+                for: series,
+                provider: provider,
+                snapshot: snapshot)
+            else {
+                return nil
+            }
+            guard let model = PlanUtilizationPaceChartModel(
+                history: series.history,
+                currentWindow: currentWindow,
+                referenceDate: referenceDate,
+                currentWindowCapturedAt: snapshot?.updatedAt)
+            else {
+                return nil
+            }
+            return (series.id, model)
+        })
         self.emptyModel = Self.emptyModel(provider: provider)
+        self.referenceDate = referenceDate
         self.width = width
     }
 
@@ -96,6 +134,7 @@ struct PlanUtilizationHistoryChartMenuView: View {
         let effectiveSelectedSeries = self.visibleSeries.first(where: { $0.id == self.selectedSeriesID })
             ?? self.visibleSeries.first
         let model = effectiveSelectedSeries.flatMap { self.modelsBySeriesID[$0.id] } ?? self.emptyModel
+        let paceModel = effectiveSelectedSeries.flatMap { self.paceModelsBySeriesID[$0.id] }
 
         VStack(alignment: .leading, spacing: 10) {
             if self.visibleSeries.count > 1 {
@@ -115,7 +154,24 @@ struct PlanUtilizationHistoryChartMenuView: View {
                         .pickerStyle(.segmented)
             }
 
-            if model.points.isEmpty {
+            if paceModel != nil {
+                Picker(L("Chart view"), selection: self.$displayMode) {
+                    ForEach(DisplayMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+            }
+
+            if self.displayMode == .pace, let paceModel {
+                PlanUtilizationPaceChartView(
+                    provider: self.provider,
+                    windowTitle: effectiveSelectedSeries?.title ?? L("Usage"),
+                    model: paceModel,
+                    currentDate: self.referenceDate,
+                    width: self.width)
+            } else if model.points.isEmpty {
                 ZStack {
                     Text(Self.emptyStateText(title: effectiveSelectedSeries?.title))
                         .font(.footnote)
@@ -839,6 +895,136 @@ struct PlanUtilizationHistoryChartMenuView: View {
 }
 
 extension PlanUtilizationHistoryChartMenuView {
+    private nonisolated static func resetMatchesHistory(
+        _ window: RateWindow,
+        latestReset: Date?) -> Bool
+    {
+        guard let latestReset, let windowReset = window.resetsAt else { return true }
+        return abs(windowReset.timeIntervalSince(latestReset)) < 2 * 60
+    }
+
+    private nonisolated static func currentWindow(
+        for series: VisibleSeries,
+        provider: UsageProvider,
+        snapshot: UsageSnapshot?) -> RateWindow?
+    {
+        guard let snapshot else { return nil }
+        let tertiaryName: PlanUtilizationSeriesName = provider == .opencodego ? .monthly : .opus
+        let slotted: [(PlanUtilizationSeriesName, RateWindow?)] = [
+            (.session, snapshot.primary),
+            (.weekly, snapshot.secondary),
+            (tertiaryName, snapshot.tertiary),
+        ]
+        let named = (snapshot.extraRateWindows ?? [])
+            .filter(\.usageKnown)
+            .map { (PlanUtilizationSeriesName(rawValue: $0.id), Optional($0.window)) }
+        let candidates = (slotted + named).compactMap { candidate -> (PlanUtilizationSeriesName, RateWindow)? in
+            let (suggestedName, window) = candidate
+            guard let window, !window.isSyntheticPlaceholder else { return nil }
+            return (suggestedName, window)
+        }
+
+        let historyReset = series.history.entries.compactMap(\.resetsAt).max()
+
+        let durationMatches = candidates.filter { _, window in
+            guard let minutes = window.windowMinutes, minutes > 0 else { return false }
+            return series.selection.name.canonicalWindowMinutes(minutes) == series.selection.windowMinutes
+        }
+        if durationMatches.count == 1,
+           self.resetMatchesHistory(durationMatches[0].1, latestReset: historyReset)
+        {
+            return durationMatches[0].1
+        }
+
+        let presentation = ProviderDescriptorRegistry.descriptor(for: provider).presentation
+        if let semanticMatch = durationMatches.first(where: { suggestedName, window in
+            guard let minutes = window.windowMinutes,
+                  self.resetMatchesHistory(window, latestReset: historyReset)
+            else { return false }
+            let normalized = presentation.normalizePlanUtilizationSeries(
+                self.providerSeries(suggestedName),
+                windowMinutes: minutes)
+            return self.historySeries(normalized) == series.selection.name
+        }) {
+            return semanticMatch.1
+        }
+
+        guard let latestReset = historyReset else { return nil }
+        let resetCandidates = candidates.filter { suggestedName, window in
+            if let minutes = window.windowMinutes, minutes > 0 {
+                let normalized = presentation.normalizePlanUtilizationSeries(
+                    self.providerSeries(suggestedName),
+                    windowMinutes: minutes)
+                return self.historySeries(normalized) == series.selection.name
+            }
+            return self.historySeries(self.providerSeries(suggestedName)) == series.selection.name
+        }
+        let closest = resetCandidates.min { lhs, rhs in
+            let lhsDistance = lhs.1.resetsAt.map { abs($0.timeIntervalSince(latestReset)) }
+                ?? .greatestFiniteMagnitude
+            let rhsDistance = rhs.1.resetsAt.map { abs($0.timeIntervalSince(latestReset)) }
+                ?? .greatestFiniteMagnitude
+            return lhsDistance < rhsDistance
+        }?.1
+        guard let closest,
+              let closestReset = closest.resetsAt,
+              abs(closestReset.timeIntervalSince(latestReset)) < 2 * 60
+        else {
+            return nil
+        }
+        return closest
+    }
+
+    #if DEBUG
+    nonisolated static func _currentWindowUsedPercentForTesting(
+        history: PlanUtilizationSeriesHistory,
+        provider: UsageProvider,
+        snapshot: UsageSnapshot) -> Double?
+    {
+        let series = VisibleSeries(
+            selection: SeriesSelection(name: history.name, windowMinutes: history.windowMinutes),
+            title: history.name.rawValue,
+            history: history)
+        return self.currentWindow(for: series, provider: provider, snapshot: snapshot)?.usedPercent
+    }
+
+    struct PaceModelSnapshot: Equatable {
+        let selectedSeries: String
+        let resetsAt: Date
+        let observedDates: [Date]
+        let rawUsedPercents: [Double]
+    }
+
+    nonisolated static func _paceModelSnapshotForTesting(
+        selectedSeriesRawValue: String? = nil,
+        histories: [PlanUtilizationSeriesHistory],
+        provider: UsageProvider,
+        snapshot: UsageSnapshot,
+        referenceDate: Date) -> PaceModelSnapshot?
+    {
+        let visibleSeries = self.visibleSeries(histories: histories, provider: provider, snapshot: snapshot)
+        guard let selectedSeries = visibleSeries.first(where: { $0.id == selectedSeriesRawValue })
+            ?? visibleSeries.first
+        else {
+            return nil
+        }
+        let currentWindow = self.currentWindow(for: selectedSeries, provider: provider, snapshot: snapshot)
+        guard let model = PlanUtilizationPaceChartModel(
+            history: selectedSeries.history,
+            currentWindow: currentWindow,
+            referenceDate: referenceDate,
+            currentWindowCapturedAt: snapshot.updatedAt)
+        else {
+            return nil
+        }
+        return PaceModelSnapshot(
+            selectedSeries: selectedSeries.id,
+            resetsAt: model.resetsAt,
+            observedDates: model.observedPoints.map(\.date),
+            rawUsedPercents: model.observedPoints.map(\.rawUsedPercent))
+    }
+    #endif
+
     private nonisolated static func detailLine(point: Point?, windowMinutes: Int) -> String {
         guard let point else {
             return "-"
