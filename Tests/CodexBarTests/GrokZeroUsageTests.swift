@@ -45,17 +45,23 @@ struct GrokZeroUsageTests {
         #expect(try await Self.resolve(parsed).snapshot.usedPercent == 0)
     }
 
-    @Test(arguments: [
-        Data([0x00]), // Invalid field key.
-        Data([0x0D, 0x00]), // Truncated percentage.
-        Data([0x72, 0x04, 0x08]), // Truncated nested message.
-        Data([0x70, 0x80]), // Truncated varint.
-    ])
+    @Test(arguments: Self.malformedSuffixes)
     func `malformed frames cannot turn unknown usage into zero`(suffix: Data) async throws {
         let parsed = try GrokWebBillingFetcher.parseGRPCWebResponse(Self.payload(suffix: suffix), now: Self.now)
 
         #expect(!parsed.usedPercentIsImplicitZero)
         #expect(try await Self.resolve(parsed).snapshot.usedPercent == nil)
+    }
+
+    @Test(arguments: [
+        Self.fixed64Field(tag: [0xF9, 0xFF, 0xFF, 0xFF, 0x0F]), // Highest valid field number.
+        Data([0x70]) + Self.varint(.max), // A valid UInt64.max scalar.
+    ])
+    func `valid unknown fields preserve implicit zero`(suffix: Data) async throws {
+        let parsed = try GrokWebBillingFetcher.parseGRPCWebResponse(Self.payload(suffix: suffix), now: Self.now)
+
+        #expect(parsed.usedPercentIsImplicitZero)
+        #expect(try await Self.resolve(parsed).snapshot.usedPercent == 0)
     }
 
     @Test(arguments: [0, 3])
@@ -79,6 +85,22 @@ struct GrokZeroUsageTests {
         #expect(throws: GrokWebBillingError.self) {
             try GrokWebBillingFetcher.parseGRPCWebResponse(Self.payload(), now: Self.proxyReset)
         }
+    }
+
+    private static let malformedSuffixes: [Data] = [
+        Data([0x00]), // Invalid field key.
+        Self.fixed64Field(tag: [0x01]), // Invalid field zero with a complete fixed64 value.
+        Data([0x02, 0x00]), // Invalid field zero with an empty length-delimited value.
+        Self.fixed64Field(tag: [0x81, 0x80, 0x80, 0x80, 0x10]), // Field number exceeds 29 bits.
+        // Overflowing varint must not truncate to a valid fixed64 tag.
+        Self.fixed64Field(tag: [0x89, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x02]),
+        Data([0x0D, 0x00]), // Truncated percentage.
+        Data([0x72, 0x04, 0x08]), // Truncated nested message.
+        Data([0x70, 0x80]), // Truncated varint.
+    ]
+
+    private static func fixed64Field(tag: [UInt8]) -> Data {
+        Data(tag + [UInt8](repeating: 0, count: 8))
     }
 
     private static let now = Date(timeIntervalSince1970: 1_788_000_000)

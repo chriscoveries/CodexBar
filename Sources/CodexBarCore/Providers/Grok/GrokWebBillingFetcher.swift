@@ -465,7 +465,7 @@ public enum GrokWebBillingFetcher {
 
         while index < bytes.count {
             let fieldStart = index
-            guard let key = Self.readVarint(bytes, index: &index), key != 0 else {
+            guard let key = Self.readVarint(bytes, index: &index), key >> 3 > 0, key >> 3 <= 536_870_911 else {
                 scan.isComplete = false
                 index = fieldStart + 1
                 continue
@@ -540,6 +540,7 @@ public enum GrokWebBillingFetcher {
         while index < bytes.count, shift < 64 {
             let byte = bytes[index]
             index += 1
+            if shift == 63, byte > 1 { return nil }
             value |= UInt64(byte & 0x7F) << shift
             if byte & 0x80 == 0 {
                 return value

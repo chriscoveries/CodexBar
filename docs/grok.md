@@ -73,6 +73,8 @@ The grok.com billing gRPC-web endpoint remains a best-effort fallback.
      from wire-published percentages; a bare inferred zero, historical-only period,
      or malformed response cannot replace unknown proxy usage. Proxy reset and plan
      metadata remain authoritative when the zero is adopted.
+     Invalid protobuf field numbers and overflowing varints prevent that response
+     from qualifying as complete; valid unknown fields remain supported.
      Grok's public web client also reads its omitted proto3 scalar as zero, and its
      [billing descriptor](https://cdn.grok.com/_next/static/chunks/32g78bk5hhe1q.js)
      declares `credit_usage_percent` as an implicit-presence float (checked
