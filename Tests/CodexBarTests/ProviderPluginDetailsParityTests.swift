@@ -296,15 +296,8 @@ struct ProviderPluginDetailsParityTests {
 
     @Test
     func `Poe fixture matches the cut-over golden`() async throws {
-        let transport = Self.transport { request in
-            switch request.url?.path {
-            case "/usage/current_balance": Self.poeBalance
-            case "/usage/points_history": Self.poeHistory
-            default: throw FixtureError.unexpectedURL(request.url)
-            }
-        }
         let now = Date(timeIntervalSince1970: 1_785_816_000)
-        let script = try await ProviderPluginRuntime(bundledPlugin: "poe", transport: transport)
+        let script = try await Self.poeRuntime()
             .fetchUsage(secrets: ["POE_API_KEY": "fixture-key"], now: now)
 
         #expect(script.primary == nil)
@@ -328,6 +321,44 @@ struct ProviderPluginDetailsParityTests {
             chart: Self.chart("Daily points", unit: "points", points: [
                 ("2026-08-02", 12.5), ("2026-08-03", 8),
             ]))])
+    }
+
+    @Test
+    func `Poe today follows the supplied refresh date`() async throws {
+        let now = Date(timeIntervalSince1970: 1_785_772_800)
+        let snapshot = try await Self.poeRuntime()
+            .fetchUsage(secrets: ["POE_API_KEY": "fixture-key"], now: now)
+        let section = try #require(snapshot.details.first)
+
+        #expect(try section.rows.contains(Self.row("Today", "8 points", "1 requests · $0.02")))
+        #expect(snapshot.updatedAt == now)
+    }
+
+    @Test(arguments: [0.0, 1.0])
+    func `Poe thirty day cutoff uses the supplied refresh clock`(secondsAfterCutoff: Double) async throws {
+        let now = Date(timeIntervalSince1970: 1_785_686_400 + 30 * 86400 + secondsAfterCutoff)
+        let snapshot = try await Self.poeRuntime()
+            .fetchUsage(secrets: ["POE_API_KEY": "fixture-key"], now: now)
+        let section = try #require(snapshot.details.first)
+        let atBoundary = secondsAfterCutoff == 0
+
+        #expect(try section.rows.contains(Self.row(
+            "Last 30 days",
+            atBoundary ? "20.5 points" : "8 points",
+            atBoundary ? "2 requests · $0.05" : "1 requests · $0.02")))
+        #expect(section.chart?.points.count == (atBoundary ? 2 : 1))
+    }
+
+    @Test
+    func `Poe expired history preserves the balance at the supplied refresh date`() async throws {
+        let now = Date(timeIntervalSince1970: 1_785_772_800 + 30 * 86400 + 1)
+        let snapshot = try await Self.poeRuntime()
+            .fetchUsage(secrets: ["POE_API_KEY": "fixture-key"], now: now)
+
+        #expect(try snapshot.details == [Self.section("Points", rows: [
+            Self.row("Current balance", "2,500 points"),
+        ])])
+        #expect(snapshot.identity?.loginMethod == "Balance: 2,500 points")
     }
 
     @Test
@@ -521,6 +552,17 @@ struct ProviderPluginDetailsParityTests {
                 headerFields: ["Content-Type": "application/json"]))
             return try (Data(body(request).utf8), response)
         }
+    }
+
+    private static func poeRuntime() throws -> ProviderPluginRuntime {
+        let transport = Self.transport { request in
+            switch request.url?.path {
+            case "/usage/current_balance": Self.poeBalance
+            case "/usage/points_history": Self.poeHistory
+            default: throw FixtureError.unexpectedURL(request.url)
+            }
+        }
+        return try ProviderPluginRuntime(bundledPlugin: "poe", transport: transport)
     }
 
     private static func openRouterRuntime(

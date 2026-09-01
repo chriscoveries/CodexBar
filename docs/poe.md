@@ -34,6 +34,8 @@ CodexBar requests:
 
 The current balance request is required. Recent points history is best-effort, so a history error does not hide a valid balance.
 
+History filtering and the UTC "Today" row use the same host refresh timestamp. The history cutoff remains a rolling 30-day duration, including entries exactly at the cutoff; it is not a calendar-month filter.
+
 ## Display
 
 The provider shows the current point balance in the menu and menu bar. When available, recent history is grouped by day and shown in the usage detail.
