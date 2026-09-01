@@ -53,9 +53,10 @@ private let jsonlSmallStrings = [
 ]
 private let jsonlConfigurations = [(-1, -1), (0, 0), (1, 0), (0, 1), (2, 7), (7, 2), (64, 64), (Int.max, Int.max)]
 
+/// Yield between bounded batches so oracle scans share the executor without interrupting comparisons.
 struct CostUsageJsonlDifferentialTests {
     @Test
-    func `all short byte splits and persisted resumes match the frozen scalar scanner`() throws {
+    func `all short byte splits and persisted resumes match the frozen scalar scanner`() async throws {
         let fixture = try JsonlParityFixture()
         defer { fixture.remove() }
         let file = fixture.file
@@ -85,6 +86,7 @@ struct CostUsageJsonlDifferentialTests {
                         runJsonlParity($0, file, maximum: maximum, prefix: prefix, budget: budget)
                     }
                 }
+                await Task.yield()
             }
             for split in 0...data.count {
                 let part = Data(data.prefix(split))
@@ -110,12 +112,13 @@ struct CostUsageJsonlDifferentialTests {
                     file,
                     offset: Int64(offset)) }
             }
+            await Task.yield()
         }
         print("JSONL differential comparisons: \(fixture.comparisons)")
     }
 
     @Test
-    func `chunk thresholds cancellation and file mutations match the frozen scalar scanner`() throws {
+    func `chunk thresholds cancellation and file mutations match the frozen scalar scanner`() async throws {
         let fixture = try JsonlParityFixture()
         defer { fixture.remove() }
         let file = fixture.file
@@ -142,6 +145,7 @@ struct CostUsageJsonlDifferentialTests {
                             prefix: prefix,
                             resume: first.resume)
                     }
+                    await Task.yield()
                 }
             }
             for stop in 1...4 {
@@ -152,6 +156,7 @@ struct CostUsageJsonlDifferentialTests {
                 _ = try fixture.compare("should-stop-resume: " + "\(length)/\(stop)") {
                     runJsonlParity($0, file, offset: first.committed ?? 0, resume: first.resume)
                 }
+                await Task.yield()
             }
             _ = try fixture.compare("should-stop-after-line: " + "\(length)") { runJsonlParity(
                 $0,
@@ -159,17 +164,20 @@ struct CostUsageJsonlDifferentialTests {
                 stopAfterLine: true) }
             let normal = runJsonlParity(.scalar, file)
             let checkCount = normal.events.count(where: { $0.hasPrefix("check:") })
+            await Task.yield()
             for cancel in 1...(checkCount + 1) {
                 _ = try fixture.compare("cancellation-every-callback: " + "\(length)/\(cancel)") { runJsonlParity(
                     $0,
                     file,
                     cancelAt: cancel) }
+                await Task.yield()
             }
             _ = try fixture.compare("cancellation-after-line: " + "\(length)") { runJsonlParity(
                 $0,
                 file,
                 cancelAfterLine: true) }
             let partial = runJsonlParity(.scalar, file, prefix: 64, budget: Int64(chunk - 1))
+            await Task.yield()
             for replacement in [Data(), Data("{}\n".utf8), data.prefix(chunk + 2)] {
                 _ = try fixture.compare("truncate-between-resumes: " + "\(length)/\(replacement.count)") { variant in
                     try replacement.write(to: file)
@@ -180,6 +188,7 @@ struct CostUsageJsonlDifferentialTests {
                         prefix: 64,
                         resume: partial.resume)
                 }
+                await Task.yield()
             }
             // Active scan mutations are synthetic and occur at a known existing cancellation boundary.
             for mutation in ["append", "truncate"] {
@@ -198,13 +207,14 @@ struct CostUsageJsonlDifferentialTests {
                         }
                     })
                 }
+                await Task.yield()
             }
         }
         print("JSONL differential comparisons: \(fixture.comparisons)")
     }
 
     @Test
-    func `EOF stop precedence and file errors match the frozen scalar scanner`() throws {
+    func `EOF stop precedence and file errors match the frozen scalar scanner`() async throws {
         let fixture = try JsonlParityFixture()
         defer { fixture.remove() }
         let file = fixture.file
@@ -244,13 +254,14 @@ struct CostUsageJsonlDifferentialTests {
                             stopAt: stop)
                     }
                 }
+                await Task.yield()
             }
         }
         print("JSONL differential comparisons: \(fixture.comparisons)")
     }
 
     @Test
-    func `unusual decoded checkpoints retain scalar checked operations`() throws {
+    func `unusual decoded checkpoints retain scalar checked operations`() async throws {
         let fixture = try JsonlParityFixture()
         defer { fixture.remove() }
         let file = fixture.file
@@ -273,6 +284,7 @@ struct CostUsageJsonlDifferentialTests {
                     runJsonlParity($0, file, maximum: Int.max, prefix: 64, resume: encoded)
                 }
             }
+            await Task.yield()
         }
         for literal in ["trueLiteral", "falseLiteral", "nullLiteral"] {
             for matched in [-1, Int.min] {
@@ -292,6 +304,7 @@ struct CostUsageJsonlDifferentialTests {
                     #expect(result.failure == nil)
                 }
             }
+            await Task.yield()
         }
         for negativeBytes in [-1, -2, -5, Int.min] {
             for suffix in ["ab\n\" \n{}", "\n\n[]", "xyz\n{}\ntrue ", " ", "\"}", "abc\n\"}"] {
@@ -306,6 +319,7 @@ struct CostUsageJsonlDifferentialTests {
                     }
                 #expect(result.failure == nil)
             }
+            await Task.yield()
         }
         print("JSONL differential comparisons: \(fixture.comparisons)")
     }
