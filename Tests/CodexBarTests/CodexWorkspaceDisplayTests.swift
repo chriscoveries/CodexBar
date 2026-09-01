@@ -105,6 +105,65 @@ struct CodexWorkspaceDisplayTests {
         #expect(view._test_buttonToolTips() == accounts.map(\.menuDisplayName))
     }
 
+    @Test
+    func `separate profile homes in one workspace retain distinct labels`() {
+        let paths = ["/tmp/synthetic-profile-a", "/tmp/synthetic-profile-b"]
+        let profiles = paths.map { path in
+            ObservedSystemCodexAccount(
+                email: "user@example.com",
+                workspaceLabel: "Business",
+                workspaceAccountID: "shared-workspace",
+                codexHomePath: path,
+                observedAt: Date(),
+                identity: .providerAccount(id: "shared-workspace"))
+        }
+        func project(activePath: String) -> [CodexVisibleAccount] {
+            CodexVisibleAccountProjection.make(from: CodexAccountReconciliationSnapshot(
+                storedAccounts: [],
+                activeStoredAccount: nil,
+                liveSystemAccount: nil,
+                profileHomeAccounts: profiles,
+                matchingStoredAccountForLiveSystemAccount: nil,
+                activeSource: .profileHome(path: activePath),
+                hasUnreadableAddedAccountStore: false)).visibleAccounts
+        }
+        let accounts = project(activePath: paths[0])
+        #expect(accounts.count == 2)
+        #expect(Set(accounts.map(\.displayName)).count == 2)
+        #expect(Set(accounts.map(\.menuDisplayName)).count == 2)
+        #expect(accounts.map(\.displayName) == project(activePath: paths[1]).map(\.displayName))
+        for (account, path) in zip(accounts, paths) {
+            #expect(!account.displayName.contains(path))
+            #expect(!account.displayName.contains("shared-workspace"))
+            #expect(account.workspaceAccountID == "shared-workspace")
+        }
+    }
+
+    @Test(arguments: [8, 12])
+    func `crowded switcher fits complete workspace discriminators`(count: Int) throws {
+        let accounts = Self.project(Self.accounts(label: nil, count: count)).visibleAccounts
+        let view = CodexAccountSwitcherView(
+            accounts: accounts, selectedAccountID: accounts[0].id, width: 310, onSelect: { _ in })
+        view.layoutSubtreeIfNeeded()
+        let buttons = Self.buttons(in: view)
+        #expect(buttons.count == count)
+        for (account, button) in zip(accounts, buttons) {
+            let discriminator = try #require(account.displayDiscriminator)
+            #expect(button.title.hasSuffix(discriminator))
+            let font = try #require(button.font)
+            let textWidth = ceil((button.title as NSString).size(withAttributes: [.font: font]).width)
+            let contentWidth = button.bounds.width - button.contentPadding.left - button.contentPadding.right
+            #expect(textWidth <= contentWidth)
+        }
+    }
+
+    private static func buttons(in view: NSView) -> [PaddedToggleButton] {
+        view.subviews.flatMap { subview in
+            if let button = subview as? PaddedToggleButton { return [button] }
+            return self.buttons(in: subview)
+        }
+    }
+
     static func project(_ accounts: [CodexVisibleAccount]) -> CodexVisibleAccountProjection {
         CodexVisibleAccountProjection(
             visibleAccounts: accounts,
@@ -113,12 +172,12 @@ struct CodexWorkspaceDisplayTests {
             hasUnreadableAddedAccountStore: false)
     }
 
-    static func accounts(label: String?) -> [CodexVisibleAccount] {
-        (0..<2).map { self.account(id: $0, label: label) }
+    static func accounts(label: String?, count: Int = 2) -> [CodexVisibleAccount] {
+        (0..<count).map { self.account(id: $0, label: label) }
     }
 
     private static func accountID(_ index: Int) -> UUID {
-        UUID(uuidString: "00000000-0000-0000-0000-00000000000\(index)")!
+        UUID(uuidString: "00000000-0000-0000-0000-\(String(format: "%012d", index))")!
     }
 
     private static func account(id: Int, label: String?) -> CodexVisibleAccount {

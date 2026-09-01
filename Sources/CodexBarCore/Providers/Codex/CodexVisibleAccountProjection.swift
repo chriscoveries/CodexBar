@@ -79,15 +79,31 @@ public struct CodexVisibleAccount: Equatable, Identifiable, Sendable {
         let groups = Dictionary(grouping: unlabeled, by: { $0.menuDisplayName.lowercased() })
         return unlabeled.map { account in
             var result = account
-            guard (groups[account.menuDisplayName.lowercased()]?.count ?? 0) > 1 else { return result }
+            let group = groups[account.menuDisplayName.lowercased()] ?? []
+            guard group.count > 1 else { return result }
             // Workspace identity survives active-account changes and promotion to the system account.
             // Hash it rather than exposing any part of the provider ID or a profile's filesystem path.
-            let identity = ManagedCodexAccount.normalizeWorkspaceAccountID(account.workspaceAccountID)
-                ?? account.storedAccountID?.uuidString.lowercased() ?? account.id
+            var identity = account.displayIdentity
+            if group.count(where: { $0.displayIdentity == identity }) > 1 {
+                identity += "\0\(account.displaySourceIdentity)"
+            }
             result.displayDiscriminator = SHA256.hash(data: Data(identity.utf8))
                 .prefix(4).map { String(format: "%02x", $0) }.joined()
             return result
         }
+    }
+
+    private var displayIdentity: String {
+        ManagedCodexAccount.normalizeWorkspaceAccountID(self.workspaceAccountID)
+            ?? self.storedAccountID?.uuidString.lowercased() ?? self.id
+    }
+
+    private var displaySourceIdentity: String {
+        // Profile homes remain separate even when they contain the same workspace credentials.
+        if case let .profileHome(path) = self.selectionSource {
+            return "profile:\(CodexHomeScope.normalizedHomePath(path) ?? path)"
+        }
+        return self.storedAccountID.map { "stored:\($0.uuidString.lowercased())" } ?? "system"
     }
 
     public var authenticationHealthLabel: String? {

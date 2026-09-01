@@ -22,7 +22,9 @@ final class CodexWorkspaceDisplayScreenshotTests: XCTestCase {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let original = CodexWorkspaceDisplayTests.accounts(label: nil)
         let projected = CodexWorkspaceDisplayTests.project(original).visibleAccounts
-        for (name, accounts) in [("before", original), ("after", projected)] {
+        let crowded = CodexWorkspaceDisplayTests.project(
+            CodexWorkspaceDisplayTests.accounts(label: nil, count: 8)).visibleAccounts
+        for (name, accounts) in [("before", original), ("after", projected), ("eight-accounts", crowded)] {
             let state = CodexAccountsSectionState(
                 visibleAccounts: accounts,
                 activeVisibleAccountID: accounts[0].id,
@@ -45,7 +47,7 @@ final class CodexWorkspaceDisplayScreenshotTests: XCTestCase {
                     addAccount: {})
                 Divider()
                 Text("Menu account switcher").font(.headline)
-                WorkspaceProofSwitcher(accounts: accounts).frame(width: 310, height: 26)
+                WorkspaceProofSwitcher(accounts: accounts).frame(width: 310, height: accounts.count > 3 ? 56 : 26)
             }
             .padding(24)
             .frame(width: 640)
