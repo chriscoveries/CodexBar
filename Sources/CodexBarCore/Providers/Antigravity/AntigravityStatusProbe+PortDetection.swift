@@ -1,5 +1,14 @@
 import Foundation
 
+/// Readiness polling may retry an empty kernel lookup while retaining the lsof diagnostic.
+struct AntigravityPortDiscoveryPendingError: LocalizedError {
+    let underlyingError: any Error
+
+    var errorDescription: String? {
+        self.underlyingError.localizedDescription
+    }
+}
+
 /// Parses Linux `/proc/<pid>/net/tcp{,6}` output to recover the listening ports
 /// owned by a process. The parsing is platform-independent for focused tests.
 enum ProcNetTCPListeningPortParser {
@@ -64,7 +73,7 @@ extension AntigravityStatusProbe {
         procRoot: String = "/proc") async throws -> [Int]
     {
         try Task.checkCancellation()
-        var lsofError: (any Error)?
+        var lsofError: SubprocessRunnerError?
         if let lsof {
             do {
                 return try await Self.lsofListeningPorts(lsof: lsof, pid: pid, timeout: timeout)
@@ -77,7 +86,6 @@ extension AntigravityStatusProbe {
                 }
             } catch let error as AntigravityStatusProbeError {
                 guard case .portDetectionFailed = error else { throw error }
-                lsofError = error
             }
         }
 
@@ -87,7 +95,7 @@ extension AntigravityStatusProbe {
         let ports = Self.procListeningPorts(pid: pid, procRoot: procRoot)
         try Task.checkCancellation()
         if ports.isEmpty {
-            if let lsofError { throw lsofError }
+            if let lsofError { throw AntigravityPortDiscoveryPendingError(underlyingError: lsofError) }
             throw AntigravityStatusProbeError.portDetectionFailed("no listening ports found")
         }
         return ports

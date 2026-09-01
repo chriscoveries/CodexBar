@@ -121,7 +121,9 @@ When the Antigravity 2.0 app is running:
    - Linux tries `lsof -nP -iTCP -sTCP:LISTEN -a -p <pid>`, then process-scoped `/proc` discovery if
      `lsof` is missing, fails to launch or exits unsuccessfully, or reports no listeners. Namespace warnings from
      `lsof` therefore do not prevent discovery when `/proc` remains readable. Cancellation and hard subprocess limits
-     still propagate; if neither source finds a listener, the original discovery error is retained.
+     still propagate. If neither source finds a listener, CLI readiness polling continues within its existing deadline
+     and retains the last discovery diagnostic if startup never succeeds. An endpoint readiness failure takes
+     precedence once a listener has been reached.
    - `/proc/<pid>/fd` socket inodes are matched only against the same process's `net/tcp` and `net/tcp6` tables.
    - All listening ports are probed.
 

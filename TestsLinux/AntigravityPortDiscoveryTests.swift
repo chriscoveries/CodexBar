@@ -29,6 +29,38 @@ struct AntigravityPortDiscoveryTests {
     }
 
     @Test
+    func `CLI readiness retries namespace warnings until the proc listener appears`() async throws {
+        let fixture = try Fixture(script: "printf 'lsof: WARNING: namespace unavailable\\n' >&2; exit 1")
+        defer { fixture.remove() }
+        let socketLink = fixture.root.appendingPathComponent("42/fd/7")
+        try FileManager.default.removeItem(at: socketLink)
+        let attempts = DiscoveryAttempts()
+        let snapshot = try await AntigravityCLIHTTPSFetchStrategy.waitForSnapshot(
+            pid: 42,
+            deadline: Date().addingTimeInterval(15),
+            dependencies: AntigravityCLIHTTPSFetchStrategy.SnapshotWaitDependencies(
+                pollIntervalNanoseconds: 0,
+                listeningPorts: { _, timeout in
+                    if await attempts.next() == 2 {
+                        try FileManager.default.createSymbolicLink(
+                            atPath: socketLink.path, withDestinationPath: "socket:[111111]")
+                    }
+                    return try await fixture.ports(timeout: timeout)
+                },
+                drainOutput: { Data() },
+                fetchSnapshot: { ports in
+                    #expect(ports == [8080])
+                    return AntigravityStatusSnapshot(
+                        modelQuotas: [AntigravityModelQuota(
+                            label: "Gemini Pro", modelId: "gemini-pro", remainingFraction: 0.5,
+                            resetTime: nil, resetDescription: nil)],
+                        accountEmail: "fixture@example.com", accountPlan: "Pro", source: .local)
+                }))
+        #expect(snapshot.accountEmail == "fixture@example.com")
+        #expect(await attempts.count == 2)
+    }
+
+    @Test
     func `successful lsof retains precedence over proc`() async throws {
         let fixture = try Fixture(script: "printf 'agy 42 user TCP 127.0.0.1:4242 (LISTEN)\\n'")
         defer { fixture.remove() }
@@ -43,9 +75,14 @@ struct AntigravityPortDiscoveryTests {
         do {
             _ = try await fixture.ports()
             Issue.record("Expected original lsof failure when neither source has a listener")
-        } catch let SubprocessRunnerError.nonZeroExit(code, stderr) {
+        } catch let error as AntigravityPortDiscoveryPendingError {
+            guard case let SubprocessRunnerError.nonZeroExit(code, stderr) = error.underlyingError else {
+                Issue.record("Expected the original lsof diagnostic")
+                return
+            }
             #expect(code == 1)
             #expect(stderr == "namespace warning\n")
+            #expect(error.localizedDescription == error.underlyingError.localizedDescription)
         }
     }
 
@@ -59,6 +96,16 @@ struct AntigravityPortDiscoveryTests {
                 timeout: 5,
                 lsof: nil,
                 procRoot: fixture.root.path)
+        }
+    }
+
+    @Test(arguments: ["exit 0", "exit 1"])
+    func `ordinary empty discovery retains the existing no ports classification`(script: String) async throws {
+        let fixture = try Fixture(script: script)
+        defer { fixture.remove() }
+        try FileManager.default.removeItem(at: fixture.root.appendingPathComponent("42/fd/7"))
+        await #expect(throws: AntigravityStatusProbeError.portDetectionFailed("no listening ports found")) {
+            try await fixture.ports()
         }
     }
 
@@ -125,6 +172,15 @@ struct AntigravityPortDiscoveryTests {
         #expect(ports.contains(Int(UInt16(bigEndian: address.sin_port))))
     }
     #endif
+
+    private actor DiscoveryAttempts {
+        private(set) var count = 0
+
+        func next() -> Int {
+            self.count += 1
+            return self.count
+        }
+    }
 
     private struct Fixture: Sendable {
         let root: URL
