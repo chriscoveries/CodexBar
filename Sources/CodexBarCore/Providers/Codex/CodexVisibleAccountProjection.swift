@@ -1,9 +1,15 @@
+#if canImport(CryptoKit)
+import CryptoKit
+#else
+import Crypto
+#endif
 import Foundation
 
 public struct CodexVisibleAccount: Equatable, Identifiable, Sendable {
     public let id: String
     public let email: String
     public let workspaceLabel: String?
+    public private(set) var displayDiscriminator: String?
     public let workspaceAccountID: String?
     public let authFingerprint: String?
     public let storedAccountID: UUID?
@@ -40,8 +46,8 @@ public struct CodexVisibleAccount: Equatable, Identifiable, Sendable {
     }
 
     public var displayName: String {
-        guard let workspaceLabel else { return self.email }
-        return "\(self.email) — \(workspaceLabel)"
+        guard let label = self.disambiguatedWorkspaceLabel ?? self.workspaceLabel else { return self.email }
+        return "\(self.email) — \(label)"
     }
 
     public var menuDisplayName: String {
@@ -50,10 +56,38 @@ public struct CodexVisibleAccount: Equatable, Identifiable, Sendable {
     }
 
     public var menuWorkspaceLabel: String? {
+        if let disambiguatedWorkspaceLabel {
+            return disambiguatedWorkspaceLabel
+        }
         guard let workspaceLabel, workspaceLabel.compare("Personal", options: [.caseInsensitive]) != .orderedSame else {
             return nil
         }
         return workspaceLabel
+    }
+
+    private var disambiguatedWorkspaceLabel: String? {
+        guard let displayDiscriminator else { return nil }
+        return "\(self.workspaceLabel ?? "Workspace") · \(displayDiscriminator)"
+    }
+
+    static func disambiguating(_ accounts: [Self]) -> [Self] {
+        let unlabeled = accounts.map { account in
+            var result = account
+            result.displayDiscriminator = nil
+            return result
+        }
+        let groups = Dictionary(grouping: unlabeled, by: { $0.menuDisplayName.lowercased() })
+        return unlabeled.map { account in
+            var result = account
+            guard (groups[account.menuDisplayName.lowercased()]?.count ?? 0) > 1 else { return result }
+            // Workspace identity survives active-account changes and promotion to the system account.
+            // Hash it rather than exposing any part of the provider ID or a profile's filesystem path.
+            let identity = ManagedCodexAccount.normalizeWorkspaceAccountID(account.workspaceAccountID)
+                ?? account.storedAccountID?.uuidString.lowercased() ?? account.id
+            result.displayDiscriminator = SHA256.hash(data: Data(identity.utf8))
+                .prefix(4).map { String(format: "%02x", $0) }.joined()
+            return result
+        }
     }
 
     public var authenticationHealthLabel: String? {
@@ -81,7 +115,7 @@ public struct CodexVisibleAccountProjection: Equatable, Sendable {
         liveVisibleAccountID: String?,
         hasUnreadableAddedAccountStore: Bool)
     {
-        self.visibleAccounts = visibleAccounts
+        self.visibleAccounts = CodexVisibleAccount.disambiguating(visibleAccounts)
         self.activeVisibleAccountID = activeVisibleAccountID
         self.liveVisibleAccountID = liveVisibleAccountID
         self.hasUnreadableAddedAccountStore = hasUnreadableAddedAccountStore

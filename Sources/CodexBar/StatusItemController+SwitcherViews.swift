@@ -1443,6 +1443,12 @@ final class CodexAccountSwitcherView: NSView {
             return account.menuDisplayName
         }
 
+        if let discriminator = account.displayDiscriminator {
+            let suffix = "|\(discriminator)"
+            let emailWidth = max(0, availableTextWidth - self.textWidth(suffix))
+            return "\(self.truncateMiddle(account.email, toFit: emailWidth))\(suffix)"
+        }
+
         guard let workspace = account.menuWorkspaceLabel else {
             return self.truncateMiddle(account.email, toFit: availableTextWidth)
         }
