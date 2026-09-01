@@ -202,8 +202,7 @@ struct AntigravityPortDiscoveryTests {
             1: 0100007F:C000 00000000:0000 0A 00000000:00000000 00:00000000 00000000 1000 0 999999
             """
             try Data(table.utf8).write(to: self.root.appendingPathComponent("42/net/tcp"))
-            try Data("#!/bin/sh\n\(script)\n".utf8).write(to: self.lsof)
-            try files.setAttributes([.posixPermissions: 0o700], ofItemAtPath: self.lsof.path)
+            try FakeExecutable.install("#!/bin/sh\n\(script)\n", at: self.lsof)
         }
 
         func ports(timeout: TimeInterval = 5) async throws -> [Int] {
