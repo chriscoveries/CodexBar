@@ -5,11 +5,13 @@ import Testing
 
 @MainActor
 extension CodexAccountScopedRefreshTests {
-    @Test(arguments: [false, true])
+    @Test(arguments: [false, true], [false, true])
     func `stacked refresh keeps selected managed workspace separate from auth default`(
-        switchesWorkspaceDuringRefresh: Bool) async throws
+        switchesWorkspaceDuringRefresh: Bool,
+        usesProviderAccountIDFallback: Bool) async throws
     {
-        let suite = "CodexManagedWorkspaceRefreshTests-\(switchesWorkspaceDuringRefresh)"
+        let suite = "CodexManagedWorkspaceRefreshTests-\(switchesWorkspaceDuringRefresh)-" +
+            "\(usesProviderAccountIDFallback)"
         let root = CodexCredentialFixtures.root
             .appendingPathComponent("managed-workspace-refresh-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -26,7 +28,7 @@ extension CodexAccountScopedRefreshTests {
             email: authenticatedTarget.email,
             providerAccountID: "selected-team-workspace",
             workspaceLabel: "Selected Team",
-            workspaceAccountID: "selected-team-workspace",
+            workspaceAccountID: usesProviderAccountIDFallback ? nil : "selected-team-workspace",
             authFingerprint: authenticatedTarget.authFingerprint,
             managedHomePath: targetHome.path,
             createdAt: 1,
@@ -48,6 +50,9 @@ extension CodexAccountScopedRefreshTests {
         }
         settings._test_managedCodexAccountStoreURL = storeURL
         settings.codexActiveSource = .managedAccount(id: target.id)
+        let initialProjection = settings.codexVisibleAccountProjection
+        let initialTarget = try #require(initialProjection.visibleAccounts.first { $0.storedAccountID == target.id })
+        #expect(initialTarget.workspaceAccountID == "selected-team-workspace")
         let snapshotStore = RecordingCodexAccountUsageSnapshotStore(initialSnapshots: [])
         let store = self.makeCodexWeeklyPublicationStore(
             settings: settings,
@@ -74,7 +79,7 @@ extension CodexAccountScopedRefreshTests {
                 email: target.email,
                 providerAccountID: "replacement-team-workspace",
                 workspaceLabel: "Replacement Team",
-                workspaceAccountID: "replacement-team-workspace",
+                workspaceAccountID: usesProviderAccountIDFallback ? nil : "replacement-team-workspace",
                 authFingerprint: target.authFingerprint,
                 managedHomePath: target.managedHomePath,
                 createdAt: target.createdAt,
