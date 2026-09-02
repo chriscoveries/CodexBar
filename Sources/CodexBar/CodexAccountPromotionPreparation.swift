@@ -268,7 +268,7 @@ struct PreparedPromotionContextBuilder {
         }
     }
 
-    private static func runtimeAccount(from rawData: Data) throws -> CodexAuthBackedAccount {
+    static func runtimeAccount(from rawData: Data) throws -> CodexAuthBackedAccount {
         guard let json = try JSONSerialization.jsonObject(with: rawData) as? [String: Any] else {
             throw CodexOAuthCredentialsError.decodeFailed("Invalid JSON")
         }

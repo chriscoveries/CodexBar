@@ -241,6 +241,7 @@ final class CodexAccountPromotionService {
         let executionResult = try CodexDisplacedLivePreservationExecutor(
             store: self.store,
             homeFactory: self.homeFactory,
+            authMaterialReader: self.authMaterialReader,
             fileManager: self.fileManager)
             .execute(plan: preservationPlan, context: context)
 
