@@ -77,7 +77,7 @@ struct CodexAccountPromotionExecutionTests {
     }
 
     @Test
-    func `executor import verifies persisted account after concurrent duplicate collision`() async throws {
+    func `executor import repairs an explicit workspace only collision`() async throws {
         let container = try CodexAccountPromotionTestContainer(
             suiteName: "CodexAccountPromotionExecutionTests-import-collision-repair")
         defer { container.tearDown() }
@@ -93,7 +93,6 @@ struct CodexAccountPromotionExecutionTests {
         let concurrentManaged = ManagedCodexAccount(
             id: concurrentID,
             email: "alpha@example.com",
-            providerAccountID: "acct-alpha",
             workspaceLabel: "Personal",
             workspaceAccountID: "acct-alpha",
             managedHomePath: concurrentHomeURL.path,
@@ -115,6 +114,8 @@ struct CodexAccountPromotionExecutionTests {
         #expect(result.displacedLiveDisposition == .alreadyManaged(managedAccountID: concurrentManaged.id))
         let accounts = try container.loadAccounts().accounts
         let repaired = try #require(accounts.first(where: { $0.id == concurrentManaged.id }))
+        #expect(repaired.providerAccountID == "acct-alpha")
+        #expect(repaired.workspaceAccountID == "acct-alpha")
         #expect(repaired.managedHomePath != concurrentHomeURL.path)
         #expect(try container.managedAuthData(for: repaired) == liveAuthData)
     }

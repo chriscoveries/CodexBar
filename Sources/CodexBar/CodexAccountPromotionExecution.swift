@@ -185,17 +185,17 @@ struct CodexDisplacedLivePreservationExecutor {
         in persistedManagedAccounts: ManagedCodexAccountSet,
         for importedAccount: ManagedCodexAccount) -> ManagedCodexAccount?
     {
-        if let providerAccountID = importedAccount.providerAccountID {
+        if let workspaceAccountID = importedAccount.effectiveWorkspaceAccountID {
             return persistedManagedAccounts.account(
                 email: importedAccount.email,
-                providerAccountID: providerAccountID)
+                providerAccountID: workspaceAccountID)
         }
 
         let normalizedEmail = importedAccount.email
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
         return persistedManagedAccounts.accounts.first {
-            $0.email == normalizedEmail && $0.providerAccountID == nil
+            $0.email == normalizedEmail && $0.effectiveWorkspaceAccountID == nil
         }
     }
 
