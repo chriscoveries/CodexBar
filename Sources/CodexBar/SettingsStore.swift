@@ -224,24 +224,27 @@ enum CodexAccountMenuProjectionRevalidationResult: Equatable {
 }
 
 @MainActor
+struct SettingsStoreKeychainAccessPolicy {
+    let setDisabled: (Bool) -> Void
+    let isExplicitlyDisabled: () -> Bool
+
+    static var live: Self {
+        Self(
+            setDisabled: { KeychainAccessGate.isDisabled = $0 },
+            isExplicitlyDisabled: { KeychainAccessGate.isExplicitlyDisabled })
+    }
+}
+
+@MainActor
 @Observable
 final class SettingsStore {
     static let sharedDefaults = SettingsStore.resolveSharedDefaults()
     static let mergedOverviewProviderLimit = 6
     static let productionCodexAccountReconciliationSnapshotCacheInterval: TimeInterval = 2
-    static let isRunningTests: Bool = {
-        let env = ProcessInfo.processInfo.environment
-        if env["XCTestConfigurationFilePath"] != nil {
-            return true
-        }
-        if env["TESTING_LIBRARY_VERSION"] != nil {
-            return true
-        }
-        if env["SWIFT_TESTING"] != nil {
-            return true
-        }
-        return NSClassFromString("XCTestCase") != nil
-    }()
+    static let isRunningTests = SettingsStore.resolveIsRunningTests(
+        processName: ProcessInfo.processInfo.processName,
+        environment: ProcessInfo.processInfo.environment,
+        hasLoadedXCTestCase: NSClassFromString("XCTestCase") != nil)
 
     #if DEBUG
     static var codexAccountReconciliationSnapshotCacheIntervalOverrideForTesting: TimeInterval?
@@ -250,6 +253,7 @@ final class SettingsStore {
     @ObservationIgnored let userDefaults: UserDefaults
     @ObservationIgnored let configStore: CodexBarConfigStore
     @ObservationIgnored let antigravityOAuthCredentialsStore: AntigravityOAuthCredentialsStore
+    @ObservationIgnored let keychainAccessPolicy: SettingsStoreKeychainAccessPolicy
     @ObservationIgnored var config: CodexBarConfig
     @ObservationIgnored var configPersistTask: Task<Void, Never>?
     @ObservationIgnored var configFileWatcher: ConfigFileWatcher?
@@ -276,6 +280,17 @@ final class SettingsStore {
     @ObservationIgnored var providerEnablementRevisions: [ProviderInstanceID: UInt64] = [:]
     @ObservationIgnored var providerConfigRevisions: [ProviderInstanceID: UInt64] = [:]
     @ObservationIgnored var providerConfigFingerprints: [ProviderInstanceID: Data] = [:]
+
+    static func resolveIsRunningTests(
+        processName: String,
+        environment: [String: String],
+        hasLoadedXCTestCase: Bool) -> Bool
+    {
+        TestProcessSafety.isRunningUnderTests(
+            processName: processName,
+            environment: environment,
+            hasLoadedXCTestCase: hasLoadedXCTestCase)
+    }
 
     static func resolveSharedDefaults(
         _ resolve: () -> UserDefaults? = { AppGroupSupport.sharedDefaults() }) -> UserDefaults?
@@ -320,10 +335,11 @@ final class SettingsStore {
         copilotTokenStore: any CopilotTokenStoring = KeychainCopilotTokenStore(),
         tokenAccountStore: any ProviderTokenAccountStoring = FileTokenAccountStore(),
         antigravityOAuthCredentialsStore: AntigravityOAuthCredentialsStore = AntigravityOAuthCredentialsStore(),
+        keychainAccessPolicy: SettingsStoreKeychainAccessPolicy = .live,
         performInitialProviderDetection: Bool = !SettingsStore.isRunningTests)
     {
         // Legacy credential migration must see the saved policy, including shared-defaults fallback.
-        KeychainAccessGate.isDisabled = Self.loadDebugDisableKeychainAccess(userDefaults: userDefaults)
+        keychainAccessPolicy.setDisabled(Self.loadDebugDisableKeychainAccess(userDefaults: userDefaults))
         if !Self.isRunningTests {
             _ = UserProviderPluginRegistry.refresh()
         }
@@ -371,11 +387,12 @@ final class SettingsStore {
         let config = CodexBarConfigMigrator.loadOrMigrate(
             configStore: configStore,
             userDefaults: userDefaults,
-            keychainAccessDisabled: KeychainAccessGate.isExplicitlyDisabled,
+            keychainAccessDisabled: keychainAccessPolicy.isExplicitlyDisabled(),
             stores: legacyStores)
         self.userDefaults = userDefaults
         self.configStore = configStore
         self.antigravityOAuthCredentialsStore = antigravityOAuthCredentialsStore
+        self.keychainAccessPolicy = keychainAccessPolicy
         self.config = config
         self.configLoading = true
         let defaultsState = Self.loadDefaultsState(
@@ -414,7 +431,7 @@ final class SettingsStore {
         } else {
             self.defaultsState.openAIWebAccessEnabled = resolvedOpenAIWebAccessEnabled
         }
-        KeychainAccessGate.isDisabled = self.debugDisableKeychainAccess
+        self.keychainAccessPolicy.setDisabled(self.debugDisableKeychainAccess)
         self.startConfigFileWatcher()
         self.observeSystemPowerStateChanges()
     }

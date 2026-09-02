@@ -45,22 +45,47 @@ struct SettingsStoreKeychainPreferenceTests {
     }
 
     @Test
-    func `settings initialization leaves app group migration untouched and fresh defaults adaptive`() throws {
+    func `settings test detection uses the shared runner detector and XCTest fallback`() {
+        #expect(SettingsStore.resolveIsRunningTests(
+            processName: "swiftpm-testing-helper",
+            environment: [:],
+            hasLoadedXCTestCase: false))
+        #expect(SettingsStore.resolveIsRunningTests(
+            processName: "CodexBar",
+            environment: [:],
+            hasLoadedXCTestCase: true))
+        #expect(!SettingsStore.resolveIsRunningTests(
+            processName: "CodexBar",
+            environment: [:],
+            hasLoadedXCTestCase: false))
+    }
+
+    @Test(arguments: [false, true])
+    func `settings initialization isolates app group migration and keychain policy`(disabled: Bool) throws {
         let local = InMemoryUserDefaults()
-        try self.withSettingsStore(defaults: local) { store in
+        local.set(disabled, forKey: "debugDisableKeychainAccess")
+        var keychainAccessValues: [Bool] = []
+        let keychainAccessPolicy = SettingsStoreKeychainAccessPolicy(
+            setDisabled: { keychainAccessValues.append($0) },
+            isExplicitlyDisabled: { keychainAccessValues.last ?? false })
+        try self.withSettingsStore(
+            defaults: local,
+            keychainAccessPolicy: keychainAccessPolicy)
+        { store in
             #expect(local.object(forKey: AppGroupSupport.migrationVersionKey) == nil)
             #expect(local.object(forKey: "widgetSelectedProvider") == nil)
-            #expect(!store.debugDisableKeychainAccess)
+            #expect(store.debugDisableKeychainAccess == disabled)
             #expect(store.refreshFrequency == .adaptive)
             // Config/secret migration remains independent of app-group migration.
-            #expect(local.bool(forKey: "codexbar.legacySecretsMigrationCompleted"))
+            #expect(local.bool(forKey: "codexbar.legacySecretsMigrationCompleted") == !disabled)
 
-            store.debugDisableKeychainAccess = true
-            #expect(local.bool(forKey: "debugDisableKeychainAccess"))
-            store.debugDisableKeychainAccess = false
-            #expect(!local.bool(forKey: "debugDisableKeychainAccess"))
+            store.debugDisableKeychainAccess = !disabled
+            #expect(local.bool(forKey: "debugDisableKeychainAccess") == !disabled)
+            store.debugDisableKeychainAccess = disabled
+            #expect(local.bool(forKey: "debugDisableKeychainAccess") == disabled)
             #expect(local.object(forKey: AppGroupSupport.migrationVersionKey) == nil)
             #expect(SettingsStore.sharedDefaults == nil)
+            #expect(keychainAccessValues == [disabled, disabled, !disabled, disabled])
         }
     }
 
@@ -79,6 +104,9 @@ struct SettingsStoreKeychainPreferenceTests {
 
     private func withSettingsStore(
         defaults: InMemoryUserDefaults,
+        keychainAccessPolicy: SettingsStoreKeychainAccessPolicy = SettingsStoreKeychainAccessPolicy(
+            setDisabled: { _ in },
+            isExplicitlyDisabled: { false }),
         operation: (SettingsStore) throws -> Void) throws
     {
         // Fail before constructing settings if the caller deliberately opted into live user state.
@@ -96,14 +124,6 @@ struct SettingsStoreKeychainPreferenceTests {
                 try FileManager.default.removeItem(at: root)
             } catch {
                 Issue.record("Could not remove synthetic settings fixture: \(error)")
-            }
-        }
-        let previousOverride = KeychainAccessGate.currentOverrideForTesting
-        defer {
-            if let previousOverride {
-                KeychainAccessGate.isDisabled = previousOverride
-            } else {
-                KeychainAccessGate.resetOverrideForTesting()
             }
         }
         let store = SettingsStore(
@@ -125,6 +145,7 @@ struct SettingsStoreKeychainPreferenceTests {
             tokenAccountStore: InMemoryTokenAccountStore(fileURL: root.appendingPathComponent("accounts.json")),
             antigravityOAuthCredentialsStore: AntigravityOAuthCredentialsStore(
                 fileURL: root.appendingPathComponent("antigravity.json")),
+            keychainAccessPolicy: keychainAccessPolicy,
             performInitialProviderDetection: false)
         defer { store.configFileWatcher?.stop() }
         try operation(store)
