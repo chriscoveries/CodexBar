@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- Agent sessions: explicitly force Tailscale CLI mode during remote-host discovery, preventing repeated app-binary crashes on newer Tailscale installations while preserving existing terminal settings (#3397). Thanks @tzioup!
+
 ## 0.56.4 — 2026-09-03
 
 ### Fixed
