@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Fixed
+- Codex: retain completed empty session fragments during cost-history scans instead of repeatedly dropping and rediscovering them, without suppressing usage-bearing duplicates or later appended usage (partial fix for #3316; #3400). Thanks @mauricio-lxlaunch!
 - Agent sessions: explicitly force Tailscale CLI mode during remote-host discovery, preventing repeated app-binary crashes on newer Tailscale installations while preserving existing terminal settings (#3397). Thanks @tzioup!
 
 ## 0.56.4 — 2026-09-03
