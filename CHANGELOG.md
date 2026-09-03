@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Fixed
+- Settings: open the About pane from the application menu as well as the status menu, reusing the existing Settings window (#3391). Thanks @elijahfriedman!
 - Menu bar: discard non-finite saved status-item positions before AppKit restores them, preserving valid placements (#3361; investigated alongside #3355). Thanks @foobra!
 - Antigravity: recover Linux port discovery when `lsof` fails with mount-namespace warnings, while preserving authentication errors and the existing startup deadline (#3364). Thanks @srijits!
 - Menu bar: let live forecast and detail labels use the full row width, preventing text from clipping to its previous width until the menu reopens (#3370).
