@@ -11,6 +11,9 @@
 - Claude: remove misleading defaults-suite warnings at launch while preserving shared OAuth preferences for the CLI and widget (#3384). Thanks @andresg747!
 - Codex: keep selected-workspace ownership consistent across refreshes, credits, history, and account reconciliation; refuse ambiguous System Account promotion instead of silently choosing the auth file's default workspace (#3386).
 
+### Documentation
+- AWS Bedrock: explain monitoring API charges, the shared refresh controls, and why Manual mode and the displayed budget do not impose a billing cap (partial follow-up to #3387). Thanks @kyen99!
+
 ## 0.56.3 — 2026-09-01
 
 ### Performance
