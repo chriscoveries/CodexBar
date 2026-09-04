@@ -41,6 +41,9 @@ public enum WarpProviderDescriptor {
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "Warp cost summary is not available." }),
+            pace: ProviderPaceCapability(
+                resetWindowPace: .resetDatePresent,
+                inferredMonthlyDuration: .windowDurationMissing),
             presentation: ProviderUsagePresentation(
                 iconDecorations: [.warp],
                 treatsExhaustedSecondaryIconWindowAsMissing: true,

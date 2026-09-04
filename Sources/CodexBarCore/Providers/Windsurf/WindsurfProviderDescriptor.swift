@@ -44,6 +44,7 @@ public enum WindsurfProviderDescriptor {
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "Windsurf cost summary is not supported." }),
+            pace: ProviderPaceCapability(resetWindowPace: .resetDatePresent),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .web, .cli],
                 pipeline: ProviderFetchPipeline(resolveStrategies: { _ in

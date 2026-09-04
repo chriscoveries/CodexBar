@@ -50,6 +50,9 @@ public enum FactoryProviderDescriptor {
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "Droid cost summary is not supported." }),
+            pace: ProviderPaceCapability(
+                primary: .exact(kind: .session, minutes: 5 * 60),
+                secondary: .weekly),
             presentation: ProviderUsagePresentation(
                 rateWindowLabeler: { metadata, snapshot, _ in
                     guard snapshot.tertiary != nil else {
