@@ -180,6 +180,10 @@ struct MenuDescriptor {
                 entries.append(.unavailable("\(remoteHost.host) — unreachable", error))
                 continue
             }
+            if let notice = remoteHost.notice {
+                entries.append(.text("\(remoteHost.host) — \(notice)", .secondary))
+                continue
+            }
             entries.append(.text("\(remoteHost.host) — \(remoteHost.sessions.count)", .secondary))
             for session in remoteHost.sessions {
                 entries.append(.action(

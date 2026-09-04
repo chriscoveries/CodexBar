@@ -135,9 +135,66 @@ struct TailscaleSessionTests {
 
     @Test
     func `remote session command negotiates v2 then v1 for PATH and bundled CLIs`() {
+        let bundledCLI = RemoteSessionFetcher.bundledCLIPath
         #expect(RemoteSessionFetcher.remoteSessionsCommand() ==
             "codexbar sessions --json-v2 || codexbar sessions --json || " +
-            "'/Applications/CodexBar.app/Contents/Helpers/CodexBarCLI' sessions --json-v2 || " +
-            "'/Applications/CodexBar.app/Contents/Helpers/CodexBarCLI' sessions --json")
+            "'\(bundledCLI)' sessions --json-v2 || " +
+            "'\(bundledCLI)' sessions --json")
+    }
+
+    @Test
+    func `bundled CLI path derives from the app bundle and falls back outside one`() {
+        // Installer idiom: <bundle>/Contents/Helpers/CodexBarCLI.
+        if Bundle.main.bundleURL.pathExtension == "app" {
+            #expect(RemoteSessionFetcher.bundledCLIPath ==
+                Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/CodexBarCLI").path)
+        } else {
+            // CLI/test processes have no app bundle: keep the historical /Applications location.
+            #expect(RemoteSessionFetcher.bundledCLIPath == RemoteSessionFetcher.bundledCLIFallback)
+        }
+    }
+
+    @Test
+    func `exit 127 is a benign missing-CLI notice not an error`() {
+        // A remote host without any codexbar CLI candidate exits 127 every poll: a normal
+        // unconfigured state that must not surface as an unreachable host.
+        let result = RemoteSessionFetcher.hostResult(
+            host: "linuxbox",
+            exitCode: 127,
+            stdout: "",
+            stderr: "sh: codexbar: command not found")
+
+        #expect(result.error == nil)
+        #expect(result.isReachable)
+        #expect(result.notice == "codexbar CLI not installed")
+        #expect(result.sessions.isEmpty)
+    }
+
+    @Test
+    func `other non-zero exits keep the unreachable error path`() {
+        let result = RemoteSessionFetcher.hostResult(
+            host: "linuxbox",
+            exitCode: 255,
+            stdout: "",
+            stderr: "ssh: connect to host linuxbox port 22: Connection refused")
+
+        #expect(result.error ==
+            "Command failed (255): ssh: connect to host linuxbox port 22: Connection refused")
+        #expect(!result.isReachable)
+        #expect(result.notice == nil)
+    }
+
+    @Test
+    func `exit zero decodes sessions and malformed output stays an error`() {
+        let healthy = RemoteSessionFetcher.hostResult(host: "linuxbox", exitCode: 0, stdout: "[]", stderr: "")
+
+        #expect(healthy.error == nil)
+        #expect(healthy.notice == nil)
+        #expect(healthy.sessions.isEmpty)
+        #expect(RemoteSessionFetcher.hostResult(
+            host: "linuxbox",
+            exitCode: 0,
+            stdout: "<html>router admin page</html>",
+            stderr: "").error != nil)
     }
 }

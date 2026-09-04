@@ -37,6 +37,15 @@ public enum SubprocessRunnerError: LocalizedError, Sendable {
 public struct SubprocessResult: Sendable {
     public let stdout: String
     public let stderr: String
+    /// Process exit status. Meaningful when the caller passed `acceptsNonZeroExit: true`;
+    /// otherwise a non-zero exit throws `SubprocessRunnerError.nonZeroExit` instead.
+    public let exitCode: Int32
+
+    public init(stdout: String, stderr: String, exitCode: Int32 = 0) {
+        self.stdout = stdout
+        self.stderr = stderr
+        self.exitCode = exitCode
+    }
 }
 
 public enum SubprocessRunner {
@@ -320,7 +329,7 @@ public enum SubprocessRunner {
                     "status": "\(exitCode)",
                     "duration_ms": "\(Int(duration * 1000))",
                 ])
-            return SubprocessResult(stdout: stdout, stderr: stderr)
+            return SubprocessResult(stdout: stdout, stderr: stderr, exitCode: exitCode)
         } catch {
             let duration = Date().timeIntervalSince(start)
             self.log.warning(

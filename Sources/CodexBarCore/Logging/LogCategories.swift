@@ -10,6 +10,7 @@ public enum LogCategories {
     }
 
     public static let adaptiveRefresh = "adaptive-refresh"
+    public static let agentSessions = "agent-sessions"
     public static let app = "app"
     public static let auggieCLI = "auggie-cli"
     public static let browserCookieGate = "browser-cookie-gate"

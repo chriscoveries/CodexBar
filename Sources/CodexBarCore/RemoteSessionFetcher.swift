@@ -4,6 +4,9 @@ public struct RemoteSessionHostResult: Equatable, Sendable, Identifiable {
     public let host: String
     public let sessions: [AgentSession]
     public let error: String?
+    /// Benign, non-failure status for a host that answered but has nothing to offer — e.g. no
+    /// `codexbar` CLI installed. Never set alongside `error`.
+    public let notice: String?
 
     public var id: String {
         self.host
@@ -13,10 +16,11 @@ public struct RemoteSessionHostResult: Equatable, Sendable, Identifiable {
         self.error == nil
     }
 
-    public init(host: String, sessions: [AgentSession], error: String?) {
+    public init(host: String, sessions: [AgentSession], error: String?, notice: String? = nil) {
         self.host = host
         self.sessions = sessions
         self.error = error
+        self.notice = notice
     }
 }
 
@@ -97,6 +101,22 @@ public enum TailscaleStatusParser {
 public struct RemoteSessionFetcher: Sendable {
     public static let bundledCLIFallback = "/Applications/CodexBar.app/Contents/Helpers/CodexBarCLI"
 
+    private static let log = CodexBarLog.logger(LogCategories.agentSessions)
+
+    /// Bundled CLI path for the running context. Derived from the app bundle so a non-default
+    /// install location keeps working (matching the CLI installer in PreferencesAdvancedPane);
+    /// falls back to the `/Applications` constant when `Bundle.main` is not an app bundle
+    /// (CLI or test processes, widgets).
+    public static var bundledCLIPath: String {
+        guard Bundle.main.bundleURL.pathExtension == "app" else { return Self.bundledCLIFallback }
+        return Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/CodexBarCLI").path
+    }
+
+    /// Per-host benign-state memory so a persistent condition is logged once per app session
+    /// instead of on every 60s poll. A later successful attempt clears the host's entry.
+    private static let hostStateLock = NSLock()
+    private nonisolated(unsafe) static var missingCLIHosts: Set<String> = []
+
     public init() {}
 
     public func discoveredHosts(
@@ -169,8 +189,15 @@ public struct RemoteSessionFetcher: Sendable {
         guard let ssh = self.findExecutable("ssh", environment: environment) ??
             (["/usr/bin/ssh", "/bin/ssh"].first { FileManager.default.isExecutableFile(atPath: $0) })
         else { return }
-        let command = "codexbar sessions focus \(Self.shellQuote(sessionID)) || " +
-            "\(Self.shellQuote(Self.bundledCLIFallback)) sessions focus \(Self.shellQuote(sessionID))"
+        // The dynamic bundle path is correct on this Mac but may not exist on the remote
+        // host; the /Applications fallback covers remote Macs. Chain both candidates.
+        var focusCandidates = ["codexbar", Self.bundledCLIPath]
+        if Self.bundledCLIFallback != Self.bundledCLIPath {
+            focusCandidates.append(Self.bundledCLIFallback)
+        }
+        let command = focusCandidates
+            .map { "\(Self.shellQuote($0)) sessions focus \(Self.shellQuote(sessionID))" }
+            .joined(separator: " || ")
         _ = try? await SubprocessRunner.run(
             binary: ssh,
             arguments: ["-o", "BatchMode=yes", "-o", "ConnectTimeout=3", host, "sh", "-lc", Self.shellQuote(command)],
@@ -188,6 +215,8 @@ public struct RemoteSessionFetcher: Sendable {
         }
         let command = Self.remoteSessionsCommand()
         do {
+            // Non-zero exits are expected here: the remote command chain only reports a status
+            // when every CLI candidate has been tried, so the exit code classifies the outcome.
             let result = try await SubprocessRunner.run(
                 binary: ssh,
                 arguments: [
@@ -198,10 +227,49 @@ public struct RemoteSessionFetcher: Sendable {
                 ],
                 environment: environment,
                 timeout: 5,
+                acceptsNonZeroExit: true,
                 label: "fetch remote agent sessions")
+            let outcome = Self.hostResult(
+                host: host,
+                exitCode: result.exitCode,
+                stdout: result.stdout,
+                stderr: result.stderr)
+            Self.recordHostOutcome(host: host, result: outcome)
+            return outcome
+        } catch {
+            return RemoteSessionHostResult(host: host, sessions: [], error: error.localizedDescription)
+        }
+    }
+
+    /// Maps a completed remote poll (exit status + captured output) to the per-host result.
+    ///
+    /// Exit 127 means the remote `sh` found no `codexbar` CLI candidate at all — an unconfigured
+    /// host, not a fetch failure — so it surfaces as a benign `notice` instead of an `error`.
+    /// Any other non-zero exit keeps the regular error path, with the same message the runner
+    /// would have produced.
+    package static func hostResult(
+        host: String,
+        exitCode: Int32,
+        stdout: String,
+        stderr: String) -> RemoteSessionHostResult
+    {
+        guard exitCode != 127 else {
+            return RemoteSessionHostResult(
+                host: host,
+                sessions: [],
+                error: nil,
+                notice: "codexbar CLI not installed")
+        }
+        guard exitCode == 0 else {
+            return RemoteSessionHostResult(
+                host: host,
+                sessions: [],
+                error: SubprocessRunnerError.nonZeroExit(code: exitCode, stderr: stderr).localizedDescription)
+        }
+        do {
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
-            var sessions = try decoder.decode([AgentSession].self, from: Data(result.stdout.utf8))
+            var sessions = try decoder.decode([AgentSession].self, from: Data(stdout.utf8))
             for index in sessions.indices {
                 sessions[index].host = host
             }
@@ -211,16 +279,36 @@ public struct RemoteSessionFetcher: Sendable {
         }
     }
 
+    /// Remembers which hosts reported the benign missing-CLI state so the DEBUG line is emitted
+    /// once per host per app session; a later successful attempt clears the host's entry.
+    private static func recordHostOutcome(host: String, result: RemoteSessionHostResult) {
+        guard result.error == nil else { return }
+        self.hostStateLock.lock()
+        defer { self.hostStateLock.unlock() }
+        if result.notice != nil {
+            guard self.missingCLIHosts.insert(host).inserted else { return }
+            self.log.debug(
+                "Remote host has no codexbar CLI (exit 127); skipping sessions",
+                metadata: ["host": host])
+        } else {
+            self.missingCLIHosts.remove(host)
+        }
+    }
+
     /// Tries the v2 session JSON protocol first, then the legacy v1 form, for both PATH and the
     /// bundled app CLI. Each fallback is reached only when the preceding command exits non-zero.
+    /// The dynamic bundle path is correct on this Mac but may not exist remotely, so the
+    /// /Applications fallback is chained too (deduped when both resolve to the same path).
     package static func remoteSessionsCommand() -> String {
-        let bundledCLI = Self.shellQuote(Self.bundledCLIFallback)
-        return [
-            "codexbar sessions --json-v2",
-            "codexbar sessions --json",
-            "\(bundledCLI) sessions --json-v2",
-            "\(bundledCLI) sessions --json",
-        ].joined(separator: " || ")
+        var candidates = ["codexbar", Self.bundledCLIPath]
+        if Self.bundledCLIFallback != Self.bundledCLIPath {
+            candidates.append(Self.bundledCLIFallback)
+        }
+        return candidates.flatMap { cli in
+            let quoted = Self.shellQuote(cli)
+            return ["\(quoted) sessions --json-v2", "\(quoted) sessions --json"]
+        }
+        .joined(separator: " || ")
     }
 
     /// Ordered candidate paths for the `tailscale` CLI, most-preferred first.
