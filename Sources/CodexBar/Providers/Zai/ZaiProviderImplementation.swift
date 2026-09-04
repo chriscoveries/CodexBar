@@ -22,17 +22,8 @@ struct ZaiProviderImplementation: ProviderImplementation {
         .zai(context.settings.zaiSettingsSnapshot(tokenOverride: context.tokenOverride))
     }
 
-    @MainActor
-    func isAvailable(context: ProviderAvailabilityContext) -> Bool {
-        if ZaiSettingsReader.apiToken(
-            for: context.settings.zaiAPIRegion,
-            environment: context.environment) != nil
-        {
-            return true
-        }
-        context.settings.ensureZaiAPITokenLoaded()
-        return !context.settings.zaiAPIToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
+    // Availability stays true for enabled providers: a missing API key must surface as the
+    // provider's error state ("z.ai API token not found…"), not hide the status item or menu tab.
 
     @MainActor
     func settingsPickers(context: ProviderSettingsContext) -> [ProviderSettingsPickerDescriptor] {
