@@ -1,32 +1,14 @@
-import Charts
 import CodexBarCore
 import SwiftUI
 
 @MainActor
 struct PlanUtilizationHistoryChartMenuView: View {
-    private enum DisplayMode: String, CaseIterable, Identifiable {
-        case pace
-        case history
-
-        var id: Self {
-            self
-        }
-
-        var title: String {
-            switch self {
-            case .pace: L("Pace")
-            case .history: L("History")
-            }
-        }
-    }
-
     private enum Layout {
         static let chartHeight: CGFloat = 130
         static let detailHeight: CGFloat = 16
         static let emptyStateHeight: CGFloat = chartHeight + detailHeight
         static let maxPoints = 30
         static let maxAxisLabels = 4
-        static let barWidth: CGFloat = 6
     }
 
     private struct SeriesSelection: Hashable {
@@ -76,20 +58,20 @@ struct PlanUtilizationHistoryChartMenuView: View {
         let pointsByID: [Date: Point]
         let pointsByIndex: [Int: Point]
         let barColor: Color
-        let trackColor: Color
     }
 
     private let provider: UsageProvider
     private let visibleSeries: [VisibleSeries]
-    private let modelsBySeriesID: [String: Model]
     private let paceModelsBySeriesID: [String: PlanUtilizationPaceChartModel]
-    private let emptyModel: Model
     private let referenceDate: Date
     private let width: CGFloat
 
+    @AppStorage("planUsageChartSeriesID") private var storedSeriesID = ""
     @State private var selectedSeriesID: String?
-    @State private var selectedPointID: Date?
-    @State private var displayMode: DisplayMode = .pace
+
+    private var defaultSelectedSeriesID: String? {
+        Self.defaultSelectedSeriesID(storedSeriesID: self.storedSeriesID, in: self.visibleSeries)
+    }
 
     init(
         provider: UsageProvider,
@@ -104,9 +86,6 @@ struct PlanUtilizationHistoryChartMenuView: View {
             snapshot: snapshot)
         let referenceDate = Date()
         self.visibleSeries = visibleSeries
-        self.modelsBySeriesID = Dictionary(uniqueKeysWithValues: visibleSeries.map {
-            ($0.id, Self.makeModel(history: $0.history, provider: provider, referenceDate: referenceDate))
-        })
         self.paceModelsBySeriesID = Dictionary(uniqueKeysWithValues: visibleSeries.compactMap { series in
             guard let currentWindow = Self.currentWindow(
                 for: series,
@@ -125,7 +104,6 @@ struct PlanUtilizationHistoryChartMenuView: View {
             }
             return (series.id, model)
         })
-        self.emptyModel = Self.emptyModel(provider: provider)
         self.referenceDate = referenceDate
         self.width = width
     }
@@ -133,7 +111,6 @@ struct PlanUtilizationHistoryChartMenuView: View {
     var body: some View {
         let effectiveSelectedSeries = self.visibleSeries.first(where: { $0.id == self.selectedSeriesID })
             ?? self.visibleSeries.first
-        let model = effectiveSelectedSeries.flatMap { self.modelsBySeriesID[$0.id] } ?? self.emptyModel
         let paceModel = effectiveSelectedSeries.flatMap { self.paceModelsBySeriesID[$0.id] }
 
         VStack(alignment: .leading, spacing: 10) {
@@ -142,7 +119,7 @@ struct PlanUtilizationHistoryChartMenuView: View {
                     get: { effectiveSelectedSeries?.id ?? "" },
                     set: { newValue in
                         self.selectedSeriesID = newValue
-                        self.selectedPointID = nil
+                        self.storedSeriesID = newValue
                     })) {
                         ForEach(self.visibleSeries) { series in
                             Text(series.title).tag(series.id)
@@ -154,24 +131,14 @@ struct PlanUtilizationHistoryChartMenuView: View {
                         .pickerStyle(.segmented)
             }
 
-            if paceModel != nil {
-                Picker(L("Chart view"), selection: self.$displayMode) {
-                    ForEach(DisplayMode.allCases) { mode in
-                        Text(mode.title).tag(mode)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-            }
-
-            if self.displayMode == .pace, let paceModel {
+            if let paceModel {
                 PlanUtilizationPaceChartView(
                     provider: self.provider,
                     windowTitle: effectiveSelectedSeries?.title ?? L("Usage"),
                     model: paceModel,
                     currentDate: self.referenceDate,
                     width: self.width)
-            } else if model.points.isEmpty {
+            } else {
                 ZStack {
                     Text(Self.emptyStateText(title: effectiveSelectedSeries?.title))
                         .font(.footnote)
@@ -179,59 +146,15 @@ struct PlanUtilizationHistoryChartMenuView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: Layout.emptyStateHeight)
-            } else {
-                self.utilizationChart(model: model)
-                    .chartYAxis(.hidden)
-                    .chartYScale(domain: 0...100)
-                    .chartXAxis {
-                        AxisMarks(values: model.axisIndexes) { value in
-                            AxisGridLine().foregroundStyle(Color.clear)
-                            AxisTick().foregroundStyle(Color.clear)
-                            AxisValueLabel(anchor: ChartAxisLabelLayout.barCenteredAnchor) {
-                                if let raw = value.as(Double.self) {
-                                    let index = Int(raw.rounded())
-                                    if let point = model.pointsByIndex[index] {
-                                        Self.axisLabel(
-                                            for: point,
-                                            windowMinutes: effectiveSelectedSeries?.history.windowMinutes ?? 0)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    .chartLegend(.hidden)
-                    .frame(height: Layout.chartHeight)
-                    .accessibilityLabel(L("Plan utilization chart"))
-                    .accessibilityValue(
-                        model.points.isEmpty
-                            ? L("No data")
-                            : String(format: L("%d utilization samples"), model.points.count))
-                    .chartOverlay { proxy in
-                        GeometryReader { geo in
-                            MouseLocationReader { location in
-                                self.updateSelection(location: location, model: model, proxy: proxy, geo: geo)
-                            }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .contentShape(Rectangle())
-                        }
-                    }
-
-                Text(self.detailLine(model: model, windowMinutes: effectiveSelectedSeries?.history.windowMinutes ?? 0))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .frame(height: Layout.detailHeight, alignment: .leading)
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .frame(minWidth: self.width, maxWidth: .infinity, alignment: .topLeading)
         .task(id: self.visibleSeries.map(\.id).joined(separator: ",")) {
-            guard let firstVisibleSeries = self.visibleSeries.first else { return }
             guard !self.visibleSeries.contains(where: { $0.id == self.selectedSeriesID }) else { return }
-            self.selectedSeriesID = firstVisibleSeries.id
-            self.selectedPointID = nil
+            guard let restoredSeriesID = self.defaultSelectedSeriesID else { return }
+            self.selectedSeriesID = restoredSeriesID
         }
     }
 
@@ -247,6 +170,7 @@ struct PlanUtilizationHistoryChartMenuView: View {
             guard !history.entries.isEmpty else { continue }
             guard history.windowMinutes > 0 else { continue }
             let effectiveName = Self.effectiveSeriesName(provider: provider, history: history)
+            guard Self.displayableSeriesNames.contains(effectiveName) else { continue }
             guard allowedNames?.contains(effectiveName) ?? true else { continue }
 
             let canonicalWindowMinutes = effectiveName.canonicalWindowMinutes(history.windowMinutes)
@@ -371,7 +295,6 @@ struct PlanUtilizationHistoryChartMenuView: View {
         let pointsByIndex = Dictionary(uniqueKeysWithValues: points.map { ($0.index, $0) })
         let color = ProviderAccentPalette.color(for: provider)
         let barColor = Color(red: color.red, green: color.green, blue: color.blue)
-        let trackColor = MenuHighlightStyle.progressTrack(false)
 
         return Model(
             points: points,
@@ -379,22 +302,19 @@ struct PlanUtilizationHistoryChartMenuView: View {
             xDomain: self.xDomain(points: points),
             pointsByID: pointsByID,
             pointsByIndex: pointsByIndex,
-            barColor: barColor,
-            trackColor: trackColor)
+            barColor: barColor)
     }
 
     private nonisolated static func emptyModel(provider: UsageProvider) -> Model {
         let color = ProviderAccentPalette.color(for: provider)
         let barColor = Color(red: color.red, green: color.green, blue: color.blue)
-        let trackColor = MenuHighlightStyle.progressTrack(false)
         return Model(
             points: [],
             axisIndexes: [],
             xDomain: nil,
             pointsByID: [:],
             pointsByIndex: [:],
-            barColor: barColor,
-            trackColor: trackColor)
+            barColor: barColor)
     }
 
     private nonisolated static func seriesPoints(
@@ -662,20 +582,6 @@ struct PlanUtilizationHistoryChartMenuView: View {
         return deduplicated.map(Double.init)
     }
 
-    private static func axisLabel(
-        for point: Point,
-        windowMinutes: Int) -> some View
-    {
-        ChartAxisLabelLayout.dateLabel(Text(point.date.formatted(self.axisFormat(windowMinutes: windowMinutes))))
-    }
-
-    private nonisolated static func axisFormat(windowMinutes: Int) -> Date.FormatStyle {
-        if windowMinutes <= 300 {
-            return .dateTime.month(.abbreviated).day()
-        }
-        return .dateTime.month(.abbreviated).day()
-    }
-
     private nonisolated static func seriesTitle(
         name: PlanUtilizationSeriesName,
         metadata: ProviderMetadata?,
@@ -786,115 +692,42 @@ struct PlanUtilizationHistoryChartMenuView: View {
         self.emptyStateText(title: title)
     }
     #endif
-
-    private func xValue(for index: Int) -> PlottableValue<Double> {
-        .value(L("Series"), Double(index))
-    }
-
-    @ViewBuilder
-    private func utilizationChart(model: Model) -> some View {
-        if let xDomain = model.xDomain {
-            Chart {
-                self.utilizationChartContent(model: model)
-            }
-            .chartXScale(domain: xDomain, range: .plotDimension(padding: ChartAxisLabelLayout.dateLabelEdgePadding))
-        } else {
-            Chart {
-                self.utilizationChartContent(model: model)
-            }
-            .chartXScale(range: .plotDimension(padding: ChartAxisLabelLayout.dateLabelEdgePadding))
-        }
-    }
-
-    @ChartContentBuilder
-    private func utilizationChartContent(model: Model) -> some ChartContent {
-        ForEach(model.points) { point in
-            BarMark(
-                x: self.xValue(for: point.index),
-                yStart: .value(L("Capacity Start"), 0),
-                yEnd: .value(L("Capacity End"), 100),
-                width: .fixed(Layout.barWidth))
-                .foregroundStyle(model.trackColor)
-            BarMark(
-                x: self.xValue(for: point.index),
-                yStart: .value(L("Utilization Start"), 0),
-                yEnd: .value(L("Utilization End"), point.usedPercent),
-                width: .fixed(Layout.barWidth))
-                .foregroundStyle(model.barColor)
-        }
-        if let selected = self.selectedPoint(model: model) {
-            RuleMark(x: self.xValue(for: selected.index))
-                .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
-                .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
-        }
-    }
-
-    private func selectedPoint(model: Model) -> Point? {
-        guard let selectedPointID else { return nil }
-        return model.pointsByID[selectedPointID]
-    }
-
-    private func detailLine(model: Model, windowMinutes: Int) -> String {
-        let activePoint = self.selectedPoint(model: model) ?? model.points.last
-        return Self.detailLine(point: activePoint, windowMinutes: windowMinutes)
-    }
-
-    private func updateSelection(
-        location: CGPoint?,
-        model: Model,
-        proxy: ChartProxy,
-        geo: GeometryProxy)
-    {
-        guard let location else {
-            if self.selectedPointID != nil {
-                self.selectedPointID = nil
-            }
-            return
-        }
-
-        guard let plotAnchor = proxy.plotFrame else { return }
-        let plotFrame = geo[plotAnchor]
-        guard plotFrame.contains(location) else {
-            if self.selectedPointID != nil {
-                self.selectedPointID = nil
-            }
-            return
-        }
-
-        let xInPlot = location.x - plotFrame.origin.x
-        guard let xValue: Double = proxy.value(atX: xInPlot) else { return }
-
-        var best: (id: Date, distance: Double)?
-        for point in model.points {
-            let distance = abs(Double(point.index) - xValue)
-            if let current = best {
-                if distance < current.distance {
-                    best = (point.id, distance)
-                }
-            } else {
-                best = (point.id, distance)
-            }
-        }
-
-        // Stay on the last selected bar when cursor is in the gap between bars; only switch
-        // selection when the cursor is over the bar's own visual body.
-        if let best, let bestPoint = model.pointsByID[best.id],
-           let barX = proxy.position(forX: Double(bestPoint.index))
-        {
-            guard ChartBarHoverSelection.accepts(
-                distanceFromBarCenter: abs(location.x - (plotFrame.origin.x + barX)),
-                barHalfWidth: Layout.barWidth / 2,
-                selectableCount: model.points.count)
-            else { return }
-        }
-
-        if self.selectedPointID != best?.id {
-            self.selectedPointID = best?.id
-        }
-    }
 }
 
 extension PlanUtilizationHistoryChartMenuView {
+    /// The plan usage chart only offers the core rate windows; tertiary (e.g. Claude Opus) and
+    /// extra rate-window series are tracked elsewhere and never appear as chart tabs.
+    private nonisolated static let displayableSeriesNames: Set<PlanUtilizationSeriesName> = [
+        .session,
+        .weekly,
+        .monthly,
+    ]
+
+    private nonisolated static let defaultSeriesPriority: [PlanUtilizationSeriesName] = [
+        .session,
+        .weekly,
+        .monthly,
+    ]
+
+    /// Restores the persisted series when it is still visible; otherwise defaults in priority
+    /// order (session, weekly, monthly) before falling back to the first available series.
+    private nonisolated static func defaultSelectedSeriesID(
+        storedSeriesID: String?,
+        in visibleSeries: [VisibleSeries]) -> String?
+    {
+        if let storedSeriesID,
+           visibleSeries.contains(where: { $0.id == storedSeriesID })
+        {
+            return storedSeriesID
+        }
+        for name in Self.defaultSeriesPriority {
+            if let match = visibleSeries.first(where: { $0.selection.name == name }) {
+                return match.id
+            }
+        }
+        return visibleSeries.first?.id
+    }
+
     private nonisolated static func resetMatchesHistory(
         _ window: RateWindow,
         latestReset: Date?) -> Bool
@@ -1022,6 +855,17 @@ extension PlanUtilizationHistoryChartMenuView {
             resetsAt: model.resetsAt,
             observedDates: model.observedPoints.map(\.date),
             rawUsedPercents: model.observedPoints.map(\.rawUsedPercent))
+    }
+
+    nonisolated static func _defaultSelectedSeriesIDForTesting(
+        storedSeriesID: String?,
+        histories: [PlanUtilizationSeriesHistory],
+        provider: UsageProvider,
+        snapshot: UsageSnapshot? = nil) -> String?
+    {
+        self.defaultSelectedSeriesID(
+            storedSeriesID: storedSeriesID,
+            in: self.visibleSeries(histories: histories, provider: provider, snapshot: snapshot))
     }
     #endif
 
