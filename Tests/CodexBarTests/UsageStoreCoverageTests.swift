@@ -794,6 +794,26 @@ extension UsageStoreCoverageTests {
     }
 
     @Test
+    func `prior snapshot survives quota and credential fetch failures`() {
+        let errors: [LocalizedTestError] = [
+            LocalizedTestError("HTTP 403 (permission or quota denied)"),
+            LocalizedTestError("HTTP 401: Kimi Code API key is invalid or expired. Please refresh your API key."),
+            LocalizedTestError("Unauthorized"),
+            LocalizedTestError("You have exceeded your quota"),
+        ]
+
+        for error in errors {
+            #expect(UsageStore.shouldPreservePriorSnapshot(after: error, hadPriorData: true))
+        }
+        #expect(!UsageStore.shouldPreservePriorSnapshot(
+            after: LocalizedTestError("HTTP 500 internal server error"),
+            hadPriorData: true))
+        #expect(!UsageStore.shouldPreservePriorSnapshot(
+            after: LocalizedTestError("HTTP 403 (permission or quota denied)"),
+            hadPriorData: false))
+    }
+
+    @Test
     func `background work settings observation ignores menu provider selection churn`() async throws {
         let settings = Self.makeSettingsStore(suite: "UsageStoreCoverageTests-switcher-selection-observation")
         settings.refreshFrequency = .manual
