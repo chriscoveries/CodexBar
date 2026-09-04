@@ -868,6 +868,39 @@ extension SettingsStore {
         }
     }
 
+    /// Monthly spend budget (USD) for the platform OpenAI provider. Unset or unusable values mean
+    /// the feature is off, and the provider keeps its no-pace snapshot behavior.
+    var openaiMonthlyBudgetUSD: Double? {
+        get {
+            guard self.userDefaults.object(forKey: "openaiMonthlyBudgetUSD") != nil else { return nil }
+            let budget = self.userDefaults.double(forKey: "openaiMonthlyBudgetUSD")
+            guard budget.isFinite, budget > 0 else { return nil }
+            return budget
+        }
+        set {
+            if let newValue, newValue.isFinite, newValue > 0 {
+                self.userDefaults.set(newValue, forKey: "openaiMonthlyBudgetUSD")
+            } else {
+                self.userDefaults.removeObject(forKey: "openaiMonthlyBudgetUSD")
+            }
+            self.noteBackgroundWorkSettingsChanged()
+        }
+    }
+
+    /// Day of month (clamped to 1-28) the OpenAI budget window resets on. Defaults to 1.
+    var openaiBudgetResetDay: Int {
+        get {
+            let day = self.userDefaults.object(forKey: "openaiBudgetResetDay") as? Int
+                ?? Int(self.userDefaults.double(forKey: "openaiBudgetResetDay"))
+            return OpenAIAPISpendBudget.sanitizedResetDay(day)
+        }
+        set {
+            self.userDefaults.set(
+                OpenAIAPISpendBudget.sanitizedResetDay(newValue),
+                forKey: "openaiBudgetResetDay")
+        }
+    }
+
     var backgroundWorkLowPowerModePreference: LowPowerModePreference {
         get { self.defaultsState.backgroundWorkLowPowerModePreference }
         set {

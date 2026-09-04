@@ -1,6 +1,7 @@
 import AppKit
 import CodexBarCore
 import Foundation
+import SwiftUI
 
 struct OpenAIAPIProviderImplementation: ProviderImplementation {
     let id: UsageProvider = .openai
@@ -14,6 +15,8 @@ struct OpenAIAPIProviderImplementation: ProviderImplementation {
     func observeSettings(_ settings: SettingsStore) {
         _ = settings[providerConfig: .openai, field: .apiKey]
         _ = settings[providerConfig: .openai, field: .secretWorkspace(logField: "projectID")]
+        _ = settings.openaiMonthlyBudgetUSD
+        _ = settings.openaiBudgetResetDay
     }
 
     @MainActor
@@ -27,7 +30,24 @@ struct OpenAIAPIProviderImplementation: ProviderImplementation {
 
     @MainActor
     func settingsFields(context: ProviderSettingsContext) -> [ProviderSettingsFieldDescriptor] {
-        [
+        let monthlyBudgetBinding = Binding(
+            get: {
+                guard let budget = context.settings.openaiMonthlyBudgetUSD else { return "" }
+                return budget == budget.rounded() ? String(Int(budget)) : String(budget)
+            },
+            set: { text in
+                context.settings.openaiMonthlyBudgetUSD =
+                    Double(text.trimmingCharacters(in: .whitespacesAndNewlines))
+            })
+        let budgetResetDayBinding = Binding(
+            get: { String(context.settings.openaiBudgetResetDay) },
+            set: { text in
+                context.settings.openaiBudgetResetDay =
+                    OpenAIAPISpendBudget.sanitizedResetDay(
+                        Int(text.trimmingCharacters(in: .whitespacesAndNewlines)))
+            })
+
+        return [
             ProviderSettingsFieldDescriptor(
                 id: "openai-api-key",
                 title: "Admin API key",
@@ -72,6 +92,26 @@ struct OpenAIAPIProviderImplementation: ProviderImplementation {
                             }
                         }),
                 ],
+                isVisible: nil,
+                onActivate: nil),
+            ProviderSettingsFieldDescriptor(
+                id: "openai-monthly-budget",
+                title: "Monthly budget (USD)",
+                subtitle: "Set your monthly OpenAI budget to get a spend pace bar. Leave empty to disable.",
+                kind: .plain,
+                placeholder: "e.g. 120",
+                binding: monthlyBudgetBinding,
+                actions: [],
+                isVisible: nil,
+                onActivate: nil),
+            ProviderSettingsFieldDescriptor(
+                id: "openai-budget-reset-day",
+                title: "Budget resets on day",
+                subtitle: "Day of month your budget resets (1-28).",
+                kind: .plain,
+                placeholder: "1",
+                binding: budgetResetDayBinding,
+                actions: [],
                 isVisible: nil,
                 onActivate: nil),
         ]

@@ -53,6 +53,7 @@ public enum OpenAIAPIProviderDescriptor {
                 noDataMessage: { "OpenAI usage needs an Admin API key for organization usage." },
                 menuHintLines: [.literal("Reported by OpenAI Admin API organization usage.")],
                 showsCostMenuSection: false),
+            pace: .calendarMonthResetWindow,
             presentation: ProviderUsagePresentation(
                 costPresenter: { snapshot in
                     let style: ProviderCostMenuCardStyle = (snapshot.providerCost?.limit ?? 1) <= 0
@@ -86,7 +87,12 @@ public enum OpenAIAPIProviderDescriptor {
             sourceModes: [.auto, .api],
             pipeline: ProviderFetchPipeline(resolveStrategies: { context in
                 let swift = OpenAIAPIBalanceFetchStrategy()
-                guard ProviderPluginPrototype.isEnabled(environment: context.env) else { return [swift] }
+                // The openai.js plugin conversion cannot attach a spend budget to its snapshot, so
+                // when a budget is configured the Admin API strategy is authoritative and the script
+                // path is skipped rather than silently dropping the budget-paced window.
+                guard ProviderPluginPrototype.isEnabled(environment: context.env),
+                      OpenAIAPISettingsReader.monthlyBudgetUSD(environment: context.env) == nil
+                else { return [swift] }
                 return [
                     ScriptFetchStrategy(
                         id: "openai.js",
@@ -138,11 +144,18 @@ struct OpenAIAPIBalanceFetchStrategy: ProviderFetchStrategy {
         guard let credential = OpenAIAPIUsageCredential(environment: context.env) else {
             throw OpenAIAPISettingsError.missingToken
         }
+        // Budget pacing rides the same environment channel as the credential keys: nil keeps the
+        // snapshot conversion on its no-pace behavior.
+        let budget = OpenAIAPISpendBudget(
+            monthlyUSD: OpenAIAPISettingsReader.monthlyBudgetUSD(environment: context.env),
+            resetDay: OpenAIAPISettingsReader.budgetResetDay(environment: context.env))
 
         do {
-            let usage = try await self.usageFetcher(credential, context.costUsageHistoryDays)
+            let usage = try await self.usageFetcher(
+                credential,
+                Self.historyDaysForBudgetPace(context: context, budget: budget))
             return self.makeResult(
-                usage: usage.toUsageSnapshot(),
+                usage: usage.toUsageSnapshot(budget: budget),
                 sourceLabel: credential.sourceLabel)
         } catch {
             let usageError = error
@@ -166,6 +179,27 @@ struct OpenAIAPIBalanceFetchStrategy: ProviderFetchStrategy {
 
     func shouldFallback(on _: Error, context _: ProviderFetchContext) -> Bool {
         false
+    }
+
+    /// Month-to-date budget pacing needs a bucket for every day of the elapsed budget period. The
+    /// user-configured cost history depth (default 30) can be shorter than that period — a 31-day
+    /// cycle starting on the reset day runs out of fetched buckets before `monthToDateSpend` reaches
+    /// the period start — which would silently understate the spend and the pace derived from it.
+    /// Widen the fetch to cover the whole elapsed period when a budget is configured; without a
+    /// budget the history depth is used unchanged. The fetcher clamps the depth to its own maximum.
+    private static func historyDaysForBudgetPace(
+        context: ProviderFetchContext,
+        budget: OpenAIAPISpendBudget?,
+        now: Date = Date()) -> Int
+    {
+        guard let budget else { return context.costUsageHistoryDays }
+        let calendar = Calendar.current
+        let periodStart = budget.periodStart(containing: now, calendar: calendar)
+        let elapsedDays = (calendar.dateComponents(
+            [.day],
+            from: calendar.startOfDay(for: periodStart),
+            to: calendar.startOfDay(for: now)).day ?? 0) + 1
+        return max(context.costUsageHistoryDays, elapsedDays)
     }
 
     private static func fetchUsage(
@@ -203,5 +237,34 @@ struct OpenAIAPIUsageCredential: Equatable {
 
     var allowsLegacyBalanceFallback: Bool {
         self.projectID == nil || !self.usesAdminKey
+    }
+}
+
+extension OpenAIAPISettingsReader {
+    // Budget pacing rides the same environment channel as the credential keys: the app projects
+    // its SettingsStore values into the fetch environment (see `ProviderRegistry.makeEnvironment`,
+    // alongside the OPENAI_ADMIN_KEY/OPENAI_PROJECT_ID projections) and the Admin API strategy
+    // reads them back from `ProviderFetchContext.env`.
+    public static let monthlyBudgetUSDEnvironmentKey = "OPENAI_MONTHLY_BUDGET_USD"
+    public static let budgetResetDayEnvironmentKey = "OPENAI_BUDGET_RESET_DAY"
+
+    public static func monthlyBudgetUSD(
+        environment: [String: String] = ProcessInfo.processInfo.environment) -> Double?
+    {
+        guard let raw = self.cleaned(environment[self.monthlyBudgetUSDEnvironmentKey]),
+              let budget = Double(raw),
+              budget.isFinite,
+              budget > 0
+        else { return nil }
+        return budget
+    }
+
+    public static func budgetResetDay(
+        environment: [String: String] = ProcessInfo.processInfo.environment) -> Int?
+    {
+        guard let raw = self.cleaned(environment[self.budgetResetDayEnvironmentKey]),
+              let day = Int(raw)
+        else { return nil }
+        return OpenAIAPISpendBudget.sanitizedResetDay(day)
     }
 }

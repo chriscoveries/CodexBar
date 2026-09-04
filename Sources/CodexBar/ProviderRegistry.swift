@@ -196,6 +196,13 @@ struct ProviderRegistry {
                 env = CodexHomeScope.scopedEnvironment(base: env, codexHome: profileHomePath)
             }
         }
+        if provider == .openai {
+            if let budget = settings.openaiMonthlyBudgetUSD {
+                env[OpenAIAPISettingsReader.monthlyBudgetUSDEnvironmentKey] = String(budget)
+            }
+            env[OpenAIAPISettingsReader.budgetResetDayEnvironmentKey] =
+                String(settings.openaiBudgetResetDay)
+        }
         return env
     }
 
