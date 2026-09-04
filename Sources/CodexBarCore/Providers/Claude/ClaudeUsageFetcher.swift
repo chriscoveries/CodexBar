@@ -406,7 +406,8 @@ public struct ClaudeUsageFetcher: ClaudeUsageFetching, Sendable {
                 allowBackgroundDelegatedRefresh: self.fetcher.allowBackgroundDelegatedRefresh)
 
             let delegatedResult = await ClaudeUsageFetcher.attemptDelegatedRefresh(
-                environment: self.fetcher.environment)
+                environment: self.fetcher.environment,
+                backgroundTokenRepairAllowed: self.fetcher.allowBackgroundDelegatedRefresh)
             let delegatedOutcome = delegatedResult.outcome
             ClaudeUsageFetcher.log.info(
                 "Claude OAuth delegated refresh attempted",
@@ -951,7 +952,8 @@ extension ClaudeUsageFetcher {
     private static func attemptDelegatedRefresh(
         now: Date = Date(),
         timeout: TimeInterval = 15,
-        environment: [String: String] = ProcessInfo.processInfo.environment)
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        backgroundTokenRepairAllowed: Bool = false)
         async -> ClaudeOAuthDelegatedRefreshCoordinator.AttemptResult
     {
         #if DEBUG
@@ -962,7 +964,8 @@ extension ClaudeUsageFetcher {
         return await ClaudeOAuthDelegatedRefreshCoordinator.attemptDetailed(
             now: now,
             timeout: timeout,
-            environment: environment)
+            environment: environment,
+            backgroundTokenRepairAllowed: backgroundTokenRepairAllowed)
     }
 
     private static func delegatedRetryFailureMetadata(
