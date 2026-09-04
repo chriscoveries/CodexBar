@@ -257,6 +257,30 @@ struct SettingsStoreAdditionalTests {
     }
 
     @Test
+    func `menu text size defaults to regular maps multipliers and persists`() throws {
+        let suite = "SettingsStoreAdditionalTests-menu-text-scale"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        let configStore = testConfigStore(suiteName: suite)
+
+        let initial = SettingsStore(userDefaults: defaults, configStore: configStore)
+        #expect(initial.menuTextScale == .regular)
+        #expect(initial.menuTextScale.multiplier == 1.0)
+        #expect(defaults.object(forKey: "menuTextScale") == nil)
+        #expect(MenuTextScaleOption.bigger.multiplier == 1.15)
+        #expect(MenuTextScaleOption.biggest.multiplier == 1.3)
+
+        initial.menuTextScale = .biggest
+        #expect(initial.menuTextScale == .biggest)
+        #expect(initial.menuTextScale.multiplier == 1.3)
+        #expect(defaults.string(forKey: "menuTextScale") == "biggest")
+
+        let reloaded = SettingsStore(userDefaults: defaults, configStore: configStore)
+        #expect(reloaded.menuTextScale == .biggest)
+        #expect(reloaded.menuTextScale.multiplier == 1.3)
+    }
+
+    @Test
     func `detects token cost usage sources from filesystem`() throws {
         let fm = FileManager.default
         let root = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)

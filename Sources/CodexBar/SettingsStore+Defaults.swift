@@ -509,6 +509,16 @@ extension SettingsStore {
         }
     }
 
+    /// Text size for the SwiftUI content hosted inside dropdown menus. Display-only: the menu
+    /// rebuild and card height re-measure ride on the `menuObservationToken` observed change.
+    var menuTextScale: MenuTextScaleOption {
+        get { MenuTextScaleOption(rawValue: self.defaultsState.menuTextScaleRaw) ?? .regular }
+        set {
+            self.defaultsState.menuTextScaleRaw = newValue.rawValue
+            self.userDefaults.set(newValue.rawValue, forKey: "menuTextScale")
+        }
+    }
+
     /// User-tunable vertical nudge for the menu bar title, clamped to -20...20.
     /// Positive moves content up, negative moves it down; 0 keeps the optical default.
     var menuBarLayoutVerticalAdjustment: Int {

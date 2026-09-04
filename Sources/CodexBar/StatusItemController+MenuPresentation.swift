@@ -905,6 +905,25 @@ struct MenuCardSectionContainerView<Content: View>: View {
     }
 }
 
+/// Applies the Menu Text Size setting to menu-hosted SwiftUI content. The multiplier rides on
+/// SwiftUI dynamic type (system default `.large`; `.xLarge` ≈ 1.15x, `.xxLarge` ≈ 1.3x) so every
+/// semantic text style (`.body`, `.footnote`, …) reflows and the `NSHostingView` fitting-size
+/// measurements that drive menu row heights grow with the text. `scaleEffect` was rejected: it
+/// stretches glyphs without changing layout, so every row height would need manual compensation.
+/// `.regular` leaves the user's system text size untouched.
+extension View {
+    @ViewBuilder
+    func menuTextScale(_ option: MenuTextScaleOption) -> some View {
+        if option == .bigger {
+            self.environment(\.dynamicTypeSize, .xLarge)
+        } else if option == .biggest {
+            self.environment(\.dynamicTypeSize, .xxLarge)
+        } else {
+            self
+        }
+    }
+}
+
 @MainActor
 @Observable
 final class MenuCardInteractiveRegionStore {

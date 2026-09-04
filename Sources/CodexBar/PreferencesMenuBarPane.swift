@@ -39,6 +39,18 @@ struct MenuBarPane: View {
                             + L("menu_bar_inactive_display_contrast_subtitle"))
                 }
                 .disabled(!Self.inactiveDisplayContrastAvailable(for: self.settings.menuBarIconStyle))
+
+                SettingsMenuPicker(
+                    selection: self.$settings.menuTextScale,
+                    options: MenuBarSettingsMenuOptions.menuTextSizes,
+                    label: {
+                        SettingsRowLabel(
+                            L("Menu Text Size"),
+                            subtitle: L("Scales the text inside the dropdown menu cards and charts."))
+                    },
+                    optionLabel: { option in
+                        Text(option.label)
+                    })
             } header: {
                 Text(L("section_icon"))
             }

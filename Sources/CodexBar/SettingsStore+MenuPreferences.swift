@@ -122,6 +122,31 @@ extension String {
     }
 }
 
+/// Text size for the SwiftUI content hosted inside dropdown menus (provider cards, charts).
+/// The multiplier is the setting's canonical semantic; hosted content maps it onto SwiftUI
+/// dynamic type so semantic text styles reflow instead of being geometrically stretched.
+enum MenuTextScaleOption: String, CaseIterable {
+    case regular
+    case bigger
+    case biggest
+
+    var label: String {
+        switch self {
+        case .regular: L("Default")
+        case .bigger: L("Bigger")
+        case .biggest: L("Biggest")
+        }
+    }
+
+    var multiplier: CGFloat {
+        switch self {
+        case .regular: 1.0
+        case .bigger: 1.15
+        case .biggest: 1.3
+        }
+    }
+}
+
 extension SettingsStore {
     var menuBarIconStyle: MenuBarIconStyle {
         get {

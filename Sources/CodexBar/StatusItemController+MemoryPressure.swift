@@ -36,7 +36,7 @@ extension StatusItemController {
                 id: "debug-memory-pressure-card",
                 scope: UsageProvider.codex.rawValue,
                 width: 30000,
-                textScale: Self.menuCardHeightTextScaleToken(),
+                textScale: Self.menuCardHeightTextScaleToken(menuTextScale: self.settings.menuTextScale),
                 fingerprint: "debug-memory-pressure"),
         ] = 44
         self.measuredStandardMenuWidthCache["debug-memory-pressure-width"] = 300
