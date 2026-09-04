@@ -11,12 +11,13 @@ extension StatusItemController {
 
     /// Measured card height also depends on the resolved font sizes, which the menu cards
     /// derive from semantic text styles (`.body`, `.footnote`, …). Those scale with the
-    /// macOS system text-size / Dynamic Type setting, which is neither part of the content
-    /// fingerprint nor invalidated on rebuild. Fold the current resolved scale into the key
-    /// so a runtime text-size change forces a fresh measurement instead of returning a
-    /// height measured at the old scale (clipped / over-tall cards).
-    static func menuCardHeightTextScaleToken() -> Int {
-        Int((NSFont.preferredFont(forTextStyle: .body).pointSize * 100).rounded())
+    /// macOS system text-size / Dynamic Type setting and with CodexBar's Menu Text Size
+    /// setting (applied as dynamic type on the hosted content), neither of which is part of
+    /// the content fingerprint nor invalidated on rebuild. Fold the current resolved scale
+    /// into the key so a runtime text-size change forces a fresh measurement instead of
+    /// returning a height measured at the old scale (clipped / over-tall cards).
+    static func menuCardHeightTextScaleToken(menuTextScale: MenuTextScaleOption = .regular) -> Int {
+        Int((NSFont.preferredFont(forTextStyle: .body).pointSize * menuTextScale.multiplier * 100).rounded())
     }
 
     func cachedMenuCardHeight(
@@ -30,7 +31,7 @@ extension StatusItemController {
             id: id,
             scope: scope,
             width: Int((width * 100).rounded()),
-            textScale: Self.menuCardHeightTextScaleToken(),
+            textScale: Self.menuCardHeightTextScaleToken(menuTextScale: self.settings.menuTextScale),
             fingerprint: fingerprint ?? "version:\(self.menuSession.contentVersion)")
         if let cached = self.menuCardHeightCache[key] {
             return cached

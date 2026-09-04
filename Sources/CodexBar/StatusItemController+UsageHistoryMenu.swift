@@ -54,6 +54,7 @@ extension StatusItemController {
             histories: histories,
             snapshot: snapshot,
             width: width)
+            .menuTextScale(self.settings.menuTextScale)
         let hosting = UsageHistoryMenuHostingView(rootView: chartView)
         hosting.frame = NSRect(
             origin: .zero,
