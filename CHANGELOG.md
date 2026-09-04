@@ -4,6 +4,7 @@
 
 ### Fixed
 - Codex: recover subscription renewal and expiration dates through optional OpenAI web billing capture, without delaying app usage or allowing late results to replace newer dashboards or cross accounts (#3373). Thanks @emanuelst!
+- Kimi: show API membership and standalone CLI versions, retry rejected automatic web sessions, and preserve completed quotas when optional plan metadata stalls; cancelled refreshes stop before further browser reads (#3414). Thanks @xirong!
 
 ## 0.56.5 — 2026-09-04
 
