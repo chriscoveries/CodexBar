@@ -538,6 +538,20 @@ struct ClaudeOAuthFetchStrategy: ProviderFetchStrategy {
     let id: String = "claude.oauth"
     let kind: ProviderFetchKind = .oauth
 
+    /// App-persisted opt-in (`SettingsStore.claudeAllowBackgroundTokenRepair`): allows CodexBar to
+    /// run the Claude CLI in the background to refresh an expired OAuth token.
+    private static let claudeAllowBackgroundTokenRepairKey = "claudeAllowBackgroundTokenRepair"
+    private static var backgroundTokenRepairAllowed: Bool {
+        #if DEBUG
+        // Unit tests must not inherit the developer's persisted opt-in.
+        if KeychainTestSafety.shouldIsolateUserStateUnderTests() {
+            return false
+        }
+        #endif
+        return ClaudeOAuthKeychainPromptPreference.applicationUserDefaults.bool(
+            forKey: Self.claudeAllowBackgroundTokenRepairKey)
+    }
+
     #if DEBUG
     @TaskLocal static var nonInteractiveCredentialRecordOverride: ClaudeOAuthCredentialRecord?
     @TaskLocal static var claudeCLIAvailableOverride: Bool?
@@ -636,9 +650,13 @@ struct ClaudeOAuthFetchStrategy: ProviderFetchStrategy {
                 guard ProviderInteractionContext.current == .background else { return true }
                 // An expired Claude CLI credential requires the delegated Claude CLI refresh path.
                 // That child process can access Keychain outside CodexBar's no-UI controls, so do
-                // not plan it during background Auto refresh without an explicit opt-in.
+                // not plan it during background Auto refresh without an explicit opt-in, and never
+                // under the 'never' Keychain prompt policy (delegated refresh would deterministically
+                // refuse to spawn).
                 guard !KeychainAccessGate.isDisabled,
+                      ClaudeOAuthKeychainPromptPreference.storedMode() != .never,
                       ClaudeOAuthKeychainPromptPreference.storedMode() == .always
+                          || Self.backgroundTokenRepairAllowed
                 else {
                     return false
                 }
@@ -690,7 +708,11 @@ struct ClaudeOAuthFetchStrategy: ProviderFetchStrategy {
             oauthKeychainPromptCooldownEnabled: context.sourceMode == .auto,
             oauthSafeCredentialSourcesOnly: context.sourceMode == .auto,
             preserveInvalidOAuthCache: context.sourceMode == .oauth,
-            allowBackgroundDelegatedRefresh: false,
+            // Opt-in background token repair (app runtime only): allows CodexBar to run the Claude
+            // CLI in the background to refresh an expired OAuth token. The fetcher still honors the
+            // 'never' Keychain prompt policy.
+            allowBackgroundDelegatedRefresh: context.runtime == .app
+                && Self.backgroundTokenRepairAllowed,
             useWebExtras: useWebExtras,
             manualCookieHeader: webEnrichmentAccess.manualCookieHeader,
             webOrganizationID: context.settings?.claude?.organizationID,

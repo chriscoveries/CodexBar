@@ -62,7 +62,8 @@ public enum ClaudeOAuthDelegatedRefreshCoordinator {
     static func attemptDetailed(
         now: Date = Date(),
         timeout: TimeInterval = 8,
-        environment: [String: String] = ProcessInfo.processInfo.environment) async -> AttemptResult
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        backgroundTokenRepairAllowed: Bool = false) async -> AttemptResult
     {
         if Task.isCancelled {
             return AttemptResult(.attemptedFailed("Cancelled."))
@@ -72,7 +73,8 @@ public enum ClaudeOAuthDelegatedRefreshCoordinator {
             now: now,
             timeout: timeout,
             environment: environment,
-            interaction: ProviderInteractionContext.current)
+            interaction: ProviderInteractionContext.current,
+            backgroundTokenRepairAllowed: backgroundTokenRepairAllowed)
         #if DEBUG
         if case .joinThenRetry = decision {
             self.userInitiatedBackgroundJoinObserverForTesting?()
@@ -92,14 +94,22 @@ public enum ClaudeOAuthDelegatedRefreshCoordinator {
             if result.isUnreadableAfterRefresh { return result }
             switch result.outcome {
             case .attemptedFailed, .skippedByCooldown, .skippedByPromptPolicy, .cliUnavailable:
-                return await self.attemptDetailed(now: now, timeout: timeout, environment: environment)
+                return await self.attemptDetailed(
+                    now: now,
+                    timeout: timeout,
+                    environment: environment,
+                    backgroundTokenRepairAllowed: backgroundTokenRepairAllowed)
             case .attemptedSucceeded:
                 return result
             }
         case let .joinDifferentProfileThenRetry(id, task, state):
             _ = await task.value
             self.clearInFlightTaskIfStillCurrent(id: id, state: state)
-            return await self.attemptDetailed(now: now, timeout: timeout, environment: environment)
+            return await self.attemptDetailed(
+                now: now,
+                timeout: timeout,
+                environment: environment,
+                backgroundTokenRepairAllowed: backgroundTokenRepairAllowed)
         case let .start(id, task, state):
             let result = await task.value
             self.clearInFlightTaskIfStillCurrent(id: id, state: state)
@@ -120,6 +130,9 @@ public enum ClaudeOAuthDelegatedRefreshCoordinator {
         let interaction: ProviderInteraction
         let readStrategy: ClaudeOAuthKeychainReadStrategy
         let promptMode: ClaudeOAuthKeychainPromptMode
+        // App opt-in (`claudeAllowBackgroundTokenRepair`) forwarded by the fetcher: lets a
+        // background attempt proceed when the prompt mode is not `.always`.
+        let backgroundTokenRepairAllowed: Bool
         let keychainAccessDisabled: Bool
         let keychainReadAllowed: Bool
         let hasSelectedProfileOAuthCredentialsFile: Bool
@@ -134,7 +147,8 @@ public enum ClaudeOAuthDelegatedRefreshCoordinator {
         now: Date,
         timeout: TimeInterval,
         environment: [String: String],
-        interaction: ProviderInteraction) -> InFlightDecision
+        interaction: ProviderInteraction,
+        backgroundTokenRepairAllowed: Bool) -> InFlightDecision
     {
         let state = self.currentStateStorage
         let profileIdentifier = ClaudeOAuthCredentialsStore.credentialsProfileIdentifier(environment: environment)
@@ -169,6 +183,7 @@ public enum ClaudeOAuthDelegatedRefreshCoordinator {
             // The delegated Claude process is an opaque Keychain boundary. Its policy must come
             // from the user's stored preference, not the strategy-adjusted mode used by our own reads.
             promptMode: ClaudeOAuthKeychainPromptPreference.storedMode(),
+            backgroundTokenRepairAllowed: backgroundTokenRepairAllowed,
             keychainAccessDisabled: KeychainAccessGate.isDisabled,
             keychainReadAllowed: ClaudeOAuthCredentialsStore.keychainAccessAllowed,
             hasSelectedProfileOAuthCredentialsFile: ClaudeOAuthCredentialsStore
@@ -187,6 +202,7 @@ public enum ClaudeOAuthDelegatedRefreshCoordinator {
             // The delegated Claude process is an opaque Keychain boundary. Its policy must come
             // from the user's stored preference, not the strategy-adjusted mode used by our own reads.
             promptMode: ClaudeOAuthKeychainPromptPreference.storedMode(),
+            backgroundTokenRepairAllowed: backgroundTokenRepairAllowed,
             keychainAccessDisabled: KeychainAccessGate.isDisabled,
             keychainReadAllowed: ClaudeOAuthCredentialsStore.keychainAccessAllowed,
             hasSelectedProfileOAuthCredentialsFile: ClaudeOAuthCredentialsStore
@@ -228,9 +244,11 @@ public enum ClaudeOAuthDelegatedRefreshCoordinator {
 
         // `/status` is an opaque Claude CLI invocation and may launch `/usr/bin/security` outside
         // CodexBar's own no-UI query controls. Background work may not cross that boundary unless
-        // the user explicitly opted into always allowing Keychain access.
+        // the user explicitly opted into always allowing Keychain access, or explicitly opted into
+        // background token repair (which still honors the 'never' prompt policy upstream).
         if configuration.interaction == .background,
-           configuration.keychainAccessDisabled || configuration.promptMode != .always
+           configuration.keychainAccessDisabled
+               || (configuration.promptMode != .always && !configuration.backgroundTokenRepairAllowed)
         {
             self.log.info("Claude OAuth delegated refresh skipped by Keychain prompt policy")
             return AttemptResult(.skippedByPromptPolicy)

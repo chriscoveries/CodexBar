@@ -760,6 +760,21 @@ extension SettingsStore {
         }
     }
 
+    /// Explicit opt-in for Claude OAuth background token repair: allows CodexBar to run the Claude
+    /// CLI in the background to refresh an expired OAuth token instead of leaving a stale pace
+    /// snapshot. `ClaudeOAuthFetchStrategy` reads this flag back through the shared application
+    /// defaults domain, the same way `ClaudeOAuthDirectKeychainReadConsent` is resolved.
+    var claudeAllowBackgroundTokenRepair: Bool {
+        get { self.userDefaults.bool(forKey: "claudeAllowBackgroundTokenRepair") }
+        set {
+            self.userDefaults.set(newValue, forKey: "claudeAllowBackgroundTokenRepair")
+            CodexBarLog.logger(LogCategories.settings).info(
+                "Claude background token repair updated",
+                metadata: ["allowed": newValue ? "1" : "0"])
+            self.noteBackgroundWorkSettingsChanged()
+        }
+    }
+
     var claudeOAuthPromptFreeCredentialsEnabled: Bool {
         get { self.claudeOAuthKeychainPromptMode == .never }
         set {

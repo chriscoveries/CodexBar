@@ -24,6 +24,7 @@ struct ClaudeProviderImplementation: ProviderImplementation {
         _ = settings.claudeCookieHeader
         _ = settings.claudeOAuthKeychainPromptMode
         _ = settings.claudeOAuthDirectKeychainReadAllowed
+        _ = settings.claudeAllowBackgroundTokenRepair
         _ = settings.claudeOAuthKeychainReadStrategy
         _ = settings.claudeWebExtrasEnabled
         _ = settings.claudeSwapEnabled
@@ -130,6 +131,23 @@ struct ClaudeProviderImplementation: ProviderImplementation {
                 binding: Binding(
                     get: { context.settings.claudeOAuthDirectKeychainReadAllowed },
                     set: { context.settings.claudeOAuthDirectKeychainReadAllowed = $0 }),
+                statusText: nil,
+                actions: [],
+                isVisible: nil,
+                isEnabled: { !context.settings.debugDisableKeychainAccess },
+                onChange: nil,
+                onAppDidBecomeActive: nil,
+                onAppearWhenEnabled: nil),
+            ProviderSettingsToggleDescriptor(
+                id: "claude-oauth-background-token-repair",
+                title: "Repair expired OAuth tokens in the background",
+                subtitle: [
+                    "Allows CodexBar to run the Claude CLI in the background to refresh an expired OAuth token.",
+                    "Off: background refreshes keep the last snapshot until you click Refresh.",
+                ].joined(separator: " "),
+                binding: Binding(
+                    get: { context.settings.claudeAllowBackgroundTokenRepair },
+                    set: { context.settings.claudeAllowBackgroundTokenRepair = $0 }),
                 statusText: nil,
                 actions: [],
                 isVisible: nil,
