@@ -112,6 +112,42 @@ struct ProviderSettingsDescriptorTests {
     }
 
     @Test
+    func `openai budget fields bind to the store with validation`() throws {
+        let fixture = try self.makeSettingsFixture(suite: "ProviderSettingsDescriptorTests-openai-budget")
+        let context = fixture.settingsContext(provider: .openai)
+
+        let fields = OpenAIAPIProviderImplementation().settingsFields(context: context)
+        let budget = try #require(fields.first(where: { $0.id == "openai-monthly-budget" }))
+        let resetDay = try #require(fields.first(where: { $0.id == "openai-budget-reset-day" }))
+        #expect(budget.kind == .plain)
+        #expect(resetDay.kind == .plain)
+
+        // The budget starts off, and empty text keeps it off.
+        #expect(fixture.settings.openaiMonthlyBudgetUSD == nil)
+        #expect(budget.binding.wrappedValue == "")
+
+        budget.binding.wrappedValue = "120.5"
+        #expect(fixture.settings.openaiMonthlyBudgetUSD == 120.5)
+        budget.binding.wrappedValue = "  60  "
+        #expect(fixture.settings.openaiMonthlyBudgetUSD == 60)
+        #expect(budget.binding.wrappedValue == "60")
+        // Blank or invalid text disables the budget again.
+        budget.binding.wrappedValue = "not-a-number"
+        #expect(fixture.settings.openaiMonthlyBudgetUSD == nil)
+        budget.binding.wrappedValue = "120"
+
+        // The reset day clamps into 1 through 28 and falls back to the default.
+        #expect(resetDay.binding.wrappedValue == "1")
+        resetDay.binding.wrappedValue = "15"
+        #expect(fixture.settings.openaiBudgetResetDay == 15)
+        #expect(resetDay.binding.wrappedValue == "15")
+        resetDay.binding.wrappedValue = "99"
+        #expect(fixture.settings.openaiBudgetResetDay == 28)
+        resetDay.binding.wrappedValue = "junk"
+        #expect(fixture.settings.openaiBudgetResetDay == 1)
+    }
+
+    @Test
     func `openrouter exposes a secure management key setting`() throws {
         let fixture = try self.makeSettingsFixture(suite: "ProviderSettingsDescriptorTests-openrouter-management")
         let context = fixture.settingsContext(provider: .openrouter)

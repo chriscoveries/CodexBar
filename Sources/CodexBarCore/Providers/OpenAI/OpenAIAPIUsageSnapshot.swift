@@ -1,5 +1,69 @@
 import Foundation
 
+/// User-configured monthly spend budget backing the OpenAI Admin API pace bar. OpenAI reports no
+/// quota lanes, so pace is budget-based: actual metered spend fills a synthetic monthly window
+/// that resets on the configured day of month.
+public struct OpenAIAPISpendBudget: Equatable, Sendable {
+    public static let minResetDay = 1
+    public static let maxResetDay = 28
+    public static let defaultResetDay = 1
+
+    public let monthlyUSD: Double
+    public let resetDay: Int
+
+    /// Fails when the budget is missing or unusable (non-finite, non-positive), which keeps the
+    /// provider on its no-pace behavior instead of surfacing a broken window.
+    public init?(monthlyUSD: Double?, resetDay: Int? = nil) {
+        guard let monthlyUSD, monthlyUSD.isFinite, monthlyUSD > 0 else { return nil }
+        self.monthlyUSD = monthlyUSD
+        self.resetDay = Self.sanitizedResetDay(resetDay)
+    }
+
+    public static func sanitizedResetDay(_ raw: Int?) -> Int {
+        guard let raw else { return Self.defaultResetDay }
+        return max(Self.minResetDay, min(Self.maxResetDay, raw))
+    }
+
+    /// Start of the budget period containing `date`: the most recent occurrence of the reset day
+    /// (local midnight) on or before `date`.
+    public func periodStart(containing date: Date, calendar: Calendar) -> Date {
+        let candidate = self.resetDayCandidate(onOrBefore: date, calendar: calendar)
+        guard candidate > date else { return candidate }
+        return calendar.date(byAdding: .month, value: -1, to: candidate) ?? candidate
+    }
+
+    /// Next budget reset: the first occurrence of the reset day (local midnight) after `date`.
+    public func nextReset(from date: Date, calendar: Calendar) -> Date {
+        let candidate = self.resetDayCandidate(onOrBefore: date, calendar: calendar)
+        guard candidate > date else {
+            return calendar.date(byAdding: .month, value: 1, to: candidate) ?? candidate
+        }
+        return candidate
+    }
+
+    /// Budget pace window for `spendUSD`: percent of the monthly budget (clamped at 100), the
+    /// monthly sentinel duration matched by the reset-window pace rules, and the next reset-day
+    /// occurrence. The window is a real user-configured lane driven by metered spend, so it is
+    /// deliberately NOT `isSyntheticPlaceholder` — that flag means "no lane present" and would
+    /// hide the window from the menu bar, widget, and warning surfaces; estimation is conveyed
+    /// via `UsageSnapshot.dataConfidence` instead.
+    public func rateWindow(spendUSD: Double, now: Date, calendar: Calendar) -> RateWindow {
+        let spend = spendUSD.isFinite ? max(0, spendUSD) : 0
+        return RateWindow(
+            usedPercent: min(spend / self.monthlyUSD * 100, 100),
+            windowMinutes: ProviderPaceCapability.monthlyWindowSentinelMinutes,
+            resetsAt: self.nextReset(from: now, calendar: calendar),
+            resetDescription: nil,
+            nextRegenPercent: nil)
+    }
+
+    private func resetDayCandidate(onOrBefore date: Date, calendar: Calendar) -> Date {
+        var components = calendar.dateComponents([.year, .month], from: date)
+        components.day = self.resetDay
+        return calendar.date(from: components) ?? date
+    }
+}
+
 public struct OpenAIAPIUsageSnapshot: Codable, Equatable, Sendable {
     public struct DailyBucket: Codable, Equatable, Sendable, Identifiable {
         public let day: String
@@ -210,10 +274,22 @@ public struct OpenAIAPIUsageSnapshot: Codable, Equatable, Sendable {
             }
     }
 
-    public func toUsageSnapshot() -> UsageSnapshot {
+    public func toUsageSnapshot(
+        budget: OpenAIAPISpendBudget? = nil,
+        now: Date = Date(),
+        calendar: Calendar = .current) -> UsageSnapshot
+    {
         let total = self.last30Days
+        // Without a budget the snapshot stays exactly as before: no window, no pace, default
+        // confidence. With one, metered spend since the reset day fills a synthetic monthly lane.
+        let primary = budget.map { activeBudget in
+            activeBudget.rateWindow(
+                spendUSD: self.monthToDateSpend(budget: activeBudget, now: now, calendar: calendar),
+                now: now,
+                calendar: calendar)
+        }
         return UsageSnapshot(
-            primary: nil,
+            primary: primary,
             secondary: nil,
             providerCost: ProviderCostSnapshot(
                 used: total.costUSD,
@@ -227,7 +303,21 @@ public struct OpenAIAPIUsageSnapshot: Codable, Equatable, Sendable {
                 providerID: .openai,
                 accountEmail: nil,
                 accountOrganization: self.identityAccountOrganization,
-                loginMethod: self.identityLoginMethod))
+                loginMethod: self.identityLoginMethod),
+            dataConfidence: primary == nil ? .unknown : .estimated)
+    }
+
+    /// Spend accumulated since the budget period began. Admin API costs are daily-aggregated, so a
+    /// bucket straddling the reset-day boundary contributes its full metered cost.
+    public func monthToDateSpend(
+        budget: OpenAIAPISpendBudget,
+        now: Date = Date(),
+        calendar: Calendar = .current) -> Double
+    {
+        let periodStart = budget.periodStart(containing: now, calendar: calendar)
+        return self.daily
+            .filter { $0.endTime > periodStart && $0.startTime <= now }
+            .reduce(0) { $0 + $1.costUSD }
     }
 
     private var identityLoginMethod: String {
