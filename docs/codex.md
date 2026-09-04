@@ -108,6 +108,8 @@ so their labels stay distinct without exposing paths. Compact switcher buttons k
 is limited, using additional rows when needed.
 
 ### OpenAI web dashboard (optional, off by default)
+- Subscription renewal or expiration dates load after the app publishes dashboard usage. CodexBar first tries the subscription API, then captures only the date and renewal flag from ChatGPT's own billing request in the same account-scoped web session, within an eight-second budget.
+- Billing capture is best-effort: unavailable or malformed responses retain previously fetched dates, while a valid empty response clears them. Cancelled, replaced, disabled, or account-mismatched refreshes cannot attach dates. The CLI web source waits only within its remaining fetch deadline.
 - Enable it in Preferences -> Providers -> Codex -> OpenAI web extras.
 - It exists for dashboard-only extras such as code review remaining, usage breakdown, and credits history.
 - It is intentionally opt-in because it loads `chatgpt.com` in a hidden WebView and can materially increase battery or network usage.
