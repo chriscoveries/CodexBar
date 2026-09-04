@@ -52,7 +52,11 @@ extension UsageStore {
             message.contains("timeout") ||
             message.contains("cancelled") ||
             message.contains("network connection was lost") ||
-            message.contains("not connected to the internet")
+            message.contains("not connected to the internet") ||
+            message.contains("unauthorized") ||
+            message.contains("invalid or expired") ||
+            message.contains("permission or quota denied") ||
+            message.contains("exceeded your quota")
     }
 
     nonisolated static func lastAvailableFailedFetchKind(

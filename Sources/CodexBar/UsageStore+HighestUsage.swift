@@ -4,7 +4,8 @@ import Foundation
 @MainActor
 extension UsageStore {
     /// Returns the enabled candidate provider with the highest usage percentage (closest to rate limit).
-    /// Excludes providers that are fully rate-limited.
+    /// Excludes providers that are fully rate-limited, unless their automatic presentation
+    /// deliberately surfaces the exhausted window.
     func providerWithHighestUsage(candidateProviders: [UsageProvider]? = nil, now: Date = Date())
         -> (provider: UsageProvider, usedPercent: Double)?
     {
@@ -128,13 +129,10 @@ extension UsageStore {
         if effectivePreference == .automatic,
            MenuBarMetricWindowResolver.automaticSelectionPrioritizesExhaustedWindow(for: provider)
         {
-            let percents = [
-                snapshot.primary?.usedPercent,
-                snapshot.secondary?.usedPercent,
-                snapshot.tertiary?.usedPercent,
-            ].compactMap(\.self)
-            guard !percents.isEmpty else { return true }
-            return percents.allSatisfy { $0 >= 100 }
+            // These presentations deliberately surface the exhausted window as the metric (e.g. Kimi),
+            // so reaching here with a spent metric means exhaustion is the provider's state. Keep it
+            // eligible: a 100%-used provider ranking first is exactly what the unified icon should show.
+            return false
         }
 
         return true

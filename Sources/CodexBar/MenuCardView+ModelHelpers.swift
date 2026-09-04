@@ -300,6 +300,14 @@ extension UsageMenuCardView.Model {
     }
 
     static func usageNotes(input: Input) -> [String] {
+        var notes = self.providerUsageNotes(input: input)
+        if self.showsExhaustedQuotaNote(input: input) {
+            notes.append(L("Quota exhausted"))
+        }
+        return notes
+    }
+
+    private static func providerUsageNotes(input: Input) -> [String] {
         let subscriptionNotes = self.subscriptionMetadataNotes(snapshot: input.snapshot, provider: input.provider)
 
         if input.provider == .kiro {
@@ -339,6 +347,19 @@ extension UsageMenuCardView.Model {
         }
 
         return subscriptionNotes
+    }
+
+    /// Providers whose automatic presentation deliberately surfaces an exhausted window treat
+    /// exhaustion as a first-class state, so name it explicitly instead of letting the 0% lane
+    /// speak for itself.
+    private static func showsExhaustedQuotaNote(input: Input) -> Bool {
+        guard let snapshot = input.snapshot else { return false }
+        let presentation = ProviderDescriptorRegistry.descriptor(for: input.provider).presentation
+        guard presentation.automaticSelectionPrioritizesExhaustedWindow else { return false }
+        return ProviderUsagePresentation.exhausted(
+            snapshot.primary,
+            snapshot.secondary,
+            snapshot.tertiary) != nil
     }
 
     var isOverviewErrorOnly: Bool {

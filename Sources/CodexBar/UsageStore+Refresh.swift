@@ -1328,6 +1328,30 @@ extension UsageStore {
         self.lastTokenFetchAt.removeValue(forKey: .claude)
     }
 
+    /// Consecutive suppressed failures before a preserved-but-stale snapshot is reported at
+    /// error level. Below this the ConsecutiveFailureGate silence is intentional flake tolerance.
+    private static let staleSnapshotLogStreak = 3
+
+    /// A suppressed failure keeps the previous snapshot on screen with no visible signal, so the
+    /// menu bar can freeze on stale pace/percent data (the provider looks healthy but never
+    /// updates). Once failures repeat, log a prominent — but non-fatal — line on every suppressed
+    /// attempt so the staleness is diagnosable. The data model has no UI-facing staleness marker
+    /// (UsageSnapshot carries no stale/outdated field), so logging is the whole surface for now.
+    private func logSuppressedStaleSnapshot(
+        provider: UsageProvider,
+        error: Error,
+        failureStreak: Int)
+    {
+        guard failureStreak >= Self.staleSnapshotLogStreak,
+              let snapshot = self.snapshots[provider.instanceID]
+        else { return }
+        let ageMinutes = max(0, Int(Date().timeIntervalSince(snapshot.updatedAt) / 60))
+        self.providerLogger.error(
+            "Stale usage still displayed without an error after \(failureStreak) consecutive " +
+                "refresh failures: provider=\(provider.rawValue) " +
+                "snapshot_age_minutes=\(ageMinutes) error=\(error.localizedDescription)")
+    }
+
     private func handleProviderFetchFailure(
         provider: UsageProvider,
         error: Error,
@@ -1439,6 +1463,18 @@ extension UsageStore {
                 provider == .claude &&
                 hadPriorData &&
                 Self.isClaudeWebSessionRefreshFailure(error)
+            // Every branch below can keep the old snapshot visible while clearing the error —
+            // deliberate flake tolerance, but after enough repeats it hides a frozen provider.
+            let keepsStaleSnapshot = self.snapshots[provider.instanceID] != nil &&
+                (!shouldSurface ||
+                    (provider == .claude && preservesPriorData &&
+                        (Self.isClaudeUsageProbeTimeout(error) || Self.isClaudeCLIRateLimitFailure(error))))
+            if keepsStaleSnapshot {
+                self.logSuppressedStaleSnapshot(
+                    provider: provider,
+                    error: error,
+                    failureStreak: self.failureGates[provider.instanceID]?.streak ?? 0)
+            }
             if preservesClaudeWebSessionFailure,
                !shouldSurface
             {
