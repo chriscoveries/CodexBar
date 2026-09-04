@@ -6,7 +6,7 @@ import SwiftUI
 struct PlanUtilizationPaceChartView: View {
     private enum Layout {
         static let chartHeight: CGFloat = 150
-        static let detailHeight: CGFloat = 17
+        static let detailHeight: CGFloat = 22
         static let axisLabelCount = 4
         static let pointSize: CGFloat = 16
     }
@@ -78,7 +78,7 @@ struct PlanUtilizationPaceChartView: View {
                 }
 
             Text(self.detailLine)
-                .font(.caption)
+                .font(.callout.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.tail)
@@ -107,7 +107,7 @@ struct PlanUtilizationPaceChartView: View {
                 AxisValueLabel(anchor: .top) {
                     if let date = value.as(Date.self) {
                         Text(Self.axisLabel(for: date, windowDuration: self.model.windowDuration))
-                            .font(.caption2)
+                            .font(.caption)
                             .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
                     }
                 }
@@ -238,6 +238,7 @@ struct PlanUtilizationPaceChartView: View {
     private func tooltip(for hover: PlanUtilizationPaceChartModel.HoverPoint) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(Self.detailDateLabel(for: hover.point.date))
+                .font(.footnote.weight(.medium))
             Text(L(
                 "Remaining %@ / used %@",
                 Self.percent(hover.point.rawRemainingPercent),
@@ -252,7 +253,7 @@ struct PlanUtilizationPaceChartView: View {
                 Text(L("Run-out %@", Self.detailDateLabel(for: runOutAt)))
             }
         }
-        .font(.caption2)
+        .font(.footnote)
         .foregroundStyle(Color(nsColor: .labelColor))
         .padding(.horizontal, 7)
         .padding(.vertical, 5)
