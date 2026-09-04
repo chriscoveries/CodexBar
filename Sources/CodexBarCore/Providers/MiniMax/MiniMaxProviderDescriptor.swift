@@ -92,6 +92,9 @@ public enum MiniMaxProviderDescriptor {
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "MiniMax cost summary is not supported." }),
+            pace: ProviderPaceCapability(
+                resetWindowPace: .resetDatePresent,
+                inferredMonthlyDuration: .windowDurationMissing),
             presentation: ProviderUsagePresentation(
                 costPresenter: { snapshot in
                     let style: ProviderCostMenuCardStyle = snapshot.providerCost?.period == "MiniMax points balance"

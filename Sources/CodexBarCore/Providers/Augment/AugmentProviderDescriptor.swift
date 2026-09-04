@@ -74,6 +74,9 @@ public enum AugmentProviderDescriptor {
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "Augment cost summary is not supported." }),
+            pace: ProviderPaceCapability(
+                resetWindowPace: .resetDatePresent,
+                inferredMonthlyDuration: .windowDurationMissing),
             fetchPlan: ProviderFetchPlan(
                 sourceModes: [.auto, .cli],
                 pipeline: ProviderFetchPipeline(resolveStrategies: { _ in

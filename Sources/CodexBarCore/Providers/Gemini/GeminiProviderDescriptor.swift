@@ -46,6 +46,10 @@ public enum GeminiProviderDescriptor {
             tokenCost: ProviderTokenCostConfig(
                 supportsTokenCost: false,
                 noDataMessage: { "Gemini cost summary is not supported." }),
+            pace: ProviderPaceCapability(
+                primary: .exact(kind: .session, minutes: 1440),
+                secondary: .exact(kind: .session, minutes: 1440),
+                tertiary: .exact(kind: .session, minutes: 1440)),
             presentation: ProviderUsagePresentation(
                 identityPresenter: { provider, snapshot in
                     guard let plan = snapshot.loginMethod(for: provider), !plan.isEmpty else {
