@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.56.5 — 2026-09-04
 
 ### Highlights
 - **More reliable Codex cost-history catch-up**: avoid repeatedly rediscovering completed work and clear abandoned Refreshing activity after account or settings changes (#3402, #3417, #3418).
