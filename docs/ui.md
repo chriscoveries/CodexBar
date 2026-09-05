@@ -67,8 +67,11 @@ model-generic token label while the rendered menu-bar prefix and accessibility l
 - Renderer/critter icons dim when last refresh failed and can render incident indicators; brand display mode uses provider branding plus title text.
 - Loading animation runs at a bounded frame rate and has a hard continuous-duration ceiling so provider hangs cannot keep
   the menu bar redrawing forever.
-- The token renderer composes provider branding and text through the same attributed-title path used for high-contrast
-  status items. Critter and bar styles keep their existing renderers.
+- Ordinary, fresh single-line text-only token layouts use cached template images so AppKit can reuse them across
+  status-item redraws while retaining native highlighting and display-scale handling. The existing bounded renderer
+  cache includes the content and appearance; memory-pressure cleanup clears it. Stale data, high-contrast mode,
+  provider icons, attachments, colored glyphs such as emoji, and multiline text keep their attributed-title rendering. Critter and bar styles
+  keep their existing renderers.
 
 ## Menu card
 - Provider-specific rows with resets (countdown by default; optional absolute clock display). Primary, secondary,
