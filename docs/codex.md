@@ -229,8 +229,9 @@ is limited, using additional rows when needed.
   - Catch-up status reads progress metadata without loading historical usage JSON or replay bodies. Cached reports
     retain row-level pricing evidence and project/session details, but omit raw token snapshots, accumulator state,
     and replay bodies. File cursor metadata, including JSONL resume state, remains available for progress tracking.
-    A native scan loads complete state once and carries a single-use receipt to save. The store reuses decoded
-    rows only while the same connection, database identity and SQLite change observations remain valid,
+    A native scan loads exact usage rows once, deferring raw token history and checkpoints until a file changes
+    or a fork needs its ancestors. A single-use receipt binds those deferred reads and saves to the original
+    connection, database identity and SQLite change observations,
     checking again under the writer lock. Filesystem/anchor and catch-up reconciliation still run at comparison
     time; a concurrent database change requests a rescan. Fresh database opens retain integrity validation.
   - Saved day/model aggregates group each file's usage rows in one pass per aggregate build. Packed token totals,

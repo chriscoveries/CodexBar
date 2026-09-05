@@ -3,6 +3,7 @@
 ## 0.56.6 — Unreleased
 
 ### Fixed
+- Codex cost: skip loading raw token histories for unchanged sessions while preserving exact request pricing, reasoning totals, and fork accounting; concurrent cache changes safely request a retry (#3297). Thanks @estevecastells!
 - Codex cost: price GPT-6 Astra sessions, including cached tokens and long-context Fast usage, and reprice saved rows without rebuilding token history (#3423, #3425).
 - Hooks: show only the configured threshold, executable, and arguments in Settings; keep examples inside empty fields instead of displaying them as duplicate labels (#3424). Thanks @kedryte!
 - Codex: recover subscription renewal and expiration dates through optional OpenAI web billing capture, without delaying app usage or allowing late results to replace newer dashboards or cross accounts (#3373). Thanks @emanuelst!
