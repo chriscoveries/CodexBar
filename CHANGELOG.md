@@ -1,6 +1,11 @@
 # Changelog
 
-## 0.56.8 — Unreleased
+## 0.56.8 — 2026-09-07
+
+### Highlights
+- **More reliable account handling**: preserve Codex permission errors, retain Claude quota-warning history across credential refreshes, and keep Copilot accounts distinct (#3466, #3453, #3460).
+- **Accurate provider history**: count Poe weekly usage over the last seven days and keep valid Poe, MiMo, and OpenRouter usage available when optional history contains malformed data (#3449, #3455, #3448, #3458).
+- **Better display support**: preserve menu-bar positions on monitors left of the primary display and translate Claude's model-specific weekly quota labels (#3463, #3459).
 
 ### Fixed
 - Copilot: keep verified GitHub user IDs authoritative when matching legacy token accounts, preventing a matching login or display label from replacing a different resolved account.
