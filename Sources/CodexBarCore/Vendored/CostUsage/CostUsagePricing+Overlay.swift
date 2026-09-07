@@ -11,7 +11,8 @@ extension CostUsagePricing {
         pricingDate: Date? = nil,
         modelsDevCatalog: ModelsDevCatalog? = nil,
         modelsDevCacheRoot: URL? = nil,
-        customPricing: CostUsageCustomPricing? = nil) -> Double?
+        customPricing: CostUsageCustomPricing? = nil,
+        pricingResolver: CodexResolver? = nil) -> Double?
     {
         let overlay = customPricing ?? self.customPricingOverlay()
         if overlay.rates(providerID: self.codexModelsDevProviderID, model: model) != nil {
@@ -26,7 +27,8 @@ extension CostUsagePricing {
             model: model,
             pricingDate: pricingDate,
             modelsDevCatalog: modelsDevCatalog,
-            modelsDevCacheRoot: modelsDevCacheRoot)
+            modelsDevCacheRoot: modelsDevCacheRoot,
+            pricingResolver: pricingResolver)
         else { return nil }
         if aggregate,
            let thresholdTokens = pricing.thresholdTokens,
