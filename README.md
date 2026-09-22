@@ -1,5 +1,7 @@
 # CodexBar 🎚️ — May your tokens never run out.
 
+Fork of [steipete/CodexBar](https://github.com/steipete/CodexBar) — chriscoveries' working copy for provider fixes, cost-report accuracy work, and issue triage. Branches under `codex/`, `fix/`, and `triage/` feed upstream PRs; `main` tracks upstream.
+
 > Every AI coding limit, in your menu bar.
 
 [![Latest release](https://img.shields.io/github/v/release/steipete/CodexBar?style=flat-square&color=0a0a0c)](https://github.com/steipete/CodexBar/releases/latest)
