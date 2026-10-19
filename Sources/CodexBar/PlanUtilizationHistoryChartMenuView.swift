@@ -67,6 +67,8 @@ struct PlanUtilizationHistoryChartMenuView: View {
     private let visibleSeries: [VisibleSeries]
     private let modelsBySeriesID: [String: Model]
     private let emptyModel: Model
+    private let paceModelsBySeriesID: [String: PlanUtilizationPaceChartModel]
+    private let referenceDate: Date
     private let width: CGFloat
 
     @State private var selectedSeriesID: String?
@@ -89,6 +91,25 @@ struct PlanUtilizationHistoryChartMenuView: View {
             ($0.id, Self.makeModel(history: $0.history, provider: provider, referenceDate: referenceDate))
         })
         self.emptyModel = Self.makeModel(history: nil, provider: provider, referenceDate: referenceDate)
+        self.paceModelsBySeriesID = Dictionary(uniqueKeysWithValues: visibleSeries.compactMap { series in
+            guard let currentWindow = Self.currentWindow(
+                for: series,
+                provider: provider,
+                snapshot: snapshot)
+            else {
+                return nil
+            }
+            guard let model = PlanUtilizationPaceChartModel(
+                history: series.history,
+                currentWindow: currentWindow,
+                referenceDate: referenceDate,
+                currentWindowCapturedAt: snapshot?.updatedAt)
+            else {
+                return nil
+            }
+            return (series.id, model)
+        })
+        self.referenceDate = referenceDate
         self.width = width
     }
 
@@ -96,6 +117,8 @@ struct PlanUtilizationHistoryChartMenuView: View {
         let effectiveSelectedSeries = self.visibleSeries.first(where: { $0.id == self.selectedSeriesID })
             ?? self.visibleSeries.first
         let model = effectiveSelectedSeries.flatMap { self.modelsBySeriesID[$0.id] } ?? self.emptyModel
+
+        let paceModel = effectiveSelectedSeries.flatMap { self.paceModelsBySeriesID[$0.id] }
 
         VStack(alignment: .leading, spacing: 10) {
             if self.visibleSeries.count > 1 {
@@ -115,7 +138,14 @@ struct PlanUtilizationHistoryChartMenuView: View {
                         .pickerStyle(.segmented)
             }
 
-            if model.points.isEmpty {
+            if let paceModel {
+                PlanUtilizationPaceChartView(
+                    provider: self.provider,
+                    windowTitle: effectiveSelectedSeries?.title ?? L("Usage"),
+                    model: paceModel,
+                    currentDate: self.referenceDate,
+                    width: self.width)
+            } else if model.points.isEmpty {
                 ZStack {
                     Text(Self.emptyStateText(title: effectiveSelectedSeries?.title))
                         .font(.footnote)
@@ -838,6 +868,125 @@ struct PlanUtilizationHistoryChartMenuView: View {
 }
 
 extension PlanUtilizationHistoryChartMenuView {
+    /// The plan usage chart only offers the core rate windows; tertiary (e.g. Claude Opus) and
+    /// extra rate-window series are tracked elsewhere and never appear as chart tabs.
+    private nonisolated static let displayableSeriesNames: Set<PlanUtilizationSeriesName> = [
+        .session,
+        .weekly,
+        .monthly,
+    ]
+
+    private nonisolated static let defaultSeriesPriority: [PlanUtilizationSeriesName] = [
+        .session,
+        .weekly,
+        .monthly,
+    ]
+
+    /// Restores the persisted series when it is still visible; otherwise defaults in priority
+    /// order (session, weekly, monthly) before falling back to the first available series.
+    private nonisolated static func defaultSelectedSeriesID(
+        storedSeriesID: String?,
+        in visibleSeries: [VisibleSeries]) -> String?
+    {
+        if let storedSeriesID,
+           visibleSeries.contains(where: { $0.id == storedSeriesID })
+        {
+            return storedSeriesID
+        }
+        for name in Self.defaultSeriesPriority {
+            if let match = visibleSeries.first(where: { $0.selection.name == name }) {
+                return match.id
+            }
+        }
+        return visibleSeries.first?.id
+    }
+
+    private nonisolated static func resetMatchesHistory(
+        _ window: RateWindow,
+        latestReset: Date?) -> Bool
+    {
+        guard let latestReset, let windowReset = window.resetsAt else { return true }
+        return abs(windowReset.timeIntervalSince(latestReset)) < 2 * 60
+    }
+
+    /// Local build: resolves the live rate window backing a chart series.
+    ///
+    /// Ported verbatim from the fork's `currentWindow(for:provider:snapshot:)`: candidates come
+    /// from the primary/secondary/tertiary lanes plus any extra rate windows, then are matched
+    /// against the series by duration, then by provider-normalized semantics, and finally by
+    /// reset proximity.
+    private nonisolated static func currentWindow(
+        for series: VisibleSeries,
+        provider: UsageProvider,
+        snapshot: UsageSnapshot?) -> RateWindow?
+    {
+        guard let snapshot else { return nil }
+        let tertiaryName: PlanUtilizationSeriesName = provider == .opencodego ? .monthly : .opus
+        let slotted: [(PlanUtilizationSeriesName, RateWindow?)] = [
+            (.session, snapshot.primary),
+            (.weekly, snapshot.secondary),
+            (tertiaryName, snapshot.tertiary),
+        ]
+        let named = (snapshot.extraRateWindows ?? [])
+            .filter(\.usageKnown)
+            .map { (PlanUtilizationSeriesName(rawValue: $0.id), Optional($0.window)) }
+        let candidates = (slotted + named).compactMap { candidate -> (PlanUtilizationSeriesName, RateWindow)? in
+            let (suggestedName, window) = candidate
+            guard let window, !window.isSyntheticPlaceholder else { return nil }
+            return (suggestedName, window)
+        }
+
+        let historyReset = series.history.entries.compactMap(\.resetsAt).max()
+
+        let durationMatches = candidates.filter { _, window in
+            guard let minutes = window.windowMinutes, minutes > 0 else { return false }
+            return series.selection.name.canonicalWindowMinutes(minutes) == series.selection.windowMinutes
+        }
+        if durationMatches.count == 1,
+           self.resetMatchesHistory(durationMatches[0].1, latestReset: historyReset)
+        {
+            return durationMatches[0].1
+        }
+
+        let presentation = ProviderDescriptorRegistry.descriptor(for: provider).presentation
+        if let semanticMatch = durationMatches.first(where: { suggestedName, window in
+            guard let minutes = window.windowMinutes,
+                  self.resetMatchesHistory(window, latestReset: historyReset)
+            else { return false }
+            let normalized = presentation.normalizePlanUtilizationSeries(
+                self.providerSeries(suggestedName),
+                windowMinutes: minutes)
+            return self.historySeries(normalized) == series.selection.name
+        }) {
+            return semanticMatch.1
+        }
+
+        guard let latestReset = historyReset else { return nil }
+        let resetCandidates = candidates.filter { suggestedName, window in
+            if let minutes = window.windowMinutes, minutes > 0 {
+                let normalized = presentation.normalizePlanUtilizationSeries(
+                    self.providerSeries(suggestedName),
+                    windowMinutes: minutes)
+                return self.historySeries(normalized) == series.selection.name
+            }
+            return self.historySeries(self.providerSeries(suggestedName)) == series.selection.name
+        }
+        let closest = resetCandidates.min { lhs, rhs in
+            let lhsDistance = lhs.1.resetsAt.map { abs($0.timeIntervalSince(latestReset)) }
+                ?? .greatestFiniteMagnitude
+            let rhsDistance = rhs.1.resetsAt.map { abs($0.timeIntervalSince(latestReset)) }
+                ?? .greatestFiniteMagnitude
+            return lhsDistance < rhsDistance
+        }?.1
+        guard let closest,
+              let closestReset = closest.resetsAt,
+              abs(closestReset.timeIntervalSince(latestReset)) < 2 * 60
+        else {
+            return nil
+        }
+        return closest
+    }
+
     private nonisolated static func detailLine(point: Point?, windowMinutes: Int) -> String {
         guard let point else {
             return "-"

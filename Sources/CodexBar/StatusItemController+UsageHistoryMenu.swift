@@ -49,18 +49,9 @@ extension StatusItemController {
             return true
         }
 
-        // Provider-specific by design: this menu burndown currently targets Codex, Claude, and Kiro quota histories.
-        if provider == .codex || provider == .claude || provider == .kiro {
-            let burndownView = QuotaBurndownChartMenuView(
-                provider: provider,
-                histories: histories,
-                width: width)
-            if burndownView.hasSeries {
-                self.appendUsageHistoryChart(burndownView, to: submenu, provider: provider, width: width)
-                submenu.addItem(.separator())
-            }
-        }
-
+        // Local build: the plan utilization chart renders the pace (trend-line) chart, which
+        // already projects forward to the next reset. The upstream `QuotaBurndownChartMenuView`
+        // is intentionally not shown — showing both would stack two trend lines in one menu.
         let chartView = PlanUtilizationHistoryChartMenuView(
             provider: provider,
             histories: histories,
